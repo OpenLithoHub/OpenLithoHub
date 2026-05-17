@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+cff-version: 1.2.0
+title: "OpenLithoHub: Computational Lithography Benchmarking and Workflow Toolkit"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - name: "OpenLithoHub Contributors"
+license: Apache-2.0
+repository-code: "https://github.com/OpenLithoHub/OpenLithoHub"
+url: "https://openlithohub.com"
+keywords:
+  - computational-lithography
+  - opc
+  - ilt
+  - euv
+  - mask-optimization
+  - curvilinear
+  - benchmark
+  - semiconductor
+  - eda
+abstract: >-
+  OpenLithoHub provides a unified evaluation and workflow framework for
+  computational lithography research. It bridges academic tensor-based
+  optimization and industrial mask manufacturing through standardized
+  metrics (EPE, PV Band, shot count, EUV stochastic robustness),
+  MRC/DRC compliance gating, and an end-to-end OASIS workflow that
+  supports both Manhattan and curvilinear masks, with a model-agnostic
+  evaluation interface for OPC/ILT models.

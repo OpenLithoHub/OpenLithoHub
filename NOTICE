@@ -1,0 +1,87 @@
+OpenLithoHub
+Copyright 2025-2026 OpenLithoHub Contributors
+https://github.com/OpenLithoHub/OpenLithoHub
+
+Licensed under the Apache License, Version 2.0 (software / source code) and
+Creative Commons Attribution-ShareAlike 4.0 International (documentation).
+See LICENSE and LICENSE-DOCS files.
+
+Datasets accessed through OpenLithoHub adapters retain their original
+licenses and are not redistributed by this project. See DATA-LICENSES.md.
+
+---
+
+# Third-Party Software Notices
+
+This project depends on the following third-party components.
+
+## Core runtime dependencies
+
+| Component | License | URL |
+|-----------|---------|-----|
+| NumPy | BSD-3-Clause | https://github.com/numpy/numpy |
+| PyTorch | BSD-3-Clause | https://github.com/pytorch/pytorch |
+| Typer | MIT | https://github.com/tiangolo/typer |
+| Click | BSD-3-Clause | https://github.com/pallets/click |
+| Pydantic | MIT | https://github.com/pydantic/pydantic |
+| Rich | MIT | https://github.com/Textualize/rich |
+
+## Optional: data extras
+
+| Component | License | URL |
+|-----------|---------|-----|
+| Hugging Face Datasets | Apache-2.0 | https://github.com/huggingface/datasets |
+| Apache Arrow / PyArrow | Apache-2.0 | https://github.com/apache/arrow |
+
+## Optional: workflow extras
+
+| Component | License | URL |
+|-----------|---------|-----|
+| KLayout (Python bindings) | GPL-3.0 (used as external tool / optional import) | https://www.klayout.de/ |
+| SciPy | BSD-3-Clause | https://github.com/scipy/scipy |
+
+## Optional: models extras
+
+| Component | License | URL |
+|-----------|---------|-----|
+| huggingface_hub | Apache-2.0 | https://github.com/huggingface/huggingface_hub |
+
+## Optional: docs extras
+
+| Component | License | URL |
+|-----------|---------|-----|
+| MkDocs Material | MIT | https://github.com/squidfunk/mkdocs-material |
+| mkdocstrings | ISC | https://github.com/mkdocstrings/mkdocstrings |
+| mkdocs-gen-files | MIT | https://github.com/oprypin/mkdocs-gen-files |
+
+## Optional: jupyter extras
+
+| Component | License | URL |
+|-----------|---------|-----|
+| IPython | BSD-3-Clause | https://github.com/ipython/ipython |
+| Matplotlib | Matplotlib License (BSD-style) | https://github.com/matplotlib/matplotlib |
+| Pillow | MIT-CMU (HPND) | https://github.com/python-pillow/Pillow |
+
+## Development-only
+
+| Component | License | URL |
+|-----------|---------|-----|
+| pytest | MIT | https://github.com/pytest-dev/pytest |
+| ruff | MIT | https://github.com/astral-sh/ruff |
+| mypy | MIT | https://github.com/python/mypy |
+| pre-commit | MIT | https://github.com/pre-commit/pre-commit |
+
+---
+
+KLayout note: the KLayout Python bindings are licensed under GPL-3.0.
+OpenLithoHub treats KLayout as an optional external tool — it is loaded
+dynamically only when the `workflow` extra is installed and is not
+statically linked or redistributed. Users who install the `workflow`
+extra are responsible for compliance with KLayout's license in their
+deployment context.
+
+---
+
+This NOTICE file is provided in compliance with Apache License 2.0,
+Section 4(d). When redistributing OpenLithoHub or derivative works, this
+file must be preserved.

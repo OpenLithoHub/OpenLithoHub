@@ -281,4 +281,20 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-[Apache 2.0](LICENSE)
+OpenLithoHub uses a layered licensing model:
+
+- **Code** — [Apache License 2.0](LICENSE)
+- **Documentation** — [CC-BY-SA 4.0](LICENSE-DOCS)
+- **Datasets** — each dataset retains its original license; OpenLithoHub
+  ships only adapters, not data. See [DATA-LICENSES.md](DATA-LICENSES.md).
+- **Third-party components** — see [NOTICE](NOTICE).
+
+You may freely use OpenLithoHub commercially under the open-source license
+(attribution and the `NOTICE` file are the only requirements). For commercial
+licensing options without attribution, with patent indemnification, or with
+SLA-backed support, see [COMMERCIAL-USE.md](COMMERCIAL-USE.md).
+
+To cite OpenLithoHub in academic work, see [CITATION.cff](CITATION.cff).
+Contributors: please review [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Contributor License Agreement](CLA-INDIVIDUAL.md). Security issues:
+[SECURITY.md](SECURITY.md).

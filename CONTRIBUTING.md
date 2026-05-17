@@ -143,3 +143,65 @@ class MyDataset(DatasetAdapter):
 - Google-style docstrings for public APIs
 - No comments unless explaining non-obvious "why"
 - Follow existing patterns in the codebase
+
+## Legal & Contributor License Agreement
+
+OpenLithoHub uses a **CLA + Dual Licensing** model. See
+[COMMERCIAL-USE.md](COMMERCIAL-USE.md) for the rationale; in short, the
+open-source release is permanently Apache 2.0 (CC-BY-SA 4.0 for docs), and
+the CLA lets the maintainers also offer an optional commercial license to
+fund continued development.
+
+Before your first PR is merged, you (or your employer, for company-owned
+work) must sign the appropriate CLA:
+
+- Individuals: [CLA-INDIVIDUAL.md](CLA-INDIVIDUAL.md)
+- Companies: [CLA-CORPORATE.md](CLA-CORPORATE.md)
+
+Once the CLA Assistant bot is configured on the repository, it will prompt
+you to sign on your first PR. Until then, include the following statement in
+your PR description:
+
+```
+I have read the CLA Document and I hereby sign the CLA
+```
+
+### Third-Party Code
+
+If your contribution uses or adapts third-party code:
+
+- The code must be under an Apache 2.0–compatible license.
+- Add an entry to [NOTICE](NOTICE) under the appropriate section.
+- Preserve original copyright headers in source files you import or adapt.
+- Disclose any third-party license details in your PR description.
+
+### New Dataset Adapters
+
+If your contribution adds a dataset adapter (under `src/openlithohub/data/`):
+
+- Add a row to [DATA-LICENSES.md](DATA-LICENSES.md) with the dataset's
+  source URL, original license (SPDX identifier where available), and
+  citation requirement.
+- The adapter must download from the dataset's official source — do not
+  commit dataset bytes to this repository.
+- Surface citation information to end users (e.g., a `citation` property on
+  the adapter class).
+
+### SPDX License Identifiers
+
+New source files should include an SPDX header on the first or second line:
+
+```python
+# SPDX-License-Identifier: Apache-2.0
+```
+
+For documentation files added under `docs/`, use:
+
+```markdown
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+```
+
+### Security Issues
+
+Do not file public issues or PRs for security vulnerabilities. See
+[SECURITY.md](SECURITY.md) for the private disclosure process.
