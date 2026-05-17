@@ -38,6 +38,14 @@ def run(
     min_spacing_nm: float = typer.Option(
         40.0, "--min-spacing-nm", help="Minimum spacing for MRC (nm)."
     ),
+    submit_to_leaderboard: bool = typer.Option(
+        False, "--submit/--no-submit", help="Auto-submit results to leaderboard."
+    ),
+    topology: str = typer.Option(
+        "manhattan", "--topology", help="Mask topology for leaderboard: manhattan or curvilinear."
+    ),
+    paper_url: str | None = typer.Option(None, "--paper-url", help="Paper URL for leaderboard."),
+    code_url: str | None = typer.Option(None, "--code-url", help="Code URL for leaderboard."),
 ) -> None:
     """Run evaluation of a lithography model on a benchmark dataset."""
     console = Console()
@@ -112,6 +120,33 @@ def run(
     if output:
         output.write_text(report)
         console.print(f"Report saved to {output}")
+
+    if submit_to_leaderboard:
+        from openlithohub.leaderboard.schema import BenchmarkResult, MaskTopology, ProcessNode
+        from openlithohub.leaderboard.tracker import submit_result as lb_submit
+
+        try:
+            result_entry = BenchmarkResult(
+                model_name=model,
+                dataset=dataset,
+                process_node=ProcessNode(node),
+                mask_topology=MaskTopology(topology),
+                epe_mean_nm=aggregated.get("epe_mean_nm", 0.0),
+                epe_max_nm=aggregated.get("epe_max_nm", 0.0),
+                pvband_nm=aggregated.get("pvband_nm"),
+                mrc_violation_rate=aggregated.get("mrc_violation_rate"),
+                drc_pass=(
+                    aggregated.get("mrc_passed", 0.0) == 1.0
+                    if "mrc_passed" in aggregated
+                    else None
+                ),
+                paper_url=paper_url,
+                code_url=code_url,
+            )
+            sub_id = lb_submit(result_entry)
+            console.print(f"[green]Submitted to leaderboard![/green] ID: {sub_id}")
+        except (ValueError, KeyError) as e:
+            console.print(f"[yellow]Warning:[/yellow] Could not submit to leaderboard: {e}")
 
 
 def _load_dataset(

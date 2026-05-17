@@ -43,6 +43,7 @@ class BenchmarkResult(BaseModel):
     stochastic_robustness: float | None = Field(None, ge=0, le=1)
 
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    submission_id: str | None = Field(None, description="Auto-assigned submission ID (read-only).")
     paper_url: str | None = None
     code_url: str | None = None
     notes: str | None = None

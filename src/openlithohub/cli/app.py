@@ -5,6 +5,7 @@ from __future__ import annotations
 import typer
 
 from openlithohub.cli.eval_cmd import eval_app
+from openlithohub.cli.leaderboard_cmd import leaderboard_app
 from openlithohub.cli.optimize_cmd import optimize_app
 
 app = typer.Typer(
@@ -15,6 +16,9 @@ app = typer.Typer(
 
 app.add_typer(eval_app, name="eval", help="Evaluate a lithography model on benchmarks.")
 app.add_typer(optimize_app, name="optimize", help="Run mask optimization on a layout.")
+app.add_typer(
+    leaderboard_app, name="leaderboard", help="View, submit, and export leaderboard results."
+)
 
 
 @app.callback(invoke_without_command=True)
