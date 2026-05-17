@@ -182,4 +182,4 @@ class LithoSimDataset(DatasetAdapter):
     @property
     def columns(self) -> list[str]:
         ds = self._load_dataset()
-        return ds.column_names
+        return ds.column_names  # type: ignore[no-any-return]

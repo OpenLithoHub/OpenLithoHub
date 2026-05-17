@@ -77,7 +77,7 @@ def submit(
         and epe_mean is not None
         and epe_max is not None
     ):
-        data: dict = {
+        data = {
             "model_name": model_name,
             "dataset": dataset,
             "process_node": node,

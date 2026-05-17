@@ -123,12 +123,12 @@ class LithoBenchDataset(DatasetAdapter):
         path = self._resolve_path(sample_id, kind)
         if not path.exists():
             raise FileNotFoundError(f"Required file not found: {path}")
-        return np.load(path)
+        return np.load(path)  # type: ignore[no-any-return]
 
     def _try_load_array(self, sample_id: str, kind: str) -> np.ndarray | None:
         path = self._resolve_path(sample_id, kind)
         if path.exists():
-            return np.load(path)
+            return np.load(path)  # type: ignore[no-any-return]
         return None
 
     def download(self, root: str) -> None:

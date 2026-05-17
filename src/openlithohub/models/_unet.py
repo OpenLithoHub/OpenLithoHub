@@ -21,7 +21,7 @@ class _DoubleConv(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.block(x)
+        return self.block(x)  # type: ignore[no-any-return]
 
 
 class _Down(nn.Module):
@@ -35,7 +35,7 @@ class _Down(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.block(x)
+        return self.block(x)  # type: ignore[no-any-return]
 
 
 class _Up(nn.Module):
@@ -53,7 +53,7 @@ class _Up(nn.Module):
         dx = skip.shape[3] - x.shape[3]
         x = nn.functional.pad(x, [dx // 2, dx - dx // 2, dy // 2, dy - dy // 2])
         x = torch.cat([skip, x], dim=1)
-        return self.conv(x)
+        return self.conv(x)  # type: ignore[no-any-return]
 
 
 class UNet(nn.Module):
@@ -82,4 +82,4 @@ class UNet(nn.Module):
         x = self.up1(x4, x3)
         x = self.up2(x, x2)
         x = self.up3(x, x1)
-        return self.outc(x)
+        return self.outc(x)  # type: ignore[no-any-return]

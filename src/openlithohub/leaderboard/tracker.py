@@ -36,7 +36,7 @@ class LeaderboardStore:
             return []
         text = self._path.read_text(encoding="utf-8")
         data = json.loads(text)
-        return data.get("entries", [])
+        return data.get("entries", [])  # type: ignore[no-any-return]
 
     def _write_entries(self, entries: list[dict[str, Any]]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)

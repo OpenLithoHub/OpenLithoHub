@@ -1,5 +1,7 @@
 """IPython magic commands for OpenLithoHub."""
 
+# mypy: disable-error-code="misc,untyped-decorator,unused-ignore"
+
 from __future__ import annotations
 
 from typing import Any

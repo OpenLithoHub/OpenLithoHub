@@ -98,15 +98,11 @@ warn_return_any = true
 warn_unused_configs = true
 packages = ["openlithohub"]
 mypy_path = "src"
+plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*"]
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["tests.*"]
-disallow_untyped_defs = false
-disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
