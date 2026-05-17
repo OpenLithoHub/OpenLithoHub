@@ -1,6 +1,7 @@
 """Tests for the CLI module."""
 
 import json
+import re
 import tempfile
 from pathlib import Path
 
@@ -10,6 +11,12 @@ from typer.testing import CliRunner
 from openlithohub.cli.app import app
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 
 def test_version_flag():
@@ -26,8 +33,9 @@ def test_no_args_shows_help():
 def test_eval_run_help():
     result = runner.invoke(app, ["eval", "run", "--help"])
     assert result.exit_code == 0
-    assert "--model" in result.output
-    assert "--dataset" in result.output
+    output = _strip_ansi(result.output)
+    assert "--model" in output
+    assert "--dataset" in output
 
 
 def test_eval_run_unknown_model():
@@ -124,9 +132,10 @@ def test_eval_run_save_report():
 def test_optimize_run_help():
     result = runner.invoke(app, ["optimize", "run", "--help"])
     assert result.exit_code == 0
-    assert "--input" in result.output
-    assert "--writer" in result.output
-    assert "--drc-check" in result.output
+    output = _strip_ansi(result.output)
+    assert "--input" in output
+    assert "--writer" in output
+    assert "--drc-check" in output
 
 
 def test_eval_run_with_mrc():

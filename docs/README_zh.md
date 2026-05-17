@@ -6,7 +6,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/OpenLithoHub/OpenLithoHub/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenLithoHub/OpenLithoHub/actions)
 
-[English Version](../README.md)
+[English Version](https://github.com/OpenLithoHub/OpenLithoHub/blob/main/README.md)
 
 ---
 
@@ -218,7 +218,7 @@ ruff format src/ tests/
 
 ## 参与贡献
 
-参见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
+参见 [CONTRIBUTING.md](https://github.com/OpenLithoHub/OpenLithoHub/blob/main/CONTRIBUTING.md)。
 
 ## 许可证
 
