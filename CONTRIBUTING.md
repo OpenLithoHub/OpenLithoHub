@@ -2,6 +2,24 @@
 
 Thank you for your interest in contributing! This guide will help you get started.
 
+## Project Scope & Responsibility Boundary
+
+OpenLithoHub 生态由两个独立仓库组成，职责清晰分离：
+
+| 仓库 | 职责 | 部署 |
+|------|------|------|
+| **本仓库 (OpenLithoHub)** | Python SDK、指标计算、模型接口、工作流引擎、CLI、技术文档、HF Spaces Playground | docs.openlithohub.com |
+| **openlithohub-website** | 品牌官网、排行榜前端展示、Blog、Community、Playground 嵌入 | openlithohub.com |
+
+**边界原则：**
+
+- 本仓库负责**数据生产**（metrics, leaderboard export, model inference）
+- 网站仓库负责**数据展示**（读取本仓库导出的 JSON 渲染前端）
+- 技术文档（API reference, Getting Started, Architecture）放在本仓库 `docs/`
+- 品牌/营销内容（Features 介绍页、Blog）放在网站仓库
+- 排行榜数据通过 `openlithohub leaderboard export` 导出 JSON，手动更新到网站仓库 `src/data/leaderboard.json`
+- 网站 features 页面的架构描述必须与本仓库 `docs/architecture.md` 保持一致
+
 ## Development Setup
 
 ```bash
