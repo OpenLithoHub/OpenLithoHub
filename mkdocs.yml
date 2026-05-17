@@ -1,0 +1,60 @@
+site_name: OpenLithoHub
+site_url: https://openlithohub.readthedocs.io
+site_description: Open-source computational lithography benchmarking and workflow tool
+repo_url: https://github.com/OpenLithoHub/OpenLithoHub
+repo_name: OpenLithoHub/OpenLithoHub
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            docstring_style: google
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Architecture: architecture.md
+  - CLI Reference: cli-reference.md
+  - API Reference:
+    - Data Adapters: api/data.md
+    - Benchmark Metrics: api/benchmark.md
+    - Model Interface: api/models.md
+    - Workflow Engine: api/workflow.md
+    - Leaderboard: api/leaderboard.md
+  - Contributing: contributing.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true

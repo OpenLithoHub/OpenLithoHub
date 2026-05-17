@@ -1,0 +1,111 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openlithohub"
+dynamic = ["version"]
+description = "Open-source computational lithography benchmarking and workflow tool"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "OpenLithoHub Contributors" },
+]
+keywords = ["lithography", "EUV", "OPC", "benchmark", "semiconductor", "EDA"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+dependencies = [
+    "numpy>=1.24",
+    "torch>=2.0",
+    "typer[all]>=0.9",
+    "pydantic>=2.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+data = [
+    "datasets>=2.14",
+    "pyarrow>=12.0",
+]
+workflow = [
+    "klayout>=0.28",
+    "scipy>=1.10",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "pytest-xdist>=3.3",
+    "mypy>=1.5",
+    "ruff>=0.1",
+    "pre-commit>=3.4",
+]
+docs = [
+    "mkdocs-material>=9.4",
+    "mkdocstrings[python]>=0.23",
+    "mkdocs-gen-files>=0.5",
+]
+all = ["openlithohub[data,workflow,dev,docs]"]
+
+[project.urls]
+Homepage = "https://github.com/OpenLithoHub/OpenLithoHub"
+Documentation = "https://openlithohub.readthedocs.io"
+Repository = "https://github.com/OpenLithoHub/OpenLithoHub"
+Issues = "https://github.com/OpenLithoHub/OpenLithoHub/issues"
+
+[project.scripts]
+openlithohub = "openlithohub.cli.app:app"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openlithohub"]
+
+[tool.ruff]
+src = ["src"]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
+ignore = ["B008", "B027", "A002"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["openlithohub"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+packages = ["openlithohub"]
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = ["klayout.*", "datasets.*", "torch.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --tb=short"
+markers = [
+    "slow: marks tests that require large data downloads",
+    "requires_klayout: marks tests that need klayout installed",
+]
+
+[tool.coverage.run]
+source = ["openlithohub"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
