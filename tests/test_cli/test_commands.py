@@ -124,3 +124,64 @@ def test_optimize_run_help():
     assert "--input" in result.output
     assert "--writer" in result.output
     assert "--drc-check" in result.output
+
+
+def test_eval_run_with_mrc():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        data_root = Path(tmpdir)
+        design_dir = data_root / "design"
+        mask_dir = data_root / "mask"
+        design_dir.mkdir()
+        mask_dir.mkdir()
+
+        arr = np.zeros((32, 32), dtype=np.float32)
+        arr[8:24, 8:24] = 1.0
+        np.save(design_dir / "s0.npy", arr)
+        np.save(mask_dir / "s0.npy", arr)
+
+        result = runner.invoke(
+            app,
+            [
+                "eval", "run",
+                "-m", "dummy-identity",
+                "--data-root", tmpdir,
+                "--mrc",
+                "--min-width-nm", "4",
+                "--min-spacing-nm", "4",
+                "-f", "json",
+            ],
+        )
+        assert result.exit_code == 0
+        json_start = result.output.index("{")
+        parsed = json.loads(result.output[json_start:])
+        assert "mrc_violation_rate" in parsed
+        assert "mrc_passed" in parsed
+
+
+def test_eval_run_no_mrc():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        data_root = Path(tmpdir)
+        design_dir = data_root / "design"
+        mask_dir = data_root / "mask"
+        design_dir.mkdir()
+        mask_dir.mkdir()
+
+        arr = np.zeros((32, 32), dtype=np.float32)
+        arr[8:24, 8:24] = 1.0
+        np.save(design_dir / "s0.npy", arr)
+        np.save(mask_dir / "s0.npy", arr)
+
+        result = runner.invoke(
+            app,
+            [
+                "eval", "run",
+                "-m", "dummy-identity",
+                "--data-root", tmpdir,
+                "--no-mrc",
+                "-f", "json",
+            ],
+        )
+        assert result.exit_code == 0
+        json_start = result.output.index("{")
+        parsed = json.loads(result.output[json_start:])
+        assert "mrc_violation_rate" not in parsed

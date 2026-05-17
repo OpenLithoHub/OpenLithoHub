@@ -31,6 +31,13 @@ def run(
     limit: int | None = typer.Option(
         None, "--limit", "-l", help="Max samples to evaluate (default: all)."
     ),
+    mrc_check: bool = typer.Option(True, "--mrc/--no-mrc", help="Run MRC compliance check."),
+    min_width_nm: float = typer.Option(
+        40.0, "--min-width-nm", help="Minimum feature width for MRC (nm)."
+    ),
+    min_spacing_nm: float = typer.Option(
+        40.0, "--min-spacing-nm", help="Minimum spacing for MRC (nm)."
+    ),
 ) -> None:
     """Run evaluation of a lithography model on a benchmark dataset."""
     console = Console()
@@ -60,19 +67,37 @@ def run(
     n_samples = min(len(adapter), limit) if limit else len(adapter)
     console.print(f"Running on {n_samples} samples...")
 
+    if mrc_check:
+        from openlithohub.benchmark.compliance.mrc import check_mrc
+
     all_metrics: list[dict[str, float]] = []
     for i in range(n_samples):
         sample = adapter[i]
         result = litho_model.predict(sample.design)
 
+        sample_metrics: dict[str, float] = {}
+
         if sample.mask is not None:
             epe = compute_epe(result.mask, sample.mask, pixel_size_nm=pixel_nm)
-            all_metrics.append(epe)
+            sample_metrics.update(epe)
+
+        if mrc_check:
+            mrc_result = check_mrc(
+                result.mask,
+                min_width_nm=min_width_nm,
+                min_spacing_nm=min_spacing_nm,
+                pixel_size_nm=pixel_nm,
+            )
+            sample_metrics["mrc_violation_rate"] = mrc_result.violation_rate
+            sample_metrics["mrc_passed"] = 1.0 if mrc_result.passed else 0.0
+
+        if sample_metrics:
+            all_metrics.append(sample_metrics)
 
     litho_model.teardown()
 
     if not all_metrics:
-        console.print("[yellow]Warning:[/yellow] No target masks found — no EPE computed.")
+        console.print("[yellow]Warning:[/yellow] No metrics computed.")
         raise typer.Exit(1)
 
     aggregated = _aggregate_metrics(all_metrics)
@@ -105,9 +130,16 @@ def _aggregate_metrics(metrics_list: list[dict[str, float]]) -> dict[str, Any]:
     """Average per-sample metrics into a single aggregate dict."""
     import torch
 
-    keys = metrics_list[0].keys()
+    if not metrics_list:
+        return {}
+
+    all_keys: set[str] = set()
+    for m in metrics_list:
+        all_keys.update(m.keys())
+
     aggregated: dict[str, Any] = {}
-    for key in keys:
-        vals = torch.tensor([m[key] for m in metrics_list])
-        aggregated[key] = float(vals.mean().item())
+    for key in sorted(all_keys):
+        vals = [m[key] for m in metrics_list if key in m]
+        if vals:
+            aggregated[key] = float(torch.tensor(vals).mean().item())
     return aggregated
