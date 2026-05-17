@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 
+import numpy as np
 import torch
 
 from openlithohub._utils.morphology import binary_dilation, binary_erosion, distance_transform
 from openlithohub._utils.tensor_ops import ensure_2d
+from openlithohub.workflow.contour.curvilinear import _trace_contour
 
 
 @dataclass
@@ -19,6 +22,24 @@ class MRCResult:
     violation_count: int
     violation_rate: float
     violations: list[dict[str, float]]
+
+
+@dataclass
+class CurvilinearMRCResult:
+    """Result of a curvilinear-specific Mask Rule Check.
+
+    Curvilinear masks (post-ILT, EUV) cannot be validated with Manhattan-only
+    rules. This adds two checks aimed at MBMW writability:
+    - Minimum curvature radius (sharp cusps cannot be written).
+    - Minimum feature area (sub-resolution dots cannot be reliably exposed).
+    """
+
+    passed: bool
+    violation_count: int
+    curvature_violations: list[dict[str, float]] = field(default_factory=list)
+    area_violations: list[dict[str, float]] = field(default_factory=list)
+    min_radius_observed_nm: float | None = None
+    min_area_observed_nm2: float | None = None
 
 
 def check_mrc(
@@ -126,3 +147,170 @@ def _add_violations(
                 "required_nm": threshold_nm,
             }
         )
+
+
+def _menger_curvature(p0: np.ndarray, p1: np.ndarray, p2: np.ndarray) -> float:
+    """Discrete curvature at p1 via the circumscribed-circle radius of (p0, p1, p2).
+
+    Returns 1/R. Returns 0.0 if the three points are collinear (infinite radius).
+    """
+    a = np.linalg.norm(p1 - p0)
+    b = np.linalg.norm(p2 - p1)
+    c = np.linalg.norm(p2 - p0)
+    if a < 1e-9 or b < 1e-9 or c < 1e-9:
+        return 0.0
+    cross = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
+    area2 = abs(cross)
+    if area2 < 1e-12:
+        return 0.0
+    return 2.0 * area2 / (a * b * c)
+
+
+def _smooth_loop(loop: np.ndarray, window: int) -> np.ndarray:
+    """Periodic moving-average smoother for closed contour loops.
+
+    Removes single-pixel rasterization aliasing before curvature estimation.
+    """
+    if window <= 1 or len(loop) < window:
+        return loop
+    kernel = np.ones(window, dtype=np.float64) / window
+    pad = window // 2
+    padded = np.concatenate([loop[-pad:], loop, loop[:pad]], axis=0)
+    sy = np.convolve(padded[:, 0], kernel, mode="valid")
+    sx = np.convolve(padded[:, 1], kernel, mode="valid")
+    return np.stack([sy[: len(loop)], sx[: len(loop)]], axis=1)
+
+
+def _connected_component_areas(binary: np.ndarray) -> list[tuple[int, float, float]]:
+    """4-connected components of a binary mask. Returns (area_px, cy, cx) per component."""
+    h, w = binary.shape
+    visited = np.zeros_like(binary, dtype=bool)
+    components: list[tuple[int, float, float]] = []
+
+    for y0 in range(h):
+        for x0 in range(w):
+            if binary[y0, x0] == 0 or visited[y0, x0]:
+                continue
+            queue: deque[tuple[int, int]] = deque([(y0, x0)])
+            visited[y0, x0] = True
+            count = 0
+            sum_y = 0
+            sum_x = 0
+            while queue:
+                y, x = queue.popleft()
+                count += 1
+                sum_y += y
+                sum_x += x
+                for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    ny, nx = y + dy, x + dx
+                    if 0 <= ny < h and 0 <= nx < w and binary[ny, nx] and not visited[ny, nx]:
+                        visited[ny, nx] = True
+                        queue.append((ny, nx))
+            components.append((count, sum_y / count, sum_x / count))
+
+    return components
+
+
+def check_curvilinear_mrc(
+    mask: torch.Tensor,
+    min_curvature_radius_nm: float = 20.0,
+    min_feature_area_nm2: float = 1600.0,
+    pixel_size_nm: float = 1.0,
+    smoothing_window: int = 5,
+    max_reports: int = 100,
+) -> CurvilinearMRCResult:
+    """Check curvilinear-specific manufacturing rules on a binary mask.
+
+    Two rules, both targeting MBMW writability of post-ILT curvilinear shapes:
+
+    1. Minimum curvature radius. The contour is traced, smoothed with a periodic
+       moving average to suppress rasterization aliasing, then discrete curvature
+       is computed at each point via the Menger (three-point circumscribed
+       circle) formula. A point violates if its radius (1/|kappa|) falls below
+       ``min_curvature_radius_nm``. The smoothing offset (``smoothing_window // 2``)
+       skips evaluation near sharp 90 degree corners typical of Manhattan input,
+       so right-angled designs do not falsely fail.
+    2. Minimum feature area. 4-connected components below
+       ``min_feature_area_nm2`` are flagged as sub-resolution dots.
+
+    Args:
+        mask: Binary mask tensor (H, W) or (B, C, H, W).
+        min_curvature_radius_nm: Minimum allowed local radius of curvature.
+        min_feature_area_nm2: Minimum allowed area for a connected feature.
+        pixel_size_nm: Physical pixel size for unit conversion.
+        smoothing_window: Window size for the periodic moving-average smoother.
+            Set to 1 to disable smoothing. Larger values relax the curvature
+            check; the default suits 1 nm/pixel ILT outputs.
+        max_reports: Cap on per-category violation reports.
+
+    Returns:
+        CurvilinearMRCResult with pass/fail status and violation details.
+    """
+    m = ensure_2d(mask)
+    binary_np = (m > 0.5).detach().cpu().numpy().astype(np.int8)
+
+    curvature_violations: list[dict[str, float]] = []
+    area_violations: list[dict[str, float]] = []
+    min_radius_observed: float | None = None
+    min_area_observed: float | None = None
+
+    pixel_area_nm2 = pixel_size_nm * pixel_size_nm
+    components = _connected_component_areas(binary_np)
+    for area_px, cy, cx in components:
+        area_nm2 = area_px * pixel_area_nm2
+        if min_area_observed is None or area_nm2 < min_area_observed:
+            min_area_observed = area_nm2
+        if area_nm2 < min_feature_area_nm2 and len(area_violations) < max_reports:
+            area_violations.append(
+                {
+                    "x_nm": cx * pixel_size_nm,
+                    "y_nm": cy * pixel_size_nm,
+                    "actual_nm2": area_nm2,
+                    "required_nm2": min_feature_area_nm2,
+                }
+            )
+
+    if min_curvature_radius_nm > 0.0:
+        loops = _trace_contour(binary_np)
+        threshold_kappa = 1.0 / max(min_curvature_radius_nm, 1e-9)
+        # Curvature stencil span. A 3-point Menger estimate is only reliable
+        # when the sampled arc length is comparable to the radius being
+        # measured. Span ~ R / pi keeps the chord/sagitta ratio sane and
+        # prevents rasterization aliasing on smooth curves from flagging
+        # spurious tight radii.
+        stencil = max(2, int(round(min_curvature_radius_nm / max(pixel_size_nm, 1e-9) / 3.0)))
+        skip = max(stencil, smoothing_window // 2)
+        for loop in loops:
+            if len(loop) < max(2 * skip + 3, 5):
+                continue
+            loop_nm = _smooth_loop(loop, smoothing_window) * pixel_size_nm
+            n = len(loop_nm)
+            for i in range(n):
+                p0 = loop_nm[(i - skip) % n]
+                p1 = loop_nm[i]
+                p2 = loop_nm[(i + skip) % n]
+                kappa = _menger_curvature(p0, p1, p2)
+                if kappa <= 0.0:
+                    continue
+                radius_nm = 1.0 / kappa
+                if min_radius_observed is None or radius_nm < min_radius_observed:
+                    min_radius_observed = radius_nm
+                if kappa > threshold_kappa and len(curvature_violations) < max_reports:
+                    curvature_violations.append(
+                        {
+                            "x_nm": float(p1[1]),
+                            "y_nm": float(p1[0]),
+                            "actual_radius_nm": radius_nm,
+                            "required_radius_nm": min_curvature_radius_nm,
+                        }
+                    )
+
+    violation_count = len(curvature_violations) + len(area_violations)
+    return CurvilinearMRCResult(
+        passed=violation_count == 0,
+        violation_count=violation_count,
+        curvature_violations=curvature_violations,
+        area_violations=area_violations,
+        min_radius_observed_nm=min_radius_observed,
+        min_area_observed_nm2=min_area_observed,
+    )

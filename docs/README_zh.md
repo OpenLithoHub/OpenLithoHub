@@ -163,6 +163,7 @@ class MyOPCModel(LithographyModel):
 | **Shot Count** | 掩膜写入时间代理指标（MBMW/VSB） | 工业标准 |
 | **随机鲁棒性** | 蒙特卡洛光子噪声仿真，量化桥接/断线概率 | EUV 专用 |
 | **MRC** | 最小线宽/间距规则检查（一票否决） | EasyMRC |
+| **曲线 MRC** | 最小曲率半径 + 最小特征面积，针对 ILT 后曲线掩膜的 MBMW 可写性 | EUV 专用 |
 | **DRC** | 设计规则检查：面积、缺口、线宽、间距 | OpenDRC |
 
 ---
@@ -219,6 +220,14 @@ ruff format src/ tests/
 ## 参与贡献
 
 参见 [CONTRIBUTING.md](https://github.com/OpenLithoHub/OpenLithoHub/blob/main/CONTRIBUTING.md)。
+
+---
+
+## 免责声明
+
+**OpenLithoHub is a purely academic, open-source project for fundamental research in computational physics and machine learning. It relies solely on publicly available datasets and published algorithms. It does not contain, nor does it seek to reverse-engineer, any proprietary commercial EDA tools or export-controlled manufacturing processes.**
+
+OpenLithoHub 是一个纯学术性质的开源项目，专注于计算物理与机器学习的基础研究。本项目仅基于公开可用的数据集与已发表的算法，不包含、亦不试图逆向工程任何商业 EDA 工具或受出口管制的制造工艺。
 
 ## 许可证
 

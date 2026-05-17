@@ -165,6 +165,7 @@ class MyOPCModel(LithographyModel):
 | **Shot Count** | Mask write time proxy for MBMW and VSB writers | Industry |
 | **Stochastic Robustness** | Monte Carlo photon noise simulation for bridge/break probability | EUV-specific |
 | **MRC** | Minimum width/spacing rule check (hard-fail) | EasyMRC |
+| **Curvilinear MRC** | Minimum curvature radius + minimum feature area for post-ILT curvilinear shapes (MBMW writability) | EUV-specific |
 | **DRC** | Design Rule Check: area, notch, width, spacing | OpenDRC |
 
 ---
@@ -222,6 +223,12 @@ ruff format src/ tests/
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+## Disclaimer
+
+**OpenLithoHub is a purely academic, open-source project for fundamental research in computational physics and machine learning. It relies solely on publicly available datasets and published algorithms. It does not contain, nor does it seek to reverse-engineer, any proprietary commercial EDA tools or export-controlled manufacturing processes.**
 
 ## License
 

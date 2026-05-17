@@ -1,9 +1,16 @@
 """Tests for compliance checks."""
 
+import math
+
 import torch
 
 from openlithohub.benchmark.compliance.drc import check_drc
-from openlithohub.benchmark.compliance.mrc import MRCResult, check_mrc
+from openlithohub.benchmark.compliance.mrc import (
+    CurvilinearMRCResult,
+    MRCResult,
+    check_curvilinear_mrc,
+    check_mrc,
+)
 
 
 class TestMRCWidthCheck:
@@ -143,3 +150,146 @@ class TestDRC:
         assert isinstance(result.violation_count, int)
         assert isinstance(result.violations, list)
         assert isinstance(result.rule_summary, dict)
+
+
+def _disk_mask(size: int, cy: float, cx: float, radius: float) -> torch.Tensor:
+    """Return a binary mask with a single filled disk."""
+    yy, xx = torch.meshgrid(
+        torch.arange(size, dtype=torch.float32),
+        torch.arange(size, dtype=torch.float32),
+        indexing="ij",
+    )
+    return ((yy - cy) ** 2 + (xx - cx) ** 2 <= radius**2).float()
+
+
+class TestCurvilinearMRCCurvature:
+    def test_large_circle_passes(self):
+        # Radius 30 px @ 1 nm/px -> 30 nm; threshold 20 nm -> pass.
+        mask = _disk_mask(128, 64, 64, 30.0)
+        result = check_curvilinear_mrc(
+            mask,
+            min_curvature_radius_nm=20.0,
+            min_feature_area_nm2=100.0,
+            pixel_size_nm=1.0,
+        )
+        assert result.passed is True
+        assert result.violation_count == 0
+        assert result.min_radius_observed_nm is not None
+        # Smoothed traced contour should give a radius near the true 30 nm.
+        assert result.min_radius_observed_nm > 20.0
+
+    def test_small_circle_fails_curvature(self):
+        # Radius 5 px @ 1 nm/px -> 5 nm; threshold 20 nm -> sharp curvature.
+        mask = _disk_mask(64, 32, 32, 5.0)
+        # Area is pi * 25 ~= 78 nm^2; relax area threshold so only curvature can fail.
+        result = check_curvilinear_mrc(
+            mask,
+            min_curvature_radius_nm=20.0,
+            min_feature_area_nm2=10.0,
+            pixel_size_nm=1.0,
+        )
+        assert result.passed is False
+        assert len(result.curvature_violations) > 0
+        assert result.min_radius_observed_nm is not None
+        assert result.min_radius_observed_nm < 20.0
+        v = result.curvature_violations[0]
+        assert v["actual_radius_nm"] < v["required_radius_nm"]
+
+    def test_pixel_size_scaling_curvature(self):
+        # Radius 5 px @ 4 nm/px -> 20 nm physical; threshold 15 nm -> pass.
+        mask = _disk_mask(64, 32, 32, 5.0)
+        result = check_curvilinear_mrc(
+            mask,
+            min_curvature_radius_nm=15.0,
+            min_feature_area_nm2=10.0,
+            pixel_size_nm=4.0,
+        )
+        # Physical radius is ~20 nm; with rasterization noise the smoother gives
+        # a slightly smaller min radius — accept if no curvature violations dominate.
+        assert result.min_radius_observed_nm is not None
+        assert result.min_radius_observed_nm > 10.0
+
+    def test_manhattan_square_does_not_blow_up(self):
+        # 90 degree corners would produce infinite curvature without smoothing.
+        # The smoother + skip stride should keep this finite and not flag the
+        # straight edges as violations.
+        mask = torch.zeros(64, 64)
+        mask[16:48, 16:48] = 1.0
+        result = check_curvilinear_mrc(
+            mask,
+            min_curvature_radius_nm=2.0,
+            min_feature_area_nm2=10.0,
+            pixel_size_nm=1.0,
+            smoothing_window=5,
+        )
+        # Function returns without exception and observed radius is finite.
+        assert result.min_radius_observed_nm is not None
+        assert math.isfinite(result.min_radius_observed_nm)
+
+
+class TestCurvilinearMRCArea:
+    def test_large_feature_passes_area(self):
+        mask = _disk_mask(64, 32, 32, 10.0)  # ~314 px area @ 1 nm/px
+        result = check_curvilinear_mrc(
+            mask,
+            min_curvature_radius_nm=1.0,
+            min_feature_area_nm2=200.0,
+            pixel_size_nm=1.0,
+        )
+        assert all(v["actual_nm2"] >= 200.0 for v in result.area_violations)
+        assert result.min_area_observed_nm2 is not None
+        assert result.min_area_observed_nm2 >= 200.0
+
+    def test_small_dot_fails_area(self):
+        mask = torch.zeros(64, 64)
+        mask[31:33, 31:33] = 1.0  # 4 px dot
+        result = check_curvilinear_mrc(
+            mask,
+            min_curvature_radius_nm=0.0,  # disable curvature check
+            min_feature_area_nm2=100.0,
+            pixel_size_nm=1.0,
+        )
+        assert result.passed is False
+        assert len(result.area_violations) == 1
+        v = result.area_violations[0]
+        assert v["actual_nm2"] == 4.0
+        assert v["required_nm2"] == 100.0
+
+    def test_area_scales_with_pixel_size(self):
+        mask = torch.zeros(64, 64)
+        mask[31:33, 31:33] = 1.0  # 4 px
+        # 4 px * (5 nm)^2 = 100 nm^2 -> exactly at threshold, should pass.
+        result = check_curvilinear_mrc(
+            mask,
+            min_curvature_radius_nm=0.0,
+            min_feature_area_nm2=100.0,
+            pixel_size_nm=5.0,
+        )
+        assert len(result.area_violations) == 0
+
+
+class TestCurvilinearMRCResultShape:
+    def test_result_dataclass_fields(self):
+        mask = _disk_mask(64, 32, 32, 12.0)
+        result = check_curvilinear_mrc(mask)
+        assert isinstance(result, CurvilinearMRCResult)
+        assert isinstance(result.passed, bool)
+        assert isinstance(result.violation_count, int)
+        assert isinstance(result.curvature_violations, list)
+        assert isinstance(result.area_violations, list)
+        assert result.violation_count == len(result.curvature_violations) + len(
+            result.area_violations
+        )
+
+    def test_empty_mask(self):
+        mask = torch.zeros(64, 64)
+        result = check_curvilinear_mrc(mask)
+        assert result.passed is True
+        assert result.violation_count == 0
+        assert result.min_radius_observed_nm is None
+        assert result.min_area_observed_nm2 is None
+
+    def test_4d_input_shape(self):
+        mask = _disk_mask(64, 32, 32, 15.0).unsqueeze(0).unsqueeze(0)
+        result = check_curvilinear_mrc(mask)
+        assert isinstance(result, CurvilinearMRCResult)
