@@ -39,7 +39,18 @@ def run(
     console = Console()
 
     import openlithohub.models.examples.dummy_model  # noqa: F401
+    import openlithohub.models.levelset_ilt  # noqa: F401
+    import openlithohub.models.neural_ilt  # noqa: F401
     from openlithohub.models.registry import registry
+    from openlithohub.workflow.process_node import PROCESS_NODES
+
+    # Auto-configure from process node
+    if node in PROCESS_NODES:
+        from openlithohub.workflow.process_node import get_node
+
+        node_config = get_node(node)
+        if pixel_nm == 1.0:
+            pixel_nm = node_config.pixel_size_nm
 
     console.print("[bold]OpenLithoHub Mask Optimization[/bold]")
     console.print(f"  Input:  {input}")

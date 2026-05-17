@@ -5,6 +5,7 @@ from openlithohub._utils.morphology import (
     binary_erosion,
     distance_transform,
 )
+from openlithohub._utils.resist_model import simulate_resist, simulate_resist_soft
 from openlithohub._utils.tensor_ops import ensure_2d
 
 __all__ = [
@@ -12,4 +13,6 @@ __all__ = [
     "binary_erosion",
     "distance_transform",
     "ensure_2d",
+    "simulate_resist",
+    "simulate_resist_soft",
 ]

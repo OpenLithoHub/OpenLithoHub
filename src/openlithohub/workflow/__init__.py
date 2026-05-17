@@ -2,6 +2,15 @@
 
 from openlithohub.workflow.export import export_oasis
 from openlithohub.workflow.parsing import parse_layout
+from openlithohub.workflow.process_node import ProcessNodeConfig, get_node, list_nodes
 from openlithohub.workflow.tiling import stitch_tiles, tile_layout
 
-__all__ = ["parse_layout", "tile_layout", "stitch_tiles", "export_oasis"]
+__all__ = [
+    "parse_layout",
+    "tile_layout",
+    "stitch_tiles",
+    "export_oasis",
+    "ProcessNodeConfig",
+    "get_node",
+    "list_nodes",
+]

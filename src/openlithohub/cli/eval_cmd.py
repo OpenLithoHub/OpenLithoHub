@@ -51,9 +51,24 @@ def run(
     console = Console()
 
     import openlithohub.models.examples.dummy_model  # noqa: F401 — register built-in models
+    import openlithohub.models.levelset_ilt  # noqa: F401
+    import openlithohub.models.neural_ilt  # noqa: F401
     from openlithohub.benchmark.metrics.epe import compute_epe
     from openlithohub.benchmark.report import generate_report
     from openlithohub.models.registry import registry
+    from openlithohub.workflow.process_node import PROCESS_NODES
+
+    # Auto-configure from process node if available
+    if node in PROCESS_NODES:
+        from openlithohub.workflow.process_node import get_node
+
+        node_config = get_node(node)
+        if pixel_nm == 1.0:
+            pixel_nm = node_config.pixel_size_nm
+        if min_width_nm == 40.0:
+            min_width_nm = node_config.min_feature_nm
+        if min_spacing_nm == 40.0:
+            min_spacing_nm = node_config.min_spacing_nm
 
     console.print(f"[bold]Evaluating[/bold] model={model} dataset={dataset} node={node}")
 

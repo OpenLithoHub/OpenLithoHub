@@ -201,6 +201,7 @@ ruff format src/ tests/
 - [x] Phase 3: OASIS workflow, PV Band, stochastic robustness, DRC, B-spline fitting, `optimize` CLI
 - [x] Phase 4: Public leaderboard, MkDocs documentation site, CI/CD for docs
 - [x] Phase 5: Web playground (HuggingFace Spaces)
+- [x] Phase 6: Real ILT models (LevelSet-ILT, Neural-ILT U-Net), DTCO process nodes, resist simulation, model hub, Jupyter integration, PyPI/Docker CI/CD
 
 ---
 

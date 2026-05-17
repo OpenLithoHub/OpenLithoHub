@@ -60,16 +60,26 @@ def distance_transform(mask: torch.Tensor) -> torch.Tensor:
     Returns:
         Distance transform tensor (H, W) with integer distances (as float).
     """
-    fg = mask.float()
+    fg = (mask > 0.5).float()
     if fg.sum() == 0:
         return torch.zeros_like(fg)
 
+    # If entire mask is foreground, distance is determined by distance to edge
+    h, w = fg.shape
+    if fg.sum() == h * w:
+        y_dist = torch.arange(h, dtype=fg.dtype, device=fg.device).unsqueeze(1).expand(h, w)
+        y_dist = torch.minimum(y_dist, (h - 1) - y_dist)
+        x_dist = torch.arange(w, dtype=fg.dtype, device=fg.device).unsqueeze(0).expand(h, w)
+        x_dist = torch.minimum(x_dist, (w - 1) - x_dist)
+        return torch.minimum(y_dist, x_dist) + 1.0
+
     dist = torch.zeros_like(fg)
     current = fg.unsqueeze(0).unsqueeze(0)
-    iteration = 0
+    max_iterations = min(h, w) // 2 + 1
 
-    while current.sum() > 0:
-        iteration += 1
+    for _ in range(max_iterations):
+        if current.sum() == 0:
+            break
         dist += current.squeeze(0).squeeze(0)
         inverted = 1.0 - current
         dilated_inv = functional.max_pool2d(inverted, kernel_size=3, stride=1, padding=1)

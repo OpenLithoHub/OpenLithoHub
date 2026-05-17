@@ -40,10 +40,14 @@ workflow = [
     "klayout>=0.28",
     "scipy>=1.10",
 ]
+models = [
+    "huggingface_hub>=0.16",
+]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
     "pytest-xdist>=3.3",
+    "pytest-benchmark>=4.0",
     "mypy>=1.5",
     "ruff>=0.1",
     "pre-commit>=3.4",
@@ -54,7 +58,11 @@ docs = [
     "mkdocstrings[python]>=0.23",
     "mkdocs-gen-files>=0.5",
 ]
-all = ["openlithohub[data,workflow,dev,docs]"]
+jupyter = [
+    "ipython>=8.0",
+    "matplotlib>=3.7",
+]
+all = ["openlithohub[data,workflow,models,dev,docs,jupyter]"]
 
 [project.urls]
 Homepage = "https://github.com/OpenLithoHub/OpenLithoHub"
@@ -92,8 +100,13 @@ packages = ["openlithohub"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["klayout.*", "datasets.*", "torch.*", "scipy.*"]
+module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -101,6 +114,7 @@ addopts = "-ra --strict-markers --tb=short"
 markers = [
     "slow: marks tests that require large data downloads",
     "requires_klayout: marks tests that need klayout installed",
+    "benchmark: performance benchmarks (deselect with -m 'not benchmark')",
 ]
 
 [tool.coverage.run]
