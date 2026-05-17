@@ -1,160 +1,224 @@
-# OpenLithoHub Strategic Whitepaper (2026 Ultimate Edition)
+# OpenLithoHub
 
-**Positioning: Open-source computational lithography workflow, manufacturability benchmarking infrastructure, and foundation model data engine for advanced EUV/curvilinear mask processes**
+**Open-source computational lithography benchmarking and workflow toolkit for advanced EUV/curvilinear mask processes.**
 
-> **Project Vision:** "We don't build lithography machines, nor do we write low-level physics engines. We pave the standardized highway connecting everyone who optimizes lithography — ensuring it leads to both the Manhattan present and the curvilinear future."
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![CI](https://github.com/OpenLithoHub/OpenLithoHub/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenLithoHub/OpenLithoHub/actions)
 
 [中文版 / Chinese Version](docs/README_zh.md)
 
 ---
 
-## I. Industry Landscape & Ecosystem Gaps (2026)
+## What is OpenLithoHub?
 
-Strategy begins with a clear-eyed view of the battlefield. Computational lithography is caught between an "compute explosion" and "ecosystem fragmentation."
+OpenLithoHub provides a unified evaluation and workflow framework for computational lithography research. It bridges the gap between academic tensor-based optimization and industrial mask manufacturing by offering:
 
-### 1.1 Industry: The Compute Revolution, Curvilinear Masks & EUV Stochastics
-
-- **NVIDIA cuLitho in Production:** TSMC has deployed cuLitho, achieving 40–60× ILT speedup. The low-level compute war (CUDA/C++) is over — competition has shifted to **AI algorithm orchestration, evaluation, and productionization**.
-- **MBMW & OASIS.MBW as Standard:** Multi-beam mask writers (MBMW) make curvilinear masks the absolute mainstream for sub-28nm. Data volumes explode; GDSII is obsolete. Industry has fully migrated to **OASIS** format (10× design data compression, 4×+ post-OPC compression). The **`OASIS.MBW 2.1` standard**, purpose-built for mask writers with native curve primitives, is the lifeline of advanced nodes.
-- **EUV Stochastics as Core Pain Point:** Photon shot noise causes line-edge roughness (LER) and micro-bridging — the yield killers. At current EUV doses, sub-20nm stochastic LER can exceed **20%** of critical dimension, far beyond the ITRS **8%** safety threshold. Deterministic optical simulation cannot meet 2nm demands.
-
-### 1.2 Academia: Thriving Islands & the Half-Life Crisis
-
-Led by `OpenOPC` (CUHK), academia has produced exceptional open-source projects (`TorchLitho 2.0`, `LithoSim`, `curvyILT`), yet the ecosystem is severely fragmented:
-
-- **Format & Metric Divergence:** Datasets (LithoBench vs LithoSim) are incompatible; EPE/PVB definitions vary; fair cross-paper comparison is impossible.
-- **Engineering Pipeline Breaks:** Academic tools operate on raw tensors — no open-source tool handles real OASIS/GDSII full-chip end-to-end optimization.
-- **Half-Life Crisis:** Papers go unmaintained post-publication; dependency conflicts (Python/PyTorch version hell) make industrial reproduction nearly impossible.
-
-### 1.3 Strategic Conclusion: OpenLithoHub's Precise Niche
+- **Unified dataset access** — single interface to LithoBench, LithoSim, and other lithography datasets
+- **Standardized metrics** — EPE, PV Band, shot count, EUV stochastic robustness
+- **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
+- **OASIS workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear)
+- **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface
 
 ```text
-[Compute Layer]     NVIDIA cuLitho / GPU Clusters (existing — we don't compete)
-[Physics Engine]    TorchLitho 2.0 / OpenILT / curvyILT (existing — we integrate)
-[Dataset Layer]     LithoBench / LithoSim / ICCAD (existing — we unify access)
-                    ↑
-[OpenLithoHub]      Cross-framework eval + OASIS workflow + EUV/MRC compliance + Data engine
-                    ↑
-[Users]             Researchers / Chip Engineers / EDA Foundation Model Developers
+┌─────────────────────────────────────────────────────────┐
+│                    OpenLithoHub                          │
+├─────────────┬──────────────┬──────────────┬─────────────┤
+│  Data Layer │  Benchmark   │   Workflow   │     CLI     │
+│ LithoBench  │  EPE/PVBand  │ Tiling/Stitch│ eval        │
+│ LithoSim    │  MRC/DRC     │ Contour Ext. │ optimize    │
+│ Transforms  │  Stochastic  │ OASIS Export │             │
+│             │  Shot Count  │ B-spline Fit │             │
+└─────────────┴──────────────┴──────────────┴─────────────┘
 ```
 
 ---
 
-## II. Core Architecture (Five-Layer Industrial Model)
+## Installation
 
-OpenLithoHub adopts a **plugin-first** modular design, bridging the gap from academic research to industrial manufacturing.
+```bash
+# Core (metrics + CLI)
+pip install openlithohub
 
-### Layer 1: Unified Data Adapter Layer
+# With dataset support (HuggingFace, parquet)
+pip install openlithohub[data]
 
-Abstracts format differences, providing a unified PyTorch Tensor output interface.
+# With full workflow (KLayout, scipy for B-spline)
+pip install openlithohub[workflow]
 
-- **Backward Compatible:** One-click loading of LithoBench (`.npy`), LithoSim (HuggingFace Parquet).
-- **Metadata Alignment:** Automatic alignment of pixel resolution, process window, and source parameters.
+# Everything
+pip install openlithohub[all]
+```
 
-### Layer 2: Manufacturability & EUV Benchmark — *Core Differentiator*
+**From source (development):**
 
-Breaking academia's "EPE-only" mindset by introducing metrics the industry actually cares about:
-
-- **EUV Stochastic Robustness:** Novel stochastic noise injection to quantify micro-bridging/open probability of AI-generated masks under photon shot noise — addressing the sub-20nm LER crisis.
-- **MRC/DRC Violation Rate:** Integrated `EasyMRC` and `OpenDRC` for minimum width/spacing rule checks (hard-fail metric).
-- **Standardized Precision & Cost:** Unified EPE and PV Band computation; shot count estimation for mask manufacturing cost.
-
-### Layer 3: Model Integration Layer
-
-Provides a minimal `LithographyModel` interface. Whether traditional heuristic OPC, U-Net deep learning, or state-of-the-art curvilinear ILT (`curvyILT`), implementing `predict()` is all that's needed to join the evaluation pipeline.
-
-### Layer 4: OASIS.MBW Workflow Engine — *Largest Engineering Moat*
-
-**Bridging the last mile from tensor to fab.**
-
-- **Full-Chip Distributed Processing:** Rapid parsing and tiling of design layouts via `KLayout` Python API.
-- **Dual-Track Contour Export (Bypassing KLayout Limitations):**
-  - *Manhattan Mode (Legacy):* Staircase polygons for traditional VSB writers, leveraging KLayout's geometry engine.
-  - *Curvilinear Mode (Modern):* **Bypasses traditional geometry engines** — directly fits AI-generated smooth contours to B-spline curves and **natively serializes to `OASIS.MBW 2.1` format** for multi-beam writers. True mathematical curve representation without quadratic data explosion.
-- **Target CLI Experience:**
-  ```bash
-  openlithohub optimize --input chip.oas --model diffusion-ilt --writer mbmw --node 3nm-euv --drc-check --output optimized.oas
-  ```
-
-### Layer 5: Leaderboard & Foundation Model Data Engine
-
-- **Public SOTA Tracking:** Building computational lithography's PapersWithCode — ranked by process node and mask topology.
-- **EDA Foundation Model Data Engine:** The biggest bottleneck for EDA visual large models (LVMs) is **extreme scarcity of open circuit data**. OpenLithoHub is not just a benchmark — it's a **data generator**. Automated pipelines produce high-quality "layout → mask → resist contour" paired datasets across process conditions and compliance labels, fueling next-gen EDA foundation model pre-training.
+```bash
+git clone https://github.com/OpenLithoHub/OpenLithoHub.git
+cd OpenLithoHub
+pip install -e ".[dev]"
+```
 
 ---
 
-## III. Execution Roadmap (12-Month Plan)
+## Quick Start
 
-### Phase 1: Minimum Viable Benchmark MVP (Months 1–2)
+### Evaluate a model
 
-- **Goal:** Establish the first "cross-dataset comparison ruler."
-- **Action:** Unified DataLoader for LithoBench & LithoSim; basic EPE evaluation; `openlithohub eval` CLI.
-- **Deliverable:** 30-second terminal GIF showing standardized evaluation report across two datasets.
+```bash
+openlithohub eval \
+  --model dummy-identity \
+  --dataset lithobench \
+  --data-root ./data/lithobench \
+  --format table
+```
 
-### Phase 2: Manufacturability Compliance & Contour Extraction (Months 3–4)
+Output:
+```
+┌──────────────────┬────────────────┐
+│ Metric           │ Value          │
+├──────────────────┼────────────────┤
+│ epe_mean_nm      │ 0.0000         │
+│ epe_max_nm       │ 0.0000         │
+│ mrc_violation_rate│ 0.0000        │
+│ mrc_passed       │ 1.0000         │
+└──────────────────┴────────────────┘
+```
 
-- **Goal:** Dimensional superiority over existing academic benchmarks.
-- **Action:** MRC check module; pixel-to-polygon/curve contour extraction (referencing `EasyMRC` & `curvyILT`).
-- **Deliverable:** Evaluation report adds "MRC Violation Rate" metric. Blog post: *"Why 90% of AI Lithography Papers Are Waste Paper in the Fab."*
+### Run end-to-end optimization
 
-### Phase 3: OASIS Workflow & Web Demo (Months 5–6)
+```bash
+openlithohub optimize \
+  --input design.oas \
+  --model your-model \
+  --writer mbmw \
+  --node 3nm-euv \
+  --drc-check \
+  --output optimized.oas
+```
 
-- **Goal:** Ignite the engineering community.
-- **Action:** End-to-end `.oas/.gds` optimization pipeline; zero-config Web playground on HuggingFace Spaces (drag layout, one-click optimize).
-- **Deliverable:** First 200+ GitHub Stars; attract industrial engineers.
+### Use as a Python library
 
-### Phase 4: Academic Coalition & Leaderboard Launch (Months 7–9)
+```python
+import torch
+from openlithohub.benchmark.metrics import compute_epe, compute_pvband
+from openlithohub.benchmark.compliance import check_mrc, check_drc
 
-- **Goal:** Establish industry-standard status.
-- **Action:** Official leaderboard website; proactively submit PRs to upstream projects, inviting authors to adopt OpenLithoHub as the recommended evaluation tool.
-- **Deliverable:** At least 3 top university teams submit scores.
+predicted = torch.load("predicted_mask.pt")
+target = torch.load("target_mask.pt")
 
-### Phase 5: Foundation Incubation & Commercialization (Months 10–12)
+# Edge Placement Error
+epe = compute_epe(predicted, target, pixel_size_nm=1.0)
+print(f"EPE mean: {epe['epe_mean_nm']:.2f} nm")
 
-- **Goal:** Secure long-term funding and official endorsement.
-- **Action:** Apply to **CHIPS Alliance** (Linux Foundation) as an incubation project; launch "Private Benchmark" commercial offering for fabless companies.
+# Process Variation Band
+pvb = compute_pvband(predicted, defocus_range_nm=20.0)
+print(f"PV Band: {pvb['pvband_mean_nm']:.2f} nm")
+
+# Manufacturing compliance
+mrc = check_mrc(predicted, min_width_nm=40.0, min_spacing_nm=40.0)
+print(f"MRC passed: {mrc.passed} ({mrc.violation_count} violations)")
+```
+
+### Register a custom model
+
+```python
+from openlithohub.models.base import LithographyModel, PredictionResult
+from openlithohub.models.registry import registry
+
+@registry.register
+class MyOPCModel(LithographyModel):
+    @property
+    def name(self) -> str:
+        return "my-opc"
+
+    @property
+    def supports_curvilinear(self) -> bool:
+        return True
+
+    def predict(self, design: torch.Tensor, **kwargs) -> PredictionResult:
+        mask = my_optimization_algorithm(design)
+        return PredictionResult(mask=mask)
+```
 
 ---
 
-## IV. Business Model & Moat Analysis
+## Architecture
 
-### 4.1 The Real Moat: Standard Inertia & Ecosystem Lock-in
-
-OpenLithoHub's ultimate barrier is not code complexity — it's **monopoly over the unit of measurement**. Once academia publishes with it, industry validates with it, and foundation model teams generate data with it, it becomes irreplaceable infrastructure.
-
-### 4.2 Monetization Paths (Open Core, Commercial Add-ons)
-
-1. **Private Benchmark Hosting:** Enable fabless companies to objectively evaluate Synopsys/Cadence/startup AI algorithms without exposing confidential OASIS data (currently a blank paid market).
-2. **Enterprise Orchestration:** Commercial toolchain with Kubernetes cluster scheduling for full-chip scale compute and memory management.
-3. **Cloud Mask Optimization SaaS:** Pay-per-use GPU-accelerated optimization for small/medium design houses.
+| Layer | Module | Description |
+|-------|--------|-------------|
+| **Data** | `openlithohub.data` | Unified adapters for LithoBench (.npy), LithoSim (HuggingFace), with resolution alignment |
+| **Benchmark** | `openlithohub.benchmark` | EPE, PV Band, shot count, stochastic robustness, MRC/DRC compliance |
+| **Models** | `openlithohub.models` | Abstract `LithographyModel` interface + decorator-based registry |
+| **Workflow** | `openlithohub.workflow` | Layout parsing, tiling, contour extraction (manhattan/curvilinear), OASIS export |
+| **CLI** | `openlithohub.cli` | `eval` and `optimize` commands via Typer |
 
 ---
 
-## V. Day 1–30 Quick Start Guide (Action Items for Founders)
+## Metrics
 
-Don't be overwhelmed by the grand architecture — the first 30 days are pure engineering basics:
+| Metric | Description | Reference |
+|--------|-------------|-----------|
+| **EPE** | Edge Placement Error — distance between predicted and target contour edges | Standard |
+| **PV Band** | Process Variation Band — resist contour variation across dose/focus window | Standard |
+| **Shot Count** | Mask write time proxy for MBMW and VSB writers | Industry |
+| **Stochastic Robustness** | Monte Carlo photon noise simulation for bridge/break probability | EUV-specific |
+| **MRC** | Minimum width/spacing rule check (hard-fail) | EasyMRC |
+| **DRC** | Design Rule Check: area, notch, width, spacing | OpenDRC |
 
-- **Day 1–3 (Claim Territory):** Register GitHub org `OpenLithoHub`, upload this whitepaper as `README.md`. Reserve PyPI package name.
-- **Day 4–10 (Conquer Data):** Download minimal samples from LithoSim & LithoBench (100 images each). Write a Python script to load and visualize with `matplotlib`.
-- **Day 11–20 (Conquer Metrics):** Write a simple `metrics.py` computing pixel-level differences (basic EPE).
-- **Day 21–30 (Package CLI):** Use `Typer` to build a CLI tool wiring data loading and metrics. Record a slick terminal GIF for the README header.
+---
 
-**Your open-source startup journey officially begins the moment you type `git init`.**
+## Supported Datasets
+
+| Dataset | Format | Process Node | Source |
+|---------|--------|--------------|--------|
+| **LithoBench** | NumPy .npy | 45nm | NeurIPS'23 |
+| **LithoSim** | HuggingFace Parquet | Sub-28nm | NeurIPS'25 |
 
 ---
 
-## Appendix: Key Open-Source Projects & References
+## Development
 
-| Project | Venue | Description |
-|---------|-------|-------------|
-| **LithoSim** | NeurIPS'25 | Sub-28nm industrial benchmark & dataset |
-| **LithoBench** | NeurIPS'23 | 45nm baseline evaluation framework |
-| **TorchLitho 2.0** | ASICON'25 | State-of-the-art differentiable lithography simulator |
-| **curvyILT** | NVIDIA arXiv'24 | GPU-accelerated curvilinear ILT with B-spline contours |
-| **EasyMRC** | TODAES'25 | Manhattanization & MRC reference implementation |
-| **IEEE DATC RDF-2025** | — | Authoritative description of AI-for-EDA reproducibility crisis |
+```bash
+# Run tests
+pytest tests/ -v
+
+# Lint
+ruff check src/ tests/
+
+# Type check
+mypy src/
+
+# Format
+ruff format src/ tests/
+```
 
 ---
+
+## Roadmap
+
+- [x] Phase 1: Unified data adapters, EPE metric, `eval` CLI
+- [x] Phase 2: MRC compliance, Manhattan contour extraction, tiling, shot count
+- [x] Phase 3: OASIS workflow, PV Band, stochastic robustness, DRC, B-spline fitting, `optimize` CLI
+- [ ] Phase 4: Public leaderboard, upstream integrations
+- [ ] Phase 5: Web playground (HuggingFace Spaces)
+
+---
+
+## Related Projects
+
+| Project | Venue | Role in Ecosystem |
+|---------|-------|-------------------|
+| [LithoSim](https://github.com/) | NeurIPS'25 | Sub-28nm industrial dataset |
+| [LithoBench](https://github.com/) | NeurIPS'23 | 45nm evaluation framework |
+| [TorchLitho 2.0](https://github.com/) | ASICON'25 | Differentiable lithography simulator |
+| [curvyILT](https://github.com/) | NVIDIA arXiv'24 | GPU-accelerated curvilinear ILT |
+| [EasyMRC](https://github.com/) | TODAES'25 | MRC reference implementation |
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
