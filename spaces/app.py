@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import io
-from pathlib import Path
-
 import gradio as gr
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,12 +15,12 @@ import torch
 def _extract_edges(binary: np.ndarray) -> np.ndarray:
     """Extract edges via Sobel-like gradient magnitude."""
     t = torch.from_numpy(binary.astype(np.float32)).unsqueeze(0).unsqueeze(0)
-    sobel_x = torch.tensor(
-        [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32
-    ).reshape(1, 1, 3, 3)
-    sobel_y = torch.tensor(
-        [[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32
-    ).reshape(1, 1, 3, 3)
+    sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32).reshape(
+        1, 1, 3, 3
+    )
+    sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).reshape(
+        1, 1, 3, 3
+    )
     gx = torch.nn.functional.conv2d(t, sobel_x, padding=1)
     gy = torch.nn.functional.conv2d(t, sobel_y, padding=1)
     mag = (gx**2 + gy**2).sqrt().squeeze().numpy()
@@ -54,7 +51,10 @@ def compute_epe(predicted: np.ndarray, target: np.ndarray, pixel_size_nm: float 
 
 
 def check_mrc(
-    mask: np.ndarray, min_width_nm: float = 40.0, min_spacing_nm: float = 40.0, pixel_size_nm: float = 1.0
+    mask: np.ndarray,
+    min_width_nm: float = 40.0,
+    min_spacing_nm: float = 40.0,
+    pixel_size_nm: float = 1.0,
 ) -> dict:
     """Simplified MRC check using morphological opening."""
     import math
@@ -199,7 +199,12 @@ def evaluate_pattern(
 
     # Compute metrics
     epe = compute_epe(predicted, target, pixel_size_nm=pixel_size_nm)
-    mrc = check_mrc(predicted, min_width_nm=min_width_nm, min_spacing_nm=min_spacing_nm, pixel_size_nm=pixel_size_nm)
+    mrc = check_mrc(
+        predicted,
+        min_width_nm=min_width_nm,
+        min_spacing_nm=min_spacing_nm,
+        pixel_size_nm=pixel_size_nm,
+    )
 
     # Visualization
     fig = visualize_masks(predicted, target)
@@ -244,7 +249,12 @@ def evaluate_uploaded(
     target = (np.array(tgt_img, dtype=np.float32) / 255.0 > 0.5).astype(np.float32)
 
     epe = compute_epe(predicted, target, pixel_size_nm=pixel_size_nm)
-    mrc = check_mrc(predicted, min_width_nm=min_width_nm, min_spacing_nm=min_spacing_nm, pixel_size_nm=pixel_size_nm)
+    mrc = check_mrc(
+        predicted,
+        min_width_nm=min_width_nm,
+        min_spacing_nm=min_spacing_nm,
+        pixel_size_nm=pixel_size_nm,
+    )
 
     fig = visualize_masks(predicted, target)
 
@@ -311,7 +321,9 @@ with gr.Blocks(
 
         # Tab 2: Upload evaluation
         with gr.TabItem("Upload Masks"):
-            gr.Markdown("Upload your own predicted and target mask images (grayscale, thresholded at 50%).")
+            gr.Markdown(
+                "Upload your own predicted and target mask images (grayscale, thresholded at 50%)."
+            )
             with gr.Row():
                 with gr.Column(scale=1):
                     pred_upload = gr.Image(type="filepath", label="Predicted Mask")

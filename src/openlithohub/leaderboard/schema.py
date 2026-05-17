@@ -14,7 +14,7 @@ class ProcessNode(str, Enum):
     N45 = "45nm"
     N28 = "28nm"
     N7 = "7nm"
-    N5 = "5nm"
+    N5_EUV = "5nm-euv"
     N3_EUV = "3nm-euv"
     N2_EUV = "2nm-euv"
 

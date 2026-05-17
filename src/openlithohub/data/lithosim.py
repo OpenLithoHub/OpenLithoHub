@@ -9,7 +9,7 @@ Requires: pip install openlithohub[data]  (adds `datasets` and `pyarrow`)
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
 import numpy as np
 import torch
@@ -73,6 +73,11 @@ class LithoSimDataset(DatasetAdapter):
         return self._ds
 
     def __len__(self) -> int:
+        if self.streaming:
+            raise TypeError(
+                "LithoSimDataset does not support len() in streaming mode. "
+                "Use iteration instead: `for sample in dataset: ...`"
+            )
         if self._len is not None:
             return self._len
         ds = self._load_dataset()
@@ -80,12 +85,25 @@ class LithoSimDataset(DatasetAdapter):
         return self._len
 
     def __getitem__(self, index: int) -> LithoSample:
+        if self.streaming:
+            raise TypeError(
+                "LithoSimDataset does not support indexing in streaming mode. "
+                "Use iteration instead: `for sample in dataset: ...`"
+            )
         ds = self._load_dataset()
 
         if index < 0 or index >= len(self):
             raise IndexError(f"Index {index} out of range [0, {len(self)})")
 
         row = ds[index]
+        return self._row_to_sample(row)
+
+    def __iter__(self) -> Iterator[LithoSample]:
+        ds = self._load_dataset()
+        for row in ds:
+            yield self._row_to_sample(row)
+
+    def _row_to_sample(self, row: dict[str, Any]) -> LithoSample:
         design = self._decode_image(row, "design")
         mask = self._try_decode_image(row, "mask")
         resist = self._try_decode_image(row, "resist")

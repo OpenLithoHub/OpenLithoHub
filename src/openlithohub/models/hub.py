@@ -57,9 +57,26 @@ class ModelHub:
         return Path(path)
 
     def _download_url(self, url: str, target: Path) -> Path:
-        """Download from a direct URL."""
+        """Download from a direct URL with timeout and size limit."""
+        if not url.startswith("https://"):
+            raise ValueError("Only HTTPS URLs are supported for model downloads")
         target.parent.mkdir(parents=True, exist_ok=True)
-        urllib.request.urlretrieve(url, str(target))  # noqa: S310
+        max_size = 2 * 1024 * 1024 * 1024  # 2 GB
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=300) as response:  # noqa: S310
+            content_length = response.headers.get("Content-Length")
+            if content_length and int(content_length) > max_size:
+                raise ValueError(
+                    f"File size {int(content_length)} bytes exceeds limit of {max_size} bytes"
+                )
+            downloaded = 0
+            with open(target, "wb") as f:
+                while chunk := response.read(8192):
+                    downloaded += len(chunk)
+                    if downloaded > max_size:
+                        target.unlink(missing_ok=True)
+                        raise ValueError(f"Download exceeded size limit of {max_size} bytes")
+                    f.write(chunk)
         return target
 
     def list_cached(self) -> list[str]:

@@ -183,6 +183,7 @@ def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:
     h_px = max(1, int(height_dbu * pixels_per_dbu))
 
     import numpy as np
+    from PIL import Image, ImageDraw
 
     raster = np.zeros((h_px, w_px), dtype=np.float32)
 
@@ -191,25 +192,16 @@ def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:
         for shape in shapes.each():
             if shape.is_polygon() or shape.is_box():
                 poly = shape.polygon if shape.is_polygon() else shape.box.to_poly()
-                for edge in poly.each_edge():
-                    x1 = int((edge.x1 - bbox.left) * pixels_per_dbu)
-                    y1 = int((edge.y1 - bbox.bottom) * pixels_per_dbu)
-                    x1 = max(0, min(x1, w_px - 1))
-                    y1 = max(0, min(y1, h_px - 1))
-                    raster[y1, x1] = 1.0
-
-    if raster.sum() == 0:
-        for layer_idx in layout.layer_indices():
-            shapes = top_cell.shapes(layer_idx)
-            for shape in shapes.each():
-                if shape.is_box():
-                    box = shape.box
-                    x0 = int((box.left - bbox.left) * pixels_per_dbu)
-                    y0 = int((box.bottom - bbox.bottom) * pixels_per_dbu)
-                    x1 = int((box.right - bbox.left) * pixels_per_dbu)
-                    y1 = int((box.top - bbox.bottom) * pixels_per_dbu)
-                    x0, x1 = max(0, x0), min(w_px, x1)
-                    y0, y1 = max(0, y0), min(h_px, y1)
-                    raster[y0:y1, x0:x1] = 1.0
+                points = []
+                for point in poly.each_point():
+                    px = int((point.x - bbox.left) * pixels_per_dbu)
+                    py = int((point.y - bbox.bottom) * pixels_per_dbu)
+                    px = max(0, min(px, w_px - 1))
+                    py = max(0, min(py, h_px - 1))
+                    points.append((px, py))
+                if len(points) >= 3:
+                    img = Image.new("L", (w_px, h_px), 0)
+                    ImageDraw.Draw(img).polygon(points, fill=255)
+                    raster = np.maximum(raster, np.array(img, dtype=np.float32) / 255.0)
 
     return torch.from_numpy(raster)

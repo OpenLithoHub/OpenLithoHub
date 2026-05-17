@@ -101,8 +101,9 @@ def stitch_tiles(
         Stitched tensor of shape output_shape.
     """
     h, w = output_shape
-    output = torch.zeros(h, w)
-    weight_map = torch.zeros(h, w)
+    device = tiles[0][1].device if tiles else torch.device("cpu")
+    output = torch.zeros(h, w, device=device)
+    weight_map = torch.zeros(h, w, device=device)
 
     for tile, result in tiles:
         tile_h = tile.height
@@ -111,10 +112,10 @@ def stitch_tiles(
         if result_2d.ndim > 2:
             result_2d = result_2d.squeeze()
 
-        blend = torch.ones(tile_h, tile_w)
+        blend = torch.ones(tile_h, tile_w, device=device)
 
         if tile.overlap > 0:
-            ramp = torch.linspace(0.0, 1.0, tile.overlap)
+            ramp = torch.linspace(0.0, 1.0, tile.overlap, device=device)
 
             if tile.origin_x > 0:
                 left_ramp = ramp.unsqueeze(0).expand(tile_h, -1)

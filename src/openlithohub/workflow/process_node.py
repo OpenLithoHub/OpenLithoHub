@@ -38,6 +38,17 @@ class ProcessNodeConfig:
 
 
 PROCESS_NODES: dict[str, ProcessNodeConfig] = {
+    "2nm-euv": ProcessNodeConfig(
+        name="2nm-euv",
+        wavelength_nm=13.5,
+        numerical_aperture=0.55,
+        sigma_inner=0.2,
+        sigma_outer=0.9,
+        pixel_size_nm=0.5,
+        min_feature_nm=12.0,
+        min_spacing_nm=12.0,
+        defocus_budget_nm=25.0,
+    ),
     "3nm-euv": ProcessNodeConfig(
         name="3nm-euv",
         wavelength_nm=13.5,
@@ -70,6 +81,17 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
         min_feature_nm=28.0,
         min_spacing_nm=28.0,
         defocus_budget_nm=50.0,
+    ),
+    "28nm": ProcessNodeConfig(
+        name="28nm",
+        wavelength_nm=193.0,
+        numerical_aperture=1.35,
+        sigma_inner=0.5,
+        sigma_outer=0.8,
+        pixel_size_nm=1.0,
+        min_feature_nm=28.0,
+        min_spacing_nm=28.0,
+        defocus_budget_nm=60.0,
     ),
     "45nm": ProcessNodeConfig(
         name="45nm",

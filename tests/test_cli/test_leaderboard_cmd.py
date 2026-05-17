@@ -117,7 +117,7 @@ def test_leaderboard_view_json_format() -> None:
                 "--dataset",
                 "lithobench",
                 "--node",
-                "5nm",
+                "5nm-euv",
                 "--topology",
                 "curvilinear",
                 "--epe-mean",

@@ -6,11 +6,11 @@ import torch
 
 
 def ensure_2d(tensor: torch.Tensor) -> torch.Tensor:
-    """Ensure tensor is 2D (H, W), squeezing batch/channel dims if needed."""
+    """Ensure tensor is 2D (H, W), taking channel 0 if multi-channel."""
     if tensor.ndim == 4:
-        return tensor.squeeze(0).squeeze(0)
+        tensor = tensor[0]
     if tensor.ndim == 3:
-        return tensor.squeeze(0)
+        tensor = tensor[0]
     if tensor.ndim == 2:
         return tensor
     raise ValueError(f"Expected 2-4D tensor, got {tensor.ndim}D")

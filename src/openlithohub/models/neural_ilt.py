@@ -47,14 +47,16 @@ class NeuralILTModel(LithographyModel):
         if self._weights_path is not None:
             weights_path = Path(self._weights_path)
             if weights_path.exists():
-                state_dict = torch.load(str(weights_path), map_location=self._device)
+                state_dict = torch.load(
+                    str(weights_path), map_location=self._device, weights_only=True
+                )
                 self._net.load_state_dict(state_dict)
         elif self._pretrained:
             from openlithohub.models.hub import ModelHub
 
             hub = ModelHub()
             path = hub.download_weights("openlithohub/neural-ilt-v1")
-            state_dict = torch.load(str(path), map_location=self._device)
+            state_dict = torch.load(str(path), map_location=self._device, weights_only=True)
             self._net.load_state_dict(state_dict)
 
         self._net.eval()
