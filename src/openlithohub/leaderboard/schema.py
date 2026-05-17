@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -42,7 +42,7 @@ class BenchmarkResult(BaseModel):
     shot_count: int | None = Field(None, ge=0)
     stochastic_robustness: float | None = Field(None, ge=0, le=1)
 
-    submitted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     submission_id: str | None = Field(None, description="Auto-assigned submission ID (read-only).")
     paper_url: str | None = None
     code_url: str | None = None
