@@ -42,3 +42,4 @@ htmlcov/
 *.hdf5
 *.oas
 *.gds
+site/
