@@ -34,16 +34,12 @@ def _format_table(metrics: dict[str, Any]) -> str:
 
     key_width = max(len(k) for k in metrics)
     lines = ["┌" + "─" * (key_width + 2) + "┬" + "─" * 16 + "┐"]
-    lines.append(
-        "│ " + "Metric".ljust(key_width) + " │ " + "Value".ljust(14) + " │"
-    )
+    lines.append("│ " + "Metric".ljust(key_width) + " │ " + "Value".ljust(14) + " │")
     lines.append("├" + "─" * (key_width + 2) + "┼" + "─" * 16 + "┤")
 
     for key, val in metrics.items():
         formatted = f"{val:.4f}" if isinstance(val, float) else str(val)
-        lines.append(
-            "│ " + key.ljust(key_width) + " │ " + formatted.ljust(14) + " │"
-        )
+        lines.append("│ " + key.ljust(key_width) + " │ " + formatted.ljust(14) + " │")
 
     lines.append("└" + "─" * (key_width + 2) + "┴" + "─" * 16 + "┘")
     return "\n".join(lines)

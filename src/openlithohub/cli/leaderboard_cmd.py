@@ -39,9 +39,7 @@ def view(
         results = results[:limit]
 
     if format == "json":
-        output = json_mod.dumps(
-            [r.model_dump(mode="json") for r in results], indent=2, default=str
-        )
+        output = json_mod.dumps([r.model_dump(mode="json") for r in results], indent=2, default=str)
         console.print(output, highlight=False)
     elif format == "markdown":
         console.print(_format_markdown(results), highlight=False)

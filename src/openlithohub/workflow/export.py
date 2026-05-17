@@ -34,9 +34,7 @@ def export_oasis(
         _export_curvilinear(m, output_path, pixel_size_nm)
 
 
-def _export_manhattan(
-    mask: torch.Tensor, output_path: Path, pixel_size_nm: float
-) -> None:
+def _export_manhattan(mask: torch.Tensor, output_path: Path, pixel_size_nm: float) -> None:
     from openlithohub.workflow.contour.manhattan import extract_manhattan_contour
 
     polygons = extract_manhattan_contour(mask, pixel_size_nm=pixel_size_nm)
@@ -57,18 +55,13 @@ def _export_manhattan(
     for poly_vertices in polygons:
         if len(poly_vertices) < 3:
             continue
-        points = [
-            db.Point(int(x / layout.dbu), int(y / layout.dbu))
-            for x, y in poly_vertices
-        ]
+        points = [db.Point(int(x / layout.dbu), int(y / layout.dbu)) for x, y in poly_vertices]
         top.shapes(layer_idx).insert(db.Polygon(points))
 
     layout.write(str(output_path))
 
 
-def _export_curvilinear(
-    mask: torch.Tensor, output_path: Path, pixel_size_nm: float
-) -> None:
+def _export_curvilinear(mask: torch.Tensor, output_path: Path, pixel_size_nm: float) -> None:
     from openlithohub.workflow.contour.curvilinear import export_oasis_mbw, fit_bspline
 
     curves = fit_bspline(mask, tolerance_nm=pixel_size_nm * 0.5, pixel_size_nm=pixel_size_nm)

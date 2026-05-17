@@ -32,9 +32,7 @@ def test_eval_run_help():
 
 def test_eval_run_unknown_model():
     with tempfile.TemporaryDirectory() as tmpdir:
-        result = runner.invoke(
-            app, ["eval", "run", "-m", "nonexistent", "--data-root", tmpdir]
-        )
+        result = runner.invoke(app, ["eval", "run", "-m", "nonexistent", "--data-root", tmpdir])
         assert result.exit_code == 1
         assert "not found" in result.output
 
@@ -105,11 +103,16 @@ def test_eval_run_save_report():
         result = runner.invoke(
             app,
             [
-                "eval", "run",
-                "-m", "dummy-identity",
-                "--data-root", tmpdir,
-                "-f", "markdown",
-                "-o", str(out_path),
+                "eval",
+                "run",
+                "-m",
+                "dummy-identity",
+                "--data-root",
+                tmpdir,
+                "-f",
+                "markdown",
+                "-o",
+                str(out_path),
             ],
         )
         assert result.exit_code == 0
@@ -142,13 +145,19 @@ def test_eval_run_with_mrc():
         result = runner.invoke(
             app,
             [
-                "eval", "run",
-                "-m", "dummy-identity",
-                "--data-root", tmpdir,
+                "eval",
+                "run",
+                "-m",
+                "dummy-identity",
+                "--data-root",
+                tmpdir,
                 "--mrc",
-                "--min-width-nm", "4",
-                "--min-spacing-nm", "4",
-                "-f", "json",
+                "--min-width-nm",
+                "4",
+                "--min-spacing-nm",
+                "4",
+                "-f",
+                "json",
             ],
         )
         assert result.exit_code == 0
@@ -174,11 +183,15 @@ def test_eval_run_no_mrc():
         result = runner.invoke(
             app,
             [
-                "eval", "run",
-                "-m", "dummy-identity",
-                "--data-root", tmpdir,
+                "eval",
+                "run",
+                "-m",
+                "dummy-identity",
+                "--data-root",
+                tmpdir,
                 "--no-mrc",
-                "-f", "json",
+                "-f",
+                "json",
             ],
         )
         assert result.exit_code == 0

@@ -131,8 +131,7 @@ class LithoSimDataset(DatasetAdapter):
             from PIL import Image
         except ImportError as e:
             raise ImportError(
-                "Pillow is required for image decoding. "
-                "Install with: pip install Pillow"
+                "Pillow is required for image decoding. Install with: pip install Pillow"
             ) from e
 
         if isinstance(value, Image.Image):

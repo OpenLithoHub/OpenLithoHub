@@ -34,9 +34,7 @@ import torch
 
 from openlithohub.data.base import DatasetAdapter, LithoSample
 
-_FILENAME_RE = re.compile(
-    r"^(?P<sample_id>.+?)_(?P<kind>design|mask|resist)\.npy$"
-)
+_FILENAME_RE = re.compile(r"^(?P<sample_id>.+?)_(?P<kind>design|mask|resist)\.npy$")
 
 
 class LithoBenchDataset(DatasetAdapter):
@@ -74,9 +72,7 @@ class LithoBenchDataset(DatasetAdapter):
         design_dir = self.root / "design"
         if design_dir.is_dir():
             self._layout = "subdirectory"
-            self._index = sorted(
-                p.stem for p in design_dir.glob("*.npy")
-            )
+            self._index = sorted(p.stem for p in design_dir.glob("*.npy"))
         else:
             self._layout = "flat"
             seen: set[str] = set()

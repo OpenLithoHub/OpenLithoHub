@@ -21,3 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI pipeline (GitHub Actions): lint + test on Python 3.10/3.11/3.12
 - Pre-commit hooks (ruff, trailing whitespace, YAML/TOML checks)
 - MkDocs Material documentation configuration
+- Full MkDocs documentation site (getting started, architecture, CLI reference, API docs)
+- GitHub Actions workflow for docs deployment to GitHub Pages
+- HuggingFace Spaces web playground (Gradio-based interactive demo)
+  - Synthetic pattern evaluation (line/space, contact holes, SRAM)
+  - Upload custom masks for EPE/MRC evaluation
+  - Edge contour visualization overlay
+  - Public leaderboard view

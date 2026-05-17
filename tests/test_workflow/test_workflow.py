@@ -21,8 +21,9 @@ class TestParseLayout:
     def test_unsupported_format_raises(self):
         import tempfile
 
-        with tempfile.NamedTemporaryFile(suffix=".txt") as f, pytest.raises(
-            ValueError, match="Unsupported"
+        with (
+            tempfile.NamedTemporaryFile(suffix=".txt") as f,
+            pytest.raises(ValueError, match="Unsupported"),
         ):
             parse_layout(f.name)
 

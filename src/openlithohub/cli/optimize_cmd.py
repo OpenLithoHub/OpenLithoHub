@@ -113,15 +113,14 @@ def run(
                     f"(rate={mrc_result.violation_rate:.4f})"
                 )
             if not drc_result.passed:
-                console.print(
-                    f"  [yellow]DRC:[/yellow] {drc_result.violation_count} violations"
-                )
+                console.print(f"  [yellow]DRC:[/yellow] {drc_result.violation_count} violations")
 
     console.print(f"[bold]Step {'6' if drc_check else '5'}:[/bold] Exporting...")
     export_mode = "curvilinear" if writer == "mbmw" else "manhattan"
 
     try:
         from openlithohub.workflow.export import export_oasis
+
         export_oasis(optimized, output, mode=export_mode, pixel_size_nm=pixel_nm)
         console.print(f"  [green]Output written to {output}[/green]")
     except ImportError as e:
@@ -146,6 +145,7 @@ def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:
 
     if suffix == ".npy":
         import numpy as np
+
         arr = np.load(str(path))
         return torch.from_numpy(arr).float()
 
@@ -172,6 +172,7 @@ def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:
     h_px = max(1, int(height_dbu * pixels_per_dbu))
 
     import numpy as np
+
     raster = np.zeros((h_px, w_px), dtype=np.float32)
 
     for layer_idx in layout.layer_indices():

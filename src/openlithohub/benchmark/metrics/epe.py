@@ -49,9 +49,7 @@ def compute_epe(
         Dictionary with 'epe_mean_nm', 'epe_max_nm', 'epe_std_nm'.
     """
     if predicted.shape != target.shape:
-        raise ValueError(
-            f"Shape mismatch: predicted {predicted.shape} vs target {target.shape}"
-        )
+        raise ValueError(f"Shape mismatch: predicted {predicted.shape} vs target {target.shape}")
 
     pred_edges = _extract_edges(predicted)
     tgt_edges = _extract_edges(target)

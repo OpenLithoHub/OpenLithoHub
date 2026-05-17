@@ -68,14 +68,16 @@ def tile_layout(
                 pad_right = tile_size - actual_w
                 tile_data = functional.pad(tile_data, (0, pad_right, 0, pad_bottom), value=0.0)
 
-            tiles.append(Tile(
-                tensor=tile_data,
-                origin_x=x,
-                origin_y=y,
-                width=actual_w,
-                height=actual_h,
-                overlap=overlap,
-            ))
+            tiles.append(
+                Tile(
+                    tensor=tile_data,
+                    origin_x=x,
+                    origin_y=y,
+                    width=actual_w,
+                    height=actual_h,
+                    overlap=overlap,
+                )
+            )
 
             x += step
         y += step
@@ -126,8 +128,8 @@ def stitch_tiles(
 
         y_end = tile.origin_y + tile_h
         x_end = tile.origin_x + tile_w
-        output[tile.origin_y:y_end, tile.origin_x:x_end] += result_2d * blend
-        weight_map[tile.origin_y:y_end, tile.origin_x:x_end] += blend
+        output[tile.origin_y : y_end, tile.origin_x : x_end] += result_2d * blend
+        weight_map[tile.origin_y : y_end, tile.origin_x : x_end] += blend
 
     nonzero = weight_map > 0
     output[nonzero] /= weight_map[nonzero]

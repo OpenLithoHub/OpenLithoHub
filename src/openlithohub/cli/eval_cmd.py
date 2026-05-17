@@ -136,9 +136,7 @@ def run(
                 pvband_nm=aggregated.get("pvband_nm"),
                 mrc_violation_rate=aggregated.get("mrc_violation_rate"),
                 drc_pass=(
-                    aggregated.get("mrc_passed", 0.0) == 1.0
-                    if "mrc_passed" in aggregated
-                    else None
+                    aggregated.get("mrc_passed", 0.0) == 1.0 if "mrc_passed" in aggregated else None
                 ),
                 paper_url=paper_url,
                 code_url=code_url,
@@ -149,9 +147,7 @@ def run(
             console.print(f"[yellow]Warning:[/yellow] Could not submit to leaderboard: {e}")
 
 
-def _load_dataset(
-    dataset: str, data_root: Path, pixel_nm: float
-) -> Any:
+def _load_dataset(dataset: str, data_root: Path, pixel_nm: float) -> Any:
     from openlithohub.data import LithoBenchDataset, LithoSimDataset
 
     if dataset == "lithobench":

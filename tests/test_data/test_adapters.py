@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -13,15 +12,12 @@ import torch
 from openlithohub.data import LithoBenchDataset, LithoSample, LithoSimDataset
 from openlithohub.data.transforms import align_resolution, normalize_to_binary
 
-
 # ==== LithoSample tests ====
 
 
 class TestLithoSample:
     def test_creation_full(self, sample_design, sample_mask):
-        sample = LithoSample(
-            design=sample_design, mask=sample_mask, metadata={"node": "45nm"}
-        )
+        sample = LithoSample(design=sample_design, mask=sample_mask, metadata={"node": "45nm"})
         assert sample.design.shape == (64, 64)
         assert sample.mask.shape == (64, 64)
         assert sample.resist is None
@@ -276,9 +272,11 @@ class TestLithoSimDataset:
             ds[5]
 
     def test_import_error_without_datasets(self):
-        with patch.dict("sys.modules", {"datasets": None}):
-            with pytest.raises(ImportError, match="datasets"):
-                LithoSimDataset(split="test")
+        with (
+            patch.dict("sys.modules", {"datasets": None}),
+            pytest.raises(ImportError, match="datasets"),
+        ):
+            LithoSimDataset(split="test")
 
     @patch("openlithohub.data.lithosim._ensure_datasets_available")
     def test_columns_property(self, mock_ensure, mock_hf_dataset):
@@ -309,8 +307,9 @@ class TestLithoSimTensorConversion:
         assert tensor.dtype == torch.float32
 
     def test_bytes_dict_conversion(self):
-        from PIL import Image
         import io
+
+        from PIL import Image
 
         img = Image.fromarray(np.zeros((32, 32), dtype=np.uint8))
         buf = io.BytesIO()

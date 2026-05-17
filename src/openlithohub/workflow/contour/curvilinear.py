@@ -29,8 +29,14 @@ def _trace_contour(binary: np.ndarray) -> list[np.ndarray]:
     contours: list[np.ndarray] = []
 
     directions = [
-        (0, 1), (1, 1), (1, 0), (1, -1),
-        (0, -1), (-1, -1), (-1, 0), (-1, 1),
+        (0, 1),
+        (1, 1),
+        (1, 0),
+        (1, -1),
+        (0, -1),
+        (-1, -1),
+        (-1, 0),
+        (-1, 1),
     ]
 
     for start_y in range(1, h + 1):
@@ -120,9 +126,7 @@ def fit_bspline(
 
         ctrl_x = np.array(tck[1][0], dtype=np.float32)
         ctrl_y = np.array(tck[1][1], dtype=np.float32)
-        control_points = torch.tensor(
-            np.stack([ctrl_x, ctrl_y], axis=1), dtype=torch.float32
-        )
+        control_points = torch.tensor(np.stack([ctrl_x, ctrl_y], axis=1), dtype=torch.float32)
         knots = torch.tensor(tck[0], dtype=torch.float32)
 
         curves.append(BSplineCurve(control_points=control_points, knots=knots, degree=3))

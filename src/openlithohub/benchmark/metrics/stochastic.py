@@ -19,9 +19,13 @@ def _count_connected_components(binary: torch.Tensor) -> int:
         region[seed[0], seed[1]] = 1.0
         prev_sum = 0.0
         while True:
-            dilated = torch.nn.functional.max_pool2d(
-                region.unsqueeze(0).unsqueeze(0), 3, stride=1, padding=1
-            ).squeeze(0).squeeze(0)
+            dilated = (
+                torch.nn.functional.max_pool2d(
+                    region.unsqueeze(0).unsqueeze(0), 3, stride=1, padding=1
+                )
+                .squeeze(0)
+                .squeeze(0)
+            )
             region = dilated * remaining
             curr_sum = region.sum().item()
             if curr_sum == prev_sum:

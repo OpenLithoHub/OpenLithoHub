@@ -124,9 +124,13 @@ def _check_min_area(
 
         prev_sum = 0.0
         while True:
-            dilated = torch.nn.functional.max_pool2d(
-                region.unsqueeze(0).unsqueeze(0), 3, stride=1, padding=1
-            ).squeeze(0).squeeze(0)
+            dilated = (
+                torch.nn.functional.max_pool2d(
+                    region.unsqueeze(0).unsqueeze(0), 3, stride=1, padding=1
+                )
+                .squeeze(0)
+                .squeeze(0)
+            )
             region = dilated * remaining
             curr_sum = region.sum().item()
             if curr_sum == prev_sum:
@@ -140,14 +144,16 @@ def _check_min_area(
             ys, xs = torch.where(region > 0.5)
             cy = float(ys.float().mean().item()) * pixel_size_nm
             cx = float(xs.float().mean().item()) * pixel_size_nm
-            violations.append({
-                "rule": 2.0,
-                "type": 2.0,
-                "x_nm": cx,
-                "y_nm": cy,
-                "actual_nm2": area_px * pixel_area_nm2,
-                "required_nm2": min_area_nm2,
-            })
+            violations.append(
+                {
+                    "rule": 2.0,
+                    "type": 2.0,
+                    "x_nm": cx,
+                    "y_nm": cy,
+                    "actual_nm2": area_px * pixel_area_nm2,
+                    "required_nm2": min_area_nm2,
+                }
+            )
 
     return violations
 
@@ -195,12 +201,14 @@ def _sample_violations(
     for idx in range(0, len(ys), step):
         if len(violations) >= max_reports:
             break
-        violations.append({
-            "rule": rule_code,
-            "type": rule_code,
-            "x_nm": float(xs[idx].item()) * pixel_size_nm,
-            "y_nm": float(ys[idx].item()) * pixel_size_nm,
-            "threshold_nm": threshold_nm,
-        })
+        violations.append(
+            {
+                "rule": rule_code,
+                "type": rule_code,
+                "x_nm": float(xs[idx].item()) * pixel_size_nm,
+                "y_nm": float(ys[idx].item()) * pixel_size_nm,
+                "threshold_nm": threshold_nm,
+            }
+        )
 
     return violations

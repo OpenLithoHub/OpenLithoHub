@@ -199,8 +199,8 @@ ruff format src/ tests/
 - [x] Phase 1: Unified data adapters, EPE metric, `eval` CLI
 - [x] Phase 2: MRC compliance, Manhattan contour extraction, tiling, shot count
 - [x] Phase 3: OASIS workflow, PV Band, stochastic robustness, DRC, B-spline fitting, `optimize` CLI
-- [ ] Phase 4: Public leaderboard, upstream integrations
-- [ ] Phase 5: Web playground (HuggingFace Spaces)
+- [x] Phase 4: Public leaderboard, MkDocs documentation site, CI/CD for docs
+- [x] Phase 5: Web playground (HuggingFace Spaces)
 
 ---
 

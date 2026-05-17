@@ -21,9 +21,7 @@ def binary_erosion(mask: torch.Tensor, radius: int = 1) -> torch.Tensor:
     kernel_size = 2 * radius + 1
     inp = mask.float().unsqueeze(0).unsqueeze(0)
     inverted = 1.0 - inp
-    dilated_inv = functional.max_pool2d(
-        inverted, kernel_size=kernel_size, stride=1, padding=radius
-    )
+    dilated_inv = functional.max_pool2d(inverted, kernel_size=kernel_size, stride=1, padding=radius)
     return (1.0 - dilated_inv).squeeze(0).squeeze(0)
 
 
@@ -41,9 +39,7 @@ def binary_dilation(mask: torch.Tensor, radius: int = 1) -> torch.Tensor:
         return mask.clone()
     kernel_size = 2 * radius + 1
     inp = mask.float().unsqueeze(0).unsqueeze(0)
-    dilated = functional.max_pool2d(
-        inp, kernel_size=kernel_size, stride=1, padding=radius
-    )
+    dilated = functional.max_pool2d(inp, kernel_size=kernel_size, stride=1, padding=radius)
     return dilated.squeeze(0).squeeze(0)
 
 

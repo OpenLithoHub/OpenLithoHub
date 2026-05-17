@@ -128,9 +128,7 @@ def test_leaderboard_view_json_format() -> None:
                 str(store),
             ],
         )
-        result = runner.invoke(
-            app, ["leaderboard", "view", "-f", "json", "--store", str(store)]
-        )
+        result = runner.invoke(app, ["leaderboard", "view", "-f", "json", "--store", str(store)])
         assert result.exit_code == 0
         parsed = json.loads(result.output)
         assert len(parsed) == 1

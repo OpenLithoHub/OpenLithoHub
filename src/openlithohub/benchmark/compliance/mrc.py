@@ -73,9 +73,7 @@ def check_mrc(
         if width_violation_count > 0:
             fg_dist = distance_transform(binary)
             ys, xs = torch.where(width_violation_mask)
-            _add_violations(
-                violations, "width", ys, xs, fg_dist, pixel_size_nm, min_width_nm
-            )
+            _add_violations(violations, "width", ys, xs, fg_dist, pixel_size_nm, min_width_nm)
 
     if has_foreground and has_background and radius_spacing >= 1:
         bg = (binary < 0.5).float()
@@ -87,9 +85,7 @@ def check_mrc(
         if spacing_violation_count > 0:
             bg_dist = distance_transform(bg)
             ys, xs = torch.where(spacing_violation_mask)
-            _add_violations(
-                violations, "spacing", ys, xs, bg_dist, pixel_size_nm, min_spacing_nm
-            )
+            _add_violations(violations, "spacing", ys, xs, bg_dist, pixel_size_nm, min_spacing_nm)
 
     violation_count = width_violation_count + spacing_violation_count
     violation_rate = violation_count / total_pixels if total_pixels > 0 else 0.0
@@ -121,10 +117,12 @@ def _add_violations(
         y_px = int(ys[idx].item())
         x_px = int(xs[idx].item())
         actual_nm = float(dist_map[y_px, x_px].item()) * 2.0 * pixel_size_nm
-        violations.append({
-            "type_code": 0.0 if vtype == "width" else 1.0,
-            "x_nm": float(x_px) * pixel_size_nm,
-            "y_nm": float(y_px) * pixel_size_nm,
-            "actual_nm": actual_nm,
-            "required_nm": threshold_nm,
-        })
+        violations.append(
+            {
+                "type_code": 0.0 if vtype == "width" else 1.0,
+                "x_nm": float(x_px) * pixel_size_nm,
+                "y_nm": float(y_px) * pixel_size_nm,
+                "actual_nm": actual_nm,
+                "required_nm": threshold_nm,
+            }
+        )

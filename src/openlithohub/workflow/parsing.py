@@ -33,20 +33,24 @@ def parse_layout(path: str | Path) -> dict[str, Any]:
     cells: list[dict[str, Any]] = []
     for cell_idx in range(layout.cells()):
         cell = layout.cell(cell_idx)
-        cells.append({
-            "name": cell.name,
-            "index": cell_idx,
-            "instance_count": cell.child_instances(),
-        })
+        cells.append(
+            {
+                "name": cell.name,
+                "index": cell_idx,
+                "instance_count": cell.child_instances(),
+            }
+        )
 
     layers: list[dict[str, Any]] = []
     for layer_idx in layout.layer_indices():
         info = layout.get_info(layer_idx)
-        layers.append({
-            "layer": info.layer,
-            "datatype": info.datatype,
-            "name": info.name if info.name else f"{info.layer}/{info.datatype}",
-        })
+        layers.append(
+            {
+                "layer": info.layer,
+                "datatype": info.datatype,
+                "name": info.name if info.name else f"{info.layer}/{info.datatype}",
+            }
+        )
 
     top_cell = layout.top_cell()
     bbox = top_cell.bbox()
