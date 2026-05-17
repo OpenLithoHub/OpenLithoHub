@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-import json
 from pathlib import Path
 
 import gradio as gr
@@ -265,30 +264,6 @@ def evaluate_uploaded(
     return fig, metrics_text
 
 
-# Sample leaderboard data for demo
-SAMPLE_LEADERBOARD = [
-    {"rank": 1, "model": "NILT-v3", "dataset": "LithoBench", "node": "3nm-euv", "epe_mean": 0.82, "epe_max": 3.41, "pvband": 1.21, "drc": "pass"},
-    {"rank": 2, "model": "curvyILT", "dataset": "LithoBench", "node": "3nm-euv", "epe_mean": 0.95, "epe_max": 4.02, "pvband": 1.45, "drc": "pass"},
-    {"rank": 3, "model": "DevelSet+", "dataset": "LithoBench", "node": "5nm", "epe_mean": 1.12, "epe_max": 5.67, "pvband": 1.89, "drc": "pass"},
-    {"rank": 4, "model": "AdaOPC", "dataset": "LithoSim", "node": "7nm", "epe_mean": 1.34, "epe_max": 6.12, "pvband": 2.03, "drc": "pass"},
-    {"rank": 5, "model": "GAN-OPC", "dataset": "LithoBench", "node": "7nm", "epe_mean": 1.56, "epe_max": 7.89, "pvband": 2.45, "drc": "fail"},
-]
-
-
-def get_leaderboard():
-    """Return leaderboard as markdown table."""
-    header = "| Rank | Model | Dataset | Node | EPE Mean (nm) | EPE Max (nm) | PV Band (nm) | DRC |\n"
-    sep = "|------|-------|---------|------|---------------|--------------|--------------|-----|\n"
-    rows = ""
-    for entry in SAMPLE_LEADERBOARD:
-        rows += (
-            f"| {entry['rank']} | {entry['model']} | {entry['dataset']} | "
-            f"{entry['node']} | {entry['epe_mean']:.2f} | {entry['epe_max']:.2f} | "
-            f"{entry['pvband']:.2f} | {entry['drc']} |\n"
-        )
-    return header + sep + rows
-
-
 # ---------------------------------------------------------------------------
 # Gradio App
 # ---------------------------------------------------------------------------
@@ -356,20 +331,12 @@ with gr.Blocks(
                 outputs=[upload_plot, upload_metrics],
             )
 
-        # Tab 3: Leaderboard
-        with gr.TabItem("Leaderboard"):
-            gr.Markdown("## Public Leaderboard\nCurrent SOTA rankings for computational lithography models.\n")
-            gr.Markdown(get_leaderboard())
-            gr.Markdown(
-                "\n*Submit your results via the CLI: "
-                "`openlithohub leaderboard submit --file results.json`*"
-            )
-
     gr.Markdown(
         """
         ---
         **OpenLithoHub** | [GitHub](https://github.com/OpenLithoHub/OpenLithoHub) |
-        [Documentation](https://openlithohub.readthedocs.io) |
+        [Docs](https://docs.openlithohub.com) |
+        [Leaderboard](https://openlithohub.com/leaderboard) |
         Apache 2.0 License
         """
     )

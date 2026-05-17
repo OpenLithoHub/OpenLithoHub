@@ -18,4 +18,3 @@ Interactive web playground for computational lithography evaluation.
 - Upload or generate synthetic mask designs
 - Compute lithography metrics (EPE, PV Band, MRC/DRC)
 - Visualize predicted vs. target contours
-- Browse the public leaderboard
