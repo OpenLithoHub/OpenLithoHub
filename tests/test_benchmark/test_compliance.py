@@ -1,6 +1,5 @@
 """Tests for compliance checks."""
 
-import pytest
 import torch
 
 from openlithohub.benchmark.compliance.drc import check_drc
@@ -96,6 +95,51 @@ class TestMRCEdgeCases:
         assert "required_nm" in v
 
 
-def test_drc_not_implemented(sample_mask):
-    with pytest.raises(NotImplementedError, match="DRC"):
-        check_drc(sample_mask)
+class TestDRC:
+    def test_clean_mask_passes(self):
+        from openlithohub.benchmark.compliance.drc import DRCRuleDeck
+
+        mask = torch.zeros(64, 64)
+        mask[10:54, 10:54] = 1.0
+        rules = DRCRuleDeck(min_width_nm=8.0, min_spacing_nm=8.0, min_area_nm2=4.0)
+        result = check_drc(mask, rule_deck=rules, pixel_size_nm=1.0)
+        assert result.passed is True
+        assert result.violation_count == 0
+
+    def test_small_area_violation(self):
+        mask = torch.zeros(64, 64)
+        mask[10:54, 10:54] = 1.0
+        mask[2:4, 2:4] = 1.0  # 4px island = 4nm2 < default 100nm2
+        result = check_drc(mask, pixel_size_nm=1.0)
+        assert result.passed is False
+        assert result.rule_summary["min_area"] > 0
+
+    def test_narrow_feature_width_violation(self):
+        mask = torch.zeros(64, 64)
+        mask[30:32, 10:54] = 1.0  # 2px-wide strip
+        result = check_drc(mask, pixel_size_nm=1.0)
+        assert result.passed is False
+        assert result.rule_summary["min_width"] > 0
+
+    def test_custom_rule_deck(self):
+        from openlithohub.benchmark.compliance.drc import DRCRuleDeck
+
+        mask = torch.zeros(64, 64)
+        mask[10:54, 10:54] = 1.0
+        mask[2:4, 2:4] = 1.0  # 4px island
+
+        lenient = DRCRuleDeck(
+            min_area_nm2=2.0, min_width_nm=1.0, min_spacing_nm=1.0, min_notch_nm=1.0
+        )
+        result = check_drc(mask, rule_deck=lenient, pixel_size_nm=1.0)
+        assert result.passed is True
+
+    def test_result_structure(self, sample_mask):
+        from openlithohub.benchmark.compliance.drc import DRCResult
+
+        result = check_drc(sample_mask)
+        assert isinstance(result, DRCResult)
+        assert isinstance(result.passed, bool)
+        assert isinstance(result.violation_count, int)
+        assert isinstance(result.violations, list)
+        assert isinstance(result.rule_summary, dict)

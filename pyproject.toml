@@ -91,7 +91,7 @@ packages = ["openlithohub"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["klayout.*", "datasets.*", "torch.*"]
+module = ["klayout.*", "datasets.*", "torch.*", "scipy.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

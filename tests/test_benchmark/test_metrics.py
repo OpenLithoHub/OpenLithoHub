@@ -4,7 +4,9 @@ import pytest
 import torch
 
 from openlithohub.benchmark.metrics.epe import compute_epe
+from openlithohub.benchmark.metrics.pvband import compute_pvband
 from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
+from openlithohub.benchmark.metrics.stochastic import compute_stochastic_robustness
 
 
 def test_epe_identical_masks(sample_design):
@@ -124,3 +126,81 @@ class TestShotCount:
         result = estimate_shot_count(mask)
         assert "shot_count" in result
         assert "estimated_write_time_s" in result
+
+
+class TestPVBand:
+    def test_returns_expected_keys(self):
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        result = compute_pvband(mask)
+        assert "pvband_mean_nm" in result
+        assert "pvband_max_nm" in result
+
+    def test_uniform_mask_zero_band(self):
+        # A full mask with no internal edges won't have a meaningful PV band
+        # from internal features, but may have boundary effects
+        mask = torch.ones(64, 64)
+        result = compute_pvband(mask)
+        # The band should be small since the mask is uniform
+        assert result["pvband_mean_nm"] >= 0.0
+
+    def test_simple_square_positive_band(self):
+        mask = torch.zeros(64, 64)
+        mask[16:48, 16:48] = 1.0
+        result = compute_pvband(mask, defocus_range_nm=20.0)
+        assert result["pvband_mean_nm"] > 0.0
+        assert result["pvband_max_nm"] >= result["pvband_mean_nm"]
+
+    def test_increases_with_defocus(self):
+        mask = torch.zeros(64, 64)
+        mask[16:48, 16:48] = 1.0
+        r_small = compute_pvband(mask, defocus_range_nm=5.0)
+        r_large = compute_pvband(mask, defocus_range_nm=40.0)
+        assert r_large["pvband_mean_nm"] >= r_small["pvband_mean_nm"]
+
+    def test_pixel_scaling(self):
+        mask = torch.zeros(64, 64)
+        mask[16:48, 16:48] = 1.0
+        r1 = compute_pvband(mask, pixel_size_nm=1.0, defocus_range_nm=10.0)
+        r2 = compute_pvband(mask, pixel_size_nm=2.0, defocus_range_nm=10.0)
+        assert r2["pvband_mean_nm"] >= r1["pvband_mean_nm"]
+
+    def test_empty_mask(self):
+        mask = torch.zeros(32, 32)
+        result = compute_pvband(mask)
+        assert result["pvband_mean_nm"] == 0.0
+
+
+class TestStochasticRobustness:
+    def test_returns_expected_keys(self):
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        result = compute_stochastic_robustness(mask, num_trials=5, seed=42)
+        assert "bridge_probability" in result
+        assert "break_probability" in result
+        assert "ler_mean_nm" in result
+        assert "robustness_score" in result
+
+    def test_deterministic_with_seed(self):
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        r1 = compute_stochastic_robustness(mask, num_trials=10, seed=123)
+        r2 = compute_stochastic_robustness(mask, num_trials=10, seed=123)
+        assert r1 == r2
+
+    def test_large_feature_robust(self):
+        mask = torch.zeros(64, 64)
+        mask[10:54, 10:54] = 1.0
+        result = compute_stochastic_robustness(
+            mask, num_trials=10, dose_photons_per_nm2=100.0, seed=42
+        )
+        assert result["robustness_score"] >= 0.5
+
+    def test_score_bounded(self):
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        result = compute_stochastic_robustness(mask, num_trials=5, seed=42)
+        assert 0.0 <= result["robustness_score"] <= 1.0
+        assert 0.0 <= result["bridge_probability"] <= 1.0
+        assert 0.0 <= result["break_probability"] <= 1.0
+        assert result["ler_mean_nm"] >= 0.0

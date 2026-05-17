@@ -81,3 +81,54 @@ def tile_layout(
         y += step
 
     return tiles
+
+
+def stitch_tiles(
+    tiles: list[tuple[Tile, torch.Tensor]],
+    output_shape: tuple[int, int],
+) -> torch.Tensor:
+    """Reassemble optimized tiles into a full-chip tensor.
+
+    Uses linear blending in overlap regions to avoid seam artifacts.
+
+    Args:
+        tiles: List of (original_tile, optimized_tensor) pairs.
+        output_shape: (H, W) of the full output tensor.
+
+    Returns:
+        Stitched tensor of shape output_shape.
+    """
+    h, w = output_shape
+    output = torch.zeros(h, w)
+    weight_map = torch.zeros(h, w)
+
+    for tile, result in tiles:
+        tile_h = tile.height
+        tile_w = tile.width
+        result_2d = result[..., :tile_h, :tile_w]
+        if result_2d.ndim > 2:
+            result_2d = result_2d.squeeze()
+
+        blend = torch.ones(tile_h, tile_w)
+
+        if tile.overlap > 0:
+            ramp = torch.linspace(0.0, 1.0, tile.overlap)
+
+            if tile.origin_x > 0:
+                left_ramp = ramp.unsqueeze(0).expand(tile_h, -1)
+                ol = min(tile.overlap, tile_w)
+                blend[:, :ol] *= left_ramp[:, :ol]
+
+            if tile.origin_y > 0:
+                top_ramp = ramp.unsqueeze(1).expand(-1, tile_w)
+                ol = min(tile.overlap, tile_h)
+                blend[:ol, :] *= top_ramp[:ol, :]
+
+        y_end = tile.origin_y + tile_h
+        x_end = tile.origin_x + tile_w
+        output[tile.origin_y:y_end, tile.origin_x:x_end] += result_2d * blend
+        weight_map[tile.origin_y:y_end, tile.origin_x:x_end] += blend
+
+    nonzero = weight_map > 0
+    output[nonzero] /= weight_map[nonzero]
+    return output
