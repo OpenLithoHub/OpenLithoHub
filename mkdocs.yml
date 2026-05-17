@@ -39,6 +39,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Architecture: architecture.md
+  - Benchmarks: benchmarks.md
   - CLI Reference: cli-reference.md
   - API Reference:
     - Data Adapters: api/data.md

@@ -179,6 +179,55 @@ class MyOPCModel(LithographyModel):
 
 ---
 
+## Baselines
+
+Reference numbers for the bundled models on eight synthetic 64×64 layouts
+(square, line, line/space, T, L, cross, contacts, dense lines). These are
+generated end-to-end by `scripts/generate_baselines.py` and persisted under
+`baselines/`. See [`docs/benchmarks.md`](docs/benchmarks.md) for the
+methodology, the Hopkins forward model, and reproduction instructions.
+
+| Model | EPE mean (nm) | EPE max (nm) | PVB mean (nm) | MRC pass |
+|---|---|---|---|---|
+| `dummy-identity` | 0.000 | 0.000 | 2.140 | 0% |
+| `levelset-ilt` (Gaussian PSF, 200 iters) | 0.036 | 0.250 | 2.128 | 0% |
+| `neural-ilt` (untrained U-Net) | 15.074 | 24.637 | 2.497 | 100% |
+
+Reproduce locally:
+
+```bash
+python scripts/generate_baselines.py --synthetic --limit 8 --output baselines/
+```
+
+---
+
+## Optical forward models
+
+OpenLithoHub ships two differentiable forward models, both written in pure
+PyTorch so the entire ILT loop is end-to-end auto-differentiable:
+
+| Model | Module | Notes |
+|---|---|---|
+| Gaussian PSF | `openlithohub._utils.forward_model.simulate_aerial_image` | Single-Gaussian convolution; cheap default for tests and small grids |
+| Hopkins SOCS | `openlithohub._utils.simulate_aerial_image_hopkins` | Partial-coherent imaging via SVD-truncated Sum-Of-Coherent-Systems; supports circular / annular / dipole illumination |
+
+Switch `LevelSetILTModel` to Hopkins:
+
+```python
+from openlithohub._utils import HopkinsParams
+from openlithohub.models.levelset_ilt import LevelSetILTModel
+
+model = LevelSetILTModel(
+    iterations=200,
+    forward_model="hopkins",
+    hopkins_params=HopkinsParams(
+        wavelength_nm=193.0, na=1.35, sigma=0.7, num_kernels=24, pixel_size_nm=2.0,
+    ),
+)
+```
+
+---
+
 ## Development
 
 ```bash

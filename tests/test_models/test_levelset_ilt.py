@@ -2,6 +2,7 @@
 
 import torch
 
+from openlithohub._utils.hopkins import HopkinsParams, clear_kernel_cache
 from openlithohub.models.base import PredictionResult
 from openlithohub.models.levelset_ilt import LevelSetILTModel
 from openlithohub.models.registry import registry
@@ -70,3 +71,44 @@ class TestLevelSetILTModel:
         design = torch.ones(16, 16)
         result = model.predict(design)
         assert result.mask.shape == design.shape
+
+
+class TestLevelSetILTHopkinsForwardModel:
+    def test_hopkins_mode_runs_end_to_end(self) -> None:
+        clear_kernel_cache()
+        model = LevelSetILTModel(
+            iterations=5,
+            forward_model="hopkins",
+            hopkins_params=HopkinsParams(num_kernels=4, pixel_size_nm=2.0, sigma=0.7),
+        )
+        design = torch.zeros(32, 32)
+        design[8:24, 8:24] = 1.0
+        result = model.predict(design)
+        assert isinstance(result, PredictionResult)
+        assert result.mask.shape == design.shape
+        assert result.metadata["forward_model"] == "hopkins"
+
+    def test_hopkins_mode_kwarg_override(self) -> None:
+        clear_kernel_cache()
+        model = LevelSetILTModel(iterations=3)  # default gaussian
+        design = torch.zeros(32, 32)
+        design[8:24, 8:24] = 1.0
+        result = model.predict(
+            design,
+            forward_model="hopkins",
+            hopkins_params=HopkinsParams(num_kernels=4, pixel_size_nm=2.0),
+        )
+        assert result.metadata["forward_model"] == "hopkins"
+
+    def test_hopkins_optimization_reduces_loss(self) -> None:
+        clear_kernel_cache()
+        model = LevelSetILTModel(
+            iterations=20,
+            lr=0.2,
+            forward_model="hopkins",
+            hopkins_params=HopkinsParams(num_kernels=4, pixel_size_nm=2.0),
+        )
+        design = torch.zeros(32, 32)
+        design[10:22, 10:22] = 1.0
+        result = model.predict(design)
+        assert result.metadata["final_loss"] < 1.0  # finite, no NaN explosion

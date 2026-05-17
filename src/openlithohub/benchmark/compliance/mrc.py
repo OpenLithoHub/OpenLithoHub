@@ -163,7 +163,7 @@ def _menger_curvature(p0: np.ndarray, p1: np.ndarray, p2: np.ndarray) -> float:
     area2 = abs(cross)
     if area2 < 1e-12:
         return 0.0
-    return 2.0 * area2 / (a * b * c)
+    return float(2.0 * area2 / (a * b * c))
 
 
 def _smooth_loop(loop: np.ndarray, window: int) -> np.ndarray:

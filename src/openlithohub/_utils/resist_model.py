@@ -8,6 +8,20 @@ import torch.nn.functional as functional
 from openlithohub._utils.forward_model import _build_gaussian_kernel
 
 
+def differentiable_threshold(
+    aerial_image: torch.Tensor,
+    threshold: float = 0.5,
+    steepness: float = 50.0,
+) -> torch.Tensor:
+    """Smooth, differentiable substitute for a hard resist threshold.
+
+    Returns ``sigmoid(steepness * (aerial - threshold))``. As ``steepness``
+    increases the output approaches a step function while remaining
+    differentiable everywhere — required for gradient-based ILT.
+    """
+    return torch.sigmoid(steepness * (aerial_image - threshold))
+
+
 def simulate_resist(
     aerial_image: torch.Tensor,
     acid_diffusion_length_nm: float = 5.0,
@@ -69,4 +83,4 @@ def simulate_resist_soft(
         acid = functional.conv2d(inp, kernel, padding=padding).squeeze(0).squeeze(0)
 
     acid = (acid - quencher_concentration).clamp(min=0.0)
-    return torch.sigmoid(steepness * (acid - threshold))
+    return differentiable_threshold(acid, threshold=threshold, steepness=steepness)
