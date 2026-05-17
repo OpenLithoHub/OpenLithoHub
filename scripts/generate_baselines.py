@@ -32,6 +32,7 @@ import torch
 import openlithohub.models.examples.dummy_model  # noqa: F401
 import openlithohub.models.levelset_ilt  # noqa: F401
 import openlithohub.models.neural_ilt  # noqa: F401
+import openlithohub.models.rule_based_opc  # noqa: F401
 from openlithohub.benchmark.compliance.mrc import check_mrc
 from openlithohub.benchmark.metrics.epe import compute_epe
 from openlithohub.benchmark.metrics.pvband import compute_pvband
@@ -246,14 +247,22 @@ def main() -> int:
     parser.add_argument(
         "--models",
         nargs="+",
-        default=["dummy-identity", "levelset-ilt"],
+        default=["dummy-identity", "rule-based-opc", "levelset-ilt"],
         help="Model names to evaluate (must be registered).",
     )
     parser.add_argument("--no-pvband", action="store_true")
     parser.add_argument("--no-mrc", action="store_true")
     parser.add_argument("--min-width-nm", type=float, default=40.0)
     parser.add_argument("--min-spacing-nm", type=float, default=40.0)
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="Seed torch RNG so models with random initialisation (neural-ilt) produce reproducible numbers.",
+    )
     args = parser.parse_args()
+
+    torch.manual_seed(args.seed)
 
     if args.synthetic or args.data_root is None:
         patterns = build_synthetic_patterns(grid=64)[: args.limit]

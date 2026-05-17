@@ -15,6 +15,21 @@
     "notes": ""
   },
   {
+    "model": "rule-based-opc",
+    "dataset": "synthetic-8",
+    "num_samples": 8,
+    "metrics": {
+      "epe_max_nm": 1.4142135381698608,
+      "epe_mean_nm": 0.5302219390869141,
+      "epe_std_nm": 0.5126763582229614,
+      "mrc_passed": 0.0,
+      "mrc_violation_rate": 0.651885986328125,
+      "pvband_max_nm": 4.625,
+      "pvband_mean_nm": 2.487058639526367
+    },
+    "notes": ""
+  },
+  {
     "model": "levelset-ilt",
     "dataset": "synthetic-8",
     "num_samples": 8,

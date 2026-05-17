@@ -28,9 +28,10 @@ python scripts/generate_baselines.py \
   --data-root /path/to/lithobench --limit 16 --output baselines/lithobench/
 ```
 
-Pass `--models dummy-identity levelset-ilt neural-ilt` to evaluate any
-subset of the registered baselines. Models that fail to register (e.g.
-`neural-ilt` when its optional weights are missing) are skipped gracefully.
+Pass `--models dummy-identity rule-based-opc levelset-ilt neural-ilt` to
+evaluate any subset of the registered baselines. Models that fail to
+register (e.g. `neural-ilt` when its optional weights are missing) are
+skipped gracefully.
 
 ## Notes on the current numbers
 
@@ -38,6 +39,10 @@ subset of the registered baselines. Models that fail to register (e.g.
   through. EPE is by construction zero on synthetic patterns where
   design == target. It exists to verify that the metric pipeline itself is
   not broken.
+- `rule-based-opc` is the geometric reference: morphological edge bias by
+  one pixel plus a small line-end extra-bias. No optical simulation, no
+  learning — this is what plain dilation buys you, and what every learned
+  model has to beat.
 - `levelset-ilt` runs 200 iterations of gradient-descent ILT against the
   default Gaussian PSF forward model. Numbers reflect that default; pass
   `forward_model="hopkins"` in user code to try the partial-coherent
