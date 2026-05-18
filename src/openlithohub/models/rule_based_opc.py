@@ -281,6 +281,9 @@ class RuleBasedOPCModel(LithographyModel):
     are all opt-in via constructor or per-call kwargs.
     """
 
+    NAME = "rule-based-opc"
+    SUPPORTS_CURVILINEAR = False
+
     def __init__(
         self,
         bias_radius_px: int = 1,
@@ -302,14 +305,6 @@ class RuleBasedOPCModel(LithographyModel):
         self._density_window_px = density_window_px
         self._density_threshold = density_threshold
         self._mrc_min_space_px = mrc_min_space_px
-
-    @property
-    def name(self) -> str:
-        return "rule-based-opc"
-
-    @property
-    def supports_curvilinear(self) -> bool:
-        return False
 
     def predict(self, design: torch.Tensor, **kwargs: Any) -> PredictionResult:
         bias_radius = int(kwargs.get("bias_radius_px", self._bias_radius_px))

@@ -204,3 +204,31 @@ class TestStochasticRobustness:
         assert 0.0 <= result["bridge_probability"] <= 1.0
         assert 0.0 <= result["break_probability"] <= 1.0
         assert result["ler_mean_nm"] >= 0.0
+
+    def test_bridging_layout_reports_bridge(self):
+        # Two 4-px-wide bars with a 3-px gap. After sigma=2 blur the gap
+        # aerial sits at ~0.44 — just below threshold — so high-dose Poisson
+        # noise lifts it above 0.5 and merges the bars (fg components 2 -> 1).
+        # Pre-fix the metric counted breaks via background components and
+        # this case slipped through; the assertion guards that polarity.
+        mask = torch.zeros(64, 64)
+        mask[16:48, 24:28] = 1.0
+        mask[16:48, 31:35] = 1.0
+        result = compute_stochastic_robustness(
+            mask, num_trials=60, dose_photons_per_nm2=200.0, seed=7
+        )
+        assert result["bridge_probability"] > 0.5
+        assert result["break_probability"] < 0.1
+
+    def test_breaking_layout_reports_break(self):
+        # Single thin 4-px bar at very low dose. Poisson noise punches holes
+        # along the bar, splitting it into multiple foreground components
+        # (fg components 1 -> >1). Catches a regression where break is
+        # counted via the wrong component direction.
+        mask = torch.zeros(64, 64)
+        mask[30:34, 8:56] = 1.0
+        result = compute_stochastic_robustness(
+            mask, num_trials=60, dose_photons_per_nm2=2.0, seed=11
+        )
+        assert result["break_probability"] > 0.5
+        assert result["bridge_probability"] < 0.1

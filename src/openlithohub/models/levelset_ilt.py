@@ -40,6 +40,9 @@ class LevelSetILTModel(LithographyModel):
       faithful, suitable for end-to-end AI-OPC research.
     """
 
+    NAME = "levelset-ilt"
+    SUPPORTS_CURVILINEAR = True
+
     def __init__(
         self,
         iterations: int = 200,
@@ -63,14 +66,6 @@ class LevelSetILTModel(LithographyModel):
         self._cached_weights: torch.Tensor | None = None
         self._cached_grid: int | None = None
         self._compiled_hopkins_cache: dict[tuple[Any, ...], Any] = {}
-
-    @property
-    def name(self) -> str:
-        return "levelset-ilt"
-
-    @property
-    def supports_curvilinear(self) -> bool:
-        return True
 
     def _ensure_hopkins_kernels(
         self, grid_size: int, device: torch.device
@@ -112,7 +107,7 @@ class LevelSetILTModel(LithographyModel):
             target = target.to(device)
 
         if forward_model == "hopkins":
-            if hopkins_params is not self._hopkins_params:
+            if hopkins_params != self._hopkins_params:
                 self._hopkins_params = hopkins_params
                 self._cached_kernels = None
                 self._cached_weights = None

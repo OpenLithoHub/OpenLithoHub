@@ -127,6 +127,16 @@ def stitch_tiles(
                 ol = min(tile.overlap, tile_h)
                 blend[:ol, :] *= top_ramp[:ol, :]
 
+            if tile.origin_x + tile_w < w:
+                right_ramp = ramp.flip(0).unsqueeze(0).expand(tile_h, -1)
+                ol = min(tile.overlap, tile_w)
+                blend[:, -ol:] *= right_ramp[:, -ol:]
+
+            if tile.origin_y + tile_h < h:
+                bottom_ramp = ramp.flip(0).unsqueeze(1).expand(-1, tile_w)
+                ol = min(tile.overlap, tile_h)
+                blend[-ol:, :] *= bottom_ramp[-ol:, :]
+
         y_end = tile.origin_y + tile_h
         x_end = tile.origin_x + tile_w
         output[tile.origin_y : y_end, tile.origin_x : x_end] += result_2d * blend

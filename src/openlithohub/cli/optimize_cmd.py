@@ -253,15 +253,19 @@ def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:
         for shape in shapes.each():
             if shape.is_polygon() or shape.is_box():
                 poly = shape.polygon if shape.is_polygon() else shape.box.to_poly()
-                points = []
-                for point in poly.each_point():
+
+                def _project(point: Any) -> tuple[int, int]:
                     px = int((point.x - bbox.left) * pixels_per_dbu)
                     py = int((point.y - bbox.bottom) * pixels_per_dbu)
-                    px = max(0, min(px, w_px - 1))
-                    py = max(0, min(py, h_px - 1))
-                    points.append((px, py))
-                if len(points) >= 3:
-                    drawer.polygon(points, fill=255)
+                    return (max(0, min(px, w_px - 1)), max(0, min(py, h_px - 1)))
+
+                hull = [_project(p) for p in poly.each_point_hull()]
+                if len(hull) >= 3:
+                    drawer.polygon(hull, fill=255)
+                for hole_idx in range(poly.holes()):
+                    hole = [_project(p) for p in poly.each_point_hole(hole_idx)]
+                    if len(hole) >= 3:
+                        drawer.polygon(hole, fill=0)
 
     raster = np.array(canvas, dtype=np.float32) / 255.0
     return torch.from_numpy(raster)

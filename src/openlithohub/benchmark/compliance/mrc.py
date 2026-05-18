@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
+from openlithohub._utils.contour_trace import trace_contour
 from openlithohub._utils.morphology import (
     binary_dilation,
     binary_erosion,
@@ -15,7 +16,6 @@ from openlithohub._utils.morphology import (
     distance_transform,
 )
 from openlithohub._utils.tensor_ops import ensure_2d
-from openlithohub.workflow.contour.curvilinear import _trace_contour
 
 
 @dataclass
@@ -278,7 +278,7 @@ def check_curvilinear_mrc(
             )
 
     if min_curvature_radius_nm > 0.0:
-        loops = _trace_contour(binary_np)
+        loops = trace_contour(binary_np)
         threshold_kappa = 1.0 / max(min_curvature_radius_nm, 1e-9)
         # Curvature stencil span. A 3-point Menger estimate is only reliable
         # when the sampled arc length is comparable to the radius being

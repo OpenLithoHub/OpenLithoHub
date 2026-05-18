@@ -20,6 +20,9 @@ class NeuralILTModel(LithographyModel):
     but requires pretrained weights for good results.
     """
 
+    NAME = "neural-ilt"
+    SUPPORTS_CURVILINEAR = True
+
     def __init__(
         self,
         weights: str | Path | None = None,
@@ -36,14 +39,6 @@ class NeuralILTModel(LithographyModel):
         self._repo_filename = repo_filename
         self._url_sha256 = url_sha256
         self._net: torch.nn.Module | None = None
-
-    @property
-    def name(self) -> str:
-        return "neural-ilt"
-
-    @property
-    def supports_curvilinear(self) -> bool:
-        return True
 
     def setup(self) -> None:
         from openlithohub.models._unet import UNet

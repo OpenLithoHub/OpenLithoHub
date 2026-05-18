@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "37 6 * * 1"
 
 permissions:
   contents: read
@@ -44,3 +46,21 @@ jobs:
         with:
           files: ./coverage.xml
         continue-on-error: true
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install package + security tools
+        run: |
+          pip install .
+          pip install pip-audit bandit
+      - name: pip-audit (installed environment)
+        run: pip-audit
+      - name: Bandit (gate on high severity)
+        run: bandit -r src/ -lll
+      - name: Bandit (medium-severity report, non-blocking)
+        run: bandit -r src/ -ll || true

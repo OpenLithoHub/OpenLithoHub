@@ -14,9 +14,18 @@ class ModelRegistry:
         self._models: dict[str, type[LithographyModel]] = {}
 
     def register(self, model_cls: type[LithographyModel]) -> type[LithographyModel]:
-        """Register a model class. Can be used as a decorator."""
-        instance = model_cls.__new__(model_cls)
-        name = instance.name if hasattr(instance, "name") else model_cls.__name__
+        """Register a model class. Can be used as a decorator.
+
+        The model class must define ``NAME`` as a class-level attribute. The
+        registry reads it without instantiating, so anything set in
+        ``__init__`` is invisible here.
+        """
+        name = getattr(model_cls, "NAME", None)
+        if not isinstance(name, str) or not name:
+            raise TypeError(
+                f"Model {model_cls.__name__} must define a class-level "
+                f"`NAME: ClassVar[str]` attribute to be registered."
+            )
         self._models[name] = model_cls
         return model_cls
 

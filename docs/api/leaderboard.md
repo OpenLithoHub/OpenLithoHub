@@ -9,8 +9,3 @@
     options:
       show_root_heading: true
       members_order: source
-
-::: openlithohub.leaderboard.data_engine
-    options:
-      show_root_heading: true
-      members_order: source

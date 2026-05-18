@@ -14,13 +14,8 @@ from openlithohub.models.registry import registry
 class DummyModel(LithographyModel):
     """Trivial model that returns the input design as the mask (identity)."""
 
-    @property
-    def name(self) -> str:
-        return "dummy-identity"
-
-    @property
-    def supports_curvilinear(self) -> bool:
-        return False
+    NAME = "dummy-identity"
+    SUPPORTS_CURVILINEAR = False
 
     def predict(self, design: torch.Tensor, **kwargs: Any) -> PredictionResult:
         return PredictionResult(mask=design.clone())

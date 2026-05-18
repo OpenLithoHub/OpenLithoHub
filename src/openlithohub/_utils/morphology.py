@@ -122,40 +122,55 @@ def connected_components(mask: torch.Tensor, connectivity: int = 8) -> tuple[tor
     labels = torch.where(fg, flat_idx, torch.full_like(flat_idx, sentinel))
 
     if connectivity == 4:
-        # 4-connectivity via two cross-shaped passes equivalent to a + kernel
-        labels_f = labels.to(torch.float32)
-        prev_sum = labels_f.sum().item() + 1.0
+        # 4-connectivity via cross-shaped neighborhood. Operates on int64 via
+        # explicit shift-and-pad rather than float32 max_pool2d — float32's
+        # 24-bit mantissa would silently collide for masks larger than ~16
+        # megapixels.
+        prev_sum = labels.sum().item() + 1
         while True:
-            l4d = labels_f.unsqueeze(0).unsqueeze(0)
-            shifted = torch.cat(
-                [
-                    l4d,
-                    functional.pad(l4d[:, :, 1:, :], (0, 0, 0, 1), value=sentinel),
-                    functional.pad(l4d[:, :, :-1, :], (0, 0, 1, 0), value=sentinel),
-                    functional.pad(l4d[:, :, :, 1:], (0, 1, 0, 0), value=sentinel),
-                    functional.pad(l4d[:, :, :, :-1], (1, 0, 0, 0), value=sentinel),
-                ],
-                dim=1,
-            )
-            new_labels_f = shifted.amin(dim=1).squeeze(0)
-            new_labels_f = torch.where(fg, new_labels_f, torch.full_like(new_labels_f, sentinel))
-            curr_sum = new_labels_f.sum().item()
-            labels_f = new_labels_f
+            up = functional.pad(labels[1:, :], (0, 0, 0, 1), value=sentinel)
+            down = functional.pad(labels[:-1, :], (0, 0, 1, 0), value=sentinel)
+            left = functional.pad(labels[:, 1:], (0, 1, 0, 0), value=sentinel)
+            right = functional.pad(labels[:, :-1], (1, 0, 0, 0), value=sentinel)
+            stacked = torch.stack([labels, up, down, left, right], dim=0)
+            new_labels = stacked.amin(dim=0)
+            new_labels = torch.where(fg, new_labels, torch.full_like(new_labels, sentinel))
+            curr_sum = int(new_labels.sum().item())
+            labels = new_labels
             if curr_sum == prev_sum:
                 break
             prev_sum = curr_sum
-        labels = labels_f.to(torch.int64)
     elif connectivity == 8:
-        # 8-connectivity = 3x3 min-pool, masked to foreground each step
+        # 8-connectivity = 3x3 min over neighborhood. Computed on int64 via
+        # nine shifted copies stacked along dim 0 — avoids float32 max_pool2d
+        # mantissa collisions on >~16 megapixel masks.
         prev_sum = labels.sum().item() + 1
         while True:
-            pooled = -functional.max_pool2d(
-                -labels.to(torch.float32).unsqueeze(0).unsqueeze(0),
-                kernel_size=3,
-                stride=1,
-                padding=1,
-            )
-            new_labels = pooled.squeeze(0).squeeze(0).to(torch.int64)
+            shifts = []
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    src = labels
+                    if dy == 1:
+                        src = src[1:, :]
+                    elif dy == -1:
+                        src = src[:-1, :]
+                    if dx == 1:
+                        src = src[:, 1:]
+                    elif dx == -1:
+                        src = src[:, :-1]
+                    pad_left = 1 if dx == -1 else 0
+                    pad_right = 1 if dx == 1 else 0
+                    pad_top = 1 if dy == -1 else 0
+                    pad_bottom = 1 if dy == 1 else 0
+                    shifts.append(
+                        functional.pad(
+                            src,
+                            (pad_left, pad_right, pad_top, pad_bottom),
+                            value=sentinel,
+                        )
+                    )
+            stacked = torch.stack(shifts, dim=0)
+            new_labels = stacked.amin(dim=0)
             new_labels = torch.where(fg, new_labels, torch.full_like(new_labels, sentinel))
             curr_sum = int(new_labels.sum().item())
             labels = new_labels

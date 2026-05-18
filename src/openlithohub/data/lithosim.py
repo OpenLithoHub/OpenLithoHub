@@ -138,9 +138,11 @@ class LithoSimDataset(DatasetAdapter):
     @staticmethod
     def _to_tensor(value: Any) -> torch.Tensor:
         if isinstance(value, np.ndarray):
-            arr = value.astype(np.float32)
-            if arr.size > 0 and arr.max() > 1.0:
-                arr = arr / 255.0
+            arr = value
+            if arr.dtype == np.uint8:
+                arr = arr.astype(np.float32) / 255.0
+            else:
+                arr = arr.astype(np.float32)
             return torch.from_numpy(arr)
 
         if isinstance(value, (list, tuple)):
@@ -154,18 +156,22 @@ class LithoSimDataset(DatasetAdapter):
             ) from e
 
         if isinstance(value, Image.Image):
-            arr = np.array(value, dtype=np.float32)
-            if arr.size > 0 and arr.max() > 1.0:
-                arr = arr / 255.0
+            arr = np.array(value)
+            if arr.dtype == np.uint8:
+                arr = arr.astype(np.float32) / 255.0
+            else:
+                arr = arr.astype(np.float32)
             return torch.from_numpy(arr)
 
         if isinstance(value, dict) and "bytes" in value:
             import io
 
             img = Image.open(io.BytesIO(value["bytes"]))
-            arr = np.array(img, dtype=np.float32)
-            if arr.size > 0 and arr.max() > 1.0:
-                arr = arr / 255.0
+            arr = np.array(img)
+            if arr.dtype == np.uint8:
+                arr = arr.astype(np.float32) / 255.0
+            else:
+                arr = arr.astype(np.float32)
             return torch.from_numpy(arr)
 
         raise TypeError(f"Cannot convert {type(value)} to tensor")

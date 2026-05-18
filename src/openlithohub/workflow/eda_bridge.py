@@ -83,7 +83,7 @@ calibre -drc -hier {svrf_path}
 ## IC Validator
 
 ```sh
-icv -dp 4 -i {oasis_path} -f OASIS -top {cell_name} {tcl_path}
+icv -dp 4 -i {oasis_path} -f OASIS -top {cell_name} {runset_path}
 ```
 
 These decks only check minimum width / minimum spacing. Replace with your
@@ -150,7 +150,7 @@ def emit_bridge_bundle(
     """Emit Calibre + IC Validator templates and a short README for the bundle."""
     oasis_path = Path(oasis_path)
     svrf = emit_calibre_svrf(oasis_path, rules, cell_name=cell_name)
-    tcl = emit_icv_runset(oasis_path, rules, cell_name=cell_name)
+    runset = emit_icv_runset(oasis_path, rules, cell_name=cell_name)
     readme = oasis_path.with_suffix(".bridge.md")
     readme.write_text(
         _RUN_README.format(
@@ -158,8 +158,8 @@ def emit_bridge_bundle(
             oasis_path=str(oasis_path),
             cell_name=cell_name,
             svrf_path=str(svrf),
-            tcl_path=str(tcl),
+            runset_path=str(runset),
         ),
         encoding="utf-8",
     )
-    return {"svrf": svrf, "icv": tcl, "readme": readme}
+    return {"svrf": svrf, "icv": runset, "readme": readme}

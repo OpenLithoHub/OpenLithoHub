@@ -9,10 +9,11 @@ content-addressed verification.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import ipaddress
 import socket
+import ssl
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 _DEFAULT_CACHE_DIR = Path.home() / ".openlithohub" / "models"
@@ -22,36 +23,67 @@ class ChecksumMismatchError(RuntimeError):
     """Raised when a downloaded file's SHA256 does not match the expected value."""
 
 
-def _reject_internal_host(url: str) -> None:
-    """Resolve `url`'s host and refuse private/loopback/link-local/multicast IPs.
+def _vet_address(addr: str, host: str) -> None:
+    """Refuse a single IP literal that would point at a private/non-routable address."""
+    ip = ipaddress.ip_address(addr)
+    if (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
+        raise ValueError(
+            f"Refusing to download from internal/non-routable address {addr} for host {host!r}"
+        )
 
-    Without this, an HTTPS URL pointing at e.g. 169.254.169.254 (cloud metadata)
-    or 10.0.0.0/8 (internal services) would be fetched by the model hub if a
-    user passed a malicious URL. The SHA256 contract limits damage but cannot
-    prevent the request itself from reaching internal services.
+
+def _resolve_and_vet(host: str) -> str:
+    """Resolve `host`, refuse private IPs, return the single vetted IP to dial.
+
+    Returns one address — the connection is later forced to that exact IP so
+    a DNS rebinder cannot swap in a private IP between vet-time and dial-time.
     """
-    parsed = urllib.parse.urlparse(url)
-    host = parsed.hostname
-    if not host:
-        raise ValueError(f"URL has no host component: {url}")
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror as exc:
         raise ValueError(f"Could not resolve host {host!r}: {exc}") from exc
+    if not infos:
+        raise ValueError(f"Host {host!r} did not resolve to any address")
     for info in infos:
         addr = info[4][0]
-        ip = ipaddress.ip_address(addr)
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
-            raise ValueError(
-                f"Refusing to download from internal/non-routable address {addr} for host {host!r}"
-            )
+        _vet_address(str(addr), host)
+    return str(infos[0][4][0])
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPSConnection that dials a fixed IP while presenting a hostname for SNI/cert.
+
+    The constructor arg `host` is the original hostname (used for SNI, cert
+    verification, and the HTTP Host header). Dialing happens to `_dial_ip`
+    instead — closes the DNS rebinding window between vet-time and connect-time.
+    """
+
+    def __init__(
+        self,
+        host: str,
+        dial_ip: str,
+        port: int,
+        timeout: float,
+        context: ssl.SSLContext,
+    ) -> None:
+        super().__init__(host, port=port, timeout=timeout, context=context)
+        self._dial_ip = dial_ip
+
+    def connect(self) -> None:
+        # Dial the vetted IP, but keep self.host (used for SNI + cert hostname).
+        sock = socket.create_connection((self._dial_ip, self.port), timeout=self.timeout)
+        if self._tunnel_host:  # type: ignore[attr-defined]
+            self.sock = sock
+            self._tunnel()  # type: ignore[attr-defined]
+        assert self.context is not None  # type: ignore[attr-defined]
+        self.sock = self.context.wrap_socket(sock, server_hostname=self.host)  # type: ignore[attr-defined]
 
 
 class ModelHub:
@@ -119,20 +151,54 @@ class ModelHub:
         return Path(path)
 
     def _download_url(self, url: str, target: Path, sha256: str) -> Path:
-        """Download from a direct URL with timeout, size limit, and SHA256 verification."""
+        """Download from a direct URL with timeout, size limit, and SHA256 verification.
+
+        Resolves the host once, refuses private/non-routable addresses, and
+        then forces the TLS connection to that exact IP. This closes the DNS
+        TOCTOU window that a plain ``urlopen(url)`` leaves open: a rebinder
+        cannot return a public IP for the vetting query and a private IP for
+        the actual fetch, because the fetch never re-resolves.
+        """
         if not url.startswith("https://"):
             raise ValueError("Only HTTPS URLs are supported for model downloads")
-        _reject_internal_host(url)
+
+        parsed = urllib.parse.urlparse(url)
+        host = parsed.hostname
+        if not host:
+            raise ValueError(f"URL has no host component: {url}")
+        port = parsed.port or 443
+        path = parsed.path or "/"
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
+        ip = _resolve_and_vet(host)
+
         target.parent.mkdir(parents=True, exist_ok=True)
         max_size = 2 * 1024 * 1024 * 1024  # 2 GB
-        req = urllib.request.Request(url)
-        sha = hashlib.sha256()
-        with urllib.request.urlopen(req, timeout=300) as response:  # noqa: S310
-            content_length = response.headers.get("Content-Length")
+
+        ctx = ssl.create_default_context()
+        # Connect to the vetted IP directly; SNI/host header still uses the
+        # original hostname so cert validation works.
+        conn = _PinnedHTTPSConnection(host, ip, port=port, timeout=300, context=ctx)
+        try:
+            conn.request("GET", path, headers={"Host": host})
+            response = conn.getresponse()
+            # Reject redirects — we vetted only the original host, and a
+            # 30x to a different host would leak the SSRF guard.
+            if response.status in (301, 302, 303, 307, 308):
+                raise ValueError(
+                    f"Refusing to follow redirect from {url} to "
+                    f"{response.getheader('Location')!r}"
+                )
+            if response.status != 200:
+                raise ValueError(
+                    f"Unexpected HTTP status {response.status} fetching {url}"
+                )
+            content_length = response.getheader("Content-Length")
             if content_length and int(content_length) > max_size:
                 raise ValueError(
                     f"File size {int(content_length)} bytes exceeds limit of {max_size} bytes"
                 )
+            sha = hashlib.sha256()
             downloaded = 0
             with open(target, "wb") as f:
                 while chunk := response.read(8192):
@@ -142,6 +208,8 @@ class ModelHub:
                         raise ValueError(f"Download exceeded size limit of {max_size} bytes")
                     sha.update(chunk)
                     f.write(chunk)
+        finally:
+            conn.close()
         actual = sha.hexdigest()
         if actual != sha256.lower():
             target.unlink(missing_ok=True)
