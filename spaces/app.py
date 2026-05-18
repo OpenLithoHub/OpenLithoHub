@@ -324,9 +324,27 @@ def load_leaderboard():
 # ---------------------------------------------------------------------------
 
 
+# Tab bar contrast fix — Gradio Soft theme renders unselected tabs in a pale
+# gray that fails WCAG AA on light backgrounds. Darken unselected labels and
+# mark the selected tab with the OpenLithoHub brand blue used on the website.
+_TAB_CSS = """
+.tab-nav { border-bottom: 1px solid #c6c6cd; }
+.tab-nav button {
+    color: #45464d;
+    font-weight: 600;
+    opacity: 1;
+}
+.tab-nav button:hover { color: #0058be; }
+.tab-nav button.selected {
+    color: #0058be;
+    border-bottom: 2px solid #0058be;
+}
+"""
+
 with gr.Blocks(
     title="OpenLithoHub Playground",
     theme=gr.themes.Soft(primary_hue="indigo", secondary_hue="cyan"),
+    css=_TAB_CSS,
 ) as demo:
     gr.Markdown(
         """
