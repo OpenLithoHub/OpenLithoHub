@@ -50,8 +50,7 @@ def _reject_internal_host(url: str) -> None:
             or ip.is_unspecified
         ):
             raise ValueError(
-                f"Refusing to download from internal/non-routable address {addr} "
-                f"for host {host!r}"
+                f"Refusing to download from internal/non-routable address {addr} for host {host!r}"
             )
 
 
