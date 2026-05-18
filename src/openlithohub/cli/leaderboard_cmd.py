@@ -62,9 +62,7 @@ def submit(
     pvband_mean: float | None = typer.Option(
         None, "--pvband-mean", help="Mean PV band width in nm."
     ),
-    pvband_max: float | None = typer.Option(
-        None, "--pvband-max", help="Max PV band width in nm."
-    ),
+    pvband_max: float | None = typer.Option(None, "--pvband-max", help="Max PV band width in nm."),
     paper_url: str | None = typer.Option(None, "--paper-url", help="Paper URL."),
     code_url: str | None = typer.Option(None, "--code-url", help="Code/repo URL."),
     notes: str | None = typer.Option(None, "--notes", help="Additional notes."),

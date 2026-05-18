@@ -124,9 +124,7 @@ class LevelSetILTModel(LithographyModel):
                 )
                 compiled = self._compiled_hopkins_cache.get(cache_key)
                 if compiled is None:
-                    compiled = torch.compile(
-                        hopkins_fn, mode="reduce-overhead", dynamic=False
-                    )
+                    compiled = torch.compile(hopkins_fn, mode="reduce-overhead", dynamic=False)
                     self._compiled_hopkins_cache[cache_key] = compiled
                 hopkins_fn = compiled
         else:

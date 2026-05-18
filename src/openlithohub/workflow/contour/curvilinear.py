@@ -169,16 +169,14 @@ def export_oasis_mbw(
         from scipy.interpolate import splev
     except ImportError:
         raise ImportError(
-            "scipy is required for OASIS export. "
-            "Install with: pip install openlithohub[workflow]"
+            "scipy is required for OASIS export. Install with: pip install openlithohub[workflow]"
         ) from None
 
     try:
         import klayout.db as db
     except ImportError:
         raise ImportError(
-            "klayout is required for OASIS export. "
-            "Install with: pip install openlithohub[workflow]"
+            "klayout is required for OASIS export. Install with: pip install openlithohub[workflow]"
         ) from None
 
     output = Path(output_path)

@@ -88,9 +88,7 @@ def distance_transform(mask: torch.Tensor) -> torch.Tensor:
     return dist
 
 
-def connected_components(
-    mask: torch.Tensor, connectivity: int = 8
-) -> tuple[torch.Tensor, int]:
+def connected_components(mask: torch.Tensor, connectivity: int = 8) -> tuple[torch.Tensor, int]:
     """Label connected components of a binary mask via iterative neighborhood min.
 
     Each foreground pixel is initially assigned a unique label (its flat index).
@@ -114,14 +112,12 @@ def connected_components(
             contiguous — caller may remap with ``unique`` if dense IDs are needed).
         num_components: number of distinct connected components.
     """
-    fg = (mask > 0.5)
+    fg = mask > 0.5
     h, w = fg.shape
     if not fg.any():
         return torch.full((h, w), -1, dtype=torch.int64, device=fg.device), 0
 
-    flat_idx = (
-        torch.arange(h * w, device=fg.device, dtype=torch.int64).reshape(h, w)
-    )
+    flat_idx = torch.arange(h * w, device=fg.device, dtype=torch.int64).reshape(h, w)
     sentinel = h * w + 1
     labels = torch.where(fg, flat_idx, torch.full_like(flat_idx, sentinel))
 

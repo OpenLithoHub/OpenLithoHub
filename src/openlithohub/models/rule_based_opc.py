@@ -239,8 +239,8 @@ def _min_enclosed_zero_run(binary: torch.Tensor) -> int:
     pad = torch.zeros((h, 1), dtype=inv.dtype, device=inv.device)
     padded = torch.cat([pad, inv, pad], dim=1)
     diff = padded[:, 1:] - padded[:, :-1]
-    starts = diff == 1   # transition foreground→zero: zero run starts (unpadded col = j)
-    ends = diff == -1    # transition zero→foreground: zero run ended (unpadded col = j-1)
+    starts = diff == 1  # transition foreground→zero: zero run starts (unpadded col = j)
+    ends = diff == -1  # transition zero→foreground: zero run ended (unpadded col = j-1)
     if not starts.any():
         return 0
     starts_idx = starts.nonzero(as_tuple=False)

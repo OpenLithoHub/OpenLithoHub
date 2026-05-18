@@ -60,9 +60,7 @@ def simulate_aerial_image(
     elif mask.ndim == 4 and mask.shape[1] == 1:
         inp = mask.float()
     else:
-        raise ValueError(
-            f"Expected mask shape (H,W) or (B,1,H,W); got {tuple(mask.shape)}"
-        )
+        raise ValueError(f"Expected mask shape (H,W) or (B,1,H,W); got {tuple(mask.shape)}")
 
     inp_padded = _circular_pad_clamped(inp, padding)
     aerial = functional.conv2d(inp_padded, kernel)
@@ -92,15 +90,11 @@ def _circular_pad_clamped(inp: torch.Tensor, padding: int) -> torch.Tensor:
             # Fall back to replicate when image is 1 px wide/tall in that axis
             step_h = remaining_h if cur_h == 1 else 0
             step_w = remaining_w if cur_w == 1 else 0
-            out = functional.pad(
-                out, (step_w, step_w, step_h, step_h), mode="replicate"
-            )
+            out = functional.pad(out, (step_w, step_w, step_h, step_h), mode="replicate")
             remaining_h -= step_h
             remaining_w -= step_w
             continue
-        out = functional.pad(
-            out, (step_w, step_w, step_h, step_h), mode="circular"
-        )
+        out = functional.pad(out, (step_w, step_w, step_h, step_h), mode="circular")
         remaining_h -= step_h
         remaining_w -= step_w
     return out
