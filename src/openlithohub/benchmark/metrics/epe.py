@@ -33,7 +33,7 @@ def compute_epe(
     predicted: torch.Tensor,
     target: torch.Tensor,
     pixel_size_nm: float = 1.0,
-) -> dict[str, float]:
+) -> dict[str, float | bool]:
     """Compute Edge Placement Error between predicted and target contours.
 
     Extracts edges from both binary masks via Sobel operators, then computes
@@ -46,7 +46,12 @@ def compute_epe(
         pixel_size_nm: Physical size of each pixel in nanometers.
 
     Returns:
-        Dictionary with 'epe_mean_nm', 'epe_max_nm', 'epe_std_nm'.
+        Dictionary with keys ``epe_mean_nm``, ``epe_max_nm``, ``epe_std_nm``,
+        and ``valid``. Empty-edge cases are reported explicitly:
+
+        - both edge sets empty → all zeros, ``valid=True`` (degenerate match).
+        - exactly one edge set empty → all values ``inf`` and ``valid=False``;
+          callers must not treat the result as a "perfect" score.
     """
     if predicted.shape != target.shape:
         raise ValueError(f"Shape mismatch: predicted {predicted.shape} vs target {target.shape}")
@@ -57,8 +62,13 @@ def compute_epe(
     pred_pts = pred_edges.nonzero(as_tuple=False).float()
     tgt_pts = tgt_edges.nonzero(as_tuple=False).float()
 
-    if pred_pts.numel() == 0 or tgt_pts.numel() == 0:
-        return {"epe_mean_nm": 0.0, "epe_max_nm": 0.0, "epe_std_nm": 0.0}
+    pred_empty = pred_pts.numel() == 0
+    tgt_empty = tgt_pts.numel() == 0
+    if pred_empty and tgt_empty:
+        return {"epe_mean_nm": 0.0, "epe_max_nm": 0.0, "epe_std_nm": 0.0, "valid": True}
+    if pred_empty or tgt_empty:
+        inf = float("inf")
+        return {"epe_mean_nm": inf, "epe_max_nm": inf, "epe_std_nm": 0.0, "valid": False}
 
     # Compute pairwise distances in chunks along BOTH axes to keep peak
     # memory at chunk_size^2 floats regardless of edge count. With a single
@@ -85,4 +95,5 @@ def compute_epe(
         "epe_mean_nm": float(min_distances.mean().item()),
         "epe_max_nm": float(min_distances.max().item()),
         "epe_std_nm": float(min_distances.std().item()) if min_distances.numel() > 1 else 0.0,
+        "valid": True,
     }

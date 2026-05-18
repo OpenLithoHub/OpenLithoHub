@@ -167,7 +167,9 @@ def evaluate_model(
 
         row: dict[str, float] = {}
         if sample.mask is not None:
-            row.update(compute_epe(result.mask, sample.mask, pixel_size_nm=pixel_nm))
+            epe = compute_epe(result.mask, sample.mask, pixel_size_nm=pixel_nm)
+            epe.pop("valid", None)
+            row.update(epe)
         if run_pvband:
             with contextlib.suppress(Exception):
                 row.update(compute_pvband(result.mask, pixel_size_nm=pixel_nm))

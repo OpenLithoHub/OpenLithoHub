@@ -46,6 +46,22 @@ def test_epe_empty_edges():
     blank = torch.zeros(32, 32)
     result = compute_epe(blank, blank, pixel_size_nm=1.0)
     assert result["epe_mean_nm"] == 0.0
+    assert result["valid"] is True
+
+
+def test_epe_one_empty_one_not_returns_inf_and_invalid():
+    blank = torch.zeros(32, 32)
+    nonblank = torch.zeros(32, 32)
+    nonblank[8:24, 8:24] = 1.0
+
+    pred_empty = compute_epe(blank, nonblank, pixel_size_nm=1.0)
+    assert pred_empty["epe_mean_nm"] == float("inf")
+    assert pred_empty["epe_max_nm"] == float("inf")
+    assert pred_empty["valid"] is False
+
+    target_empty = compute_epe(nonblank, blank, pixel_size_nm=1.0)
+    assert target_empty["epe_mean_nm"] == float("inf")
+    assert target_empty["valid"] is False
 
 
 def test_epe_shape_mismatch():

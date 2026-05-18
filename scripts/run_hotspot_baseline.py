@@ -67,8 +67,13 @@ def predict_grid(sample: LithoSample, *, step_nm: float = 200.0) -> torch.Tensor
     h_px, w_px = int(design.shape[0]), int(design.shape[1])
     pixel_nm = float(sample.metadata.get("pixel_nm", 1.0))
     ox_nm, oy_nm = sample.metadata.get("origin_nm", [0.0, 0.0])
-    xs = torch.arange(0, w_px * pixel_nm, step_nm, dtype=torch.float32) + float(ox_nm)
-    ys = torch.arange(0, h_px * pixel_nm, step_nm, dtype=torch.float32) + float(oy_nm)
+    # Inclusive-stop arange: arange(0, n*step, step) drops the right/bottom
+    # edge sample (e.g. 2000/200 stops at 1800). Adding step/2 to the stop
+    # bound gives an inclusive lattice without floating-point boundary games.
+    x_stop = w_px * pixel_nm + step_nm / 2.0
+    y_stop = h_px * pixel_nm + step_nm / 2.0
+    xs = torch.arange(0, x_stop, step_nm, dtype=torch.float32) + float(ox_nm)
+    ys = torch.arange(0, y_stop, step_nm, dtype=torch.float32) + float(oy_nm)
     if xs.numel() == 0 or ys.numel() == 0:
         return torch.zeros(0, 2)
     grid_y, grid_x = torch.meshgrid(ys, xs, indexing="ij")

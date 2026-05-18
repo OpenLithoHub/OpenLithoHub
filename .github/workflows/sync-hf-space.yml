@@ -35,6 +35,21 @@ jobs:
           # then force-push it to the HF Space repo's main branch.
           tmpdir=$(mktemp -d)
           cp -r spaces/. "$tmpdir/"
+          # Pin the openlithohub install to the exact commit being synced so
+          # the Space rebuild is reproducible and doesn't track a moving @main.
+          python3 - "$tmpdir/requirements.txt" "$GITHUB_SHA" <<'PY'
+          import re, sys
+          path, sha = sys.argv[1], sys.argv[2]
+          with open(path) as f:
+              text = f.read()
+          new = re.sub(
+              r"(openlithohub @ git\+https://github\.com/OpenLithoHub/OpenLithoHub\.git@)[^\s#]+",
+              r"\g<1>" + sha,
+              text,
+          )
+          with open(path, "w") as f:
+              f.write(new)
+          PY
           cd "$tmpdir"
           git init -b main
           git add .

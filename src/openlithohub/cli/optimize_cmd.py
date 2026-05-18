@@ -175,8 +175,9 @@ def run(
     except ImportError as e:
         console.print(f"  [yellow]Warning:[/yellow] {e}")
         console.print("  Falling back to raw tensor export...")
-        torch.save(optimized, str(output).replace(".oas", ".pt"))
-        console.print(f"  Saved tensor to {str(output).replace('.oas', '.pt')}")
+        fallback_path = output.with_suffix(".pt")
+        torch.save(optimized, str(fallback_path))
+        console.print(f"  Saved tensor to {fallback_path}")
 
     console.print()
     console.print("[bold green]Optimization complete.[/bold green]")

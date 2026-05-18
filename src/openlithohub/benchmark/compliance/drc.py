@@ -53,7 +53,12 @@ def check_drc(
     m = ensure_2d(mask)
     binary = (m > 0.5).float()
 
-    rules = _RULE_DECKS.get(rule_deck, _DEFAULT_RULES) if isinstance(rule_deck, str) else rule_deck
+    if isinstance(rule_deck, str):
+        if rule_deck not in _RULE_DECKS:
+            raise ValueError(f"Unknown rule deck {rule_deck!r}. Available: {sorted(_RULE_DECKS)}")
+        rules = _RULE_DECKS[rule_deck]
+    else:
+        rules = rule_deck
 
     violations: list[dict[str, float]] = []
     rule_summary: dict[str, int] = {}
