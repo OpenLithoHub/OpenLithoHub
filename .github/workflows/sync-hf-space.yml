@@ -1,0 +1,43 @@
+name: Sync spaces/ to HuggingFace
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "spaces/**"
+      - ".github/workflows/sync-hf-space.yml"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push spaces/ subtree to HuggingFace Space
+        env:
+          HF_USERNAME: ${{ secrets.HF_USERNAME }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HF_USERNAME:-}" ] || [ -z "${HF_TOKEN:-}" ]; then
+            echo "::error::HF_USERNAME and HF_TOKEN secrets must be set on this repository."
+            exit 1
+          fi
+
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+
+          # Build a clean orphan branch containing only spaces/* at the root,
+          # then force-push it to the HF Space repo's main branch.
+          tmpdir=$(mktemp -d)
+          cp -r spaces/. "$tmpdir/"
+          cd "$tmpdir"
+          git init -b main
+          git add .
+          git commit -m "Sync from OpenLithoHub@${GITHUB_SHA::7}"
+          git remote add space "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/OpenLithoHub/playground"
+          git push --force space main
