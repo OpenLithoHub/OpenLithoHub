@@ -65,7 +65,7 @@ jupyter = [
 all = ["openlithohub[data,workflow,models,dev,docs,jupyter]"]
 
 [project.urls]
-Homepage = "https://github.com/OpenLithoHub/OpenLithoHub"
+Homepage = "https://openlithohub.com"
 Documentation = "https://docs.openlithohub.com"
 Repository = "https://github.com/OpenLithoHub/OpenLithoHub"
 Issues = "https://github.com/OpenLithoHub/OpenLithoHub/issues"
