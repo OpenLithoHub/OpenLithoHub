@@ -31,3 +31,7 @@ def main(
 
         typer.echo(f"openlithohub {__version__}")
         raise typer.Exit()
+
+
+if __name__ == "__main__":
+    app()

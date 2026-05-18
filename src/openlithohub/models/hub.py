@@ -9,6 +9,9 @@ content-addressed verification.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
+import socket
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -17,6 +20,39 @@ _DEFAULT_CACHE_DIR = Path.home() / ".openlithohub" / "models"
 
 class ChecksumMismatchError(RuntimeError):
     """Raised when a downloaded file's SHA256 does not match the expected value."""
+
+
+def _reject_internal_host(url: str) -> None:
+    """Resolve `url`'s host and refuse private/loopback/link-local/multicast IPs.
+
+    Without this, an HTTPS URL pointing at e.g. 169.254.169.254 (cloud metadata)
+    or 10.0.0.0/8 (internal services) would be fetched by the model hub if a
+    user passed a malicious URL. The SHA256 contract limits damage but cannot
+    prevent the request itself from reaching internal services.
+    """
+    parsed = urllib.parse.urlparse(url)
+    host = parsed.hostname
+    if not host:
+        raise ValueError(f"URL has no host component: {url}")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        raise ValueError(f"Could not resolve host {host!r}: {exc}") from exc
+    for info in infos:
+        addr = info[4][0]
+        ip = ipaddress.ip_address(addr)
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise ValueError(
+                f"Refusing to download from internal/non-routable address {addr} "
+                f"for host {host!r}"
+            )
 
 
 class ModelHub:
@@ -87,6 +123,7 @@ class ModelHub:
         """Download from a direct URL with timeout, size limit, and SHA256 verification."""
         if not url.startswith("https://"):
             raise ValueError("Only HTTPS URLs are supported for model downloads")
+        _reject_internal_host(url)
         target.parent.mkdir(parents=True, exist_ok=True)
         max_size = 2 * 1024 * 1024 * 1024  # 2 GB
         req = urllib.request.Request(url)

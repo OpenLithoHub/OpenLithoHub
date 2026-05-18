@@ -5,7 +5,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as functional
 
-from openlithohub._utils.forward_model import _build_gaussian_kernel
+from openlithohub._utils.forward_model import _build_gaussian_kernel, _circular_pad_clamped
 
 
 def differentiable_threshold(
@@ -20,6 +20,21 @@ def differentiable_threshold(
     differentiable everywhere — required for gradient-based ILT.
     """
     return torch.sigmoid(steepness * (aerial_image - threshold))
+
+
+def _diffuse_acid(acid: torch.Tensor, sigma_px: float) -> torch.Tensor:
+    """Apply Gaussian acid-diffusion blur with circular padding.
+
+    Resist diffusion shares the periodic-boundary contract documented in
+    ``forward_model``; zero-padding here would cause near-edge resist to
+    underexpose relative to the Hopkins forward and silently bias EPE on
+    layouts with features close to the frame.
+    """
+    kernel = _build_gaussian_kernel(sigma_px, acid.device)
+    padding = kernel.shape[-1] // 2
+    inp = acid.unsqueeze(0).unsqueeze(0)
+    inp_padded = _circular_pad_clamped(inp, padding)
+    return functional.conv2d(inp_padded, kernel).squeeze(0).squeeze(0)
 
 
 def simulate_resist(
@@ -51,10 +66,7 @@ def simulate_resist(
 
     sigma_diffusion_px = acid_diffusion_length_nm / max(pixel_size_nm, 1e-6)
     if sigma_diffusion_px > 0.1:
-        kernel = _build_gaussian_kernel(sigma_diffusion_px, acid.device)
-        inp = acid.unsqueeze(0).unsqueeze(0)
-        padding = kernel.shape[-1] // 2
-        acid = functional.conv2d(inp, kernel, padding=padding).squeeze(0).squeeze(0)
+        acid = _diffuse_acid(acid, sigma_diffusion_px)
 
     acid = (acid - quencher_concentration).clamp(min=0.0)
     return (acid >= threshold).float()
@@ -77,10 +89,7 @@ def simulate_resist_soft(
 
     sigma_diffusion_px = acid_diffusion_length_nm / max(pixel_size_nm, 1e-6)
     if sigma_diffusion_px > 0.1:
-        kernel = _build_gaussian_kernel(sigma_diffusion_px, acid.device)
-        inp = acid.unsqueeze(0).unsqueeze(0)
-        padding = kernel.shape[-1] // 2
-        acid = functional.conv2d(inp, kernel, padding=padding).squeeze(0).squeeze(0)
+        acid = _diffuse_acid(acid, sigma_diffusion_px)
 
     acid = (acid - quencher_concentration).clamp(min=0.0)
     return differentiable_threshold(acid, threshold=threshold, steepness=steepness)

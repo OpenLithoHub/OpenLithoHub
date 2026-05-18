@@ -65,6 +65,7 @@ def run(
     import openlithohub.models.examples.dummy_model  # noqa: F401
     import openlithohub.models.levelset_ilt  # noqa: F401
     import openlithohub.models.neural_ilt  # noqa: F401
+    import openlithohub.models.rule_based_opc  # noqa: F401
     from openlithohub.models.registry import registry
     from openlithohub.workflow.process_node import PROCESS_NODES
 
@@ -216,7 +217,7 @@ def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:
     if suffix == ".npy":
         import numpy as np
 
-        arr = np.load(str(path))
+        arr = np.load(str(path), allow_pickle=False)
         return torch.from_numpy(arr).float()
 
     try:

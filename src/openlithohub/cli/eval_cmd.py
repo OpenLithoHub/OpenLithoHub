@@ -79,6 +79,7 @@ def run(
     import openlithohub.models.examples.dummy_model  # noqa: F401 — register built-in models
     import openlithohub.models.levelset_ilt  # noqa: F401
     import openlithohub.models.neural_ilt  # noqa: F401
+    import openlithohub.models.rule_based_opc  # noqa: F401
     from openlithohub.benchmark.metrics.epe import compute_epe
     from openlithohub.benchmark.metrics.pvband import compute_pvband
     from openlithohub.benchmark.report import generate_report

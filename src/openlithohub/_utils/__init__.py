@@ -9,6 +9,7 @@ from openlithohub._utils.hopkins import (
 from openlithohub._utils.morphology import (
     binary_dilation,
     binary_erosion,
+    connected_components,
     distance_transform,
 )
 from openlithohub._utils.resist_model import (
@@ -24,6 +25,7 @@ __all__ = [
     "binary_erosion",
     "clear_kernel_cache",
     "compute_socs_kernels",
+    "connected_components",
     "differentiable_threshold",
     "distance_transform",
     "ensure_2d",

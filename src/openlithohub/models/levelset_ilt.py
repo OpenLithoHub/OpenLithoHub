@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Literal
 
 import torch
@@ -92,7 +93,7 @@ class LevelSetILTModel(LithographyModel):
         Args:
             design: Target design pattern (H, W), binary.
             **kwargs: Optional overrides — iterations, lr, sigma_px, tv_weight,
-                forward_model, hopkins_params.
+                forward_model, hopkins_params, device, dtype, compile_forward.
         """
         target = design.detach().float()
         if target.ndim > 2:
@@ -106,6 +107,9 @@ class LevelSetILTModel(LithographyModel):
         hopkins_params = kwargs.get("hopkins_params", self._hopkins_params)
         dtype = kwargs.get("dtype", torch.float32)
         compile_forward = kwargs.get("compile_forward", False)
+        device = kwargs.get("device")
+        if device is not None:
+            target = target.to(device)
 
         if forward_model == "hopkins":
             if hopkins_params is not self._hopkins_params:
@@ -114,7 +118,7 @@ class LevelSetILTModel(LithographyModel):
                 self._cached_weights = None
                 self._cached_grid = None
             kernels, weights = self._ensure_hopkins_kernels(target.shape[0], target.device)
-            hopkins_fn = simulate_aerial_image_hopkins
+            hopkins_fn: Callable[..., torch.Tensor] | None = simulate_aerial_image_hopkins
             if compile_forward:
                 cache_key = (
                     target.shape[0],
@@ -126,11 +130,11 @@ class LevelSetILTModel(LithographyModel):
                 if compiled is None:
                     compiled = torch.compile(hopkins_fn, mode="reduce-overhead", dynamic=False)
                     self._compiled_hopkins_cache[cache_key] = compiled
-                hopkins_fn = compiled
+                hopkins_fn = compiled  # type: ignore[assignment]
         else:
             kernels = None
             weights = None
-            hopkins_fn = simulate_aerial_image_hopkins
+            hopkins_fn = None
 
         mask_logit = torch.zeros_like(target, requires_grad=True)
         with torch.no_grad():
@@ -147,6 +151,7 @@ class LevelSetILTModel(LithographyModel):
 
             mask_continuous = torch.sigmoid(mask_logit)
             if forward_model == "hopkins":
+                assert hopkins_fn is not None  # narrowed by forward_model == "hopkins" branch
                 aerial = hopkins_fn(
                     mask_continuous,
                     kernels=kernels,

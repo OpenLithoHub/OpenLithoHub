@@ -35,7 +35,6 @@ def compute_stochastic_robustness(
     resist_nominal = apply_resist_threshold(aerial_nominal, threshold=0.5)
 
     nominal_fg_components = _count_connected_components(resist_nominal)
-    nominal_bg_components = _count_connected_components((resist_nominal < 0.5).float())
 
     pixel_area_nm2 = pixel_size_nm * pixel_size_nm
     lambda_map = aerial_nominal.clamp(min=0.0) * dose_photons_per_nm2 * pixel_area_nm2
@@ -67,11 +66,10 @@ def compute_stochastic_robustness(
             noisy_resist = apply_resist_threshold(noisy_intensity, threshold=0.5)
 
             noisy_fg_components = _count_connected_components(noisy_resist)
-            noisy_bg_components = _count_connected_components((noisy_resist < 0.5).float())
 
             if noisy_fg_components < nominal_fg_components:
                 bridge_count += 1
-            if noisy_bg_components < nominal_bg_components:
+            if noisy_fg_components > nominal_fg_components:
                 break_count += 1
 
             diff = (noisy_resist - resist_nominal).abs()

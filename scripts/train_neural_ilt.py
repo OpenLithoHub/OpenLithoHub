@@ -81,9 +81,13 @@ class _LithoBenchPairs(Dataset):
 
     def __init__(self, root: Path) -> None:
         self.inner = LithoBenchDataset(root=root)
-        # Filter to samples that actually have a ground-truth mask.
+        # Filter to samples that actually have a ground-truth mask. Use a
+        # path-existence check rather than materializing every sample —
+        # `inner[i]` decodes design+mask+resist arrays from disk.
         self._indices = [
-            i for i in range(len(self.inner)) if self.inner[i].mask is not None
+            i
+            for i, sid in enumerate(self.inner.sample_ids)
+            if self.inner.has_kind(sid, "mask")
         ]
         if not self._indices:
             raise RuntimeError(f"No samples with masks in {root}")
