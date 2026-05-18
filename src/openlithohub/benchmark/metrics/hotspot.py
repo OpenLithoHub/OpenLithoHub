@@ -56,10 +56,10 @@ def compute_hotspot_detection(
         Edge cases:
 
         - No GT and no predictions → recall/precision/F1 = 1.0 (vacuous
-          perfect score). This convention matches sklearn's behavior
-          when ``y_true`` and ``y_pred`` are both empty.
+            perfect score). This convention matches sklearn's behavior
+            when ``y_true`` and ``y_pred`` are both empty.
         - GT present but no predictions → recall=0, precision=1.0
-          (vacuously: nothing predicted, so nothing is wrong), F1=0.
+            (vacuously: nothing predicted, so nothing is wrong), F1=0.
         - Predictions present but no GT → recall=1.0, precision=0, F1=0.
     """
     if predicted_points.ndim != 2 or predicted_points.shape[-1] != 2:

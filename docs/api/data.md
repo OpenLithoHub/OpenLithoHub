@@ -15,6 +15,16 @@
       show_root_heading: true
       members_order: source
 
+::: openlithohub.data.iccad16
+    options:
+      show_root_heading: true
+      members_order: source
+
+::: openlithohub.data.ganopc
+    options:
+      show_root_heading: true
+      members_order: source
+
 ::: openlithohub.data.transforms
     options:
       show_root_heading: true

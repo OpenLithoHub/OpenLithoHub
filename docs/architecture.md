@@ -51,11 +51,18 @@ The data layer provides unified access to lithography datasets through the `Data
 
 - **LithoBenchDataset** — loads NumPy `.npy` files from LithoBench (NeurIPS'23)
 - **LithoSimDataset** — loads HuggingFace Parquet datasets from LithoSim (NeurIPS'25)
+- **GanOpcDataset** — loads ~4875 paired-PNG (target, OPC mask) samples from
+  GAN-OPC (TCAD'20) for AI-OPC training
+- **Iccad16Dataset** — rasterizes the ICCAD'16 Problem C OASIS layouts via
+  klayout and exposes per-case hotspot annotations (no reference mask;
+  `LithoSample.mask` is `None`)
 - **Dummy generator** — `generate_dummy_layout` / `generate_dummy_pair` produce
   deterministic, DRC-clean synthetic layouts with only NumPy and PyTorch, for
   CI and Colab use.
 
-All adapters produce `(design, target)` tensor pairs with consistent shape `(B, 1, H, W)`.
+All adapters produce `LithoSample` records. Mask-optimization adapters yield
+paired `(design, mask)` tensors; hotspot-detection adapters set `mask=None` and
+expose annotations through `metadata`.
 
 ## Benchmark Layer
 
@@ -67,6 +74,7 @@ All adapters produce `(design, target)` tensor pairs with consistent shape `(B, 
 | PV Band | `compute_pvband()` | Process variation band width across dose/focus window |
 | Shot Count | `estimate_shot_count()` | Mask write time proxy for MBMW/VSB writers |
 | Stochastic | `compute_stochastic_robustness()` | Monte Carlo photon noise bridge/break probability |
+| Hotspot Detection | `compute_hotspot_detection()` | Distance-tolerant point matching → recall / precision / F1 |
 
 ### Compliance
 

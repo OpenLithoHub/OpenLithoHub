@@ -24,9 +24,9 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 
 ## Key Features
 
-- **Unified dataset access** — single interface to LithoBench, LithoSim, and other lithography datasets
+- **Unified dataset access** — single interface to LithoBench, LithoSim, GAN-OPC, ICCAD'16 hotspot, and other lithography datasets
 - **Hermetic dummy layouts** — `generate_dummy_layout` for CI / Colab without network or KLayout
-- **Standardized metrics** — EPE, PV Band, shot count, EUV stochastic robustness
+- **Standardized metrics** — EPE, PV Band, shot count, EUV stochastic robustness, hotspot detection (recall / precision / F1)
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
 - **OASIS workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear)
 - **EDA bridge** — minimal Calibre nmDRC / IC Validator templates emitted alongside OASIS exports

@@ -14,9 +14,9 @@
 
 OpenLithoHub 为计算光刻研究提供统一的评测与工作流框架，打通从学术 Tensor 优化到工业掩膜制造的完整链路：
 
-- **统一数据接入** — 通过单一接口加载 LithoBench、LithoSim 等光刻数据集
+- **统一数据接入** — 通过单一接口加载 LithoBench、LithoSim、GAN-OPC、ICCAD'16 hotspot 等光刻数据集
 - **零设置假数据** — `generate_dummy_layout` 在纯 NumPy/PyTorch 下生成确定性的、满足基本 DRC 的版图，可直接用于 CI 与 Colab
-- **标准化评估指标** — EPE、PV Band、Shot Count、EUV 随机鲁棒性
+- **标准化评估指标** — EPE、PV Band、Shot Count、EUV 随机鲁棒性、Hotspot 检测 (recall / precision / F1)
 - **制造合规检查** — MRC/DRC 规则检查作为一票否决指标
 - **OASIS 工作流** — 从 Tensor 到 fab-ready 掩膜的端到端管线（Manhattan & Curvilinear）
 - **EDA 桥接模板** — 导出 OASIS 时一并生成最小化的 Calibre nmDRC / IC Validator 规则脚本
@@ -153,8 +153,8 @@ class MyOPCModel(LithographyModel):
 
 | 层 | 模块 | 说明 |
 |----|------|------|
-| **数据层** | `openlithohub.data` | 统一适配 LithoBench (.npy)、LithoSim (HuggingFace)、确定性假数据生成 |
-| **评测层** | `openlithohub.benchmark` | EPE、PV Band、Shot Count、随机鲁棒性、MRC/DRC 合规检查 |
+| **数据层** | `openlithohub.data` | 统一适配 LithoBench (.npy)、LithoSim (HuggingFace)、GAN-OPC (paired PNG)、ICCAD'16 hotspot (klayout 读 OASIS)、确定性假数据生成 |
+| **评测层** | `openlithohub.benchmark` | EPE、PV Band、Shot Count、随机鲁棒性、Hotspot 检测、MRC/DRC 合规检查 |
 | **模型层** | `openlithohub.models` | 抽象 `LithographyModel` 接口 + 装饰器注册机制 + 模型 Hub |
 | **工作流层** | `openlithohub.workflow` | 版图解析、切片、轮廓提取、OASIS 导出、EDA 桥接模板 |
 | **可视化层** | `openlithohub.vis` | 论文级 IEEE/SPIE 出图（轮廓叠加、PV Band 包络） |
@@ -180,10 +180,12 @@ class MyOPCModel(LithographyModel):
 
 ## 支持的数据集
 
-| 数据集 | 格式 | 工艺节点 | 来源 |
-|--------|------|----------|------|
-| **LithoBench** | NumPy .npy | 45nm | NeurIPS'23 |
-| **LithoSim** | HuggingFace Parquet | Sub-28nm | NeurIPS'25 |
+| 数据集 | 格式 | 工艺节点 | 任务 | 来源 |
+|--------|------|----------|------|------|
+| **LithoBench** | NumPy .npy | 45nm | 掩膜优化 | NeurIPS'23 |
+| **LithoSim** | HuggingFace Parquet | Sub-28nm | 掩膜优化 | NeurIPS'25 |
+| **GAN-OPC** | 配对 PNG | — | AI-OPC 训练 | TCAD'20 |
+| **ICCAD'16 Problem C** | OASIS + CSV | N7 EUV | Hotspot 检测 | ICCAD'16 |
 
 ---
 
@@ -221,11 +223,11 @@ ruff format src/ tests/
 
 | 项目 | 发表 | 在生态中的角色 |
 |------|------|----------------|
-| [LithoSim](https://github.com/) | NeurIPS'25 | Sub-28nm 工业级数据集 |
-| [LithoBench](https://github.com/) | NeurIPS'23 | 45nm 评测框架 |
-| [TorchLitho 2.0](https://github.com/) | ASICON'25 | 可微分光刻仿真引擎 |
-| [curvyILT](https://github.com/) | NVIDIA arXiv'24 | GPU 加速曲线 ILT |
-| [EasyMRC](https://github.com/) | TODAES'25 | MRC 参考实现 |
+| LithoSim | NeurIPS'25 | Sub-28nm 工业级数据集 |
+| LithoBench | NeurIPS'23 | 45nm 评测框架 |
+| TorchLitho 2.0 | ASICON'25 | 可微分光刻仿真引擎 |
+| [curvyILT](https://github.com/phdyang007/curvyILT) | NVIDIA arXiv'24 | GPU 加速曲线 ILT |
+| EasyMRC | TODAES'25 | MRC 参考实现 |
 
 ---
 

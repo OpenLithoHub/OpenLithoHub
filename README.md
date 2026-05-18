@@ -16,8 +16,8 @@
 
 OpenLithoHub provides a unified evaluation and workflow framework for computational lithography research. It bridges the gap between academic tensor-based optimization and industrial mask manufacturing by offering:
 
-- **Unified dataset access** — single interface to LithoBench, LithoSim, and other lithography datasets
-- **Standardized metrics** — EPE, PV Band, shot count, EUV stochastic robustness
+- **Unified dataset access** — single interface to LithoBench, LithoSim, GAN-OPC, ICCAD'16 hotspot, and other lithography datasets
+- **Standardized metrics** — EPE, PV Band, shot count, EUV stochastic robustness, hotspot detection (recall / precision / F1)
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
 - **OASIS workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear)
 - **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface
@@ -185,8 +185,8 @@ figure in three minutes.
 
 | Layer | Module | Description |
 |-------|--------|-------------|
-| **Data** | `openlithohub.data` | Unified adapters for LithoBench (.npy), LithoSim (HuggingFace), with resolution alignment |
-| **Benchmark** | `openlithohub.benchmark` | EPE, PV Band, shot count, stochastic robustness, MRC/DRC compliance |
+| **Data** | `openlithohub.data` | Unified adapters for LithoBench (.npy), LithoSim (HuggingFace), GAN-OPC (paired PNGs), ICCAD'16 hotspot (OASIS via klayout) |
+| **Benchmark** | `openlithohub.benchmark` | EPE, PV Band, shot count, stochastic robustness, hotspot detection, MRC/DRC compliance |
 | **Models** | `openlithohub.models` | Abstract `LithographyModel` interface + decorator-based registry |
 | **Workflow** | `openlithohub.workflow` | Layout parsing, tiling, contour extraction (manhattan/curvilinear), OASIS export |
 | **CLI** | `openlithohub.cli` | `eval`, `optimize`, and `leaderboard` command groups via Typer |
@@ -209,10 +209,12 @@ figure in three minutes.
 
 ## Supported Datasets
 
-| Dataset | Format | Process Node | Source |
-|---------|--------|--------------|--------|
-| **LithoBench** | NumPy .npy | 45nm | NeurIPS'23 |
-| **LithoSim** | HuggingFace Parquet | Sub-28nm | NeurIPS'25 |
+| Dataset | Format | Process Node | Task | Source |
+|---------|--------|--------------|------|--------|
+| **LithoBench** | NumPy .npy | 45nm | Mask optimization | NeurIPS'23 |
+| **LithoSim** | HuggingFace Parquet | Sub-28nm | Mask optimization | NeurIPS'25 |
+| **GAN-OPC** | Paired PNGs | — | AI-OPC training | TCAD'20 |
+| **ICCAD'16 Problem C** | OASIS + CSV | N7 EUV | Hotspot detection | ICCAD'16 |
 
 ---
 
@@ -301,11 +303,11 @@ ruff format src/ tests/
 
 | Project | Venue | Role in Ecosystem |
 |---------|-------|-------------------|
-| [LithoSim](https://github.com/) | NeurIPS'25 | Sub-28nm industrial dataset |
-| [LithoBench](https://github.com/) | NeurIPS'23 | 45nm evaluation framework |
-| [TorchLitho 2.0](https://github.com/) | ASICON'25 | Differentiable lithography simulator |
-| [curvyILT](https://github.com/) | NVIDIA arXiv'24 | GPU-accelerated curvilinear ILT |
-| [EasyMRC](https://github.com/) | TODAES'25 | MRC reference implementation |
+| LithoSim | NeurIPS'25 | Sub-28nm industrial dataset |
+| LithoBench | NeurIPS'23 | 45nm evaluation framework |
+| TorchLitho 2.0 | ASICON'25 | Differentiable lithography simulator |
+| [curvyILT](https://github.com/phdyang007/curvyILT) | NVIDIA arXiv'24 | GPU-accelerated curvilinear ILT |
+| EasyMRC | TODAES'25 | MRC reference implementation |
 
 ---
 

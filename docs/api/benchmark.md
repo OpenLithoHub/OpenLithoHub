@@ -22,6 +22,11 @@
       show_root_heading: true
       members_order: source
 
+::: openlithohub.benchmark.metrics.hotspot
+    options:
+      show_root_heading: true
+      members_order: source
+
 ## Compliance
 
 ::: openlithohub.benchmark.compliance.mrc
