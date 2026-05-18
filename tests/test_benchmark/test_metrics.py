@@ -318,6 +318,4 @@ class TestHotspotDetection:
 
     def test_negative_radius_rejected(self):
         with pytest.raises(ValueError, match="match_radius_nm"):
-            compute_hotspot_detection(
-                torch.zeros(0, 2), torch.zeros(0, 2), match_radius_nm=-1.0
-            )
+            compute_hotspot_detection(torch.zeros(0, 2), torch.zeros(0, 2), match_radius_nm=-1.0)

@@ -68,8 +68,7 @@ def compute_hotspot_detection(
         )
     if ground_truth_points.ndim != 2 or ground_truth_points.shape[-1] != 2:
         raise ValueError(
-            f"ground_truth_points must have shape (M, 2), got "
-            f"{tuple(ground_truth_points.shape)}"
+            f"ground_truth_points must have shape (M, 2), got {tuple(ground_truth_points.shape)}"
         )
     if match_radius_nm < 0:
         raise ValueError(f"match_radius_nm must be >= 0, got {match_radius_nm}")

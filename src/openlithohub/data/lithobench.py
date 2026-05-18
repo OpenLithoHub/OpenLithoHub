@@ -142,7 +142,7 @@ class LithoBenchDataset(DatasetAdapter):
         raise NotImplementedError(
             "LithoBench auto-download is not implemented and we do not ship a "
             "canonical mirror URL. Refer to the NeurIPS'23 LithoBench paper "
-            "(\"LithoBench: Benchmarking AI Computational Lithography for "
+            '("LithoBench: Benchmarking AI Computational Lithography for '
             "Semiconductor Manufacturing\") for the project's current data "
             "release page, then arrange the .npy files so that "
             "<root>/{design,mask,resist}/sample_*.npy or "

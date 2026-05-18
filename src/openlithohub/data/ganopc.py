@@ -84,9 +84,7 @@ class GanOpcDataset(DatasetAdapter):
 
         if sample_ids is None:
             tgt_ids = {p.stem.removesuffix(".glp") for p in self._tgt_dir.glob("*.glp.png")}
-            msk_ids = {
-                p.stem.removesuffix(".glpOPC") for p in self._msk_dir.glob("*.glpOPC.png")
-            }
+            msk_ids = {p.stem.removesuffix(".glpOPC") for p in self._msk_dir.glob("*.glpOPC.png")}
             paired = sorted(
                 tgt_ids & msk_ids,
                 key=lambda s: (0, int(s)) if s.isdigit() else (1, s),
