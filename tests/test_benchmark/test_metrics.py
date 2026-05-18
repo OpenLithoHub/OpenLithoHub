@@ -78,6 +78,17 @@ def test_epe_returns_expected_keys(sample_design, sample_mask):
     assert "epe_std_nm" in result
 
 
+def test_epe_full_foreground_no_phantom_border():
+    # Two identical fully-foreground masks: a zero-padded Sobel would emit a
+    # 1-pixel phantom edge along every border, biasing EPE for tile-based
+    # workflows. The border-strip in _extract_edges keeps EPE at zero.
+    full = torch.ones(32, 32)
+    result = compute_epe(full, full, pixel_size_nm=1.0)
+    assert result["epe_mean_nm"] == 0.0
+    assert result["epe_max_nm"] == 0.0
+    assert result["valid"] is True
+
+
 class TestShotCount:
     def test_mbmw_basic(self):
         mask = torch.zeros(32, 32)
@@ -186,6 +197,16 @@ class TestPVBand:
         mask = torch.zeros(32, 32)
         result = compute_pvband(mask)
         assert result["pvband_mean_nm"] == 0.0
+
+    def test_thickness_grows_with_dose_variation(self):
+        # PV band should report contour-to-contour distance: increasing dose
+        # variation widens the gap between outer and inner envelopes, so the
+        # reported width must grow monotonically.
+        mask = torch.zeros(96, 96)
+        mask[24:72, 24:72] = 1.0
+        r_low = compute_pvband(mask, dose_variation=0.02, defocus_range_nm=10.0)
+        r_high = compute_pvband(mask, dose_variation=0.20, defocus_range_nm=40.0)
+        assert r_high["pvband_mean_nm"] > r_low["pvband_mean_nm"]
 
 
 class TestStochasticRobustness:

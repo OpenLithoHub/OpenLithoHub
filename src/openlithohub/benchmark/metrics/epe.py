@@ -26,6 +26,14 @@ def _extract_edges(binary: torch.Tensor) -> torch.Tensor:
     gy = functional.conv2d(inp, sobel_y, padding=1)
     magnitude = (gx.square() + gy.square()).sqrt().squeeze()
 
+    # Zero-padded Sobel produces phantom 1-pixel edges along every image border
+    # whenever foreground touches the frame. Strip the border so a fully-clear
+    # edge of features (typical in tile-based optimization) does not bias EPE.
+    magnitude[0, :] = 0.0
+    magnitude[-1, :] = 0.0
+    magnitude[:, 0] = 0.0
+    magnitude[:, -1] = 0.0
+
     return magnitude > 0.0
 
 

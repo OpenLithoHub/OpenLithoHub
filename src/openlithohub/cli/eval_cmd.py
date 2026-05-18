@@ -80,6 +80,7 @@ def run(
     import openlithohub.models.levelset_ilt  # noqa: F401
     import openlithohub.models.neural_ilt  # noqa: F401
     import openlithohub.models.rule_based_opc  # noqa: F401
+    from openlithohub.benchmark.compliance.mrc import check_mrc
     from openlithohub.benchmark.metrics.epe import compute_epe
     from openlithohub.benchmark.metrics.pvband import compute_pvband
     from openlithohub.benchmark.report import generate_report
@@ -128,9 +129,6 @@ def run(
 
     n_samples = min(len(adapter), limit) if limit else len(adapter)
     console.print(f"Running on {n_samples} samples...")
-
-    if mrc_check:
-        from openlithohub.benchmark.compliance.mrc import check_mrc
 
     all_metrics: list[dict[str, float]] = []
     perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)

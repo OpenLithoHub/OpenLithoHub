@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +46,7 @@ class NeuralILTModel(LithographyModel):
 
         self._net = UNet(in_channels=1, out_channels=1).to(self._device)
 
+        weights_loaded = False
         if self._weights_path is not None:
             weights_path = Path(self._weights_path)
             if weights_path.exists():
@@ -52,6 +54,7 @@ class NeuralILTModel(LithographyModel):
                     str(weights_path), map_location=self._device, weights_only=True
                 )
                 self._net.load_state_dict(state_dict)
+                weights_loaded = True
         elif self._pretrained:
             from openlithohub.models.hub import ModelHub
 
@@ -61,6 +64,19 @@ class NeuralILTModel(LithographyModel):
             )
             state_dict = torch.load(str(path), map_location=self._device, weights_only=True)
             self._net.load_state_dict(state_dict)
+            weights_loaded = True
+
+        if not weights_loaded:
+            # BatchNorm in eval() mode with default running stats produces
+            # near-arbitrary outputs that are then thresholded to a binary
+            # mask. Surface this so users know predictions are meaningless.
+            warnings.warn(
+                "NeuralILTModel is running with random-initialized weights. "
+                "Predictions are not meaningful. Pass --pretrained or --weights "
+                "to load trained parameters.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         self._net.eval()
 
