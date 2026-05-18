@@ -32,7 +32,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from openlithohub.data.base import DatasetAdapter, LithoSample
+from openlithohub.data.base import DatasetAdapter, LithoSample, natural_sort_key
 
 _FILENAME_RE = re.compile(r"^(?P<sample_id>.+?)_(?P<kind>design|mask|resist)\.npy$")
 
@@ -72,7 +72,7 @@ class LithoBenchDataset(DatasetAdapter):
         design_dir = self.root / "design"
         if design_dir.is_dir():
             self._layout = "subdirectory"
-            self._index = sorted(p.stem for p in design_dir.glob("*.npy"))
+            self._index = sorted((p.stem for p in design_dir.glob("*.npy")), key=natural_sort_key)
         else:
             self._layout = "flat"
             seen: set[str] = set()
@@ -80,7 +80,7 @@ class LithoBenchDataset(DatasetAdapter):
                 m = _FILENAME_RE.match(p.name)
                 if m and m.group("kind") == "design":
                     seen.add(m.group("sample_id"))
-            self._index = sorted(seen)
+            self._index = sorted(seen, key=natural_sort_key)
 
         meta_path = self.root / "metadata.json"
         if meta_path.exists():

@@ -10,7 +10,33 @@ import pytest
 import torch
 
 from openlithohub.data import LithoBenchDataset, LithoSample, LithoSimDataset
+from openlithohub.data.base import natural_sort_key
 from openlithohub.data.transforms import align_resolution, normalize_to_binary
+
+# ==== natural_sort_key tests ====
+
+
+class TestNaturalSortKey:
+    def test_pure_numeric_strings(self):
+        assert sorted(["10", "2", "1"], key=natural_sort_key) == ["1", "2", "10"]
+
+    def test_mixed_alphanumeric(self):
+        ids = ["sample_10", "sample_2", "sample_1", "sample_100"]
+        assert sorted(ids, key=natural_sort_key) == [
+            "sample_1",
+            "sample_2",
+            "sample_10",
+            "sample_100",
+        ]
+
+    def test_zero_padded_unaffected(self):
+        ids = ["sample_0010", "sample_0002", "sample_0001"]
+        assert sorted(ids, key=natural_sort_key) == [
+            "sample_0001",
+            "sample_0002",
+            "sample_0010",
+        ]
+
 
 # ==== LithoSample tests ====
 
@@ -118,6 +144,15 @@ class TestLithoBenchSubdirectory:
         ds = LithoBenchDataset(root=subdir_dataset, pixel_nm=2.0)
         sample = ds[0]
         assert sample.metadata["pixel_nm"] == 2.0
+
+    def test_natural_sort_ordering(self, tmp_path):
+        """sample_2 must come before sample_10 (regression: lexical sort would invert)."""
+        design_dir = tmp_path / "design"
+        design_dir.mkdir()
+        for i in [1, 2, 10, 100]:
+            np.save(design_dir / f"sample_{i}.npy", np.zeros((4, 4), dtype=np.float32))
+        ds = LithoBenchDataset(root=tmp_path)
+        assert ds.sample_ids == ["sample_1", "sample_2", "sample_10", "sample_100"]
 
 
 class TestLithoBenchFlat:

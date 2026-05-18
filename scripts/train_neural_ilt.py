@@ -22,6 +22,7 @@ After training, upload the checkpoint to HuggingFace Hub:
 then point `NeuralILTModel(pretrained=True)` at it (see
 `src/openlithohub/models/neural_ilt.py:58`).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -85,9 +86,7 @@ class _LithoBenchPairs(Dataset):
         # path-existence check rather than materializing every sample —
         # `inner[i]` decodes design+mask+resist arrays from disk.
         self._indices = [
-            i
-            for i, sid in enumerate(self.inner.sample_ids)
-            if self.inner.has_kind(sid, "mask")
+            i for i, sid in enumerate(self.inner.sample_ids) if self.inner.has_kind(sid, "mask")
         ]
         if not self._indices:
             raise RuntimeError(f"No samples with masks in {root}")
@@ -187,8 +186,12 @@ def train(cfg: TrainConfig) -> dict:
 
 def _parse_args() -> TrainConfig:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--data-root", type=Path, default=None,
-                   help="Path to LithoBench root. If omitted, uses the dummy generator.")
+    p.add_argument(
+        "--data-root",
+        type=Path,
+        default=None,
+        help="Path to LithoBench root. If omitted, uses the dummy generator.",
+    )
     p.add_argument("--dataset", default="lithobench")
     p.add_argument("--epochs", type=int, default=50)
     p.add_argument("--batch-size", type=int, default=8)
@@ -197,8 +200,9 @@ def _parse_args() -> TrainConfig:
     p.add_argument("--forward-model", default="gaussian", choices=["gaussian", "hopkins"])
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--output", type=Path, default=Path("checkpoints/neural_ilt.pt"))
-    p.add_argument("--smoke-test", action="store_true",
-                   help="Run a single batch to verify wiring, then exit.")
+    p.add_argument(
+        "--smoke-test", action="store_true", help="Run a single batch to verify wiring, then exit."
+    )
     args = p.parse_args()
     return TrainConfig(
         data_root=args.data_root,

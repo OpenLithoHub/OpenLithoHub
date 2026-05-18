@@ -22,9 +22,9 @@ jobs:
       - name: Install linting tools
         run: pip install ruff
       - name: Ruff check
-        run: ruff check src/ tests/
+        run: ruff check src/ tests/ spaces/ scripts/
       - name: Ruff format check
-        run: ruff format --check src/ tests/
+        run: ruff format --check src/ tests/ spaces/ scripts/
 
   test:
     runs-on: ubuntu-latest
@@ -62,5 +62,5 @@ jobs:
         run: pip-audit
       - name: Bandit (gate on high severity)
         run: bandit -r src/ -lll
-      - name: Bandit (medium-severity report, non-blocking)
-        run: bandit -r src/ -ll || true
+      - name: Bandit (gate on medium severity)
+        run: bandit -r src/ -ll

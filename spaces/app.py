@@ -14,7 +14,9 @@ MAX_UPLOAD_DIM = int(os.environ.get("OPENLITHOHUB_MAX_UPLOAD_DIM", "1024"))
 
 # Monkeypatch gradio_client.utils to handle bool schemas (Gradio 4.44 bug)
 # https://github.com/gradio-app/gradio/issues/10662
-import gradio_client.utils as _gc_utils
+# E402 is unavoidable here: the patch must run before `import gradio` so that
+# gradio_client.utils is replaced before gradio caches its references.
+import gradio_client.utils as _gc_utils  # noqa: E402
 
 _orig_json_schema_to_python_type = _gc_utils._json_schema_to_python_type
 _orig_get_type = _gc_utils.get_type
@@ -35,14 +37,14 @@ def _patched_get_type(schema):
 _gc_utils._json_schema_to_python_type = _patched_json_schema_to_python_type
 _gc_utils.get_type = _patched_get_type
 
-import gradio as gr
-import matplotlib.pyplot as plt
-import numpy as np
-import torch
+import gradio as gr  # noqa: E402
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
 
-from openlithohub.benchmark.compliance.mrc import check_mrc as _olh_check_mrc
-from openlithohub.benchmark.metrics.epe import _extract_edges as _olh_extract_edges
-from openlithohub.benchmark.metrics.epe import compute_epe as _olh_compute_epe
+from openlithohub.benchmark.compliance.mrc import check_mrc as _olh_check_mrc  # noqa: E402
+from openlithohub.benchmark.metrics.epe import _extract_edges as _olh_extract_edges  # noqa: E402
+from openlithohub.benchmark.metrics.epe import compute_epe as _olh_compute_epe  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Metric adapters — thin numpy → torch wrappers around the canonical

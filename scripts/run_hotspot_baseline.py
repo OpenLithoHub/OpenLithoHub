@@ -93,9 +93,7 @@ def predict_clip_centers(sample: LithoSample) -> torch.Tensor:
     sites = sample.metadata.get("clip_sites", [])
     if not sites:
         return torch.zeros(0, 2)
-    pts = [
-        [(s["x0_nm"] + s["x1_nm"]) / 2.0, (s["y0_nm"] + s["y1_nm"]) / 2.0] for s in sites
-    ]
+    pts = [[(s["x0_nm"] + s["x1_nm"]) / 2.0, (s["y0_nm"] + s["y1_nm"]) / 2.0] for s in sites]
     return torch.tensor(pts, dtype=torch.float32)
 
 

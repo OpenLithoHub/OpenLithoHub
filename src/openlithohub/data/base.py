@@ -2,12 +2,25 @@
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
 import torch
+
+_NAT_SPLIT_RE = re.compile(r"(\d+)")
+
+
+def natural_sort_key(s: str) -> tuple[Any, ...]:
+    """Sort key that orders strings with embedded numbers numerically.
+
+    `sample_2` < `sample_10` < `sample_100`, instead of the lexical
+    `sample_10` < `sample_2`.
+    """
+    parts = _NAT_SPLIT_RE.split(s)
+    return tuple(int(p) if p.isdigit() else p for p in parts)
 
 
 @dataclass

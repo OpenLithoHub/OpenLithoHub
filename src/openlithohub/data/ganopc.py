@@ -34,7 +34,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from openlithohub.data.base import DatasetAdapter, LithoSample
+from openlithohub.data.base import DatasetAdapter, LithoSample, natural_sort_key
 
 
 class GanOpcDataset(DatasetAdapter):
@@ -85,10 +85,7 @@ class GanOpcDataset(DatasetAdapter):
         if sample_ids is None:
             tgt_ids = {p.stem.removesuffix(".glp") for p in self._tgt_dir.glob("*.glp.png")}
             msk_ids = {p.stem.removesuffix(".glpOPC") for p in self._msk_dir.glob("*.glpOPC.png")}
-            paired = sorted(
-                tgt_ids & msk_ids,
-                key=lambda s: (0, int(s)) if s.isdigit() else (1, s),
-            )
+            paired = sorted(tgt_ids & msk_ids, key=natural_sort_key)
             sample_ids = paired
         if not sample_ids:
             raise FileNotFoundError(

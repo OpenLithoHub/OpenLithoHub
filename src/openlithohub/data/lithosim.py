@@ -65,7 +65,9 @@ class LithoSimDataset(DatasetAdapter):
         if self._ds is None:
             from datasets import load_dataset
 
-            self._ds = load_dataset(
+            # B615: dataset_name comes from the caller; revision pinning is the
+            # caller's responsibility (datasets accepts `name@revision` syntax).
+            self._ds = load_dataset(  # nosec B615
                 self.dataset_name,
                 split=self.split,
                 cache_dir=self.cache_dir,
@@ -179,7 +181,8 @@ class LithoSimDataset(DatasetAdapter):
     def download(self, root: str) -> None:
         from datasets import load_dataset
 
-        load_dataset(
+        # B615: revision pinning is the caller's responsibility (see _load_dataset).
+        load_dataset(  # nosec B615
             self.dataset_name,
             split=self.split,
             cache_dir=root,
