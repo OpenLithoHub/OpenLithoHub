@@ -6,6 +6,29 @@ import json
 import os
 from pathlib import Path
 
+# Monkeypatch gradio_client.utils to handle bool schemas (Gradio 4.44 bug)
+# https://github.com/gradio-app/gradio/issues/10662
+import gradio_client.utils as _gc_utils
+
+_orig_json_schema_to_python_type = _gc_utils._json_schema_to_python_type
+_orig_get_type = _gc_utils.get_type
+
+
+def _patched_json_schema_to_python_type(schema, defs=None):
+    if isinstance(schema, bool):
+        return "Any"
+    return _orig_json_schema_to_python_type(schema, defs)
+
+
+def _patched_get_type(schema):
+    if not isinstance(schema, dict):
+        return "Any"
+    return _orig_get_type(schema)
+
+
+_gc_utils._json_schema_to_python_type = _patched_json_schema_to_python_type
+_gc_utils.get_type = _patched_get_type
+
 import gradio as gr
 import matplotlib.pyplot as plt
 import numpy as np
