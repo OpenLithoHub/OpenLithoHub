@@ -62,6 +62,7 @@ class TestBSplineFitting:
         assert curves == []
 
     def test_export_creates_file(self, tmp_path):
+        pytest.importorskip("klayout.db")
         mask = torch.zeros(32, 32)
         mask[8:24, 8:24] = 1.0
         curves = fit_bspline(mask, tolerance_nm=1.0)
@@ -72,9 +73,67 @@ class TestBSplineFitting:
         assert out.exists()
         assert out.stat().st_size > 0
 
+    def test_export_oasis_round_trip(self, tmp_path):
+        """Re-read the exported OASIS via klayout and verify polygon count + bbox.
+
+        Guards against silent export corruption: a writer that produces a
+        well-formed but semantically empty file would pass the size check above
+        but fail here.
+        """
+        db = pytest.importorskip("klayout.db")
+
+        pixel_size_nm = 1.0
+        samples_per_curve = 64
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        curves = fit_bspline(mask, tolerance_nm=1.0)
+        assert len(curves) > 0
+
+        out = tmp_path / "round_trip.oas"
+        export_oasis_mbw(
+            curves,
+            str(out),
+            samples_per_curve=samples_per_curve,
+            pixel_size_nm=pixel_size_nm,
+            layer=1,
+            datatype=0,
+            cell_name="TOP",
+        )
+
+        layout = db.Layout()
+        layout.read(str(out))
+
+        cells = list(layout.each_cell())
+        assert len(cells) == 1
+        top = cells[0]
+        assert top.name == "TOP"
+
+        layer_idx = layout.layer(1, 0)
+        polygons = list(top.shapes(layer_idx).each())
+        assert len(polygons) == len(curves)
+        for shape in polygons:
+            assert shape.is_polygon()
+            assert shape.polygon.num_points() == samples_per_curve
+
+        bbox = top.bbox()
+        assert not bbox.empty()
+        # Mask foreground sits in pixels [8, 24) -> nm window roughly [8, 24).
+        # Allow generous slack: B-spline smoothing pulls in slightly, and
+        # klayout bbox is reported in dbu units (= pixel_size_nm / 1000 nm).
+        dbu_per_nm = 1.0 / layout.dbu
+        assert bbox.left >= 0
+        assert bbox.bottom >= 0
+        assert bbox.right <= int(round(32 * dbu_per_nm))
+        assert bbox.top <= int(round(32 * dbu_per_nm))
+        # Bounding box should at least span half of the foreground region.
+        min_span_dbu = int(round(8 * dbu_per_nm))
+        assert (bbox.right - bbox.left) >= min_span_dbu
+        assert (bbox.top - bbox.bottom) >= min_span_dbu
+
 
 class TestExportOASIS:
     def test_curvilinear_export(self, tmp_path):
+        pytest.importorskip("klayout.db")
         mask = torch.zeros(32, 32)
         mask[8:24, 8:24] = 1.0
         out = tmp_path / "out_curvi.oas"

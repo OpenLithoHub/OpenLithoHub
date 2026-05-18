@@ -103,6 +103,30 @@ def test_leaderboard_file_is_valid_json(
     data = json.loads(tmp_store.path.read_text())
     assert "entries" in data
     assert len(data["entries"]) == 1
+    assert data["schema_version"] == 1
+
+
+def test_legacy_unversioned_file_still_loads(
+    tmp_store: LeaderboardStore, sample_result: BenchmarkResult
+) -> None:
+    """Files written by older versions had no schema_version key."""
+    legacy_entry = sample_result.model_dump(mode="json")
+    legacy_entry["submission_id"] = "legacy-deadbeef"
+    tmp_store.path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_store.path.write_text(json.dumps({"entries": [legacy_entry]}))
+
+    results = tmp_store.query()
+    assert len(results) == 1
+    assert results[0].model_name == sample_result.model_name
+
+
+def test_future_schema_version_rejected(
+    tmp_store: LeaderboardStore, sample_result: BenchmarkResult
+) -> None:
+    tmp_store.path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_store.path.write_text(json.dumps({"schema_version": 999, "entries": []}))
+    with pytest.raises(ValueError, match="newer schema"):
+        tmp_store.query()
 
 
 def test_module_level_functions(tmp_path: Path, sample_result: BenchmarkResult) -> None:

@@ -27,6 +27,11 @@ from openlithohub.leaderboard.schema import BenchmarkResult
 _DEFAULT_LEADERBOARD_DIR = Path.home() / ".openlithohub"
 _LEADERBOARD_FILENAME = "leaderboard.json"
 
+# Bump when the on-disk shape changes (new required fields, renamed fields,
+# changed enum values). Files without this key are treated as v1 (legacy).
+# Add a migration in `_migrate_entries` when bumping.
+LEADERBOARD_SCHEMA_VERSION = 1
+
 
 @contextlib.contextmanager
 def _file_lock(lock_path: Path) -> Iterator[None]:
@@ -73,11 +78,17 @@ class LeaderboardStore:
             return []
         text = self._path.read_text(encoding="utf-8")
         data = json.loads(text)
-        return data.get("entries", [])  # type: ignore[no-any-return]
+        version = int(data.get("schema_version", 1))
+        entries: list[dict[str, Any]] = data.get("entries", [])
+        return _migrate_entries(entries, from_version=version)
 
     def _write_entries(self, entries: list[dict[str, Any]]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps({"entries": entries}, indent=2, default=str)
+        payload = json.dumps(
+            {"schema_version": LEADERBOARD_SCHEMA_VERSION, "entries": entries},
+            indent=2,
+            default=str,
+        )
         # tempfile in the same directory so os.replace is atomic across the
         # whole sequence (cross-device rename would otherwise be a copy).
         fd, tmp_name = tempfile.mkstemp(
@@ -124,6 +135,22 @@ def _generate_id(model_name: str) -> str:
     ts_hex = f"{int(time.time() * 1000):x}"[-8:]
     safe_name = model_name.replace(" ", "-").lower()[:20]
     return f"{safe_name}-{ts_hex}"
+
+
+def _migrate_entries(entries: list[dict[str, Any]], *, from_version: int) -> list[dict[str, Any]]:
+    """Migrate leaderboard entries from an older schema version.
+
+    Currently a no-op: only schema v1 exists. When bumping
+    LEADERBOARD_SCHEMA_VERSION, add a stepwise migration here so older
+    on-disk files keep loading.
+    """
+    if from_version > LEADERBOARD_SCHEMA_VERSION:
+        raise ValueError(
+            f"Leaderboard file was written by a newer schema "
+            f"(v{from_version} > v{LEADERBOARD_SCHEMA_VERSION}). "
+            "Upgrade openlithohub or move the file aside."
+        )
+    return entries
 
 
 _default_store: LeaderboardStore | None = None

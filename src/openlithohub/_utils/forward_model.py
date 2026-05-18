@@ -1,4 +1,16 @@
-"""Simplified aerial image forward model using Gaussian PSF convolution."""
+"""Simplified aerial image forward model using Gaussian PSF convolution.
+
+Padding contract
+----------------
+All convolutions in this module MUST use circular (periodic) padding, not
+zero-padding. This is not stylistic — the Hopkins source-mask formulation
+treats the mask as a tile in a periodic illumination, and zero-padding the
+input introduces spurious dim-aerial fringes near the frame edge that
+silently degrade EPE / PV-band metrics on layouts with features close to
+the boundary. If you add a new conv-based simulator here, route it through
+``_circular_pad_clamped`` (or an equivalent ``mode="circular"`` call) — do
+not switch to ``F.conv2d``'s default zero-pad as a "simplification".
+"""
 
 from __future__ import annotations
 

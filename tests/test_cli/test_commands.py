@@ -136,6 +136,16 @@ def test_optimize_run_help():
     assert "--input" in output
     assert "--writer" in output
     assert "--drc-check" in output
+    assert "--sha256" in output
+    assert "--pretrained" in output
+
+
+def test_eval_run_help_lists_sha256():
+    result = runner.invoke(app, ["eval", "run", "--help"])
+    assert result.exit_code == 0
+    output = _strip_ansi(result.output)
+    assert "--sha256" in output
+    assert "--pretrained" in output
 
 
 def test_eval_run_with_mrc():

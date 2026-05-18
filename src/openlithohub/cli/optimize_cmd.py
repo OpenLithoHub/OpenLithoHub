@@ -39,6 +39,20 @@ def run(
     compile_forward: bool = typer.Option(
         False, "--compile/--no-compile", help="Wrap the Hopkins forward with torch.compile."
     ),
+    pretrained: bool = typer.Option(
+        False,
+        "--pretrained/--no-pretrained",
+        help="Load pretrained weights for the selected model (when supported).",
+    ),
+    sha256: str | None = typer.Option(
+        None,
+        "--sha256",
+        help=(
+            "Expected SHA256 hex digest for direct-URL weight downloads. "
+            "Required when the model resolves weights via a raw HTTPS URL; "
+            "ignored for HuggingFace Hub repos."
+        ),
+    ),
 ) -> None:
     """Run end-to-end mask optimization on a layout file.
 
@@ -70,10 +84,22 @@ def run(
     console.print()
 
     try:
-        litho_model = registry.get(model)
+        litho_model = registry.get(model, **_build_model_kwargs(pretrained, sha256))
     except KeyError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from None
+    except TypeError:
+        # Selected model does not accept pretrained / sha256 kwargs.
+        if pretrained or sha256 is not None:
+            console.print(
+                f"[yellow]Warning:[/yellow] Model {model!r} does not support "
+                "--pretrained / --sha256; ignoring."
+            )
+        try:
+            litho_model = registry.get(model)
+        except KeyError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1) from None
 
     litho_model.setup()
 
@@ -165,6 +191,16 @@ def _build_perf_kwargs(device: str, dtype: str, compile_forward: bool) -> dict[s
         "dtype": dtype_map[dtype],
         "compile_forward": compile_forward,
     }
+
+
+def _build_model_kwargs(pretrained: bool, sha256: str | None) -> dict[str, Any]:
+    """Construct registry.get() kwargs for opt-in remote weight loading."""
+    kwargs: dict[str, Any] = {}
+    if pretrained:
+        kwargs["pretrained"] = True
+    if sha256 is not None:
+        kwargs["url_sha256"] = sha256
+    return kwargs
 
 
 def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:
