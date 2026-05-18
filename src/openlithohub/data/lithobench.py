@@ -140,8 +140,13 @@ class LithoBenchDataset(DatasetAdapter):
 
     def download(self, root: str) -> None:
         raise NotImplementedError(
-            "LithoBench auto-download not yet implemented. "
-            "Please download manually from: https://github.com/phdyang007/lithobench"
+            "LithoBench auto-download is not implemented and we do not ship a "
+            "canonical mirror URL. Refer to the NeurIPS'23 LithoBench paper "
+            "(\"LithoBench: Benchmarking AI Computational Lithography for "
+            "Semiconductor Manufacturing\") for the project's current data "
+            "release page, then arrange the .npy files so that "
+            "<root>/{design,mask,resist}/sample_*.npy or "
+            "<root>/sample_*_{design,mask,resist}.npy exists."
         )
 
     @property

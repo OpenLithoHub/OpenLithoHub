@@ -16,8 +16,10 @@ that introduces them — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 | Dataset | Adapter | Original License | Source | Citation |
 |---------|---------|------------------|--------|----------|
-| LithoBench | `openlithohub.data.lithobench` | See upstream repository (verify before redistribution) | https://github.com/phdyang007/lithobench | Yang et al., *LithoBench: Benchmarking AI Computational Lithography for Semiconductor Manufacturing*, NeurIPS 2023 |
+| LithoBench | `openlithohub.data.lithobench` | See upstream release (verify before redistribution) | Refer to the NeurIPS 2023 LithoBench paper for the project's current data release page | Yang et al., *LithoBench: Benchmarking AI Computational Lithography for Semiconductor Manufacturing*, NeurIPS 2023 |
 | LithoSim | `openlithohub.data.lithosim` | See upstream source (verify before redistribution) | (upstream source as documented in adapter) | (refer to upstream source) |
+| ICCAD16-N7M2EUV | `openlithohub.data.iccad16` | See upstream repository (verify before redistribution) | https://github.com/phdyang007/ICCAD16-N7M2EUV | ICCAD 2016 CAD Contest, Problem C — EUV Simulation; Yang et al., *Bridging the Gap Between Layout Pattern Sampling and Hotspot Detection via Batch Active Learning*, TCAD 2020 |
+| GAN-OPC | `openlithohub.data.ganopc` | See upstream repository (verify before redistribution) | https://github.com/phdyang007/GAN-OPC | Yang et al., *GAN-OPC: Mask Optimization with Lithography-guided Generative Adversarial Nets*, TCAD 2020 |
 
 > **Note**: License entries above marked "verify before redistribution" mean
 > the upstream project did not declare a single SPDX-identified license at

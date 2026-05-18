@@ -4,6 +4,7 @@ import pytest
 import torch
 
 from openlithohub.benchmark.metrics.epe import compute_epe
+from openlithohub.benchmark.metrics.hotspot import compute_hotspot_detection
 from openlithohub.benchmark.metrics.pvband import compute_pvband
 from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
 from openlithohub.benchmark.metrics.stochastic import compute_stochastic_robustness
@@ -232,3 +233,91 @@ class TestStochasticRobustness:
         )
         assert result["break_probability"] > 0.5
         assert result["bridge_probability"] < 0.1
+
+
+class TestHotspotDetection:
+    def test_perfect_match(self):
+        gt = torch.tensor([[10.0, 10.0], [50.0, 50.0], [100.0, 200.0]])
+        pred = gt.clone()
+        result = compute_hotspot_detection(pred, gt, match_radius_nm=1.0)
+        assert result["num_tp"] == 3.0
+        assert result["num_fp"] == 0.0
+        assert result["num_fn"] == 0.0
+        assert result["recall"] == 1.0
+        assert result["precision"] == 1.0
+        assert result["f1"] == 1.0
+
+    def test_within_radius_counts_as_match(self):
+        gt = torch.tensor([[10.0, 10.0]])
+        pred = torch.tensor([[10.5, 10.0]])  # 0.5 nm away
+        result = compute_hotspot_detection(pred, gt, match_radius_nm=1.0)
+        assert result["num_tp"] == 1.0
+        assert result["recall"] == 1.0
+        assert result["precision"] == 1.0
+
+    def test_outside_radius_misses(self):
+        gt = torch.tensor([[10.0, 10.0]])
+        pred = torch.tensor([[15.0, 10.0]])  # 5 nm away
+        result = compute_hotspot_detection(pred, gt, match_radius_nm=1.0)
+        assert result["num_tp"] == 0.0
+        assert result["num_fp"] == 1.0
+        assert result["num_fn"] == 1.0
+        assert result["recall"] == 0.0
+        assert result["precision"] == 0.0
+        assert result["f1"] == 0.0
+
+    def test_duplicate_predictions_become_fp(self):
+        gt = torch.tensor([[10.0, 10.0]])
+        # Two predictions both inside the disk: one TP, one FP. GT cannot be
+        # double-counted — this is the property the greedy matcher enforces.
+        pred = torch.tensor([[10.0, 10.0], [10.5, 10.0]])
+        result = compute_hotspot_detection(pred, gt, match_radius_nm=1.0)
+        assert result["num_tp"] == 1.0
+        assert result["num_fp"] == 1.0
+        assert result["num_fn"] == 0.0
+        assert result["recall"] == 1.0
+        assert result["precision"] == 0.5
+
+    def test_partial_recall(self):
+        gt = torch.tensor([[10.0, 10.0], [50.0, 50.0], [100.0, 100.0]])
+        pred = torch.tensor([[10.0, 10.0], [50.0, 50.0]])
+        result = compute_hotspot_detection(pred, gt, match_radius_nm=1.0)
+        assert result["num_tp"] == 2.0
+        assert result["num_fn"] == 1.0
+        assert result["recall"] == pytest.approx(2 / 3)
+        assert result["precision"] == 1.0
+
+    def test_empty_gt_and_pred_is_vacuous_perfect(self):
+        empty = torch.zeros(0, 2)
+        result = compute_hotspot_detection(empty, empty, match_radius_nm=1.0)
+        assert result["recall"] == 1.0
+        assert result["precision"] == 1.0
+        assert result["f1"] == 1.0
+
+    def test_empty_predictions_with_gt(self):
+        gt = torch.tensor([[10.0, 10.0], [20.0, 20.0]])
+        empty = torch.zeros(0, 2)
+        result = compute_hotspot_detection(empty, gt, match_radius_nm=1.0)
+        assert result["num_fn"] == 2.0
+        assert result["recall"] == 0.0
+        assert result["f1"] == 0.0
+
+    def test_predictions_with_empty_gt(self):
+        empty = torch.zeros(0, 2)
+        pred = torch.tensor([[10.0, 10.0]])
+        result = compute_hotspot_detection(pred, empty, match_radius_nm=1.0)
+        assert result["num_fp"] == 1.0
+        assert result["precision"] == 0.0
+        assert result["f1"] == 0.0
+
+    def test_shape_validation(self):
+        with pytest.raises(ValueError, match="predicted_points"):
+            compute_hotspot_detection(torch.zeros(3), torch.zeros(0, 2))
+        with pytest.raises(ValueError, match="ground_truth_points"):
+            compute_hotspot_detection(torch.zeros(0, 2), torch.zeros(3, 3))
+
+    def test_negative_radius_rejected(self):
+        with pytest.raises(ValueError, match="match_radius_nm"):
+            compute_hotspot_detection(
+                torch.zeros(0, 2), torch.zeros(0, 2), match_radius_nm=-1.0
+            )

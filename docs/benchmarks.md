@@ -58,6 +58,99 @@ The same `results.json` / `results.md` artifacts land under the chosen
 output directory. Submit them to the public leaderboard with
 `openlithohub leaderboard submit --file <results.json>`.
 
+## Hotspot detection — ICCAD 2016 Problem C
+
+The ICCAD'16 EUV hotspot benchmark is wired in via
+`openlithohub.data.Iccad16Dataset` (klayout-based OASIS rasterizer) and
+the point-matching metric `compute_hotspot_detection`. Together they
+support a separate baseline track from the mask-optimization numbers
+above — the data has no reference mask, so EPE / PVB / MRC do not apply.
+
+### Dataset
+
+- 4 published test cases (`testcase{1..4}.oas` + `test{1..4}.csv`)
+  mirrored at https://github.com/phdyang007/ICCAD16-N7M2EUV.
+- Layer `(1000, 0)` is the design polygons; layer `(10000, 0)` is the
+  hotspot-detection clip-site grid (16×16 nm windows, ~120 per case),
+  exposed via `LithoSample.metadata['clip_sites']`.
+- Hotspot annotations live in `metadata['hotspots']` as
+  `(hotspot_id, category_id, x_nm, y_nm)` rows. The contest's
+  category-id-to-defect-kind mapping (EPE / Bridging / Necking) is
+  not published, so the loader preserves the raw integer.
+- `LithoSample.mask` is intentionally `None` for this dataset.
+
+### Metric
+
+`compute_hotspot_detection(predicted_points, ground_truth_points,
+match_radius_nm)` does greedy point-matching: each predicted point
+counts as a TP iff an unmatched GT point lies within
+`match_radius_nm`. Returns
+`{num_tp, num_fp, num_fn, recall, precision, f1}`. Edge cases follow
+sklearn convention — empty-vs-empty is a vacuous perfect score; empty
+predictions against present GT give recall=0, precision=1.0.
+
+### Baselines
+
+Sanity baselines (not ML predictors) are produced by:
+
+```bash
+python scripts/run_hotspot_baseline.py \
+  --data-root data/iccad16 \
+  --output out/hotspot \
+  --match-radius-nm 100.0
+```
+
+Numbers below are from `testcase1` (18 GT hotspots) at
+`match_radius_nm=100` — the strict 1 nm radius is shown in the script's
+default output and gives all-zero TP for these strawman predictors.
+
+| Model | GT | Predicted | TP | FP | FN | Recall | Precision | F1 |
+|---|---|---|---|---|---|---|---|---|
+| `empty` | 18 | 0 | 0 | 0 | 18 | 0.000 | 1.000 | 0.000 |
+| `grid-200nm` | 18 | 80 | 2 | 78 | 16 | 0.111 | 0.025 | 0.041 |
+| `clip-centers` | 18 | 120 | 1 | 119 | 17 | 0.056 | 0.008 | 0.014 |
+
+Things worth knowing:
+
+- **`empty`** predicts nothing. It pins the recall floor (0.0) while
+  scoring vacuous precision=1.0; useful as a "metric is alive" check.
+- **`grid-200nm`** rasters predictions on a 200 nm lattice over the
+  design bbox. Saturates the FP rate to expose the recall ceiling
+  attainable by a brute-force "guess everywhere" predictor.
+- **`clip-centers`** treats the auxiliary clip-site layer as a predictor.
+  It performs near-zero — confirming our empirical finding that the
+  clip-site grid is an inspection-window layer, not a hotspot mask.
+  The 70+ nm separation between clip centers and CSV hotspots makes
+  this baseline a useful regression check against anyone re-mistaking
+  layer 10000 for ground truth.
+
+A real ML predictor (CNN, ViT, etc.) plugs into the same script by
+adding a function to the `PREDICTORS` dict that consumes a
+`LithoSample` and returns an `(N, 2)` tensor of nm-coordinates.
+
+## GAN-OPC paired-mask dataset
+
+`openlithohub.data.GanOpcDataset` exposes the ~4875 paired-PNG training
+set from Yang et al., *GAN-OPC: Mask Optimization with
+Lithography-guided Generative Adversarial Nets* (TCAD 2020). Source:
+https://github.com/phdyang007/GAN-OPC (multi-volume 7z archive,
+unpacks to `ganopc-data/{artitgt,artimsk}/N.glp.png` +
+`N.glpOPC.png`).
+
+```python
+from openlithohub.data import GanOpcDataset
+
+ds = GanOpcDataset("data/ganopc/extracted")  # parent of ganopc-data/
+sample = ds[0]
+sample.design  # (2048, 2048) torch.float32, {0., 1.}
+sample.mask    # (2048, 2048) torch.float32, {0., 1.}
+```
+
+The pairs are `(design_layout, OPC_mask)` so this dataset is suitable
+for AI-OPC training and for evaluating mask-optimization models with
+the standard EPE / PVB / shot-count / MRC metric stack — though no
+canonical baseline numbers are published here yet.
+
 ## Differentiable forward models
 
 Two forward models ship in `openlithohub._utils`. Both are pure PyTorch
