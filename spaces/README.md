@@ -9,6 +9,15 @@ python_version: 3.11
 app_file: app.py
 pinned: false
 license: apache-2.0
+tags:
+  - computational-lithography
+  - semiconductor
+  - OPC
+  - lithography
+  - EUV
+  - mask-optimization
+  - EPE
+  - MRC
 ---
 
 # OpenLithoHub Playground
