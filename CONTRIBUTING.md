@@ -18,6 +18,7 @@ OpenLithoHub 生态由两个独立仓库组成，职责清晰分离：
 - 技术文档（API reference, Getting Started, Architecture）放在本仓库 `docs/`
 - 品牌/营销内容（Features 介绍页、Blog）放在网站仓库
 - 排行榜数据通过 `openlithohub leaderboard export` 导出 JSON，手动更新到网站仓库 `src/data/leaderboard.json`
+- 首页 hero 对比图通过 `python scripts/generate_hero_figure.py` 生成 `docs/assets/hero.{png,json}`，手动复制到网站仓库 `public/hero.png` 和 `src/data/hero.json`
 - 网站 features 页面的架构描述必须与本仓库 `docs/architecture.md` 保持一致
 
 ## Development Setup

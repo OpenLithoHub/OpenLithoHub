@@ -103,6 +103,8 @@ class LevelSetILTModel(LithographyModel):
         tv_weight = kwargs.get("tv_weight", self._tv_weight)
         forward_model = kwargs.get("forward_model", self._forward_model)
         hopkins_params = kwargs.get("hopkins_params", self._hopkins_params)
+        dtype = kwargs.get("dtype", torch.float32)
+        compile_forward = kwargs.get("compile_forward", False)
 
         if forward_model == "hopkins":
             if hopkins_params is not self._hopkins_params:
@@ -111,9 +113,13 @@ class LevelSetILTModel(LithographyModel):
                 self._cached_weights = None
                 self._cached_grid = None
             kernels, weights = self._ensure_hopkins_kernels(target.shape[0], target.device)
+            hopkins_fn = simulate_aerial_image_hopkins
+            if compile_forward:
+                hopkins_fn = torch.compile(hopkins_fn, mode="reduce-overhead", dynamic=False)
         else:
             kernels = None
             weights = None
+            hopkins_fn = simulate_aerial_image_hopkins
 
         mask_logit = torch.zeros_like(target, requires_grad=True)
         with torch.no_grad():
@@ -130,14 +136,17 @@ class LevelSetILTModel(LithographyModel):
 
             mask_continuous = torch.sigmoid(mask_logit)
             if forward_model == "hopkins":
-                aerial = simulate_aerial_image_hopkins(
+                aerial = hopkins_fn(
                     mask_continuous,
                     kernels=kernels,
                     weights=weights,
                     dose=self._dose,
+                    dtype=dtype,
                 )
             else:
                 aerial = simulate_aerial_image(mask_continuous, sigma_px=sigma_px, dose=self._dose)
+            if aerial.dtype != torch.float32:
+                aerial = aerial.float()
 
             resist = differentiable_threshold(
                 aerial, threshold=0.5, steepness=self._resist_steepness

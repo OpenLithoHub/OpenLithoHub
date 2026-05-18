@@ -1,0 +1,10 @@
+{
+  "grid": 128,
+  "pixel_size_nm": 2.0,
+  "sigma_px": 4.5,
+  "forward_model": "gaussian",
+  "model": "levelset-ilt",
+  "epe_nm_no_opc": 2.5,
+  "epe_nm_with_opc": 0.608,
+  "resist_threshold": 0.5
+}

@@ -27,13 +27,21 @@ class TestHopkinsParams:
         assert p.illumination == "circular"
 
     def test_cache_key_changes_with_params(self) -> None:
-        a = HopkinsParams(sigma=0.7).cache_key(64, "cpu")
-        b = HopkinsParams(sigma=0.5).cache_key(64, "cpu")
+        a = HopkinsParams(sigma=0.7).cache_key(64, "cpu", "torch.complex64")
+        b = HopkinsParams(sigma=0.5).cache_key(64, "cpu", "torch.complex64")
         assert a != b
 
     def test_cache_key_changes_with_grid(self) -> None:
         p = HopkinsParams()
-        assert p.cache_key(64, "cpu") != p.cache_key(128, "cpu")
+        assert p.cache_key(64, "cpu", "torch.complex64") != p.cache_key(
+            128, "cpu", "torch.complex64"
+        )
+
+    def test_cache_key_changes_with_dtype(self) -> None:
+        p = HopkinsParams()
+        assert p.cache_key(64, "cpu", "torch.complex64") != p.cache_key(
+            64, "cpu", "torch.complex128"
+        )
 
 
 class TestComputeSocsKernels:
@@ -150,3 +158,45 @@ class TestSimulateAerialImageHopkins:
         mask = torch.zeros(32, 32)
         with pytest.raises(ValueError, match="kernels"):
             simulate_aerial_image_hopkins(mask, params=None, kernels=None, weights=None)
+
+
+class TestDtypeAndCompile:
+    def test_cache_key_includes_dtype(self) -> None:
+        """Different dtypes must not collide in the kernel cache."""
+        params = HopkinsParams(num_kernels=4, pixel_size_nm=2.0)
+        k64, _ = compute_socs_kernels(params, 64, dtype=torch.complex64)
+        k128, _ = compute_socs_kernels(params, 64, dtype=torch.complex128)
+        assert k64.dtype == torch.complex64
+        assert k128.dtype == torch.complex128
+        # Re-fetch to confirm cache returns the right dtype on second call.
+        k64_again, _ = compute_socs_kernels(params, 64, dtype=torch.complex64)
+        assert k64_again.dtype == torch.complex64
+
+    def test_bf16_vs_fp32_numerical_consistency(self) -> None:
+        """bf16 forward should match fp32 within bf16's mantissa tolerance."""
+        params = HopkinsParams(num_kernels=4, pixel_size_nm=2.0)
+        kernels, weights = compute_socs_kernels(params, 64)
+        mask = torch.zeros(64, 64)
+        mask[20:44, 20:44] = 1.0
+        aerial_fp32 = simulate_aerial_image_hopkins(
+            mask, kernels=kernels, weights=weights, dtype=torch.float32
+        )
+        aerial_bf16 = simulate_aerial_image_hopkins(
+            mask, kernels=kernels, weights=weights, dtype=torch.bfloat16
+        )
+        assert aerial_bf16.dtype == torch.bfloat16
+        assert torch.allclose(aerial_bf16.float(), aerial_fp32, atol=5e-3, rtol=5e-2)
+
+    def test_compiled_forward_matches_eager(self) -> None:
+        """torch.compile-wrapped forward should be numerically identical to eager."""
+        params = HopkinsParams(num_kernels=4, pixel_size_nm=2.0)
+        kernels, weights = compute_socs_kernels(params, 32)
+        mask = torch.zeros(32, 32)
+        mask[10:22, 10:22] = 1.0
+        eager = simulate_aerial_image_hopkins(mask, kernels=kernels, weights=weights)
+        try:
+            compiled = torch.compile(simulate_aerial_image_hopkins, dynamic=False)
+            out = compiled(mask, kernels=kernels, weights=weights)
+        except Exception as exc:  # noqa: BLE001 — torch.compile may not be available
+            pytest.skip(f"torch.compile unavailable in this env: {exc}")
+        assert torch.allclose(out, eager, atol=1e-5)

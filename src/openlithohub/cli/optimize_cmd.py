@@ -29,6 +29,15 @@ def run(
         128, "--overlap", help="Tile overlap for seamless stitching (pixels)."
     ),
     pixel_nm: float = typer.Option(1.0, "--pixel-nm", help="Pixel size in nanometers."),
+    device: str = typer.Option(
+        "cpu", "--device", help="Torch device for the forward model (cpu, cuda, mps)."
+    ),
+    dtype: str = typer.Option(
+        "fp32", "--dtype", help="Compute dtype for the forward model: fp32 or bf16."
+    ),
+    compile_forward: bool = typer.Option(
+        False, "--compile/--no-compile", help="Wrap the Hopkins forward with torch.compile."
+    ),
 ) -> None:
     """Run end-to-end mask optimization on a layout file.
 
@@ -85,6 +94,7 @@ def run(
 
     console.print("[bold]Step 3:[/bold] Running optimization...")
     tile_results: list[tuple[Tile, torch.Tensor]] = []
+    perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
 
     with Progress(
         SpinnerColumn(),
@@ -95,7 +105,7 @@ def run(
     ) as progress:
         task = progress.add_task("Optimizing tiles", total=len(tiles))
         for tile in tiles:
-            result = litho_model.predict(tile.tensor)
+            result = litho_model.predict(tile.tensor, **perf_kwargs)
             tile_results.append((tile, result.mask))
             progress.advance(task)
 
@@ -142,6 +152,18 @@ def run(
 
     console.print()
     console.print("[bold green]Optimization complete.[/bold green]")
+
+
+def _build_perf_kwargs(device: str, dtype: str, compile_forward: bool) -> dict:
+    """Translate CLI perf flags into predict() kwargs."""
+    dtype_map = {"fp32": torch.float32, "bf16": torch.bfloat16}
+    if dtype not in dtype_map:
+        raise typer.BadParameter(f"--dtype must be 'fp32' or 'bf16'; got {dtype!r}")
+    return {
+        "device": device,
+        "dtype": dtype_map[dtype],
+        "compile_forward": compile_forward,
+    }
 
 
 def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:

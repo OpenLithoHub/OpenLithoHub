@@ -258,7 +258,10 @@ def main() -> int:
         "--seed",
         type=int,
         default=0,
-        help="Seed torch RNG so models with random initialisation (neural-ilt) produce reproducible numbers.",
+        help=(
+            "Seed torch RNG so models with random initialisation (neural-ilt) "
+            "produce reproducible numbers."
+        ),
     )
     args = parser.parse_args()
 

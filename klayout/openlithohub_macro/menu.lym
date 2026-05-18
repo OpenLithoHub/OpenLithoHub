@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<klayout-macro>
+  <description>OpenLithoHub: Optimize Selection</description>
+  <version>0.1.0</version>
+  <category>pymacros</category>
+  <prolog/>
+  <epilog/>
+  <doc>Runs `openlithohub optimize` on the currently selected shapes.</doc>
+  <autorun>false</autorun>
+  <autorun-early>false</autorun-early>
+  <priority>0</priority>
+  <shortcut/>
+  <show-in-menu>true</show-in-menu>
+  <group-name/>
+  <menu-path>tools_menu.end</menu-path>
+  <interpreter>python</interpreter>
+  <dsl-interpreter-name/>
+  <text>import importlib.util, pathlib, sys
+_here = pathlib.Path(__file__).resolve().parent
+spec = importlib.util.spec_from_file_location(
+    "openlithohub_optimize", _here / "openlithohub_optimize.py"
+)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+module.run_from_menu()
+</text>
+</klayout-macro>

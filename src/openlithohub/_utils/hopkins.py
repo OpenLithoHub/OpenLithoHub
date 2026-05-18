@@ -63,7 +63,7 @@ class HopkinsParams:
     dipole_angle_deg: float = 0.0
     defocus_nm: float = 0.0
 
-    def cache_key(self, grid_size: int, device: str) -> Hashable:
+    def cache_key(self, grid_size: int, device: str, kernel_dtype: str) -> Hashable:
         return (
             self.wavelength_nm,
             self.na,
@@ -76,6 +76,7 @@ class HopkinsParams:
             self.defocus_nm,
             grid_size,
             device,
+            kernel_dtype,
         )
 
 
@@ -206,12 +207,22 @@ def compute_socs_kernels(
     params: HopkinsParams,
     grid_size: int,
     device: torch.device | str = "cpu",
+    dtype: torch.dtype = torch.complex64,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute SOCS kernels and their weights for a square grid.
 
+    Args:
+        params: Optical parameters.
+        grid_size: Square grid edge length (pixels).
+        device: PyTorch device.
+        dtype: Complex dtype of the returned kernels (``complex64`` or
+            ``complex128``). The internal FFT/SVD always runs in
+            ``complex64`` — this dtype only controls the cached output.
+
     Returns:
-        kernels: complex64 tensor of shape (K, H, W). Each kernel is in the
-            spatial domain, ready for FFT-based convolution.
+        kernels: complex tensor of shape (K, H, W) with the requested dtype.
+            Each kernel is in the spatial domain, ready for FFT-based
+            convolution.
         weights: real float32 tensor of shape (K,). Sorted descending.
 
     The returned kernels are zero-centered (fftshift-style) with the kernel
@@ -219,7 +230,7 @@ def compute_socs_kernels(
     `simulate_aerial_image_hopkins` expects.
     """
     dev = torch.device(device)
-    cache_key = params.cache_key(grid_size, str(dev))
+    cache_key = params.cache_key(grid_size, str(dev), str(dtype))
     cached = _KERNEL_CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -258,7 +269,7 @@ def compute_socs_kernels(
     weights = s2.to(torch.float32)
 
     kernels_spatial = torch.fft.ifft2(kernels_freq, norm="backward")
-    kernels_spatial = torch.fft.fftshift(kernels_spatial, dim=(-2, -1)).to(torch.complex64)
+    kernels_spatial = torch.fft.fftshift(kernels_spatial, dim=(-2, -1))
 
     # Calibrate so that an open-frame (all-ones) mask produces aerial ≈ 1.
     # For a constant mask, coherent_k = sum(kernel_k); aerial_open = Σ_k w_k |sum(k_k)|².
@@ -269,6 +280,7 @@ def compute_socs_kernels(
     if float(open_frame) > 0.0:
         weights = weights / open_frame
 
+    kernels_spatial = kernels_spatial.to(dtype)
     _KERNEL_CACHE[cache_key] = (kernels_spatial.detach(), weights.detach())
     return _KERNEL_CACHE[cache_key]
 
@@ -305,6 +317,7 @@ def simulate_aerial_image_hopkins(
     kernels: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     dose: float = 1.0,
+    dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """Simulate aerial image via SOCS-truncated Hopkins imaging.
 
@@ -316,6 +329,11 @@ def simulate_aerial_image_hopkins(
             `params` is only used for `dose` (and may be None).
         weights: Pre-computed real weights (K,). Must accompany `kernels`.
         dose: Linear dose multiplier on the resulting intensity.
+        dtype: Real dtype of the returned aerial image (``float32`` or
+            ``bfloat16``). The internal FFT is always done in
+            ``complex64`` because PyTorch's ``fft2`` does not support
+            ``bfloat16``-complex; the cast happens before squaring and at
+            the output.
 
     Returns:
         Real-valued aerial image with the same spatial shape as `mask`.
@@ -341,11 +359,15 @@ def simulate_aerial_image_hopkins(
     image = mask2d.to(torch.float32)
     K = kernels.shape[0]  # noqa: N806
     aerial = torch.zeros_like(image)
+    # Kernels may be cached as complex128 etc.; FFT path uses complex64.
+    kernels_c64 = kernels.to(torch.complex64) if kernels.dtype != torch.complex64 else kernels
     for k in range(K):
-        coherent = _fft_conv2d_complex(image, kernels[k])
+        coherent = _fft_conv2d_complex(image, kernels_c64[k])
         aerial = aerial + weights[k] * (coherent.real**2 + coherent.imag**2)
 
     aerial = aerial * dose
+    if dtype != torch.float32:
+        aerial = aerial.to(dtype)
     if squeezed:
         return aerial
     return aerial.unsqueeze(0).unsqueeze(0)

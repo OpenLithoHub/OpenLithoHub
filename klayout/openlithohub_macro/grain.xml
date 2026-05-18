@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<salt-grain>
+  <name>openlithohub_macro</name>
+  <version>0.1.0</version>
+  <api-version>0.27</api-version>
+  <title>OpenLithoHub OPC/ILT</title>
+  <doc>Reference macro that runs `openlithohub optimize` on the current selection. Requires the `openlithohub` Python package to be installed and on PATH outside KLayout.</doc>
+  <doc-url>https://docs.openlithohub.com/cli-reference/</doc-url>
+  <license>Apache-2.0</license>
+  <author>OpenLithoHub contributors</author>
+</salt-grain>

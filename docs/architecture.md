@@ -138,6 +138,23 @@ the ILT loops and PV-band metric:
 - **Morphology** (`binary_dilation`, `binary_erosion`, `distance_transform`)
   — GPU-friendly binary primitives shared by metrics and the dummy generator.
 
+## Performance
+
+The Hopkins forward model and the CLI both expose opt-in performance flags.
+Default behaviour is unchanged (CPU, fp32, eager) so existing scripts remain
+bit-identical.
+
+| Flag | CLI | API | Effect |
+|------|-----|-----|--------|
+| Device | `--device cuda` | `predict(..., device=...)` | Run kernels and forward on a non-CPU device. |
+| Dtype | `--dtype bf16` | `simulate_aerial_image_hopkins(..., dtype=torch.bfloat16)` | Cast the aerial image to bf16. The internal FFT stays in `complex64` because PyTorch's `fft2` does not support complex-bf16, so memory savings come from the squared-magnitude accumulator and the mask copy, not from the FFT itself. |
+| Compile | `--compile` | `torch.compile(simulate_aerial_image_hopkins, mode="reduce-overhead")` | Wrap the K-kernel forward in a TorchInductor graph after the SOCS kernels are pre-computed. SOCS computation itself is **not** compiled (Python control flow + SVD is a poor fit). |
+
+The SOCS kernel cache key includes the requested dtype, so flipping between
+fp32 and bf16 in a long-running service does not corrupt cached tensors.
+Cache keys also include the device, so the cache is safe across mixed CPU /
+CUDA workloads.
+
 ## Leaderboard
 
 The leaderboard system uses a JSON-backed store with Pydantic validation:

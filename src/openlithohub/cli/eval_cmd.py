@@ -46,6 +46,15 @@ def run(
     ),
     paper_url: str | None = typer.Option(None, "--paper-url", help="Paper URL for leaderboard."),
     code_url: str | None = typer.Option(None, "--code-url", help="Code URL for leaderboard."),
+    device: str = typer.Option(
+        "cpu", "--device", help="Torch device for the forward model (cpu, cuda, mps)."
+    ),
+    dtype: str = typer.Option(
+        "fp32", "--dtype", help="Compute dtype for the forward model: fp32 or bf16."
+    ),
+    compile_forward: bool = typer.Option(
+        False, "--compile/--no-compile", help="Wrap the Hopkins forward with torch.compile."
+    ),
 ) -> None:
     """Run evaluation of a lithography model on a benchmark dataset."""
     console = Console()
@@ -94,9 +103,10 @@ def run(
         from openlithohub.benchmark.compliance.mrc import check_mrc
 
     all_metrics: list[dict[str, float]] = []
+    perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
     for i in range(n_samples):
         sample = adapter[i]
-        result = litho_model.predict(sample.design)
+        result = litho_model.predict(sample.design, **perf_kwargs)
 
         sample_metrics: dict[str, float] = {}
 
@@ -189,3 +199,22 @@ def _aggregate_metrics(metrics_list: list[dict[str, float]]) -> dict[str, Any]:
         if vals:
             aggregated[key] = float(torch.tensor(vals).mean().item())
     return aggregated
+
+
+def _build_perf_kwargs(device: str, dtype: str, compile_forward: bool) -> dict[str, Any]:
+    """Translate CLI perf flags into predict() kwargs.
+
+    Models that don't consume these keys (e.g. dummy-identity) ignore them
+    via their **kwargs catch-all; models that drive the Hopkins forward
+    (LevelSetILTModel, AIModelOPC) read them as listed in their docstrings.
+    """
+    import torch
+
+    dtype_map = {"fp32": torch.float32, "bf16": torch.bfloat16}
+    if dtype not in dtype_map:
+        raise typer.BadParameter(f"--dtype must be 'fp32' or 'bf16'; got {dtype!r}")
+    return {
+        "device": device,
+        "dtype": dtype_map[dtype],
+        "compile_forward": compile_forward,
+    }
