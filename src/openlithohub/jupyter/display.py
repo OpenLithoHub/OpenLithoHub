@@ -36,7 +36,7 @@ def display_mask(
     h, w = arr.shape[:2]
 
     fig, ax = plt.subplots(1, 1, figsize=figsize)
-    extent = [0, w * pixel_size_nm, h * pixel_size_nm, 0]
+    extent = (0.0, w * pixel_size_nm, h * pixel_size_nm, 0.0)
     ax.imshow(arr, cmap="gray", vmin=0, vmax=1, extent=extent, interpolation="nearest")
     ax.set_title(title)
     ax.set_xlabel("x (nm)")
@@ -83,7 +83,7 @@ def display_comparison(
     )
     tgt_arr = target.detach().cpu().numpy() if isinstance(target, torch.Tensor) else target
     h, w = pred_arr.shape[:2]
-    extent = [0, w * pixel_size_nm, h * pixel_size_nm, 0]
+    extent = (0.0, w * pixel_size_nm, h * pixel_size_nm, 0.0)
 
     fig, axes = plt.subplots(1, 3, figsize=figsize)
 

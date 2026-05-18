@@ -24,3 +24,13 @@
     options:
       show_root_heading: true
       members_order: source
+
+::: openlithohub.workflow.process_node
+    options:
+      show_root_heading: true
+      members_order: source
+
+::: openlithohub.workflow.eda_bridge
+    options:
+      show_root_heading: true
+      members_order: source

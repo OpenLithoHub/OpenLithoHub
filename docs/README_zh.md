@@ -15,21 +15,25 @@
 OpenLithoHub 为计算光刻研究提供统一的评测与工作流框架，打通从学术 Tensor 优化到工业掩膜制造的完整链路：
 
 - **统一数据接入** — 通过单一接口加载 LithoBench、LithoSim 等光刻数据集
+- **零设置假数据** — `generate_dummy_layout` 在纯 NumPy/PyTorch 下生成确定性的、满足基本 DRC 的版图，可直接用于 CI 与 Colab
 - **标准化评估指标** — EPE、PV Band、Shot Count、EUV 随机鲁棒性
 - **制造合规检查** — MRC/DRC 规则检查作为一票否决指标
 - **OASIS 工作流** — 从 Tensor 到 fab-ready 掩膜的端到端管线（Manhattan & Curvilinear）
+- **EDA 桥接模板** — 导出 OASIS 时一并生成最小化的 Calibre nmDRC / IC Validator 规则脚本
+- **论文级出图** — `openlithohub.vis` 提供 IEEE / SPIE 期刊规范的轮廓叠加图，矢量 PDF 导出
 - **模型无关评测** — 任何 OPC/ILT 模型只需实现最小接口即可接入评测
+- **公开排行榜** — 跨模型、数据集、工艺节点追踪 SOTA 结果
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│                    OpenLithoHub                          │
-├─────────────┬──────────────┬──────────────┬─────────────┤
-│  数据层     │  评测层      │   工作流层   │    CLI      │
-│ LithoBench  │  EPE/PVBand  │ 切片/拼接    │ eval        │
-│ LithoSim    │  MRC/DRC     │ 轮廓提取     │ optimize    │
-│ 变换工具    │  随机鲁棒性  │ OASIS 导出   │             │
-│             │  Shot Count  │ B 样条拟合   │             │
-└─────────────┴──────────────┴──────────────┴─────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                       OpenLithoHub                              │
+├─────────────┬──────────────┬──────────────┬───────────┬─────────┤
+│   数据层    │   评测层     │   工作流层   │  可视化   │   CLI   │
+│ LithoBench  │  EPE/PVBand  │ 切片/拼接    │ 论文出图  │ eval    │
+│ LithoSim    │  MRC/DRC     │ 轮廓提取     │ Jupyter   │ optimize│
+│ 变换工具    │  随机鲁棒性  │ OASIS 导出   │ EDA 桥接  │leaderbd │
+│ 假数据生成  │  Shot Count  │ B 样条拟合   │           │         │
+└─────────────┴──────────────┴──────────────┴───────────┴─────────┘
 ```
 
 ---
@@ -45,6 +49,9 @@ pip install openlithohub[data]
 
 # 含完整工作流（KLayout、scipy B 样条）
 pip install openlithohub[workflow]
+
+# 含可视化与 Jupyter
+pip install openlithohub[jupyter]
 
 # 全部安装
 pip install openlithohub[all]
@@ -65,7 +72,7 @@ pip install -e ".[dev]"
 ### 评测模型
 
 ```bash
-openlithohub eval \
+openlithohub eval run \
   --model dummy-identity \
   --dataset lithobench \
   --data-root ./data/lithobench \
@@ -87,7 +94,7 @@ openlithohub eval \
 ### 端到端掩膜优化
 
 ```bash
-openlithohub optimize \
+openlithohub optimize run \
   --input design.oas \
   --model your-model \
   --writer mbmw \
@@ -146,11 +153,14 @@ class MyOPCModel(LithographyModel):
 
 | 层 | 模块 | 说明 |
 |----|------|------|
-| **数据层** | `openlithohub.data` | 统一适配 LithoBench (.npy)、LithoSim (HuggingFace)，支持分辨率对齐 |
+| **数据层** | `openlithohub.data` | 统一适配 LithoBench (.npy)、LithoSim (HuggingFace)、确定性假数据生成 |
 | **评测层** | `openlithohub.benchmark` | EPE、PV Band、Shot Count、随机鲁棒性、MRC/DRC 合规检查 |
-| **模型层** | `openlithohub.models` | 抽象 `LithographyModel` 接口 + 装饰器注册机制 |
-| **工作流层** | `openlithohub.workflow` | 版图解析、切片、轮廓提取（Manhattan/Curvilinear）、OASIS 导出 |
-| **CLI** | `openlithohub.cli` | `eval` 与 `optimize` 命令（基于 Typer） |
+| **模型层** | `openlithohub.models` | 抽象 `LithographyModel` 接口 + 装饰器注册机制 + 模型 Hub |
+| **工作流层** | `openlithohub.workflow` | 版图解析、切片、轮廓提取、OASIS 导出、EDA 桥接模板 |
+| **可视化层** | `openlithohub.vis` | 论文级 IEEE/SPIE 出图（轮廓叠加、PV Band 包络） |
+| **Jupyter** | `openlithohub.jupyter` | IPython 显示助手与 `%load_ext` 魔法命令 |
+| **前向模型** | `openlithohub._utils` | 可微分 Hopkins SOCS 成像、光刻胶仿真、形态学算子 |
+| **CLI** | `openlithohub.cli` | `eval`、`optimize`、`leaderboard` 命令组（基于 Typer） |
 
 ---
 
@@ -200,8 +210,10 @@ ruff format src/ tests/
 - [x] Phase 1: 统一数据适配、EPE 指标、`eval` CLI
 - [x] Phase 2: MRC 合规、Manhattan 轮廓提取、切片、Shot Count
 - [x] Phase 3: OASIS 工作流、PV Band、随机鲁棒性、DRC、B 样条拟合、`optimize` CLI
-- [ ] Phase 4: 公开排行榜、上游项目集成
-- [ ] Phase 5: Web 演示平台（HuggingFace Spaces）
+- [x] Phase 4: 公开排行榜、MkDocs 文档站、文档 CI/CD
+- [x] Phase 5: Web 演示平台（HuggingFace Spaces）
+- [x] Phase 6: 真实 ILT 模型（LevelSet-ILT、Neural-ILT U-Net）、DTCO 工艺节点、光刻胶仿真、模型 Hub、Jupyter 集成、PyPI/Docker CI/CD
+- [x] Phase 7: 论文级出图、假数据生成器、EDA 桥接模板、Colab 教程
 
 ---
 

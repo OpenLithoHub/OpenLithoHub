@@ -92,9 +92,7 @@ class TestRuleBasedOPCModel:
         assert result.mask.ndim == 2
 
     def test_directional_line_end_extends_only_along_axis(self) -> None:
-        model = RuleBasedOPCModel(
-            bias_radius_px=0, line_end_extra_px=2, directional_line_end=True
-        )
+        model = RuleBasedOPCModel(bias_radius_px=0, line_end_extra_px=2, directional_line_end=True)
         design = torch.zeros(16, 16)
         design[8, 4:9] = 1.0
         result = model.predict(design)
@@ -107,9 +105,7 @@ class TestRuleBasedOPCModel:
         assert result.mask[9, 8].item() == 0.0
 
     def test_directional_line_end_disabled_uses_isotropic(self) -> None:
-        model = RuleBasedOPCModel(
-            bias_radius_px=0, line_end_extra_px=1, directional_line_end=False
-        )
+        model = RuleBasedOPCModel(bias_radius_px=0, line_end_extra_px=1, directional_line_end=False)
         design = torch.zeros(16, 16)
         design[8, 4:9] = 1.0
         result = model.predict(design)
@@ -118,9 +114,7 @@ class TestRuleBasedOPCModel:
         assert result.mask[9, 8].item() == 1.0
 
     def test_inner_corner_serif_fills_concave_notch(self) -> None:
-        model = RuleBasedOPCModel(
-            bias_radius_px=0, line_end_extra_px=0, inner_corner_extra_px=1
-        )
+        model = RuleBasedOPCModel(bias_radius_px=0, line_end_extra_px=0, inner_corner_extra_px=1)
         design = torch.zeros(16, 16)
         # L-shape: vertical bar + horizontal bar meeting at (8,8)
         design[4:9, 8] = 1.0
@@ -132,9 +126,7 @@ class TestRuleBasedOPCModel:
         assert result.metadata["n_inner_corners"] >= 1
 
     def test_inner_corner_serif_inactive_when_zero(self) -> None:
-        model = RuleBasedOPCModel(
-            bias_radius_px=0, line_end_extra_px=0, inner_corner_extra_px=0
-        )
+        model = RuleBasedOPCModel(bias_radius_px=0, line_end_extra_px=0, inner_corner_extra_px=0)
         design = torch.zeros(16, 16)
         design[4:9, 8] = 1.0
         design[8, 8:13] = 1.0
@@ -169,9 +161,7 @@ class TestRuleBasedOPCModel:
         design[10:22, 10:22] = 1.0
         baseline = model.predict(design)
         # iso/dense both None → identical to single-radius dilation.
-        explicit = model.predict(
-            design, iso_radius_px=None, dense_radius_px=None
-        )
+        explicit = model.predict(design, iso_radius_px=None, dense_radius_px=None)
         assert torch.equal(baseline.mask, explicit.mask)
 
     def test_metadata_reports_min_space_and_growth(self) -> None:
@@ -196,10 +186,7 @@ class TestRuleBasedOPCModel:
         # now demand min_space_px >= 3 — retreat should clean it
         cleaned = model.predict(design, mrc_min_space_px=3)
         assert cleaned.metadata["mrc_violated"] is False
-        assert (
-            cleaned.metadata["min_space_px"] == 0
-            or cleaned.metadata["min_space_px"] >= 3
-        )
+        assert cleaned.metadata["min_space_px"] == 0 or cleaned.metadata["min_space_px"] >= 3
 
     def test_bias_radius_nm_converts_with_pixel_size(self) -> None:
         model = RuleBasedOPCModel(bias_radius_px=0, line_end_extra_px=0)

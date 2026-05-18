@@ -19,6 +19,7 @@ numbers can be regenerated locally with `--data-root <path>`.
 | Model | Samples | EPE mean (nm) | EPE max (nm) | PVB mean (nm) | MRC pass |
 |---|---|---|---|---|---|
 | `dummy-identity` | 8 | 0.000 | 0.000 | 2.140 | 0% |
+| `rule-based-opc` | 8 | 0.530 | 1.414 | 2.487 | 0% |
 | `levelset-ilt` (Gaussian PSF) | 8 | 0.036 | 0.250 | 2.128 | 0% |
 | `neural-ilt` (untrained U-Net) | 8 | 15.074 | 24.637 | 2.497 | 100% |
 
@@ -27,6 +28,9 @@ Things worth knowing about these numbers:
 - **`dummy-identity`** copies the design straight through. Its EPE is zero
   by construction on a synthetic suite where `design == target_mask`. It
   exists as a smoke test of the metric pipeline, not as a real model.
+- **`rule-based-opc`** applies analytic per-edge bias OPC. It is the
+  cheapest non-trivial baseline and a fair starting point when comparing
+  AI methods.
 - **`levelset-ilt`** runs 200 iterations of gradient-descent ILT under the
   default Gaussian PSF forward model (`sigma_px=2.0`). The MRC failure
   count reflects the small synthetic patterns being narrower than the

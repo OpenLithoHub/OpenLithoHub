@@ -59,7 +59,9 @@ def _line_end_mask(mask: torch.Tensor) -> torch.Tensor:
     return ((fg > 0.5) & (neighbour_count <= 1.0)).float()
 
 
-def _neighbours(mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+def _neighbours(
+    mask: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Return four boolean-valued float tensors: up, down, left, right neighbours."""
     fg = mask.float()
     pad = functional.pad(fg.unsqueeze(0).unsqueeze(0), (1, 1, 1, 1), value=0.0)
@@ -289,9 +291,7 @@ class RuleBasedOPCModel(LithographyModel):
     def predict(self, design: torch.Tensor, **kwargs: Any) -> PredictionResult:
         bias_radius = int(kwargs.get("bias_radius_px", self._bias_radius_px))
         line_end_extra = int(kwargs.get("line_end_extra_px", self._line_end_extra_px))
-        inner_corner_extra = int(
-            kwargs.get("inner_corner_extra_px", self._inner_corner_extra_px)
-        )
+        inner_corner_extra = int(kwargs.get("inner_corner_extra_px", self._inner_corner_extra_px))
         directional = bool(kwargs.get("directional_line_end", self._directional_line_end))
         iso_radius = kwargs.get("iso_radius_px", self._iso_radius_px)
         dense_radius = kwargs.get("dense_radius_px", self._dense_radius_px)
@@ -303,9 +303,7 @@ class RuleBasedOPCModel(LithographyModel):
         pixel_size_nm = kwargs.get("pixel_size_nm")
         if bias_radius_nm is not None or pixel_size_nm is not None:
             if bias_radius_nm is None or pixel_size_nm is None:
-                raise ValueError(
-                    "bias_radius_nm and pixel_size_nm must be provided together"
-                )
+                raise ValueError("bias_radius_nm and pixel_size_nm must be provided together")
             if pixel_size_nm <= 0:
                 raise ValueError("pixel_size_nm must be positive")
             bias_radius = int(round(float(bias_radius_nm) / float(pixel_size_nm)))
@@ -369,12 +367,8 @@ class RuleBasedOPCModel(LithographyModel):
             mrc_violated = 0 < min_space < mrc_min_space
 
         design_sum = float(target.sum().item())
-        mask_area_growth = (
-            float(binary.sum().item()) / design_sum if design_sum > 0 else 0.0
-        )
-        bias_radius_nm_meta = (
-            float(bias_radius_nm) if bias_radius_nm is not None else None
-        )
+        mask_area_growth = float(binary.sum().item()) / design_sum if design_sum > 0 else 0.0
+        bias_radius_nm_meta = float(bias_radius_nm) if bias_radius_nm is not None else None
 
         return PredictionResult(
             mask=binary,

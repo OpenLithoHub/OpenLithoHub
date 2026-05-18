@@ -15,6 +15,26 @@
       show_root_heading: true
       members_order: source
 
+::: openlithohub.models.neural_ilt
+    options:
+      show_root_heading: true
+      members_order: source
+
+::: openlithohub.models.rule_based_opc
+    options:
+      show_root_heading: true
+      members_order: source
+
+::: openlithohub.models.hub
+    options:
+      show_root_heading: true
+      members_order: source
+
+::: openlithohub.models.examples.dummy_model
+    options:
+      show_root_heading: true
+      members_order: source
+
 ## Differentiable forward models
 
 ::: openlithohub._utils.forward_model

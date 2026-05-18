@@ -275,6 +275,65 @@ def evaluate_uploaded(
 
 
 # ---------------------------------------------------------------------------
+# Leaderboard view
+# ---------------------------------------------------------------------------
+
+import json
+import os
+from pathlib import Path
+
+
+def _leaderboard_path() -> Path:
+    env = os.environ.get("OPENLITHOHUB_LEADERBOARD_PATH")
+    if env:
+        return Path(env)
+    here = Path(__file__).parent
+    candidates = [
+        here / "leaderboard.json",
+        Path.home() / ".openlithohub" / "leaderboard.json",
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    return candidates[0]
+
+
+def load_leaderboard():
+    """Read the JSON leaderboard. Returns ``(rows, status_md)``."""
+    path = _leaderboard_path()
+    if not path.exists():
+        return [], (
+            "_No leaderboard entries yet. Submit your model via "
+            "`openlithohub submit` — see the [submission guide]"
+            "(https://github.com/OpenLithoHub/OpenLithoHub#leaderboard)._"
+        )
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return [], f"_Failed to parse leaderboard: {exc}_"
+
+    entries = data.get("entries", [])
+    rows = []
+    for e in entries:
+        rows.append(
+            [
+                e.get("model_name", ""),
+                e.get("dataset", ""),
+                e.get("process_node", ""),
+                e.get("mask_topology", ""),
+                e.get("epe_mean_nm"),
+                e.get("epe_max_nm"),
+                e.get("pvband_nm"),
+                e.get("shot_count"),
+                e.get("paper_url") or e.get("code_url") or "",
+            ]
+        )
+    rows.sort(key=lambda r: (r[4] is None, r[4]))
+    status = f"_{len(rows)} submission(s) — sorted by EPE mean (lower is better)._"
+    return rows, status
+
+
+# ---------------------------------------------------------------------------
 # Gradio App
 # ---------------------------------------------------------------------------
 
@@ -342,6 +401,44 @@ with gr.Blocks(
                 inputs=[pred_upload, tgt_upload, px_size_upload, mw_upload, ms_upload],
                 outputs=[upload_plot, upload_metrics],
             )
+
+        # Tab 3: Leaderboard
+        with gr.TabItem("Leaderboard"):
+            gr.Markdown(
+                """
+                ## Community SOTA Leaderboard
+
+                Snapshot of community-submitted benchmark results, sorted by mean EPE.
+                Submissions go through `openlithohub submit` against the published
+                LithoBench / LithoSim splits — see the
+                [submission guide](https://github.com/OpenLithoHub/OpenLithoHub#leaderboard).
+                """
+            )
+            lb_status = gr.Markdown()
+            lb_table = gr.Dataframe(
+                headers=[
+                    "Model",
+                    "Dataset",
+                    "Node",
+                    "Topology",
+                    "EPE mean (nm)",
+                    "EPE max (nm)",
+                    "PV band (nm)",
+                    "Shot count",
+                    "Reference",
+                ],
+                datatype=["str", "str", "str", "str", "number", "number", "number", "number", "str"],
+                interactive=False,
+                wrap=True,
+            )
+            refresh_btn = gr.Button("Refresh", variant="secondary")
+
+            def _load():
+                rows, status = load_leaderboard()
+                return rows, status
+
+            demo.load(fn=_load, inputs=None, outputs=[lb_table, lb_status])
+            refresh_btn.click(fn=_load, inputs=None, outputs=[lb_table, lb_status])
 
     gr.Markdown(
         """

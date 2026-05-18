@@ -36,12 +36,15 @@ Tests are organized by module:
 
 ```
 tests/
+├── benchmarks/        # pytest-benchmark performance suite
 ├── test_benchmark/    # Metrics and compliance
 ├── test_cli/          # CLI commands
-├── test_data/         # Dataset adapters
+├── test_data/         # Dataset adapters + dummy generator
 ├── test_leaderboard/  # Leaderboard logic
 ├── test_models/       # Model interface
-└── test_workflow/     # Workflow pipeline
+├── test_utils/        # Hopkins, resist, morphology
+├── test_vis/          # Paper-ready visualization
+└── test_workflow/     # Workflow pipeline + EDA bridge
 ```
 
 ## Adding a New Metric

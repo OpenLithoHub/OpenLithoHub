@@ -44,12 +44,14 @@ pre-commit install
 ```
 src/openlithohub/
 ├── cli/          # Command-line interface (Typer)
-├── data/         # Layer 1: Dataset adapters
+├── data/         # Layer 1: Dataset adapters + dummy generator
 ├── benchmark/    # Layer 2: Metrics and compliance checks
 ├── models/       # Layer 3: Model integration interface
-├── workflow/     # Layer 4: OASIS workflow engine
+├── workflow/     # Layer 4: OASIS workflow engine + EDA bridge templates
 ├── leaderboard/  # Layer 5: SOTA tracking and data engine
-└── _utils/       # Shared internal utilities
+├── vis/          # Paper-publication matplotlib helpers (IEEE / SPIE styles)
+├── jupyter/      # IPython display helpers and `%load_ext` magics
+└── _utils/       # Shared internal utilities (Hopkins, resist, morphology)
 ```
 
 ## Running Tests

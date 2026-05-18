@@ -39,7 +39,7 @@ pip install -e ".[dev]"
 Run the built-in dummy model against synthetic data:
 
 ```bash
-openlithohub eval \
+openlithohub eval run \
   --model dummy-identity \
   --dataset lithobench \
   --data-root ./data/lithobench \
@@ -108,7 +108,55 @@ class MyOPCModel(LithographyModel):
 Once registered, your model is available via the CLI:
 
 ```bash
-openlithohub eval --model my-opc --dataset lithobench --data-root ./data
+openlithohub eval run --model my-opc --dataset lithobench --data-root ./data
+```
+
+## Try It Without a Dataset
+
+If you don't have LithoBench/LithoSim handy (or you're running on Colab), you
+can still exercise the full pipeline using the bundled dummy layout
+generator — it's deterministic, DRC-clean, and depends only on NumPy and
+PyTorch:
+
+```python
+import torch
+from openlithohub.data import generate_dummy_layout
+from openlithohub.benchmark import compute_epe, compute_pvband
+from openlithohub.vis import plot_contours
+
+target = generate_dummy_layout(size=256, seed=0)
+predicted = generate_dummy_layout(size=256, seed=1)
+
+print(compute_epe(predicted, target, pixel_size_nm=1.0))
+print(compute_pvband(predicted))
+
+# Vector PDF, IEEE column-width, colorblind-safe palette
+plot_contours(target, predicted, save_path="result.pdf", style="ieee")
+```
+
+For a click-to-run version, open
+[`notebooks/quickstart.ipynb`](https://github.com/OpenLithoHub/OpenLithoHub/blob/main/notebooks/quickstart.ipynb)
+in Google Colab.
+
+## Bridging to Commercial EDA
+
+After you `export_oasis(...)`, you can emit minimal Calibre / IC Validator
+rule decks alongside the OASIS file so layout engineers can sanity-check it
+in their existing toolchain:
+
+```python
+from openlithohub.workflow import (
+    BridgeRules,
+    emit_bridge_bundle,
+    export_oasis,
+)
+
+export_oasis(mask, "optimized.oas", mode="curvilinear")
+emit_bridge_bundle(
+    "optimized.oas",
+    BridgeRules(min_width_nm=40.0, min_spacing_nm=40.0),
+)
+# → optimized.svrf, optimized.rs, optimized.bridge.md
 ```
 
 ## Next Steps

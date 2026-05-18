@@ -6,12 +6,15 @@ OpenLithoHub uses a layered architecture designed for extensibility and separati
 
 | Layer | Module | Responsibility |
 |-------|--------|----------------|
-| **Data** | `openlithohub.data` | Dataset loading, format conversion, resolution alignment |
+| **Data** | `openlithohub.data` | Dataset loading, format conversion, resolution alignment, dummy layout generation |
 | **Benchmark** | `openlithohub.benchmark` | Metrics computation, compliance checking, reporting |
-| **Models** | `openlithohub.models` | Abstract model interface, registry, example implementations |
-| **Workflow** | `openlithohub.workflow` | Layout parsing, tiling, contour extraction, OASIS export |
+| **Models** | `openlithohub.models` | Abstract model interface, registry, example implementations, model hub |
+| **Workflow** | `openlithohub.workflow` | Layout parsing, tiling, contour extraction, OASIS export, EDA bridge templates |
+| **Vis** | `openlithohub.vis` | Paper-publication matplotlib helpers (IEEE / SPIE styles, contour overlays, PV-band plots) |
+| **Jupyter** | `openlithohub.jupyter` | IPython display helpers and `%load_ext` magics |
 | **CLI** | `openlithohub.cli` | User-facing commands via Typer |
 | **Leaderboard** | `openlithohub.leaderboard` | SOTA tracking, submission, querying |
+| **Forward models** | `openlithohub._utils` | Differentiable Hopkins SOCS imaging, resist simulation, morphology |
 
 ## Data Flow
 
@@ -46,8 +49,11 @@ Dataset (LithoBench/LithoSim)
 
 The data layer provides unified access to lithography datasets through the `DatasetAdapter` interface:
 
-- **LithoBenchAdapter** — loads NumPy `.npy` files from LithoBench (NeurIPS'23)
-- **LithoSimAdapter** — loads HuggingFace Parquet datasets from LithoSim (NeurIPS'25)
+- **LithoBenchDataset** — loads NumPy `.npy` files from LithoBench (NeurIPS'23)
+- **LithoSimDataset** — loads HuggingFace Parquet datasets from LithoSim (NeurIPS'25)
+- **Dummy generator** — `generate_dummy_layout` / `generate_dummy_pair` produce
+  deterministic, DRC-clean synthetic layouts with only NumPy and PyTorch, for
+  CI and Colab use.
 
 All adapters produce `(design, target)` tensor pairs with consistent shape `(B, 1, H, W)`.
 
@@ -59,7 +65,7 @@ All adapters produce `(design, target)` tensor pairs with consistent shape `(B, 
 |--------|----------|-------------|
 | EPE | `compute_epe()` | Edge Placement Error between predicted and target contours |
 | PV Band | `compute_pvband()` | Process variation band width across dose/focus window |
-| Shot Count | `compute_shot_count()` | Mask write time proxy for MBMW/VSB writers |
+| Shot Count | `estimate_shot_count()` | Mask write time proxy for MBMW/VSB writers |
 | Stochastic | `compute_stochastic_robustness()` | Monte Carlo photon noise bridge/break probability |
 
 ### Compliance
@@ -67,6 +73,7 @@ All adapters produce `(design, target)` tensor pairs with consistent shape `(B, 
 | Check | Function | Description |
 |-------|----------|-------------|
 | MRC | `check_mrc()` | Minimum width/spacing rule check (hard-fail) |
+| Curvilinear MRC | `check_curvilinear_mrc()` | Min curvature radius and feature area for post-ILT curvilinear shapes |
 | DRC | `check_drc()` | Full design rule check: area, notch, width, spacing |
 
 ## Model Layer
@@ -93,10 +100,43 @@ The `ModelRegistry` provides decorator-based registration and lookup by name.
 
 The workflow layer converts tensor masks to fab-ready OASIS files:
 
-1. **Tiling** — split large layouts into manageable tiles with configurable overlap
-2. **Contour Extraction** — convert binary masks to polygon boundaries (manhattan or curvilinear)
-3. **B-spline Fitting** — smooth curvilinear contours with configurable control point density
-4. **OASIS Export** — write polygons to industry-standard OASIS format
+1. **Layout parsing** (`parse_layout`) — read `.oas` / `.gds` into tensors
+2. **Tiling** (`tile_layout`, `stitch_tiles`) — split large layouts into
+   manageable tiles with configurable overlap and stitch them back
+3. **Contour Extraction** — convert binary masks to polygon boundaries
+   (manhattan or curvilinear)
+4. **B-spline Fitting** — smooth curvilinear contours with configurable
+   control point density
+5. **OASIS Export** (`export_oasis`) — write polygons to OASIS
+6. **Process node presets** (`ProcessNodeConfig`, `get_node`, `list_nodes`) —
+   physical parameters for `45nm`, `7nm`, `5nm-euv`, `3nm-euv`, `2nm-euv`
+7. **EDA bridge** (`BridgeRules`, `emit_calibre_svrf`, `emit_icv_runset`,
+   `emit_bridge_bundle`) — emit minimal Calibre nmDRC and Synopsys IC
+   Validator runsets next to an exported OASIS file
+
+## Visualization & Jupyter
+
+`openlithohub.vis` ships paper-publication matplotlib helpers — `plot_contours`
+and `plot_pv_band` produce single-panel IEEE / SPIE column-width figures with
+a colorblind-safe palette and Type-42 vector PDF defaults via the `paper_style`
+context manager.
+
+`openlithohub.jupyter` exposes `display_mask` and `display_comparison` for rich
+inline display, plus `%load_ext openlithohub.jupyter` magics for the CLI.
+
+## Forward Models
+
+`openlithohub._utils` contains the differentiable forward models that power
+the ILT loops and PV-band metric:
+
+- **Hopkins SOCS** (`simulate_aerial_image_hopkins`, `HopkinsParams`,
+  `compute_socs_kernels`) — partial-coherent imaging with circular / annular
+  / dipole / quasar illumination and per-(params, grid) kernel caching.
+- **Resist simulation** (`simulate_resist`, `simulate_resist_soft`,
+  `differentiable_threshold`) — chemically-amplified resist with acid
+  diffusion and a sigmoid-based soft threshold.
+- **Morphology** (`binary_dilation`, `binary_erosion`, `distance_transform`)
+  — GPU-friendly binary primitives shared by metrics and the dummy generator.
 
 ## Leaderboard
 

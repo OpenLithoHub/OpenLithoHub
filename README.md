@@ -23,15 +23,15 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 - **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│                    OpenLithoHub                          │
-├─────────────┬──────────────┬──────────────┬─────────────┤
-│  Data Layer │  Benchmark   │   Workflow   │     CLI     │
-│ LithoBench  │  EPE/PVBand  │ Tiling/Stitch│ eval        │
-│ LithoSim    │  MRC/DRC     │ Contour Ext. │ optimize    │
-│ Transforms  │  Stochastic  │ OASIS Export │             │
-│             │  Shot Count  │ B-spline Fit │             │
-└─────────────┴──────────────┴──────────────┴─────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                       OpenLithoHub                              │
+├─────────────┬──────────────┬──────────────┬───────────┬─────────┤
+│  Data Layer │  Benchmark   │   Workflow   │ Vis & UX  │   CLI   │
+│ LithoBench  │  EPE/PVBand  │ Tiling/Stitch│ Paper figs│ eval    │
+│ LithoSim    │  MRC/DRC     │ Contour Ext. │ Jupyter   │ optimize│
+│ Transforms  │  Stochastic  │ OASIS Export │ EDA bridge│leaderbd │
+│ Dummy gen.  │  Shot Count  │ B-spline Fit │           │         │
+└─────────────┴──────────────┴──────────────┴───────────┴─────────┘
 ```
 
 ---
@@ -67,7 +67,7 @@ pip install -e ".[dev]"
 ### Evaluate a model
 
 ```bash
-openlithohub eval \
+openlithohub eval run \
   --model dummy-identity \
   --dataset lithobench \
   --data-root ./data/lithobench \
@@ -89,7 +89,7 @@ Output:
 ### Run end-to-end optimization
 
 ```bash
-openlithohub optimize \
+openlithohub optimize run \
   --input design.oas \
   --model your-model \
   --writer mbmw \
@@ -142,6 +142,43 @@ class MyOPCModel(LithographyModel):
         return PredictionResult(mask=mask)
 ```
 
+### Paper-ready figures
+
+```python
+from openlithohub.vis import plot_contours
+
+# Vector PDF, IEEE column-width, colorblind-safe palette
+plot_contours(target, predicted, save_path="fig.pdf", style="ieee")
+```
+
+### Hermetic dummy layouts (for CI / Colab)
+
+```python
+from openlithohub.data import generate_dummy_layout
+
+mask = generate_dummy_layout(size=256, seed=0)  # numpy + torch only, no KLayout
+```
+
+### EDA bridge (Calibre / IC Validator)
+
+```python
+from openlithohub.workflow import BridgeRules, emit_bridge_bundle
+
+emit_bridge_bundle(
+    "optimized.oas",
+    BridgeRules(min_width_nm=40.0, min_spacing_nm=40.0),
+)
+# Writes optimized.svrf, optimized.rs, optimized.bridge.md
+```
+
+### Try it in Colab
+
+The `notebooks/quickstart.ipynb` tutorial runs end-to-end on Colab's stock
+runtime — install, generate a layout, score it, and produce a paper-ready
+figure in three minutes.
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/OpenLithoHub/OpenLithoHub/blob/main/notebooks/quickstart.ipynb)
+
 ---
 
 ## Architecture
@@ -152,7 +189,7 @@ class MyOPCModel(LithographyModel):
 | **Benchmark** | `openlithohub.benchmark` | EPE, PV Band, shot count, stochastic robustness, MRC/DRC compliance |
 | **Models** | `openlithohub.models` | Abstract `LithographyModel` interface + decorator-based registry |
 | **Workflow** | `openlithohub.workflow` | Layout parsing, tiling, contour extraction (manhattan/curvilinear), OASIS export |
-| **CLI** | `openlithohub.cli` | `eval` and `optimize` commands via Typer |
+| **CLI** | `openlithohub.cli` | `eval`, `optimize`, and `leaderboard` command groups via Typer |
 
 ---
 
@@ -190,8 +227,11 @@ methodology, the Hopkins forward model, and reproduction instructions.
 | Model | EPE mean (nm) | EPE max (nm) | PVB mean (nm) | MRC pass |
 |---|---|---|---|---|
 | `dummy-identity` | 0.000 | 0.000 | 2.140 | 0% |
+| `rule-based-opc` (analytic OPC bias) | 0.530 | 1.414 | 2.487 | 0% |
 | `levelset-ilt` (Gaussian PSF, 200 iters) | 0.036 | 0.250 | 2.128 | 0% |
 | `neural-ilt` (untrained U-Net) | 15.074 | 24.637 | 2.497 | 100% |
+
+See [`baselines/results.md`](baselines/results.md) for per-pattern breakdowns.
 
 Reproduce locally:
 
