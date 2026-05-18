@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from pathlib import Path
+
+# Upper bound on the longest side of an uploaded mask. EPE uses a distance
+# transform on the GPU/CPU tensor, so memory grows with W*H. 1024 keeps a
+# single evaluation comfortably under 1 GB on the HF free 16 GB container.
+MAX_UPLOAD_DIM = int(os.environ.get("OPENLITHOHUB_MAX_UPLOAD_DIM", "1024"))
 
 # Monkeypatch gradio_client.utils to handle bool schemas (Gradio 4.44 bug)
 # https://github.com/gradio-app/gradio/issues/10662
@@ -230,6 +236,14 @@ def evaluate_uploaded(
     pred_img = Image.open(pred_file).convert("L")
     tgt_img = Image.open(target_file).convert("L")
 
+    longest = max(pred_img.size[0], pred_img.size[1], tgt_img.size[0], tgt_img.size[1])
+    if longest > MAX_UPLOAD_DIM:
+        return None, (
+            f"Uploaded mask is {longest}px on its longest side; the playground "
+            f"caps inputs at {MAX_UPLOAD_DIM}px to keep evaluation under the free "
+            f"HF Space memory budget. Downsample or crop your mask and retry."
+        )
+
     # Resize to match if different
     if pred_img.size != tgt_img.size:
         tgt_img = tgt_img.resize(pred_img.size, Image.NEAREST)
@@ -320,6 +334,38 @@ def load_leaderboard():
 
 
 # ---------------------------------------------------------------------------
+# Upload-tab example generation
+# ---------------------------------------------------------------------------
+
+
+def _build_upload_examples() -> list[list[str]]:
+    """Materialize the synthetic patterns as PNG (pred, target) pairs.
+
+    Returns rows shaped to match the Upload tab inputs:
+    [pred_path, target_path, pixel_size_nm, min_width_nm, min_spacing_nm].
+    """
+    from PIL import Image
+
+    out_dir = Path(tempfile.gettempdir()) / "olh_upload_examples"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(0)
+
+    rows: list[list[str]] = []
+    for name, gen in PATTERN_GENERATORS.items():
+        target = gen(size=256)
+        noise = rng.normal(0, 0.15, target.shape).astype(np.float32)
+        predicted = ((target + noise) > 0.5).astype(np.float32)
+
+        slug = name.lower().replace("/", "_").replace(" ", "_").replace("-", "_")
+        pred_path = out_dir / f"{slug}_pred.png"
+        tgt_path = out_dir / f"{slug}_target.png"
+        Image.fromarray((predicted * 255).astype(np.uint8)).save(pred_path)
+        Image.fromarray((target * 255).astype(np.uint8)).save(tgt_path)
+        rows.append([str(pred_path), str(tgt_path), 1.0, 40.0, 40.0])
+    return rows
+
+
+# ---------------------------------------------------------------------------
 # Gradio App
 # ---------------------------------------------------------------------------
 
@@ -404,6 +450,13 @@ with gr.Blocks(
                 fn=evaluate_uploaded,
                 inputs=[pred_upload, tgt_upload, px_size_upload, mw_upload, ms_upload],
                 outputs=[upload_plot, upload_metrics],
+            )
+
+            gr.Examples(
+                examples=_build_upload_examples(),
+                inputs=[pred_upload, tgt_upload, px_size_upload, mw_upload, ms_upload],
+                label="Try a synthetic example",
+                examples_per_page=3,
             )
 
         # Tab 3: Leaderboard
