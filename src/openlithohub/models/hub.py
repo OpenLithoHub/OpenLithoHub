@@ -186,13 +186,10 @@ class ModelHub:
             # 30x to a different host would leak the SSRF guard.
             if response.status in (301, 302, 303, 307, 308):
                 raise ValueError(
-                    f"Refusing to follow redirect from {url} to "
-                    f"{response.getheader('Location')!r}"
+                    f"Refusing to follow redirect from {url} to {response.getheader('Location')!r}"
                 )
             if response.status != 200:
-                raise ValueError(
-                    f"Unexpected HTTP status {response.status} fetching {url}"
-                )
+                raise ValueError(f"Unexpected HTTP status {response.status} fetching {url}")
             content_length = response.getheader("Content-Length")
             if content_length and int(content_length) > max_size:
                 raise ValueError(

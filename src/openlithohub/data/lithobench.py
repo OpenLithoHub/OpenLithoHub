@@ -88,9 +88,7 @@ class LithoBenchDataset(DatasetAdapter):
                 with open(meta_path, encoding="utf-8") as f:
                     self._metadata = json.load(f)
             except json.JSONDecodeError as exc:
-                raise RuntimeError(
-                    f"Corrupt LithoBench metadata at {meta_path}: {exc}"
-                ) from exc
+                raise RuntimeError(f"Corrupt LithoBench metadata at {meta_path}: {exc}") from exc
 
     def __len__(self) -> int:
         return len(self._index)
