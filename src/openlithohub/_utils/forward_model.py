@@ -26,15 +26,72 @@ def simulate_aerial_image(
     """Simulate aerial image via Gaussian PSF convolution.
 
     Approximates Hopkins diffraction with a single Gaussian point spread function.
+
+    Accepts ``(H, W)`` for single-image use and ``(B, 1, H, W)`` for batched
+    forward passes — the output preserves the input rank.
+
+    Uses circular (periodic) padding to match the Hopkins forward model's
+    convention. OPC treats the mask as a tile of an infinite layout, so
+    zero-padding at the border would introduce spurious dim-aerial fringes
+    that the Hopkins path does not have.
     """
     if sigma_px < 1e-6:
         return mask.float() * dose
 
     kernel = _build_gaussian_kernel(sigma_px, mask.device)
-    inp = mask.float().unsqueeze(0).unsqueeze(0)
     padding = kernel.shape[-1] // 2
-    aerial = functional.conv2d(inp, kernel, padding=padding).squeeze(0).squeeze(0)
+
+    squeezed = False
+    if mask.ndim == 2:
+        inp = mask.float().unsqueeze(0).unsqueeze(0)
+        squeezed = True
+    elif mask.ndim == 4 and mask.shape[1] == 1:
+        inp = mask.float()
+    else:
+        raise ValueError(
+            f"Expected mask shape (H,W) or (B,1,H,W); got {tuple(mask.shape)}"
+        )
+
+    inp_padded = _circular_pad_clamped(inp, padding)
+    aerial = functional.conv2d(inp_padded, kernel)
+    if squeezed:
+        aerial = aerial.squeeze(0).squeeze(0)
     return aerial * dose
+
+
+def _circular_pad_clamped(inp: torch.Tensor, padding: int) -> torch.Tensor:
+    """Circular pad an (N, C, H, W) tensor by ``padding`` on every side.
+
+    PyTorch's circular pad refuses pad sizes >= the corresponding image
+    dimension. For very small masks (typical of unit tests) we tile the
+    padding in steps that respect that constraint.
+    """
+    if padding == 0:
+        return inp
+    out = inp
+    remaining_h = padding
+    remaining_w = padding
+    while remaining_h > 0 or remaining_w > 0:
+        cur_h = out.shape[-2]
+        cur_w = out.shape[-1]
+        step_h = min(remaining_h, cur_h - 1) if remaining_h > 0 else 0
+        step_w = min(remaining_w, cur_w - 1) if remaining_w > 0 else 0
+        if step_h == 0 and step_w == 0:
+            # Fall back to replicate when image is 1 px wide/tall in that axis
+            step_h = remaining_h if cur_h == 1 else 0
+            step_w = remaining_w if cur_w == 1 else 0
+            out = functional.pad(
+                out, (step_w, step_w, step_h, step_h), mode="replicate"
+            )
+            remaining_h -= step_h
+            remaining_w -= step_w
+            continue
+        out = functional.pad(
+            out, (step_w, step_w, step_h, step_h), mode="circular"
+        )
+        remaining_h -= step_h
+        remaining_w -= step_w
+    return out
 
 
 def apply_resist_threshold(

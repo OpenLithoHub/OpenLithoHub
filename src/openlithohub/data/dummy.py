@@ -110,8 +110,10 @@ def generate_dummy_layout(
             continue
         x = int(rng.integers(0, spec.size - w))
         y = int(rng.integers(0, spec.size - h))
-        canvas[y : y + h, x : x + w] = 1.0
-        placed = int(canvas.sum())
+        sub = canvas[y : y + h, x : x + w]
+        new_pixels = int((sub == 0.0).sum())
+        sub[:] = 1.0
+        placed += new_pixels
 
     mask = torch.from_numpy(canvas)
     mask = _enforce_min_rules(mask, min_width_px, min_spacing_px)

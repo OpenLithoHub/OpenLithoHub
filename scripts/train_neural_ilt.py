@@ -108,21 +108,15 @@ def _build_dataset(cfg: TrainConfig) -> Dataset:
 def _forward(mask_continuous: torch.Tensor, cfg: TrainConfig) -> torch.Tensor:
     """Apply the configured forward model to (B, 1, H, W) continuous masks.
 
-    Both forward models in `_utils` operate on 2D tensors, so iterate the
-    batch dimension explicitly.
+    Both forward models accept batched (B, 1, H, W) input and broadcast the
+    convolution / SOCS kernels across the batch.
     """
-    outs = []
-    for b in range(mask_continuous.shape[0]):
-        m = mask_continuous[b, 0]
-        if cfg.forward_model == "gaussian":
-            aerial = simulate_aerial_image(m, sigma_px=cfg.sigma_px)
-        elif cfg.forward_model == "hopkins":
-            params = HopkinsParams(num_kernels=8, pixel_size_nm=2.0)
-            aerial = simulate_aerial_image_hopkins(m, params=params)
-        else:
-            raise ValueError(f"Unknown forward model: {cfg.forward_model}")
-        outs.append(aerial)
-    return torch.stack(outs).unsqueeze(1)
+    if cfg.forward_model == "gaussian":
+        return simulate_aerial_image(mask_continuous, sigma_px=cfg.sigma_px)
+    if cfg.forward_model == "hopkins":
+        params = HopkinsParams(num_kernels=8, pixel_size_nm=2.0)
+        return simulate_aerial_image_hopkins(mask_continuous, params=params)
+    raise ValueError(f"Unknown forward model: {cfg.forward_model}")
 
 
 def _step(model: UNet, batch: tuple[torch.Tensor, torch.Tensor], cfg: TrainConfig) -> torch.Tensor:

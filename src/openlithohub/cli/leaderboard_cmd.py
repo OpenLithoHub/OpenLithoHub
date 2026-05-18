@@ -6,6 +6,7 @@ import json as json_mod
 from pathlib import Path
 
 import typer
+from pydantic import ValidationError
 from rich.console import Console
 from rich.table import Table
 
@@ -58,7 +59,12 @@ def submit(
     topology: str | None = typer.Option(None, "--topology", "-t", help="manhattan or curvilinear."),
     epe_mean: float | None = typer.Option(None, "--epe-mean", help="Mean EPE in nm."),
     epe_max: float | None = typer.Option(None, "--epe-max", help="Max EPE in nm."),
-    pvband: float | None = typer.Option(None, "--pvband", help="PV band width in nm."),
+    pvband_mean: float | None = typer.Option(
+        None, "--pvband-mean", help="Mean PV band width in nm."
+    ),
+    pvband_max: float | None = typer.Option(
+        None, "--pvband-max", help="Max PV band width in nm."
+    ),
     paper_url: str | None = typer.Option(None, "--paper-url", help="Paper URL."),
     code_url: str | None = typer.Option(None, "--code-url", help="Code/repo URL."),
     notes: str | None = typer.Option(None, "--notes", help="Additional notes."),
@@ -85,8 +91,10 @@ def submit(
             "epe_mean_nm": epe_mean,
             "epe_max_nm": epe_max,
         }
-        if pvband is not None:
-            data["pvband_nm"] = pvband
+        if pvband_mean is not None:
+            data["pvband_mean_nm"] = pvband_mean
+        if pvband_max is not None:
+            data["pvband_max_nm"] = pvband_max
         if paper_url:
             data["paper_url"] = paper_url
         if code_url:
@@ -102,8 +110,11 @@ def submit(
 
     try:
         result = BenchmarkResult.model_validate(data)
-    except Exception as e:
-        console.print(f"[red]Validation error:[/red] {e}")
+    except ValidationError as e:
+        console.print("[red]Validation error:[/red]")
+        for err in e.errors():
+            loc = ".".join(str(p) for p in err["loc"])
+            console.print(f"  [red]{loc}[/red]: {err['msg']}")
         raise typer.Exit(1) from None
 
     store = LeaderboardStore(store_path) if store_path else None
@@ -141,12 +152,13 @@ def export(
 def _print_table(console: Console, results: list[BenchmarkResult]) -> None:
     table = Table(title="OpenLithoHub Leaderboard", show_lines=True)
     table.add_column("#", style="dim", width=4)
-    table.add_column("Model", style="bold")
-    table.add_column("Dataset")
+    table.add_column("Model", style="bold", no_wrap=True, overflow="fold")
+    table.add_column("Dataset", no_wrap=True, overflow="fold")
     table.add_column("Node")
     table.add_column("EPE Mean (nm)", justify="right")
     table.add_column("EPE Max (nm)", justify="right")
-    table.add_column("PV Band (nm)", justify="right")
+    table.add_column("PV Band Mean (nm)", justify="right")
+    table.add_column("PV Band Max (nm)", justify="right")
     table.add_column("DRC", justify="center")
     table.add_column("Links")
 
@@ -164,7 +176,8 @@ def _print_table(console: Console, results: list[BenchmarkResult]) -> None:
             r.process_node.value,
             f"{r.epe_mean_nm:.2f}",
             f"{r.epe_max_nm:.2f}",
-            f"{r.pvband_nm:.2f}" if r.pvband_nm is not None else "-",
+            f"{r.pvband_mean_nm:.2f}" if r.pvband_mean_nm is not None else "-",
+            f"{r.pvband_max_nm:.2f}" if r.pvband_max_nm is not None else "-",
             "pass" if r.drc_pass else ("fail" if r.drc_pass is False else "-"),
             " | ".join(links) if links else "-",
         )
@@ -175,19 +188,21 @@ def _print_table(console: Console, results: list[BenchmarkResult]) -> None:
 def _format_markdown(results: list[BenchmarkResult]) -> str:
     header = (
         "| # | Model | Dataset | Node | EPE Mean (nm) | EPE Max (nm) "
-        "| PV Band (nm) | DRC | Paper | Code |"
+        "| PV Band Mean (nm) | PV Band Max (nm) | DRC | Paper | Code |"
     )
     lines = [
         header,
-        "|---|-------|---------|------|---------------|--------------|--------------|-----|-------|------|",
+        "|---|-------|---------|------|---------------|--------------|"
+        "-------------------|------------------|-----|-------|------|",
     ]
     for i, r in enumerate(results, 1):
-        pvband = f"{r.pvband_nm:.2f}" if r.pvband_nm is not None else "-"
+        pvm = f"{r.pvband_mean_nm:.2f}" if r.pvband_mean_nm is not None else "-"
+        pvx = f"{r.pvband_max_nm:.2f}" if r.pvband_max_nm is not None else "-"
         drc = "pass" if r.drc_pass else ("fail" if r.drc_pass is False else "-")
         paper = f"[link]({r.paper_url})" if r.paper_url else "-"
         code = f"[link]({r.code_url})" if r.code_url else "-"
         lines.append(
             f"| {i} | {r.model_name} | {r.dataset} | {r.process_node.value} | "
-            f"{r.epe_mean_nm:.2f} | {r.epe_max_nm:.2f} | {pvband} | {drc} | {paper} | {code} |"
+            f"{r.epe_mean_nm:.2f} | {r.epe_max_nm:.2f} | {pvm} | {pvx} | {drc} | {paper} | {code} |"
         )
     return "\n".join(lines)

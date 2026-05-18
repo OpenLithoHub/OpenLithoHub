@@ -2,52 +2,37 @@
 
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
+
 import gradio as gr
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
+from openlithohub.benchmark.compliance.mrc import check_mrc as _olh_check_mrc
+from openlithohub.benchmark.metrics.epe import _extract_edges as _olh_extract_edges
+from openlithohub.benchmark.metrics.epe import compute_epe as _olh_compute_epe
+
 # ---------------------------------------------------------------------------
-# Metric computation (inlined from openlithohub to keep Spaces self-contained)
+# Metric adapters — thin numpy → torch wrappers around the canonical
+# openlithohub implementations so the Space and the CLI/leaderboard always
+# report identical numbers.
 # ---------------------------------------------------------------------------
 
 
 def _extract_edges(binary: np.ndarray) -> np.ndarray:
-    """Extract edges via Sobel-like gradient magnitude."""
-    t = torch.from_numpy(binary.astype(np.float32)).unsqueeze(0).unsqueeze(0)
-    sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32).reshape(
-        1, 1, 3, 3
-    )
-    sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).reshape(
-        1, 1, 3, 3
-    )
-    gx = torch.nn.functional.conv2d(t, sobel_x, padding=1)
-    gy = torch.nn.functional.conv2d(t, sobel_y, padding=1)
-    mag = (gx**2 + gy**2).sqrt().squeeze().numpy()
-    return (mag > 0).astype(np.float32)
+    edges = _olh_extract_edges(torch.from_numpy(binary.astype(np.float32)))
+    return edges.numpy().astype(np.float32)
 
 
 def compute_epe(predicted: np.ndarray, target: np.ndarray, pixel_size_nm: float = 1.0) -> dict:
-    """Compute EPE between two binary masks."""
-    pred_edges = _extract_edges(predicted)
-    tgt_edges = _extract_edges(target)
-
-    pred_pts = np.argwhere(pred_edges > 0).astype(np.float32)
-    tgt_pts = np.argwhere(tgt_edges > 0).astype(np.float32)
-
-    if len(pred_pts) == 0 or len(tgt_pts) == 0:
-        return {"epe_mean_nm": 0.0, "epe_max_nm": 0.0, "epe_std_nm": 0.0}
-
-    pred_t = torch.from_numpy(pred_pts)
-    tgt_t = torch.from_numpy(tgt_pts)
-    dists = torch.cdist(pred_t, tgt_t)
-    min_dists = dists.min(dim=1).values * pixel_size_nm
-
-    return {
-        "epe_mean_nm": float(min_dists.mean().item()),
-        "epe_max_nm": float(min_dists.max().item()),
-        "epe_std_nm": float(min_dists.std().item()) if len(min_dists) > 1 else 0.0,
-    }
+    return _olh_compute_epe(
+        torch.from_numpy(predicted.astype(np.float32)),
+        torch.from_numpy(target.astype(np.float32)),
+        pixel_size_nm=pixel_size_nm,
+    )
 
 
 def check_mrc(
@@ -56,37 +41,18 @@ def check_mrc(
     min_spacing_nm: float = 40.0,
     pixel_size_nm: float = 1.0,
 ) -> dict:
-    """Simplified MRC check using morphological opening."""
-    import math
-
-    from scipy.ndimage import binary_dilation, binary_erosion
-
-    binary = mask > 0.5
-    h, w = binary.shape
-    total = h * w
-
-    radius_w = int(math.floor(min_width_nm / (2.0 * pixel_size_nm)))
-    radius_s = int(math.floor(min_spacing_nm / (2.0 * pixel_size_nm)))
-
-    width_violations = 0
-    spacing_violations = 0
-
-    if binary.any() and radius_w >= 1:
-        struct = np.ones((2 * radius_w + 1, 2 * radius_w + 1), dtype=bool)
-        opened = binary_dilation(binary_erosion(binary, structure=struct), structure=struct)
-        width_violations = int(np.sum(binary & ~opened))
-
-    if binary.any() and (~binary).any() and radius_s >= 1:
-        bg = ~binary
-        struct = np.ones((2 * radius_s + 1, 2 * radius_s + 1), dtype=bool)
-        opened_bg = binary_dilation(binary_erosion(bg, structure=struct), structure=struct)
-        spacing_violations = int(np.sum(bg & ~opened_bg))
-
-    total_violations = width_violations + spacing_violations
+    result = _olh_check_mrc(
+        torch.from_numpy(mask.astype(np.float32)),
+        min_width_nm=min_width_nm,
+        min_spacing_nm=min_spacing_nm,
+        pixel_size_nm=pixel_size_nm,
+    )
+    width_violations = sum(1 for v in result.violations if v.get("type_code") == 0.0)
+    spacing_violations = sum(1 for v in result.violations if v.get("type_code") == 1.0)
     return {
-        "passed": total_violations == 0,
-        "violation_count": total_violations,
-        "violation_rate": total_violations / total if total > 0 else 0.0,
+        "passed": result.passed,
+        "violation_count": result.violation_count,
+        "violation_rate": result.violation_rate,
         "width_violations": width_violations,
         "spacing_violations": spacing_violations,
     }
@@ -278,10 +244,6 @@ def evaluate_uploaded(
 # Leaderboard view
 # ---------------------------------------------------------------------------
 
-import json
-import os
-from pathlib import Path
-
 
 def _leaderboard_path() -> Path:
     env = os.environ.get("OPENLITHOHUB_LEADERBOARD_PATH")
@@ -323,7 +285,8 @@ def load_leaderboard():
                 e.get("mask_topology", ""),
                 e.get("epe_mean_nm"),
                 e.get("epe_max_nm"),
-                e.get("pvband_nm"),
+                e.get("pvband_mean_nm"),
+                e.get("pvband_max_nm"),
                 e.get("shot_count"),
                 e.get("paper_url") or e.get("code_url") or "",
             ]
@@ -423,11 +386,23 @@ with gr.Blocks(
                     "Topology",
                     "EPE mean (nm)",
                     "EPE max (nm)",
-                    "PV band (nm)",
+                    "PV band mean (nm)",
+                    "PV band max (nm)",
                     "Shot count",
                     "Reference",
                 ],
-                datatype=["str", "str", "str", "str", "number", "number", "number", "number", "str"],
+                datatype=[
+                    "str",
+                    "str",
+                    "str",
+                    "str",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "str",
+                ],
                 interactive=False,
                 wrap=True,
             )

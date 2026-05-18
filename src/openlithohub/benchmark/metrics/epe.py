@@ -60,13 +60,24 @@ def compute_epe(
     if pred_pts.numel() == 0 or tgt_pts.numel() == 0:
         return {"epe_mean_nm": 0.0, "epe_max_nm": 0.0, "epe_std_nm": 0.0}
 
-    # Compute pairwise distances in chunks to limit memory usage.
+    # Compute pairwise distances in chunks along BOTH axes to keep peak
+    # memory at chunk_size^2 floats regardless of edge count. With a single
+    # axis chunked, large target patterns still blow the memory budget.
     chunk_size = 4096
     min_dists = []
     for i in range(0, pred_pts.shape[0], chunk_size):
-        chunk = pred_pts[i : i + chunk_size]
-        dists = torch.cdist(chunk, tgt_pts)
-        min_dists.append(dists.min(dim=1).values)
+        pred_chunk = pred_pts[i : i + chunk_size]
+        running = torch.full(
+            (pred_chunk.shape[0],),
+            float("inf"),
+            device=pred_chunk.device,
+            dtype=pred_chunk.dtype,
+        )
+        for j in range(0, tgt_pts.shape[0], chunk_size):
+            tgt_chunk = tgt_pts[j : j + chunk_size]
+            dists = torch.cdist(pred_chunk, tgt_chunk)
+            running = torch.minimum(running, dists.min(dim=1).values)
+        min_dists.append(running)
 
     min_distances = torch.cat(min_dists) * pixel_size_nm
 

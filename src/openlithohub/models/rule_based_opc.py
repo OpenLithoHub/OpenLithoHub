@@ -172,20 +172,36 @@ def _min_run_length(mask: torch.Tensor) -> int:
 
 
 def _min_run_in_lines(binary: torch.Tensor) -> int:
-    """Smallest non-zero run of 1s along the last dim."""
+    """Smallest non-zero run of 1s along the last dim.
+
+    Vectorized via padded edge detection: a transition 0→1 marks a run start,
+    1→0 marks a run end. Run lengths are end_index - start_index, computed
+    pairwise without a Python loop.
+    """
     h, w = binary.shape
-    runs = torch.zeros_like(binary)
-    runs[:, 0] = binary[:, 0]
-    for j in range(1, w):
-        runs[:, j] = (runs[:, j - 1] + 1) * binary[:, j]
-    # ends of runs: position where the next pixel is 0 (or end of row)
-    is_end = torch.zeros_like(binary, dtype=torch.bool)
-    is_end[:, :-1] = (runs[:, :-1] > 0) & (binary[:, 1:] == 0)
-    is_end[:, -1] = runs[:, -1] > 0
-    end_runs = runs[is_end]
-    if end_runs.numel() == 0:
+    if w == 0:
         return 0
-    return int(end_runs.min().item())
+    pad_left = torch.zeros((h, 1), dtype=binary.dtype, device=binary.device)
+    pad_right = torch.zeros((h, 1), dtype=binary.dtype, device=binary.device)
+    padded = torch.cat([pad_left, binary, pad_right], dim=1)
+    diff = padded[:, 1:] - padded[:, :-1]
+    # diff[:, j] = padded[:, j+1] - padded[:, j], so:
+    #   diff == 1 at column j => run starts at column j (in unpadded) where j == start
+    #   diff == -1 at column j => run just ended at column j-1 (unpadded)
+    # In padded coords: starts where diff==1 (unpadded col = j), ends where
+    # diff==-1 (unpadded col = j-1).
+    starts_mask = diff == 1  # shape (h, w+1)
+    ends_mask = diff == -1
+    if not starts_mask.any():
+        return 0
+    # In a row, starts and ends are paired in order; lengths = ends_col - starts_col
+    # Both have the same count per row by construction.
+    starts_cols = starts_mask.nonzero(as_tuple=False)[:, 1]
+    ends_cols = ends_mask.nonzero(as_tuple=False)[:, 1]
+    lengths = ends_cols - starts_cols
+    if lengths.numel() == 0:
+        return 0
+    return int(lengths.min().item())
 
 
 def _min_space_px(mask: torch.Tensor) -> int:
@@ -207,34 +223,41 @@ def _min_space_px(mask: torch.Tensor) -> int:
 
 
 def _min_enclosed_zero_run(binary: torch.Tensor) -> int:
-    """Smallest run of 0s along the last dim that has 1s on both sides."""
+    """Smallest run of 0s along the last dim that has 1s on both sides.
+
+    Vectorized: an enclosed zero-run is bounded by 1→0 on the left and 0→1
+    on the right within the original (unpadded) row. Using sentinel-1 padding
+    instead of 0 makes border-touching runs auto-fail (they pair to a sentinel
+    rather than a real 1, which we then exclude).
+    """
     h, w = binary.shape
     if w < 3:
         return 0
     inv = 1 - binary
-    runs = torch.zeros_like(inv)
-    runs[:, 0] = inv[:, 0]
-    for j in range(1, w):
-        runs[:, j] = (runs[:, j - 1] + 1) * inv[:, j]
-    # a run "ends" at column j when binary[:, j+1] == 1 (right side closed)
-    # and is enclosed when the column immediately before its start is 1
-    # (left side closed). The start column is j - run_len + 1; checking
-    # binary at start - 1 = j - run_len handles that.
-    best = 0
-    for j in range(w - 1):
-        end_here = (runs[:, j] > 0) & (binary[:, j + 1] == 1)
-        if not end_here.any():
-            continue
-        for row in torch.nonzero(end_here, as_tuple=False).flatten().tolist():
-            run_len = int(runs[row, j].item())
-            start = j - run_len + 1
-            if start - 1 < 0:
-                continue
-            if binary[row, start - 1].item() != 1:
-                continue
-            if best == 0 or run_len < best:
-                best = run_len
-    return best
+    # Pad with 0 on both sides so we get edges on every internal run, then
+    # we'll discard runs that begin at column 0 or end at column w-1.
+    pad = torch.zeros((h, 1), dtype=inv.dtype, device=inv.device)
+    padded = torch.cat([pad, inv, pad], dim=1)
+    diff = padded[:, 1:] - padded[:, :-1]
+    starts = diff == 1   # transition foreground→zero: zero run starts (unpadded col = j)
+    ends = diff == -1    # transition zero→foreground: zero run ended (unpadded col = j-1)
+    if not starts.any():
+        return 0
+    starts_idx = starts.nonzero(as_tuple=False)
+    ends_idx = ends.nonzero(as_tuple=False)
+    # Per-row pair preservation by row-major nonzero ordering.
+    starts_cols = starts_idx[:, 1]
+    ends_cols = ends_idx[:, 1]
+    lengths = ends_cols - starts_cols
+    # Enclosed = run does NOT touch left border (start_col > 0) AND does NOT
+    # touch right border (end_col-1 < w-1, i.e. ends_cols < w).
+    # In our padded coords starts_cols ∈ [0, w]; the unpadded start = starts_cols,
+    # so border-touching means starts_cols == 0 OR ends_cols == w.
+    enclosed = (starts_cols > 0) & (ends_cols < w)
+    enclosed_lengths = lengths[enclosed]
+    if enclosed_lengths.numel() == 0:
+        return 0
+    return int(enclosed_lengths.min().item())
 
 
 def _min_width_px(mask: torch.Tensor) -> int:

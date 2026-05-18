@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import math
-from collections import deque
 from dataclasses import dataclass, field
 
 import numpy as np
 import torch
 
-from openlithohub._utils.morphology import binary_dilation, binary_erosion, distance_transform
+from openlithohub._utils.morphology import (
+    binary_dilation,
+    binary_erosion,
+    connected_components,
+    distance_transform,
+)
 from openlithohub._utils.tensor_ops import ensure_2d
 from openlithohub.workflow.contour.curvilinear import _trace_contour
 
@@ -181,34 +185,36 @@ def _smooth_loop(loop: np.ndarray, window: int) -> np.ndarray:
     return np.stack([sy[: len(loop)], sx[: len(loop)]], axis=1)
 
 
-def _connected_component_areas(binary: np.ndarray) -> list[tuple[int, float, float]]:
-    """4-connected components of a binary mask. Returns (area_px, cy, cx) per component."""
+def _connected_component_areas(binary: torch.Tensor) -> list[tuple[int, float, float]]:
+    """4-connected components of a binary mask. Returns (area_px, cy, cx) per component.
+
+    Uses GPU-vectorized labeling — orders of magnitude faster than per-pixel
+    BFS for large masks.
+    """
+    labels, num = connected_components(binary, connectivity=4)
+    if num == 0:
+        return []
+
+    fg = labels >= 0
+    flat_labels = labels[fg]
     h, w = binary.shape
-    visited = np.zeros_like(binary, dtype=bool)
-    components: list[tuple[int, float, float]] = []
+    ys, xs = torch.where(fg)
 
-    for y0 in range(h):
-        for x0 in range(w):
-            if binary[y0, x0] == 0 or visited[y0, x0]:
-                continue
-            queue: deque[tuple[int, int]] = deque([(y0, x0)])
-            visited[y0, x0] = True
-            count = 0
-            sum_y = 0
-            sum_x = 0
-            while queue:
-                y, x = queue.popleft()
-                count += 1
-                sum_y += y
-                sum_x += x
-                for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                    ny, nx = y + dy, x + dx
-                    if 0 <= ny < h and 0 <= nx < w and binary[ny, nx] and not visited[ny, nx]:
-                        visited[ny, nx] = True
-                        queue.append((ny, nx))
-            components.append((count, sum_y / count, sum_x / count))
+    unique_labels, inverse = torch.unique(flat_labels, return_inverse=True)
+    counts = torch.zeros(unique_labels.numel(), dtype=torch.float64, device=binary.device)
+    counts.scatter_add_(0, inverse, torch.ones_like(inverse, dtype=torch.float64))
+    sum_y = torch.zeros(unique_labels.numel(), dtype=torch.float64, device=binary.device)
+    sum_y.scatter_add_(0, inverse, ys.to(torch.float64))
+    sum_x = torch.zeros(unique_labels.numel(), dtype=torch.float64, device=binary.device)
+    sum_x.scatter_add_(0, inverse, xs.to(torch.float64))
 
-    return components
+    counts_cpu = counts.tolist()
+    cy_cpu = (sum_y / counts).tolist()
+    cx_cpu = (sum_x / counts).tolist()
+    return [
+        (int(counts_cpu[i]), float(cy_cpu[i]), float(cx_cpu[i]))
+        for i in range(unique_labels.numel())
+    ]
 
 
 def check_curvilinear_mrc(
@@ -247,7 +253,8 @@ def check_curvilinear_mrc(
         CurvilinearMRCResult with pass/fail status and violation details.
     """
     m = ensure_2d(mask)
-    binary_np = (m > 0.5).detach().cpu().numpy().astype(np.int8)
+    binary_torch = (m > 0.5).float()
+    binary_np = binary_torch.detach().cpu().numpy().astype(np.int8)
 
     curvature_violations: list[dict[str, float]] = []
     area_violations: list[dict[str, float]] = []
@@ -255,7 +262,7 @@ def check_curvilinear_mrc(
     min_area_observed: float | None = None
 
     pixel_area_nm2 = pixel_size_nm * pixel_size_nm
-    components = _connected_component_areas(binary_np)
+    components = _connected_component_areas(binary_torch)
     for area_px, cy, cx in components:
         area_nm2 = area_px * pixel_area_nm2
         if min_area_observed is None or area_nm2 < min_area_observed:

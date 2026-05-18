@@ -86,3 +86,90 @@ def distance_transform(mask: torch.Tensor) -> torch.Tensor:
         current = 1.0 - dilated_inv
 
     return dist
+
+
+def connected_components(
+    mask: torch.Tensor, connectivity: int = 8
+) -> tuple[torch.Tensor, int]:
+    """Label connected components of a binary mask via iterative neighborhood min.
+
+    Each foreground pixel is initially assigned a unique label (its flat index).
+    The labels are then iteratively replaced by the minimum label in the
+    pixel's neighborhood (intersected with foreground). Convergence happens in
+    O(component-diameter) iterations and runs entirely on GPU via min-pool
+    primitives — orders of magnitude faster than per-pixel BFS for large
+    masks.
+
+    Args:
+        mask: Binary tensor (H, W) with values in {0, 1}.
+        connectivity: 4 (von Neumann) or 8 (Moore). Default 8 matches the
+            erosion-based components in `mrc._connected_component_areas` and
+            in `stochastic._count_connected_components`. The 4-connectivity
+            kernel rules out diagonal merges, which matches `drc._check_min_area`'s
+            historical behaviour.
+
+    Returns:
+        labels: int64 tensor (H, W). Background pixels are -1; foreground pixels
+            share an integer label per component (labels are not necessarily
+            contiguous — caller may remap with ``unique`` if dense IDs are needed).
+        num_components: number of distinct connected components.
+    """
+    fg = (mask > 0.5)
+    h, w = fg.shape
+    if not fg.any():
+        return torch.full((h, w), -1, dtype=torch.int64, device=fg.device), 0
+
+    flat_idx = (
+        torch.arange(h * w, device=fg.device, dtype=torch.int64).reshape(h, w)
+    )
+    sentinel = h * w + 1
+    labels = torch.where(fg, flat_idx, torch.full_like(flat_idx, sentinel))
+
+    if connectivity == 4:
+        # 4-connectivity via two cross-shaped passes equivalent to a + kernel
+        labels_f = labels.to(torch.float32)
+        prev_sum = labels_f.sum().item() + 1.0
+        while True:
+            l4d = labels_f.unsqueeze(0).unsqueeze(0)
+            shifted = torch.cat(
+                [
+                    l4d,
+                    functional.pad(l4d[:, :, 1:, :], (0, 0, 0, 1), value=sentinel),
+                    functional.pad(l4d[:, :, :-1, :], (0, 0, 1, 0), value=sentinel),
+                    functional.pad(l4d[:, :, :, 1:], (0, 1, 0, 0), value=sentinel),
+                    functional.pad(l4d[:, :, :, :-1], (1, 0, 0, 0), value=sentinel),
+                ],
+                dim=1,
+            )
+            new_labels_f = shifted.amin(dim=1).squeeze(0)
+            new_labels_f = torch.where(fg, new_labels_f, torch.full_like(new_labels_f, sentinel))
+            curr_sum = new_labels_f.sum().item()
+            labels_f = new_labels_f
+            if curr_sum == prev_sum:
+                break
+            prev_sum = curr_sum
+        labels = labels_f.to(torch.int64)
+    elif connectivity == 8:
+        # 8-connectivity = 3x3 min-pool, masked to foreground each step
+        prev_sum = labels.sum().item() + 1
+        while True:
+            pooled = -functional.max_pool2d(
+                -labels.to(torch.float32).unsqueeze(0).unsqueeze(0),
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            )
+            new_labels = pooled.squeeze(0).squeeze(0).to(torch.int64)
+            new_labels = torch.where(fg, new_labels, torch.full_like(new_labels, sentinel))
+            curr_sum = int(new_labels.sum().item())
+            labels = new_labels
+            if curr_sum == prev_sum:
+                break
+            prev_sum = curr_sum
+    else:
+        raise ValueError(f"connectivity must be 4 or 8, got {connectivity}")
+
+    labels = torch.where(fg, labels, torch.full_like(labels, -1))
+    fg_labels = labels[fg]
+    num_components = int(torch.unique(fg_labels).numel())
+    return labels, num_components

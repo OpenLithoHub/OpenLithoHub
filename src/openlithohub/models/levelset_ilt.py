@@ -61,6 +61,7 @@ class LevelSetILTModel(LithographyModel):
         self._cached_kernels: torch.Tensor | None = None
         self._cached_weights: torch.Tensor | None = None
         self._cached_grid: int | None = None
+        self._compiled_hopkins_cache: dict[tuple[Any, ...], Any] = {}
 
     @property
     def name(self) -> str:
@@ -115,7 +116,19 @@ class LevelSetILTModel(LithographyModel):
             kernels, weights = self._ensure_hopkins_kernels(target.shape[0], target.device)
             hopkins_fn = simulate_aerial_image_hopkins
             if compile_forward:
-                hopkins_fn = torch.compile(hopkins_fn, mode="reduce-overhead", dynamic=False)
+                cache_key = (
+                    target.shape[0],
+                    str(target.device),
+                    str(dtype),
+                    forward_model,
+                )
+                compiled = self._compiled_hopkins_cache.get(cache_key)
+                if compiled is None:
+                    compiled = torch.compile(
+                        hopkins_fn, mode="reduce-overhead", dynamic=False
+                    )
+                    self._compiled_hopkins_cache[cache_key] = compiled
+                hopkins_fn = compiled
         else:
             kernels = None
             weights = None

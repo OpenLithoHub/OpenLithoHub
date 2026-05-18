@@ -32,6 +32,9 @@ def run(
         None, "--limit", "-l", help="Max samples to evaluate (default: all)."
     ),
     mrc_check: bool = typer.Option(True, "--mrc/--no-mrc", help="Run MRC compliance check."),
+    pvband_check: bool = typer.Option(
+        True, "--pvband/--no-pvband", help="Compute Process Variation Band metrics."
+    ),
     min_width_nm: float = typer.Option(
         40.0, "--min-width-nm", help="Minimum feature width for MRC (nm)."
     ),
@@ -63,6 +66,7 @@ def run(
     import openlithohub.models.levelset_ilt  # noqa: F401
     import openlithohub.models.neural_ilt  # noqa: F401
     from openlithohub.benchmark.metrics.epe import compute_epe
+    from openlithohub.benchmark.metrics.pvband import compute_pvband
     from openlithohub.benchmark.report import generate_report
     from openlithohub.models.registry import registry
     from openlithohub.workflow.process_node import PROCESS_NODES
@@ -124,6 +128,10 @@ def run(
             sample_metrics["mrc_violation_rate"] = mrc_result.violation_rate
             sample_metrics["mrc_passed"] = 1.0 if mrc_result.passed else 0.0
 
+        if pvband_check:
+            pv = compute_pvband(result.mask, pixel_size_nm=pixel_nm)
+            sample_metrics.update(pv)
+
         if sample_metrics:
             all_metrics.append(sample_metrics)
 
@@ -158,7 +166,8 @@ def run(
                 mask_topology=MaskTopology(topology),
                 epe_mean_nm=aggregated.get("epe_mean_nm", 0.0),
                 epe_max_nm=aggregated.get("epe_max_nm", 0.0),
-                pvband_nm=aggregated.get("pvband_nm"),
+                pvband_mean_nm=aggregated.get("pvband_mean_nm"),
+                pvband_max_nm=aggregated.get("pvband_max_nm"),
                 mrc_violation_rate=aggregated.get("mrc_violation_rate"),
                 drc_pass=(
                     aggregated.get("mrc_passed", 0.0) == 1.0 if "mrc_passed" in aggregated else None

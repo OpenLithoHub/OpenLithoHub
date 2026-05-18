@@ -1,4 +1,10 @@
-"""Model hub for downloading and caching pretrained weights."""
+"""Model hub for downloading and caching pretrained weights.
+
+Remote downloads (direct HTTPS URLs) require a known SHA256 — `torch.load`
+on attacker-controlled bytes is a known RCE vector even with
+``weights_only=True``. The HuggingFace path relies on the Hub's own
+content-addressed verification.
+"""
 
 from __future__ import annotations
 
@@ -9,10 +15,15 @@ from pathlib import Path
 _DEFAULT_CACHE_DIR = Path.home() / ".openlithohub" / "models"
 
 
+class ChecksumMismatchError(RuntimeError):
+    """Raised when a downloaded file's SHA256 does not match the expected value."""
+
+
 class ModelHub:
     """Manages download and caching of pretrained model weights.
 
     Supports HuggingFace Hub (if installed) and direct URL downloads.
+    Direct URL downloads MUST come with a SHA256 checksum.
     """
 
     def __init__(self, cache_dir: Path | None = None) -> None:
@@ -24,17 +35,33 @@ class ModelHub:
         model_id: str,
         filename: str = "model.pt",
         revision: str = "main",
+        sha256: str | None = None,
     ) -> Path:
         """Download model weights, returning the cached file path.
 
-        Tries HuggingFace Hub first; falls back to direct URL if model_id is a URL.
+        Args:
+            model_id: A HuggingFace repo ID (``owner/repo``) or an HTTPS URL.
+            filename: File name within the repo (HF Hub only).
+            revision: Git revision (HF Hub only).
+            sha256: Required for direct HTTPS downloads. Hex digest of the
+                expected file contents. The Hub path uses HuggingFace's own
+                hash verification and ignores this argument.
         """
         cached_path = self.cache_dir / model_id.replace("/", "--") / filename
         if cached_path.exists():
+            if sha256 is not None and self.get_checksum(cached_path) != sha256.lower():
+                raise ChecksumMismatchError(
+                    f"Cached file {cached_path} does not match expected SHA256."
+                )
             return cached_path
 
         if model_id.startswith("http://") or model_id.startswith("https://"):
-            return self._download_url(model_id, cached_path)
+            if sha256 is None:
+                raise ValueError(
+                    "Direct URL downloads require a sha256= argument. "
+                    "Pass the expected hex digest of the weights file."
+                )
+            return self._download_url(model_id, cached_path, sha256)
 
         try:
             return self._download_hf_hub(model_id, filename, revision)
@@ -56,13 +83,14 @@ class ModelHub:
         )
         return Path(path)
 
-    def _download_url(self, url: str, target: Path) -> Path:
-        """Download from a direct URL with timeout and size limit."""
+    def _download_url(self, url: str, target: Path, sha256: str) -> Path:
+        """Download from a direct URL with timeout, size limit, and SHA256 verification."""
         if not url.startswith("https://"):
             raise ValueError("Only HTTPS URLs are supported for model downloads")
         target.parent.mkdir(parents=True, exist_ok=True)
         max_size = 2 * 1024 * 1024 * 1024  # 2 GB
         req = urllib.request.Request(url)
+        sha = hashlib.sha256()
         with urllib.request.urlopen(req, timeout=300) as response:  # noqa: S310
             content_length = response.headers.get("Content-Length")
             if content_length and int(content_length) > max_size:
@@ -76,7 +104,14 @@ class ModelHub:
                     if downloaded > max_size:
                         target.unlink(missing_ok=True)
                         raise ValueError(f"Download exceeded size limit of {max_size} bytes")
+                    sha.update(chunk)
                     f.write(chunk)
+        actual = sha.hexdigest()
+        if actual != sha256.lower():
+            target.unlink(missing_ok=True)
+            raise ChecksumMismatchError(
+                f"SHA256 mismatch for {url}: expected {sha256.lower()}, got {actual}"
+            )
         return target
 
     def list_cached(self) -> list[str]:

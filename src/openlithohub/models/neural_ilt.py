@@ -25,10 +25,16 @@ class NeuralILTModel(LithographyModel):
         weights: str | Path | None = None,
         pretrained: bool = False,
         device: str = "cpu",
+        repo_id: str = "openlithohub/neural-ilt-v1",
+        repo_filename: str = "model.pt",
+        url_sha256: str | None = None,
     ) -> None:
         self._weights_path = weights
         self._pretrained = pretrained
         self._device = device
+        self._repo_id = repo_id
+        self._repo_filename = repo_filename
+        self._url_sha256 = url_sha256
         self._net: torch.nn.Module | None = None
 
     @property
@@ -55,7 +61,9 @@ class NeuralILTModel(LithographyModel):
             from openlithohub.models.hub import ModelHub
 
             hub = ModelHub()
-            path = hub.download_weights("openlithohub/neural-ilt-v1")
+            path = hub.download_weights(
+                self._repo_id, filename=self._repo_filename, sha256=self._url_sha256
+            )
             state_dict = torch.load(str(path), map_location=self._device, weights_only=True)
             self._net.load_state_dict(state_dict)
 
@@ -85,5 +93,5 @@ class NeuralILTModel(LithographyModel):
         return PredictionResult(
             mask=mask_binary,
             contour=None,
-            metadata={"logits_range": (float(logits.min()), float(logits.max()))},
+            metadata={"logits_range": (logits.min().item(), logits.max().item())},
         )

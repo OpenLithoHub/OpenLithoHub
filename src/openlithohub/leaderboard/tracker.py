@@ -1,10 +1,24 @@
-"""SOTA tracking and leaderboard management."""
+"""SOTA tracking and leaderboard management.
+
+The store is a single JSON file shared across CLI invocations and the Spaces
+app. Read-modify-write therefore needs:
+- A POSIX advisory lock (`fcntl.flock`) on a sidecar `.lock` file so two
+  concurrent submitters serialize.
+- An atomic rename (`tempfile` + `os.replace`) so the file is never
+  partially written.
+
+Submission IDs are stored under the public ``submission_id`` field of
+``BenchmarkResult`` so they round-trip through `model_validate`.
+"""
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import tempfile
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +26,25 @@ from openlithohub.leaderboard.schema import BenchmarkResult
 
 _DEFAULT_LEADERBOARD_DIR = Path.home() / ".openlithohub"
 _LEADERBOARD_FILENAME = "leaderboard.json"
+
+
+@contextlib.contextmanager
+def _file_lock(lock_path: Path) -> Iterator[None]:
+    """Cross-platform best-effort exclusive lock. Falls back to a no-op on Windows."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        import fcntl
+    except ImportError:
+        # Windows: no fcntl. The atomic rename below still gives single-writer
+        # safety per write; concurrent reads of stale data are tolerated.
+        yield
+        return
+    with open(lock_path, "w") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 class LeaderboardStore:
@@ -31,6 +64,10 @@ class LeaderboardStore:
     def path(self) -> Path:
         return self._path
 
+    @property
+    def _lock_path(self) -> Path:
+        return self._path.with_suffix(self._path.suffix + ".lock")
+
     def _read_entries(self) -> list[dict[str, Any]]:
         if not self._path.exists():
             return []
@@ -40,18 +77,29 @@ class LeaderboardStore:
 
     def _write_entries(self, entries: list[dict[str, Any]]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self._path.with_suffix(".tmp")
         payload = json.dumps({"entries": entries}, indent=2, default=str)
-        tmp_path.write_text(payload, encoding="utf-8")
-        tmp_path.replace(self._path)
+        # tempfile in the same directory so os.replace is atomic across the
+        # whole sequence (cross-device rename would otherwise be a copy).
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=self._path.name + ".", suffix=".tmp", dir=str(self._path.parent)
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(payload)
+            os.replace(tmp_name, self._path)
+        except Exception:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(tmp_name)
+            raise
 
     def submit(self, result: BenchmarkResult) -> str:
-        entries = self._read_entries()
-        submission_id = _generate_id(result.model_name)
-        entry = result.model_dump(mode="json")
-        entry["_submission_id"] = submission_id
-        entries.append(entry)
-        self._write_entries(entries)
+        with _file_lock(self._lock_path):
+            entries = self._read_entries()
+            submission_id = _generate_id(result.model_name)
+            entry = result.model_dump(mode="json")
+            entry["submission_id"] = submission_id
+            entries.append(entry)
+            self._write_entries(entries)
         return submission_id
 
     def query(
@@ -62,8 +110,7 @@ class LeaderboardStore:
         entries = self._read_entries()
         results: list[BenchmarkResult] = []
         for entry in entries:
-            entry_copy = {k: v for k, v in entry.items() if not k.startswith("_")}
-            r = BenchmarkResult.model_validate(entry_copy)
+            r = BenchmarkResult.model_validate(entry)
             if dataset and r.dataset != dataset:
                 continue
             if process_node and r.process_node.value != process_node:

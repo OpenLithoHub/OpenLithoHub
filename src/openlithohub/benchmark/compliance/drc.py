@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 import torch
 
-from openlithohub._utils.morphology import binary_dilation, binary_erosion
+from openlithohub._utils.morphology import binary_dilation, binary_erosion, connected_components
 from openlithohub._utils.tensor_ops import ensure_2d
 
 
@@ -114,47 +114,44 @@ def _check_min_area(
     pixel_area_nm2 = pixel_size_nm * pixel_size_nm
     min_area_px = min_area_nm2 / pixel_area_nm2
 
-    remaining = binary.clone()
+    labels, num = connected_components(binary, connectivity=4)
+    if num == 0:
+        return []
+
+    fg = labels >= 0
+    flat_labels = labels[fg]
+    ys, xs = torch.where(fg)
+    unique_labels, inverse = torch.unique(flat_labels, return_inverse=True)
+    n_comp = unique_labels.numel()
+
+    counts = torch.zeros(n_comp, dtype=torch.float64, device=binary.device)
+    counts.scatter_add_(0, inverse, torch.ones_like(inverse, dtype=torch.float64))
+    sum_y = torch.zeros(n_comp, dtype=torch.float64, device=binary.device)
+    sum_y.scatter_add_(0, inverse, ys.to(torch.float64))
+    sum_x = torch.zeros(n_comp, dtype=torch.float64, device=binary.device)
+    sum_x.scatter_add_(0, inverse, xs.to(torch.float64))
+
+    counts_cpu = counts.tolist()
+    cy_cpu = (sum_y / counts).tolist()
+    cx_cpu = (sum_x / counts).tolist()
+
     violations: list[dict[str, float]] = []
-
-    while remaining.sum() > 0 and len(violations) < 50:
-        seed_idx = remaining.nonzero(as_tuple=False)[0]
-        region = torch.zeros_like(remaining)
-        region[seed_idx[0], seed_idx[1]] = 1.0
-
-        prev_sum = 0.0
-        while True:
-            dilated = (
-                torch.nn.functional.max_pool2d(
-                    region.unsqueeze(0).unsqueeze(0), 3, stride=1, padding=1
-                )
-                .squeeze(0)
-                .squeeze(0)
-            )
-            region = dilated * remaining
-            curr_sum = region.sum().item()
-            if curr_sum == prev_sum:
-                break
-            prev_sum = curr_sum
-
-        area_px = region.sum().item()
-        remaining = (remaining - region).clamp(min=0.0)
-
-        if area_px < min_area_px:
-            ys, xs = torch.where(region > 0.5)
-            cy = float(ys.float().mean().item()) * pixel_size_nm
-            cx = float(xs.float().mean().item()) * pixel_size_nm
-            violations.append(
-                {
-                    "rule": 2.0,
-                    "type": 2.0,
-                    "x_nm": cx,
-                    "y_nm": cy,
-                    "actual_nm2": area_px * pixel_area_nm2,
-                    "required_nm2": min_area_nm2,
-                }
-            )
-
+    for i in range(n_comp):
+        if len(violations) >= 50:
+            break
+        area_px = counts_cpu[i]
+        if area_px >= min_area_px:
+            continue
+        violations.append(
+            {
+                "rule": 2.0,
+                "type": 2.0,
+                "x_nm": cx_cpu[i] * pixel_size_nm,
+                "y_nm": cy_cpu[i] * pixel_size_nm,
+                "actual_nm2": area_px * pixel_area_nm2,
+                "required_nm2": min_area_nm2,
+            }
+        )
     return violations
 
 

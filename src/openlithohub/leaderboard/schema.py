@@ -36,7 +36,8 @@ class BenchmarkResult(BaseModel):
 
     epe_mean_nm: float = Field(..., ge=0, description="Mean EPE in nanometers")
     epe_max_nm: float = Field(..., ge=0)
-    pvband_nm: float | None = Field(None, ge=0)
+    pvband_mean_nm: float | None = Field(None, ge=0, description="Mean PV band width (nm)")
+    pvband_max_nm: float | None = Field(None, ge=0, description="Max PV band width (nm)")
     mrc_violation_rate: float | None = Field(None, ge=0, le=1)
     drc_pass: bool | None = None
     shot_count: int | None = Field(None, ge=0)

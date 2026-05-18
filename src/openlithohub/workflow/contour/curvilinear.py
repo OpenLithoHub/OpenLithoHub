@@ -1,8 +1,14 @@
-"""Curvilinear contour extraction and B-spline fitting for OASIS.MBW export."""
+"""Curvilinear contour extraction and B-spline fitting for OASIS export.
+
+Curvilinear masks (post-ILT, EUV, MBMW writers) are emitted as high-resolution
+sampled polygons on a designated layer of a real OASIS file. Native SEMI P44
+curve primitives are not yet emitted — `klayout.db` does not surface them in
+its public Python API at the time of writing — but the file produced here is
+a valid OASIS file that any vendor tool can read.
+"""
 
 from __future__ import annotations
 
-import struct
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -138,59 +144,62 @@ def export_oasis_mbw(
     curves: list[BSplineCurve],
     output_path: str,
     *,
-    format_version: str = "2.1",
     samples_per_curve: int = 64,
+    pixel_size_nm: float = 1.0,
+    layer: int = 1,
+    datatype: int = 0,
+    cell_name: str = "TOP",
 ) -> None:
-    """Serialize B-spline curves to OASIS.MBW format for multi-beam writers.
+    """Serialize B-spline curves to an OASIS file via klayout.db.
 
-    MVP implementation: samples curves to high-resolution polygons and writes
-    a simplified OASIS-compatible binary file with polygon records.
-    Native curve primitives per SEMI P44 are planned for a future release.
+    Curves are sampled to high-resolution polygons (``samples_per_curve``
+    vertices per loop) and inserted into a single top cell on the requested
+    ``(layer, datatype)``. The output is a real SEMI P39 OASIS file readable
+    by KLayout, Calibre, and other industry tools — not a custom binary
+    blob.
+
+    Native SEMI P44 multi-beam curve primitives are not yet emitted; the
+    polygon approximation is the standard interim representation that all
+    multi-beam writer flows accept.
     """
+    if not curves:
+        raise ValueError("Cannot export an empty curve list to OASIS.")
+
     try:
         from scipy.interpolate import splev
     except ImportError:
         raise ImportError(
-            "scipy is required for OASIS.MBW export. "
+            "scipy is required for OASIS export. "
+            "Install with: pip install openlithohub[workflow]"
+        ) from None
+
+    try:
+        import klayout.db as db
+    except ImportError:
+        raise ImportError(
+            "klayout is required for OASIS export. "
             "Install with: pip install openlithohub[workflow]"
         ) from None
 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    sampled_polygons: list[list[tuple[float, float]]] = []
+    layout = db.Layout()
+    layout.dbu = pixel_size_nm / 1000.0
+    top = layout.create_cell(cell_name)
+    layer_idx = layout.layer(layer, datatype)
+
     for curve in curves:
         ctrl = curve.control_points.numpy()
         knot = curve.knots.numpy()
         tck = (knot, [ctrl[:, 0], ctrl[:, 1]], curve.degree)
         u_eval = np.linspace(0.0, 1.0, samples_per_curve, endpoint=False)
         xs, ys = splev(u_eval, tck)
-        polygon = [(float(x), float(y)) for x, y in zip(xs, ys, strict=False)]
-        sampled_polygons.append(polygon)
+        points = [
+            db.Point(int(round(float(x) / layout.dbu)), int(round(float(y) / layout.dbu)))
+            for x, y in zip(xs, ys, strict=False)
+        ]
+        if len(points) >= 3:
+            top.shapes(layer_idx).insert(db.Polygon(points))
 
-    _write_oasis_binary(sampled_polygons, output, format_version)
-
-
-def _write_oasis_binary(
-    polygons: list[list[tuple[float, float]]],
-    output_path: Path,
-    version: str,
-) -> None:
-    """Write a simplified OASIS binary file with polygon records."""
-    with open(output_path, "wb") as f:
-        f.write(b"%SEMI-OASIS\r\n")
-        f.write(struct.pack("<B", 1))
-        f.write(f"MBW {version}\0".encode("ascii"))
-
-        f.write(struct.pack("<B", 14))
-        f.write(b"TOP\0")
-        f.write(struct.pack("<I", 0))
-        f.write(struct.pack("<I", 0))
-
-        for polygon in polygons:
-            f.write(struct.pack("<B", 21))
-            f.write(struct.pack("<H", len(polygon)))
-            for x, y in polygon:
-                f.write(struct.pack("<ii", int(x * 1000), int(y * 1000)))
-
-        f.write(struct.pack("<B", 2))
+    layout.write(str(output))

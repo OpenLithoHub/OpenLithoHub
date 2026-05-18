@@ -66,6 +66,9 @@ def _export_curvilinear(mask: torch.Tensor, output_path: Path, pixel_size_nm: fl
 
     curves = fit_bspline(mask, tolerance_nm=pixel_size_nm * 0.5, pixel_size_nm=pixel_size_nm)
     if not curves:
-        output_path.write_bytes(b"")
-        return
-    export_oasis_mbw(curves, str(output_path))
+        raise ValueError(
+            "No curvilinear contours could be extracted from the mask — refusing "
+            "to write an empty OASIS file. Check that the mask contains foreground "
+            "pixels and that the tolerance is appropriate for the pixel pitch."
+        )
+    export_oasis_mbw(curves, str(output_path), pixel_size_nm=pixel_size_nm)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import torch
 import typer
@@ -154,7 +155,7 @@ def run(
     console.print("[bold green]Optimization complete.[/bold green]")
 
 
-def _build_perf_kwargs(device: str, dtype: str, compile_forward: bool) -> dict:
+def _build_perf_kwargs(device: str, dtype: str, compile_forward: bool) -> dict[str, Any]:
     """Translate CLI perf flags into predict() kwargs."""
     dtype_map = {"fp32": torch.float32, "bf16": torch.bfloat16}
     if dtype not in dtype_map:
@@ -207,7 +208,8 @@ def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:
     import numpy as np
     from PIL import Image, ImageDraw
 
-    raster = np.zeros((h_px, w_px), dtype=np.float32)
+    canvas = Image.new("L", (w_px, h_px), 0)
+    drawer = ImageDraw.Draw(canvas)
 
     for layer_idx in layout.layer_indices():
         shapes = top_cell.shapes(layer_idx)
@@ -222,8 +224,7 @@ def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:
                     py = max(0, min(py, h_px - 1))
                     points.append((px, py))
                 if len(points) >= 3:
-                    img = Image.new("L", (w_px, h_px), 0)
-                    ImageDraw.Draw(img).polygon(points, fill=255)
-                    raster = np.maximum(raster, np.array(img, dtype=np.float32) / 255.0)
+                    drawer.polygon(points, fill=255)
 
+    raster = np.array(canvas, dtype=np.float32) / 255.0
     return torch.from_numpy(raster)

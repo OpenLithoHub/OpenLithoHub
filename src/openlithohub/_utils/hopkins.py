@@ -26,6 +26,7 @@ auto-differentiable (the mask is the optimization variable in ILT).
 from __future__ import annotations
 
 import math
+from collections import OrderedDict
 from collections.abc import Hashable
 from dataclasses import dataclass
 from typing import Literal
@@ -48,8 +49,10 @@ class HopkinsParams:
         pixel_size_nm: Physical size of one mask pixel.
         num_kernels: SOCS truncation order. 24 is a common production default.
         illumination: Source shape — circular, annular, dipole (X-direction
-            poles), or quasar (4-pole).
+            poles), or quasar (4-pole, CQuad).
         dipole_angle_deg: Pole-pair orientation for dipole/quasar (degrees).
+        pole_opening_deg: Half-angle of each pole wedge for dipole/quasar
+            (degrees). 30° is a common production CQuad value.
         defocus_nm: Defocus offset; affects the pupil phase only.
     """
 
@@ -61,6 +64,7 @@ class HopkinsParams:
     num_kernels: int = 24
     illumination: IlluminationKind = "circular"
     dipole_angle_deg: float = 0.0
+    pole_opening_deg: float = 30.0
     defocus_nm: float = 0.0
 
     def cache_key(self, grid_size: int, device: str, kernel_dtype: str) -> Hashable:
@@ -73,6 +77,7 @@ class HopkinsParams:
             self.num_kernels,
             self.illumination,
             self.dipole_angle_deg,
+            self.pole_opening_deg,
             self.defocus_nm,
             grid_size,
             device,
@@ -80,7 +85,13 @@ class HopkinsParams:
         )
 
 
-_KERNEL_CACHE: dict[Hashable, tuple[torch.Tensor, torch.Tensor]] = {}
+_KERNEL_CACHE: OrderedDict[Hashable, tuple[torch.Tensor, torch.Tensor]] = OrderedDict()
+_KERNEL_CACHE_MAXSIZE = 8
+
+
+def _wrap_to_pi(theta: torch.Tensor) -> torch.Tensor:
+    """Wrap an angle tensor to the interval (-pi, pi]."""
+    return (theta + math.pi) % (2.0 * math.pi) - math.pi
 
 
 def _frequency_grid(grid_size: int, pixel_size_nm: float, device: torch.device) -> torch.Tensor:
@@ -138,18 +149,26 @@ def _illumination_samples(
         in_src = (rr <= sigma_outer) & (rr >= sigma_inner)
     elif params.illumination in ("dipole", "quasar"):
         angle_rad = math.radians(params.dipole_angle_deg)
-        u = rr * torch.cos(aa - angle_rad)
-        v = rr * torch.sin(aa - angle_rad)
+        opening_rad = math.radians(max(1.0, params.pole_opening_deg))
         in_ring = rr <= sigma_outer
         if sigma_inner > 0:
             in_ring = in_ring & (rr >= sigma_inner)
         if params.illumination == "dipole":
-            in_src = in_ring & (u.abs() >= v.abs())
-        else:  # quasar: 4 poles separated by 90°
-            in_src = in_ring & (
-                (u.abs() >= v.abs()) | (v.abs() > u.abs())
-            )  # all four quadrants of the annulus — placeholder; real quasar
-            # would mask narrower wedges, refine when the use case lands.
+            # Two poles on the dipole axis; angular distance to ±x-axis
+            # (after rotation by dipole_angle) must be within opening_rad.
+            theta = aa - angle_rad
+            d_axis = torch.minimum(
+                torch.abs(_wrap_to_pi(theta)),
+                torch.abs(_wrap_to_pi(theta - math.pi)),
+            )
+            in_src = in_ring & (d_axis <= opening_rad)
+        else:
+            # Quasar / CQuad: 4 poles at ±dipole_angle and ±dipole_angle + 90°.
+            theta = aa - angle_rad
+            d_pole = torch.full_like(theta, math.pi)
+            for offset in (0.0, math.pi / 2.0, math.pi, 3.0 * math.pi / 2.0):
+                d_pole = torch.minimum(d_pole, torch.abs(_wrap_to_pi(theta - offset)))
+            in_src = in_ring & (d_pole <= opening_rad)
     else:
         raise ValueError(f"Unknown illumination kind: {params.illumination!r}")
 
@@ -233,6 +252,7 @@ def compute_socs_kernels(
     cache_key = params.cache_key(grid_size, str(dev), str(dtype))
     cached = _KERNEL_CACHE.get(cache_key)
     if cached is not None:
+        _KERNEL_CACHE.move_to_end(cache_key)
         return cached
 
     f = _frequency_grid(grid_size, params.pixel_size_nm, dev)
@@ -282,6 +302,8 @@ def compute_socs_kernels(
 
     kernels_spatial = kernels_spatial.to(dtype)
     _KERNEL_CACHE[cache_key] = (kernels_spatial.detach(), weights.detach())
+    while len(_KERNEL_CACHE) > _KERNEL_CACHE_MAXSIZE:
+        _KERNEL_CACHE.popitem(last=False)
     return _KERNEL_CACHE[cache_key]
 
 
@@ -340,37 +362,41 @@ def simulate_aerial_image_hopkins(
     """
     squeezed = False
     if mask.ndim == 2:
-        mask2d = mask
+        mask4d = mask.unsqueeze(0).unsqueeze(0)
         squeezed = True
     elif mask.ndim == 4 and mask.shape[1] == 1:
-        mask2d = mask.squeeze(0).squeeze(0)
+        mask4d = mask
     else:
         raise ValueError(f"Expected mask shape (H,W) or (B,1,H,W); got {tuple(mask.shape)}")
 
-    H, W = mask2d.shape  # noqa: N806
+    B, _, H, W = mask4d.shape  # noqa: N806
     if H != W:
         raise ValueError(f"Hopkins forward model expects a square grid; got {H}x{W}")
 
     if kernels is None or weights is None:
         if params is None:
             raise ValueError("Provide either (params) or (kernels and weights).")
-        kernels, weights = compute_socs_kernels(params, H, mask2d.device)
+        kernels, weights = compute_socs_kernels(params, H, mask4d.device)
 
-    image = mask2d.to(torch.float32)
+    image = mask4d.to(torch.float32).squeeze(1)  # (B, H, W)
     K = kernels.shape[0]  # noqa: N806
     aerial = torch.zeros_like(image)
-    # Kernels may be cached as complex128 etc.; FFT path uses complex64.
     kernels_c64 = kernels.to(torch.complex64) if kernels.dtype != torch.complex64 else kernels
+
+    image_c = image.to(torch.complex64)
+    image_f = torch.fft.fft2(image_c)  # (B, H, W)
     for k in range(K):
-        coherent = _fft_conv2d_complex(image, kernels_c64[k])
+        kernel_shifted = torch.fft.ifftshift(kernels_c64[k], dim=(-2, -1))
+        kernel_f = torch.fft.fft2(kernel_shifted)  # (H, W)
+        coherent = torch.fft.ifft2(image_f * kernel_f.unsqueeze(0))  # (B, H, W)
         aerial = aerial + weights[k] * (coherent.real**2 + coherent.imag**2)
 
     aerial = aerial * dose
     if dtype != torch.float32:
         aerial = aerial.to(dtype)
     if squeezed:
-        return aerial
-    return aerial.unsqueeze(0).unsqueeze(0)
+        return aerial.squeeze(0)
+    return aerial.unsqueeze(1)
 
 
 def clear_kernel_cache() -> None:

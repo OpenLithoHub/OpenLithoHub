@@ -5,36 +5,14 @@ from __future__ import annotations
 import torch
 
 from openlithohub._utils.forward_model import apply_resist_threshold, simulate_aerial_image
-from openlithohub._utils.morphology import distance_transform
+from openlithohub._utils.morphology import connected_components, distance_transform
 from openlithohub._utils.tensor_ops import ensure_2d
 
 
 def _count_connected_components(binary: torch.Tensor) -> int:
-    """Count connected components using iterative erosion-based labeling."""
-    remaining = binary.clone()
-    count = 0
-    while remaining.sum() > 0:
-        seed = remaining.nonzero(as_tuple=False)[0]
-        region = torch.zeros_like(remaining)
-        region[seed[0], seed[1]] = 1.0
-        prev_sum = 0.0
-        while True:
-            dilated = (
-                torch.nn.functional.max_pool2d(
-                    region.unsqueeze(0).unsqueeze(0), 3, stride=1, padding=1
-                )
-                .squeeze(0)
-                .squeeze(0)
-            )
-            region = dilated * remaining
-            curr_sum = region.sum().item()
-            if curr_sum == prev_sum:
-                break
-            prev_sum = curr_sum
-        remaining = remaining - region
-        remaining = remaining.clamp(min=0.0)
-        count += 1
-    return count
+    """Count 8-connected components of a binary tensor."""
+    _, n = connected_components(binary, connectivity=8)
+    return n
 
 
 def compute_stochastic_robustness(

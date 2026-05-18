@@ -84,7 +84,7 @@ class LithoBenchDataset(DatasetAdapter):
 
         meta_path = self.root / "metadata.json"
         if meta_path.exists():
-            with open(meta_path) as f:
+            with open(meta_path, encoding="utf-8") as f:
                 self._metadata = json.load(f)
 
     def __len__(self) -> int:
