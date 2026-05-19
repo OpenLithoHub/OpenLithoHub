@@ -60,3 +60,21 @@ class LithographyModel(ABC):
 
     def teardown(self) -> None:
         """Optional cleanup hook."""
+
+    def to_torch_module(self) -> torch.nn.Module:
+        """Return a single ``nn.Module`` that maps an input mask/design tensor
+        to an output mask tensor, suitable for ONNX / TorchScript export.
+
+        Default raises ``NotImplementedError``. Override this on models that
+        wrap a static ``nn.Module`` (e.g. Neural-ILT). Iterative optimizers
+        like Level-Set ILT do not have a single forward graph and cannot be
+        exported — those should keep the default.
+
+        The returned module must be in ``eval()`` mode and accept tensors
+        of shape ``(B, 1, H, W)`` in ``[0, 1]``, returning the same shape.
+        """
+        raise NotImplementedError(
+            f"Model {type(self).NAME!r} does not support export to a single "
+            "nn.Module — override LithographyModel.to_torch_module() if it "
+            "wraps a static forward graph."
+        )

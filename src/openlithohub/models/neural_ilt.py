@@ -106,3 +106,23 @@ class NeuralILTModel(LithographyModel):
             contour=None,
             metadata={"logits_range": (logits.min().item(), logits.max().item())},
         )
+
+    def to_torch_module(self) -> torch.nn.Module:
+        """Return the U-Net wrapped so the export forward emits a sigmoid mask
+        in ``[0, 1]`` directly — what a downstream production pipeline expects.
+        """
+        if self._net is None:
+            self.setup()
+        assert self._net is not None
+        unet = self._net
+
+        class _NeuralILTExportWrapper(torch.nn.Module):
+            def __init__(self, net: torch.nn.Module) -> None:
+                super().__init__()
+                self.net = net
+
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
+                return torch.sigmoid(self.net(x))
+
+        wrapper = _NeuralILTExportWrapper(unet).eval()
+        return wrapper

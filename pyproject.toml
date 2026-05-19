@@ -63,7 +63,10 @@ jupyter = [
     "ipython>=8.0",
     "matplotlib>=3.7",
 ]
-all = ["openlithohub[data,workflow,models,dev,docs,jupyter]"]
+export = [
+    "onnx>=1.14",
+]
+all = ["openlithohub[data,workflow,models,dev,docs,jupyter,export]"]
 
 [project.urls]
 Homepage = "https://openlithohub.com"
