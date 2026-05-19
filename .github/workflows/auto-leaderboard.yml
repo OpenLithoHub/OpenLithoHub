@@ -14,7 +14,11 @@ on:
       - "submissions/**.yml"
 
 permissions:
-  contents: read
+  # contents: write is required so peter-evans/create-pull-request can
+  # push the auto-leaderboard/pr-N branch back to the repo. The base
+  # ref checkout still uses persist-credentials: false to avoid the
+  # duplicate-Authorization-header issue against the create-PR action.
+  contents: write
   pull-requests: write
 
 jobs:
