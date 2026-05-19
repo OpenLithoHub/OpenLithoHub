@@ -60,6 +60,8 @@ def compute_epe(
         - both edge sets empty → all zeros, ``valid=True`` (degenerate match).
         - exactly one edge set empty → all values ``inf`` and ``valid=False``;
           callers must not treat the result as a "perfect" score.
+        - exactly one matched edge pixel → ``epe_std_nm`` is ``nan`` (std over
+          a single sample is undefined); ``valid=True``.
     """
     if predicted.shape != target.shape:
         raise ValueError(f"Shape mismatch: predicted {predicted.shape} vs target {target.shape}")
@@ -102,6 +104,11 @@ def compute_epe(
     return {
         "epe_mean_nm": float(min_distances.mean().item()),
         "epe_max_nm": float(min_distances.max().item()),
-        "epe_std_nm": float(min_distances.std().item()) if min_distances.numel() > 1 else 0.0,
+        # std over a single edge pixel is undefined, not zero — return nan so
+        # downstream filters can distinguish a degenerate single-edge result
+        # from a genuine zero-spread multi-edge match.
+        "epe_std_nm": (
+            float(min_distances.std().item()) if min_distances.numel() > 1 else float("nan")
+        ),
         "valid": True,
     }

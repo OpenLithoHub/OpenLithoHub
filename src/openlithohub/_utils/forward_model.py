@@ -15,6 +15,7 @@ not switch to ``F.conv2d``'s default zero-pad as a "simplification".
 from __future__ import annotations
 
 import math
+import warnings
 
 import torch
 import torch.nn.functional as functional
@@ -87,9 +88,21 @@ def _circular_pad_clamped(inp: torch.Tensor, padding: int) -> torch.Tensor:
         step_h = min(remaining_h, cur_h - 1) if remaining_h > 0 else 0
         step_w = min(remaining_w, cur_w - 1) if remaining_w > 0 else 0
         if step_h == 0 and step_w == 0:
-            # Fall back to replicate when image is 1 px wide/tall in that axis
+            # Image is 1 px wide/tall in some axis — circular pad cannot extend
+            # it (PyTorch refuses pad sizes >= dim). Fall back to replicate so
+            # the unit-test path still runs, but warn so production callers are
+            # not silently downgraded from circular padding (the Hopkins forward
+            # model's contract — see module docstring).
             step_h = remaining_h if cur_h == 1 else 0
             step_w = remaining_w if cur_w == 1 else 0
+            warnings.warn(
+                "_circular_pad_clamped: input has a 1-pixel-wide axis; falling "
+                "back to replicate padding. This violates the module's circular-"
+                "padding contract and will introduce edge artifacts on a real "
+                "layout. See forward_model.py module docstring.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
             out = functional.pad(out, (step_w, step_w, step_h, step_h), mode="replicate")
             remaining_h -= step_h
             remaining_w -= step_w

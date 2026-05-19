@@ -53,6 +53,14 @@ def run(
             "ignored for HuggingFace Hub repos."
         ),
     ),
+    layer: str | None = typer.Option(
+        None,
+        "--layer",
+        help=(
+            "OASIS/GDSII layer to rasterize, as 'LAYER:DTYPE' (e.g. '1:0'). "
+            "Required for multi-layer files; ignored for raw .pt/.npy inputs."
+        ),
+    ),
 ) -> None:
     """Run end-to-end mask optimization on a layout file.
 
@@ -106,7 +114,7 @@ def run(
 
     console.print("[bold]Step 1:[/bold] Parsing layout...")
     try:
-        layout_tensor = _load_layout_as_tensor(input, pixel_nm)
+        layout_tensor = _load_layout_as_tensor(input, pixel_nm, layer=layer)
     except (ImportError, FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/red] {e}")
         litho_model.teardown()
@@ -205,8 +213,17 @@ def _build_model_kwargs(pretrained: bool, sha256: str | None) -> dict[str, Any]:
     return kwargs
 
 
-def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:
-    """Load a layout file and rasterize to a binary tensor."""
+def _load_layout_as_tensor(
+    path: Path,
+    pixel_nm: float,
+    layer: str | None = None,
+) -> torch.Tensor:
+    """Load a layout file and rasterize to a binary tensor.
+
+    For OASIS/GDSII inputs with more than one layer, ``layer`` must be set
+    to a ``"LAYER:DTYPE"`` string (e.g. ``"1:0"``); otherwise the loader
+    refuses rather than collapsing every layer onto the same mask.
+    """
     if not path.exists():
         raise FileNotFoundError(f"Input file not found: {path}")
 
@@ -243,30 +260,72 @@ def _load_layout_as_tensor(path: Path, pixel_nm: float) -> torch.Tensor:
     w_px = max(1, int(width_dbu * pixels_per_dbu))
     h_px = max(1, int(height_dbu * pixels_per_dbu))
 
+    selected_layer_idx = _select_layer(layout, layer)
+
     import numpy as np
     from PIL import Image, ImageDraw
 
     canvas = Image.new("L", (w_px, h_px), 0)
     drawer = ImageDraw.Draw(canvas)
 
-    for layer_idx in layout.layer_indices():
-        shapes = top_cell.shapes(layer_idx)
-        for shape in shapes.each():
-            if shape.is_polygon() or shape.is_box():
-                poly = shape.polygon if shape.is_polygon() else shape.box.to_poly()
+    shapes = top_cell.shapes(selected_layer_idx)
+    for shape in shapes.each():
+        if shape.is_polygon() or shape.is_box():
+            poly = shape.polygon if shape.is_polygon() else shape.box.to_poly()
 
-                def _project(point: Any) -> tuple[int, int]:
-                    px = int((point.x - bbox.left) * pixels_per_dbu)
-                    py = int((point.y - bbox.bottom) * pixels_per_dbu)
-                    return (max(0, min(px, w_px - 1)), max(0, min(py, h_px - 1)))
+            def _project(point: Any) -> tuple[int, int]:
+                px = int((point.x - bbox.left) * pixels_per_dbu)
+                py = int((point.y - bbox.bottom) * pixels_per_dbu)
+                return (max(0, min(px, w_px - 1)), max(0, min(py, h_px - 1)))
 
-                hull = [_project(p) for p in poly.each_point_hull()]
-                if len(hull) >= 3:
-                    drawer.polygon(hull, fill=255)
-                for hole_idx in range(poly.holes()):
-                    hole = [_project(p) for p in poly.each_point_hole(hole_idx)]
-                    if len(hole) >= 3:
-                        drawer.polygon(hole, fill=0)
+            hull = [_project(p) for p in poly.each_point_hull()]
+            if len(hull) >= 3:
+                drawer.polygon(hull, fill=255)
+            for hole_idx in range(poly.holes()):
+                hole = [_project(p) for p in poly.each_point_hole(hole_idx)]
+                if len(hole) >= 3:
+                    drawer.polygon(hole, fill=0)
 
     raster = np.array(canvas, dtype=np.float32) / 255.0
     return torch.from_numpy(raster)
+
+
+def _select_layer(layout: Any, layer: str | None) -> int:
+    """Resolve a CLI --layer 'NUM:DTYPE' to a klayout layer index.
+
+    Refuses multi-layer files when the user did not specify a layer — the
+    historical behavior of OR-ing every layer into one mask collapses
+    multi-layer designs into nonsense input.
+    """
+    layer_indices = list(layout.layer_indices())
+    if not layer_indices:
+        raise ValueError("Layout contains no layers.")
+
+    if layer is None:
+        if len(layer_indices) > 1:
+            available = ", ".join(
+                f"{layout.get_info(idx).layer}:{layout.get_info(idx).datatype}"
+                for idx in layer_indices
+            )
+            raise ValueError(
+                f"Layout has {len(layer_indices)} layers; pass --layer LAYER:DTYPE "
+                f"(available: [{available}])."
+            )
+        return int(layer_indices[0])
+
+    if ":" not in layer:
+        raise ValueError(f"--layer must be 'LAYER:DTYPE' (e.g. '1:0'); got {layer!r}")
+    try:
+        layer_num_s, dtype_s = layer.split(":", 1)
+        layer_num = int(layer_num_s)
+        dtype = int(dtype_s)
+    except ValueError:
+        raise ValueError(
+            f"--layer must be 'LAYER:DTYPE' with integer components; got {layer!r}"
+        ) from None
+
+    for idx in layer_indices:
+        info = layout.get_info(idx)
+        if info.layer == layer_num and info.datatype == dtype:
+            return int(idx)
+    raise ValueError(f"Layer {layer!r} not found in layout.")

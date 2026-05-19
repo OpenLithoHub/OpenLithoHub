@@ -16,15 +16,17 @@ class ModelRegistry:
     def register(self, model_cls: type[LithographyModel]) -> type[LithographyModel]:
         """Register a model class. Can be used as a decorator.
 
-        The model class must define ``NAME`` as a class-level attribute. The
-        registry reads it without instantiating, so anything set in
-        ``__init__`` is invisible here.
+        The model class must define ``NAME`` directly on itself (not inherit
+        it). The registry reads ``vars(model_cls)`` so that a default ``NAME``
+        on a future base class cannot cause every concrete subclass that
+        forgets to override it to silently collide on the same key.
         """
-        name = getattr(model_cls, "NAME", None)
+        name = vars(model_cls).get("NAME")
         if not isinstance(name, str) or not name:
             raise TypeError(
                 f"Model {model_cls.__name__} must define a class-level "
-                f"`NAME: ClassVar[str]` attribute to be registered."
+                f"`NAME: ClassVar[str]` attribute on itself (not inherited) "
+                f"to be registered."
             )
         self._models[name] = model_cls
         return model_cls

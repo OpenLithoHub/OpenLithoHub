@@ -217,3 +217,45 @@ def test_eval_run_no_mrc():
         json_start = result.output.index("{")
         parsed = json.loads(result.output[json_start:])
         assert "mrc_violation_rate" not in parsed
+
+
+def test_optimize_run_drc_check_smoke():
+    """End-to-end smoke for `optimize --drc-check`.
+
+    Pins the contract that optimize_cmd reads from MRCResult / DRCResult:
+    .violation_count, .violation_rate, and .passed. If compliance.{mrc,drc}
+    drift, this catches it via the CLI rather than only in unit tests.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        layout_arr = np.zeros((64, 64), dtype=np.float32)
+        layout_arr[16:48, 16:48] = 1.0
+        in_path = Path(tmpdir) / "in.npy"
+        np.save(in_path, layout_arr)
+        out_path = Path(tmpdir) / "out.oas"
+
+        result = runner.invoke(
+            app,
+            [
+                "optimize",
+                "run",
+                "-i",
+                str(in_path),
+                "-m",
+                "dummy-identity",
+                "-o",
+                str(out_path),
+                "--drc-check",
+                "--tile-size",
+                "64",
+                "--overlap",
+                "0",
+                "--pixel-nm",
+                "1.0",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        # Either explicit "All checks passed" or per-check violation lines —
+        # both indicate the MRC/DRC contract was successfully consumed.
+        output = _strip_ansi(result.output)
+        assert ("All checks passed" in output) or ("violations" in output)
+        assert "Optimization complete" in output

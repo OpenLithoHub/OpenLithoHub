@@ -171,12 +171,28 @@ class TestTileLayout:
         tiles = tile_layout(layout, tile_size=64, overlap=0)
         # Positions: 0, 64. 2x2 = 4 tiles.
         assert len(tiles) == 4
-        # Last tile should be padded to 64x64
+        # Boundary tiles are anchored to the layout edge so the full tile is
+        # filled with real layout (no zero-pad artefacts at the chip edge).
         last = tiles[-1]
         assert last.tensor.shape == (64, 64)
-        # But actual height/width should reflect the real content
-        assert last.width == 36  # 100 - 64
-        assert last.height == 36
+        assert last.width == 64
+        assert last.height == 64
+        # The boundary tile's origin is pulled back to fit inside the layout.
+        assert last.origin_x == 100 - 64
+        assert last.origin_y == 100 - 64
+
+    def test_boundary_zero_pads_when_layout_smaller_than_tile(self):
+        # When the layout is smaller than tile_size in some axis, anchoring
+        # is impossible and we must fall back to zero padding.
+        layout = torch.ones(48, 48)
+        tiles = tile_layout(layout, tile_size=64, overlap=0)
+        assert len(tiles) == 1
+        t = tiles[0]
+        assert t.tensor.shape == (64, 64)
+        assert t.width == 48
+        assert t.height == 48
+        assert t.origin_x == 0
+        assert t.origin_y == 0
 
     def test_tile_data_correctness(self):
         layout = torch.zeros(128, 128)

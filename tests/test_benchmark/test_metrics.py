@@ -89,6 +89,30 @@ def test_epe_full_foreground_no_phantom_border():
     assert result["valid"] is True
 
 
+def test_epe_single_edge_pixel_yields_nan_std(monkeypatch):
+    import math
+
+    from openlithohub.benchmark.metrics import epe as epe_mod
+
+    # Sobel always produces a multi-pixel edge ring even for a 1x1 island, so
+    # we force the single-edge path by stubbing _extract_edges to return a
+    # mask with exactly one true pixel. That exercises the numel()==1 branch.
+    def _one_edge(binary):
+        out = torch.zeros_like(binary, dtype=torch.bool)
+        out[binary.shape[0] // 2, binary.shape[1] // 2] = True
+        return out
+
+    monkeypatch.setattr(epe_mod, "_extract_edges", _one_edge)
+
+    a = torch.zeros(8, 8)
+    b = torch.zeros(8, 8)
+    result = epe_mod.compute_epe(a, b, pixel_size_nm=1.0)
+    assert result["valid"] is True
+    assert result["epe_mean_nm"] == 0.0
+    # Std over a single sample is undefined, not zero.
+    assert math.isnan(result["epe_std_nm"])
+
+
 class TestShotCount:
     def test_mbmw_basic(self):
         mask = torch.zeros(32, 32)

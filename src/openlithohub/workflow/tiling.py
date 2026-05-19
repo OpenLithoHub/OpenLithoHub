@@ -28,7 +28,11 @@ def tile_layout(
     """Partition a full-chip layout tensor into overlapping tiles.
 
     Uses a sliding window with configurable overlap. Boundary tiles are
-    zero-padded to maintain uniform tile dimensions.
+    *anchored* to the layout edge (origin pulled back so the tile fits
+    entirely inside the layout) so the model sees real layout context
+    instead of zero-padding artefacts. The resulting boundary tiles overlap
+    further with their neighbours, which ``stitch_tiles`` blends correctly
+    via its weight-map normalization.
 
     Args:
         layout_tensor: Full layout as tensor (H, W).
@@ -58,23 +62,45 @@ def tile_layout(
         while x < w:
             y_end = min(y + tile_size, h)
             x_end = min(x + tile_size, w)
-            tile_data = layout_tensor[..., y:y_end, x:x_end]
-
             actual_h = y_end - y
             actual_w = x_end - x
 
-            if actual_h < tile_size or actual_w < tile_size:
-                pad_bottom = tile_size - actual_h
-                pad_right = tile_size - actual_w
+            if actual_h < tile_size and h >= tile_size:
+                # Anchor the tile to the bottom edge so its full extent is
+                # filled with real layout, not zero pad. This pulls the
+                # origin back; the extra coverage overlaps the previous row
+                # and is handled by stitch_tiles' weight-map blending.
+                y_origin = h - tile_size
+                tile_h_real = tile_size
+            else:
+                y_origin = y
+                tile_h_real = actual_h
+
+            if actual_w < tile_size and w >= tile_size:
+                x_origin = w - tile_size
+                tile_w_real = tile_size
+            else:
+                x_origin = x
+                tile_w_real = actual_w
+
+            y_real_end = y_origin + tile_h_real
+            x_real_end = x_origin + tile_w_real
+            tile_data = layout_tensor[..., y_origin:y_real_end, x_origin:x_real_end]
+
+            if tile_h_real < tile_size or tile_w_real < tile_size:
+                # Layout smaller than tile_size in some axis — must zero-pad,
+                # there is no real layout to anchor to.
+                pad_bottom = tile_size - tile_h_real
+                pad_right = tile_size - tile_w_real
                 tile_data = functional.pad(tile_data, (0, pad_right, 0, pad_bottom), value=0.0)
 
             tiles.append(
                 Tile(
                     tensor=tile_data,
-                    origin_x=x,
-                    origin_y=y,
-                    width=actual_w,
-                    height=actual_h,
+                    origin_x=x_origin,
+                    origin_y=y_origin,
+                    width=tile_w_real,
+                    height=tile_h_real,
                     overlap=overlap,
                 )
             )

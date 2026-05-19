@@ -42,6 +42,9 @@ class LithoSimDataset(DatasetAdapter):
         cache_dir: Local cache directory for downloaded data.
         pixel_nm: Pixel resolution in nanometers.
         streaming: If True, use streaming mode (no full download).
+        revision: Optional Git revision (commit SHA, tag, or branch) to pin
+            for reproducible downloads. ``None`` resolves to the dataset's
+            default branch and is therefore not reproducible.
     """
 
     def __init__(
@@ -51,6 +54,7 @@ class LithoSimDataset(DatasetAdapter):
         cache_dir: str | None = None,
         pixel_nm: float = 0.5,
         streaming: bool = False,
+        revision: str | None = None,
     ) -> None:
         _ensure_datasets_available()
         self.split = split
@@ -58,6 +62,7 @@ class LithoSimDataset(DatasetAdapter):
         self.cache_dir = cache_dir
         self.pixel_nm = pixel_nm
         self.streaming = streaming
+        self.revision = revision
         self._ds: Any = None
         self._len: int | None = None
 
@@ -65,13 +70,14 @@ class LithoSimDataset(DatasetAdapter):
         if self._ds is None:
             from datasets import load_dataset
 
-            # B615: dataset_name comes from the caller; revision pinning is the
-            # caller's responsibility (datasets accepts `name@revision` syntax).
+            # B615: revision is exposed as a constructor argument so callers
+            # can pin a specific commit/tag for reproducible downloads.
             self._ds = load_dataset(  # nosec B615
                 self.dataset_name,
                 split=self.split,
                 cache_dir=self.cache_dir,
                 streaming=self.streaming,
+                revision=self.revision,
             )
         return self._ds
 
@@ -181,11 +187,12 @@ class LithoSimDataset(DatasetAdapter):
     def download(self, root: str) -> None:
         from datasets import load_dataset
 
-        # B615: revision pinning is the caller's responsibility (see _load_dataset).
+        # B615: revision is pinnable via the constructor argument.
         load_dataset(  # nosec B615
             self.dataset_name,
             split=self.split,
             cache_dir=root,
+            revision=self.revision,
         )
 
     @property
