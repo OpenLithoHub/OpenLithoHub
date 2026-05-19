@@ -2,28 +2,34 @@
 
 ## Installation
 
+!!! note "Alpha release"
+
+    OpenLithoHub is currently in **alpha** (`0.1.0a2` on PyPI). Until a
+    stable `0.1.0` is cut, install with `--pre` so pip does not skip
+    pre-releases.
+
 === "Core (metrics + CLI)"
 
     ```bash
-    pip install openlithohub
+    pip install --pre openlithohub
     ```
 
 === "With datasets"
 
     ```bash
-    pip install openlithohub[data]
+    pip install --pre 'openlithohub[data]'
     ```
 
 === "Full workflow"
 
     ```bash
-    pip install openlithohub[workflow]
+    pip install --pre 'openlithohub[workflow]'
     ```
 
 === "Everything"
 
     ```bash
-    pip install openlithohub[all]
+    pip install --pre 'openlithohub[all]'
     ```
 
 ### From source (development)

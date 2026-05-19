@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0a2] - 2026-05-19
+
+First public alpha. Establishes the `openlithohub` PyPI name; install
+with `pip install --pre openlithohub` until a stable `0.1.0` is cut.
+API surface is **not** stable.
+
+### Added
+
+- **First PyPI release** — `openlithohub-0.1.0a2` published via GitHub
+  Actions trusted publishing (`.github/workflows/publish.yml`) on
+  every `v*` tag. `hatch-vcs` derives the version from the git tag.
+- **PDK layer registry (`openlithohub.data._layers`)** — single source
+  of truth for the (layer, datatype) pairs each adapter rasterizes by
+  default (`asap7=10/0`, `freepdk45=11/0`, `orfs_asap7=20/0`). Each
+  adapter's `DEFAULT_DESIGN_LAYER` re-exports the registry entry.
+- **Docs link-boundary lint (`scripts/lint_docs_links.py`)** — new
+  Docs-CI step that fails when a Markdown link in `docs/**` resolves
+  outside `docs/`, catching the class of bug that only `mkdocs build
+  --strict` surfaces (and only after a page is added to nav).
+- **End-to-end URL-cache test for `ModelHub.download_weights`** —
+  locks the on-disk shape of URL-keyed cache entries and asserts that
+  `list_cached → clear_cache` round-trips cleanly.
+
+### Changed
+
+- **`ModelHub` class docstring** documents the three identifier
+  shapes that flow through the cache (`owner/repo`, `owner--repo`,
+  `url--<hex>`); auto-rendered onto `docs/api/models.md` via
+  mkdocstrings.
+- **`mkdocs-material`** pinned to `>=9.4,<10` to avoid the
+  backwards-incompatible mkdocs-material/mkdocs 2.0 series that
+  drops the plugin system this site depends on (mkdocstrings,
+  mkdocs-gen-files).
+
+### Fixed
+
+- **`ModelHub.clear_cache` path traversal** — caller-supplied
+  `model_id` now passes through the same `_safe_cache_segment`
+  validator as `download_weights`, so a `..` cannot escape `cache_dir`
+  and `rmtree` a sibling. URL-keyed entries (`url--<hex>`) are
+  accepted in their on-disk form so `list_cached` output round-trips.
+- **`OrfsArtifactDataset` docstring layer mismatch** — corrected from
+  `(10, 0)` to `(20, 0)` to match `DEFAULT_DESIGN_LAYER` (post-route
+  ORFS-ASAP7 numbers M1 differently from the cell-library source).
+- **`docs/README_zh.md` license link** — replaced relative `../LICENSE`
+  with the canonical GitHub URL so adding the page to the mkdocs nav
+  later does not break `mkdocs build --strict`.
+- **Pytest deprecation noise** — narrow `filterwarnings` entry
+  silences torch's internal `torch.jit.script_method` deprecation
+  (14 hits in `tests/test_utils/test_hopkins.py`) without masking
+  other warnings.
+
+## [0.1.0a1] - 2026-05-19 [YANKED]
+
+Tag exists in git history but the publish workflow failed at the OIDC
+exchange step due to a case-mismatched PyPI trusted publisher
+registration. No artifact reached PyPI. Superseded by `0.1.0a2`.
+
+## [0.1.0-pre] - pre-release work
+
 ### Added
 
 - **Real PDK rollout (issue #4)** — three new dataset adapters that bring OpenLithoHub onto industrial layouts:

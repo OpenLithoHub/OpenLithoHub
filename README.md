@@ -6,6 +6,7 @@
 
 **Open-source computational lithography benchmarking and workflow toolkit for advanced EUV/curvilinear mask processes.**
 
+[![PyPI](https://img.shields.io/pypi/v/openlithohub?include_prereleases&label=PyPI)](https://pypi.org/project/openlithohub/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/OpenLithoHub/OpenLithoHub/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenLithoHub/OpenLithoHub/actions)
@@ -43,18 +44,22 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 
 ## Installation
 
+> OpenLithoHub is currently in **alpha** (`0.1.0a2` on PyPI). Until a
+> stable `0.1.0` is cut, install with `--pre` so pip does not skip
+> pre-releases.
+
 ```bash
 # Core (metrics + CLI)
-pip install openlithohub
+pip install --pre openlithohub
 
 # With dataset support (HuggingFace, parquet)
-pip install openlithohub[data]
+pip install --pre 'openlithohub[data]'
 
 # With full workflow (KLayout, scipy for B-spline)
-pip install openlithohub[workflow]
+pip install --pre 'openlithohub[workflow]'
 
 # Everything
-pip install openlithohub[all]
+pip install --pre 'openlithohub[all]'
 ```
 
 **From source (development):**
