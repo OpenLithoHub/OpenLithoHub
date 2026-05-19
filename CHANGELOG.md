@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **RFC 0003 — Standard MRC rule-deck schema**
+  (`docs/rfcs/0003-mrc-rule-deck-schema.md`). A single JSON/TOML
+  format covering every parameter the OpenLithoHub MRC checkers
+  consume (`min_width_nm`, `min_spacing_nm`, `min_curvature_radius_nm`,
+  `min_feature_area_nm2`) plus provenance/notes. New
+  `openlithohub.benchmark.compliance.load_rule_deck()` validates the
+  file against the in-tree schema (Draft 2020-12) and exposes
+  `RuleDeck.kwargs_manhattan()` / `kwargs_curvilinear()` adapters to
+  the existing `check_mrc` / `check_curvilinear_mrc` functions. Ships
+  with a worked example (`benchmark/compliance/rule_decks/freepdk45_metal1.json`).
+- **Measured-source / Zernike-pupil I/O** (`openlithohub._utils.optics`) —
+  load lithography source maps and pupil aberrations from common formats
+  for use with the Hopkins/SOCS forward model.
+- **Calibre / CSV gauge parser** (`openlithohub.workflow.parse_gauge`) —
+  ingests Calibre `.gg` and CSV gauge files and refuses unrecognized
+  headers (rather than silently falling back to a wrong canonical
+  column order, which would produce incorrect EPE numbers).
+- **`openlithohub export` CLI** — exports trained models to
+  ONNX / TorchScript / TensorRT-ready artifacts. Uses the dynamo ONNX
+  path with a TorchScript fallback for models that aren't yet
+  `torch.export`-able (e.g. NeuralILT). New `[export]` extra pulls in
+  `onnxscript`.
+- **End-to-end leaderboard submission test** — drives the full
+  `auto-leaderboard.yml` pipeline (yaml load → schema validate →
+  on-disk JSON) and asserts hostile YAML cannot inject extra fields,
+  override `submission_id`, or smuggle Python objects.
+- **`scripts/build_litho_tiny.py`** — deterministic 100-pair generator
+  emitting an HF-ready parquet + dataset card under `out/litho-tiny/`.
+
+### Changed
+
+- **`--compile` defaults to `True`** on the `eval` and `optimize` CLI
+  commands, with a graceful fallback to eager when `torch.compile`
+  fails (Windows / non-Triton environments stay alive). The existing
+  `--no-compile` escape hatch is preserved.
+- **`README.md`** — prominent star CTA at the top and a JIT-acceleration
+  bullet calling out the default `torch.compile` wrap.
+- **`mypy --strict` enforced in CI**; pre-existing type errors cleared.
+
+### Fixed
+
+- **`contour_trace` truncation** — bound raised from `4*(h+w)` to
+  `2*h*w` so serpentine boundaries no longer truncate silently.
+- **Manhattan tracer X/T-junction ambiguity** — resolved by always
+  picking the right-turn edge, keeping foreground consistently on
+  the right; new diagonal-touch test.
+- **Leaderboard schema lockdown** — `extra='forbid'`, URL-field
+  validation, bounded string lengths; hostile-input tests added.
+- **Leaderboard tracker** — type-checks `entries` on read;
+  `secrets.token_hex(4)` for collision-free submission IDs.
+- **`ModelHub._resolve_and_vet`** now returns all vetted IPs and the
+  caller iterates with fallback, so dual-stack hosts work in
+  IPv6-broken CI.
+- **`Iccad16Dataset`** — warns per skipped row and raises if every row
+  is malformed (was silent).
+- **`workflow.gauges`** — refuses Calibre `.gg` files without a
+  recognizable header (was silent fallback to canonical column
+  order producing wrong EPE numbers).
+
 ## [0.1.0a2] - 2026-05-19
 
 First public alpha. Establishes the `openlithohub` PyPI name; install
