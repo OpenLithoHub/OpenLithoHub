@@ -59,9 +59,9 @@ def compute_epe(
 
         - both edge sets empty → all zeros, ``valid=True`` (degenerate match).
         - exactly one edge set empty → all values ``inf`` and ``valid=False``;
-          callers must not treat the result as a "perfect" score.
+            callers must not treat the result as a "perfect" score.
         - exactly one matched edge pixel → ``epe_std_nm`` is ``nan`` (std over
-          a single sample is undefined); ``valid=True``.
+            a single sample is undefined); ``valid=True``.
     """
     if predicted.shape != target.shape:
         raise ValueError(f"Shape mismatch: predicted {predicted.shape} vs target {target.shape}")

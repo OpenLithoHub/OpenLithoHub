@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/logo-full.png" alt="OpenLithoHub" width="280" />
+</p>
+
 # OpenLithoHub
 
 **Open-source computational lithography benchmarking and workflow toolkit for advanced EUV/curvilinear mask processes.**

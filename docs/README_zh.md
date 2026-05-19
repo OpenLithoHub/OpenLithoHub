@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo-full.png" alt="OpenLithoHub" width="280" />
+</p>
+
 # OpenLithoHub
 
 **面向先进 EUV/曲线掩膜工艺的开源计算光刻评测与工作流工具包。**

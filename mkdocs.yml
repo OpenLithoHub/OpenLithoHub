@@ -6,6 +6,8 @@ repo_name: OpenLithoHub/OpenLithoHub
 
 theme:
   name: material
+  logo: assets/logo.png
+  favicon: assets/favicon.png
   features:
     - navigation.sections
     - navigation.expand
