@@ -59,6 +59,7 @@ nav:
   - RFCs:
     - "0001 — Layout-MAE Base Model": rfcs/0001-base-model.md
     - "0002 — Layout Tokens": rfcs/0002-layout-tokens.md
+    - "0003 — MRC Rule-Deck Schema": rfcs/0003-mrc-rule-deck-schema.md
   - Contributing: contributing.md
 
 markdown_extensions:

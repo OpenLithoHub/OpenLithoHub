@@ -1,0 +1,19 @@
+{
+  "schema_version": "1",
+  "process_node": "freepdk45",
+  "layer": "metal1",
+  "polarity": "clear",
+  "pixel_size_nm": 1.0,
+  "rules": {
+    "min_width_nm": 65.0,
+    "min_spacing_nm": 65.0,
+    "min_curvature_radius_nm": 25.0,
+    "min_feature_area_nm2": 4225.0
+  },
+  "source": {
+    "vendor": "NCSU FreePDK45 (open)",
+    "translated_from": "manual",
+    "reference": "https://eda.ncsu.edu/freepdk/freepdk45/"
+  },
+  "notes": "Example deck for testing — derived from FreePDK45 M1 width/space; curvilinear rules are illustrative defaults, not authoritative."
+}
