@@ -26,6 +26,12 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.base.ref }}
+          # peter-evans/create-pull-request can't compose with the
+          # Authorization header that actions/checkout persists by
+          # default — git emits "Duplicate header: Authorization" and
+          # fails with HTTP 400. Disable credential persistence here;
+          # the create-PR action passes its own token in step env.
+          persist-credentials: false
 
       - name: Fetch only the submission YAMLs from the PR
         env:
