@@ -26,6 +26,19 @@ class MaskTopology(str, Enum):
     CURVILINEAR = "curvilinear"
 
 
+class LeaderboardTrack(str, Enum):
+    """Leaderboard track. Default is the open ongoing competition.
+
+    Hackathon tracks scope a fixed dataset + node + frozen test split for
+    a bounded period. Entries marked with a hackathon track are
+    displayed in their own ranked table on the website and never mix
+    with the open leaderboard. See ``docs/hackathon.md``.
+    """
+
+    OPEN = "open"
+    HACKATHON_2026Q3 = "hackathon-2026q3"
+
+
 class BenchmarkResult(BaseModel):
     """A single benchmark submission for the leaderboard."""
 
@@ -33,6 +46,10 @@ class BenchmarkResult(BaseModel):
     dataset: str = Field(..., description="Dataset used (lithobench/lithosim)")
     process_node: ProcessNode
     mask_topology: MaskTopology
+    track: LeaderboardTrack = Field(
+        LeaderboardTrack.OPEN,
+        description="Leaderboard track (open or a specific hackathon round).",
+    )
 
     epe_mean_nm: float = Field(..., ge=0, description="Mean EPE in nanometers")
     epe_max_nm: float = Field(..., ge=0)

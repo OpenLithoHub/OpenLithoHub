@@ -52,6 +52,7 @@ nav:
     - Visualization: api/vis.md
     - Leaderboard: api/leaderboard.md
   - Leaderboard Submissions: leaderboard-submission.md
+  - Hackathon (2026-Q3): hackathon.md
   - Community: community.md
   - Announcements:
     - "v0.1 Launch (2026-05)": announcements/2026-05-launch.md

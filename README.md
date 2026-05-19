@@ -346,6 +346,10 @@ flow are documented in [docs/community.md](docs/community.md).
 [v0.1 release post](docs/announcements/2026-05-launch.md) — includes
 paste-ready copy for X / LinkedIn / 知乎 / HuggingFace Forum.
 
+🏆 **Mini-hackathon launching 2026-Q3** —
+[charter & rules](docs/hackathon.md). EPE target, frozen test split,
+hard MRC/DRC gate, separate leaderboard track.
+
 ---
 
 ## Disclaimer
