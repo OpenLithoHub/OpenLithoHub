@@ -51,6 +51,7 @@ nav:
     - Workflow Engine: api/workflow.md
     - Visualization: api/vis.md
     - Leaderboard: api/leaderboard.md
+  - Leaderboard Submissions: leaderboard-submission.md
   - Contributing: contributing.md
 
 markdown_extensions:

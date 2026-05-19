@@ -1,0 +1,21 @@
+# Sample submission template — duplicate, rename, fill in.
+model_name: example-model
+dataset: lithobench
+process_node: 7nm
+mask_topology: curvilinear
+
+epe_mean_nm: 0.0
+epe_max_nm: 0.0
+
+# Optional fields below — delete lines that don't apply.
+# pvband_mean_nm: 0.0
+# pvband_max_nm: 0.0
+# mrc_violation_rate: 0.0
+# drc_pass: true
+# shot_count: 0
+# stochastic_robustness: 0.0
+
+paper_url: https://example.com/paper
+code_url: https://github.com/example/model
+notes: |
+  Replace with your model details. See docs/leaderboard-submission.md.
