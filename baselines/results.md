@@ -9,3 +9,26 @@ default model configuration shipped with OpenLithoHub.
 | `rule-based-opc` | 8 | 0.530 | 1.414 | 2.487 | 0% |
 | `levelset-ilt` | 8 | 0.036 | 0.250 | 2.128 | 0% |
 | `neural-ilt` | 8 | 15.074 | 24.637 | 2.497 | 100% |
+
+## ASAP7 standard cells (Phase 1)
+
+Smoke-test baseline against the 4 canonical ASAP7 cells (`INVx1`,
+`NAND2x1`, `NOR2x1`, `DFFHQNx1` from `asap7sc7p5t_27_R`), M1 layer,
+`pixel_nm=1.0`. Reproduce with:
+
+```
+.venv/bin/openlithohub eval run \
+  --dataset asap7 --node 7nm \
+  --data-root /path/to/asap7 \
+  --accept-license \
+  --model dummy-identity
+```
+
+| Model | Samples | PVB mean (nm) | PVB max (nm) | MRC pass | DRC pass |
+|---|---|---|---|---|---|
+| `dummy-identity` | 4 | 2.858 | 10.000 | 100% | 100% |
+
+EPE columns are not populated for ASAP7 because the cells ship without a
+reference OPC mask (`LithoSample.mask is None`). EPE will populate once
+Phase 2 introduces a reference-mask source or Phase 3 adds OPC ground
+truth via the lithography forward model.

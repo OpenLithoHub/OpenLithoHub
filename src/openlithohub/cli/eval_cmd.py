@@ -73,6 +73,15 @@ def run(
             "ignored for HuggingFace Hub repos."
         ),
     ),
+    accept_license: bool = typer.Option(
+        False,
+        "--accept-license",
+        help=(
+            "Acknowledge the upstream PDK license. Required for "
+            "--dataset asap7 (BSD-3-Clause attribution); ignored for "
+            "datasets that have no license gate."
+        ),
+    ),
 ) -> None:
     """Run evaluation of a lithography model on a benchmark dataset."""
     console = Console()
@@ -122,8 +131,8 @@ def run(
 
     try:
         try:
-            adapter = _load_dataset(dataset, data_root, pixel_nm)
-        except (FileNotFoundError, ValueError) as e:
+            adapter = _load_dataset(dataset, data_root, pixel_nm, accept_license)
+        except (FileNotFoundError, ValueError, RuntimeError) as e:
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1) from None
 
@@ -218,14 +227,29 @@ def run(
             console.print(f"[yellow]Warning:[/yellow] Could not submit to leaderboard: {e}")
 
 
-def _load_dataset(dataset: str, data_root: Path, pixel_nm: float) -> Any:
-    from openlithohub.data import LithoBenchDataset, LithoSimDataset
+def _load_dataset(
+    dataset: str,
+    data_root: Path,
+    pixel_nm: float,
+    accept_license: bool = False,
+) -> Any:
+    from openlithohub.data import Asap7Dataset, LithoBenchDataset, LithoSimDataset
 
     if dataset == "lithobench":
         return LithoBenchDataset(root=data_root, pixel_nm=pixel_nm)
     if dataset == "lithosim":
         return LithoSimDataset(cache_dir=str(data_root), pixel_nm=pixel_nm)
-    raise ValueError(f"Unknown dataset '{dataset}'. Choose from: lithobench, lithosim")
+    if dataset == "asap7":
+        if not accept_license:
+            from openlithohub.data.asap7 import ASAP7_LICENSE, ASAP7_LICENSE_URL
+
+            raise RuntimeError(
+                f"--dataset asap7 requires --accept-license: ASAP7 ships under "
+                f"{ASAP7_LICENSE}. Read the terms at {ASAP7_LICENSE_URL} and "
+                f"re-run with --accept-license to confirm."
+            )
+        return Asap7Dataset(root=data_root, pixel_nm=pixel_nm)
+    raise ValueError(f"Unknown dataset '{dataset}'. Choose from: lithobench, lithosim, asap7")
 
 
 def _aggregate_metrics(metrics_list: list[dict[str, float]]) -> dict[str, Any]:
