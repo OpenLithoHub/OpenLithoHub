@@ -235,16 +235,21 @@ def evaluate_uploaded(
     if pred_file is None or target_file is None:
         return None, "Please upload both predicted and target mask images."
 
-    pred_img = Image.open(pred_file).convert("L")
-    tgt_img = Image.open(target_file).convert("L")
+    pred_img = Image.open(pred_file)
+    tgt_img = Image.open(target_file)
 
     longest = max(pred_img.size[0], pred_img.size[1], tgt_img.size[0], tgt_img.size[1])
     if longest > MAX_UPLOAD_DIM:
+        pred_img.close()
+        tgt_img.close()
         return None, (
             f"Uploaded mask is {longest}px on its longest side; the playground "
             f"caps inputs at {MAX_UPLOAD_DIM}px to keep evaluation under the free "
             f"HF Space memory budget. Downsample or crop your mask and retry."
         )
+
+    pred_img = pred_img.convert("L")
+    tgt_img = tgt_img.convert("L")
 
     # Resize to match if different
     if pred_img.size != tgt_img.size:
@@ -353,8 +358,7 @@ def _build_upload_examples() -> list[list[str]]:
     """
     from PIL import Image
 
-    out_dir = Path(tempfile.gettempdir()) / "olh_upload_examples"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(tempfile.mkdtemp(prefix="olh_upload_examples_"))
     rng = np.random.default_rng(0)
 
     rows: list[list[str]] = []

@@ -119,48 +119,48 @@ def run(
     litho_model.setup()
 
     try:
-        adapter = _load_dataset(dataset, data_root, pixel_nm)
-    except (FileNotFoundError, ValueError) as e:
-        console.print(f"[red]Error:[/red] {e}")
+        try:
+            adapter = _load_dataset(dataset, data_root, pixel_nm)
+        except (FileNotFoundError, ValueError) as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1) from None
+
+        n_samples = min(len(adapter), limit) if limit else len(adapter)
+        console.print(f"Running on {n_samples} samples...")
+
+        all_metrics: list[dict[str, float]] = []
+        perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
+        for i in range(n_samples):
+            sample = adapter[i]
+            result = litho_model.predict(sample.design, **perf_kwargs)
+
+            sample_metrics: dict[str, float] = {}
+
+            if sample.mask is not None:
+                epe = compute_epe(result.mask, sample.mask, pixel_size_nm=pixel_nm)
+                # `valid` is a non-numeric flag describing edge-set health for this
+                # sample; drop it before aggregation so we don't average a bool.
+                epe.pop("valid", None)
+                sample_metrics.update(epe)
+
+            if mrc_check:
+                mrc_result = check_mrc(
+                    result.mask,
+                    min_width_nm=min_width_nm,
+                    min_spacing_nm=min_spacing_nm,
+                    pixel_size_nm=pixel_nm,
+                )
+                sample_metrics["mrc_violation_rate"] = mrc_result.violation_rate
+                sample_metrics["mrc_passed"] = 1.0 if mrc_result.passed else 0.0
+
+            if pvband_check:
+                pv = compute_pvband(result.mask, pixel_size_nm=pixel_nm)
+                sample_metrics.update(pv)
+
+            if sample_metrics:
+                all_metrics.append(sample_metrics)
+    finally:
         litho_model.teardown()
-        raise typer.Exit(1) from None
-
-    n_samples = min(len(adapter), limit) if limit else len(adapter)
-    console.print(f"Running on {n_samples} samples...")
-
-    all_metrics: list[dict[str, float]] = []
-    perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
-    for i in range(n_samples):
-        sample = adapter[i]
-        result = litho_model.predict(sample.design, **perf_kwargs)
-
-        sample_metrics: dict[str, float] = {}
-
-        if sample.mask is not None:
-            epe = compute_epe(result.mask, sample.mask, pixel_size_nm=pixel_nm)
-            # `valid` is a non-numeric flag describing edge-set health for this
-            # sample; drop it before aggregation so we don't average a bool.
-            epe.pop("valid", None)
-            sample_metrics.update(epe)
-
-        if mrc_check:
-            mrc_result = check_mrc(
-                result.mask,
-                min_width_nm=min_width_nm,
-                min_spacing_nm=min_spacing_nm,
-                pixel_size_nm=pixel_nm,
-            )
-            sample_metrics["mrc_violation_rate"] = mrc_result.violation_rate
-            sample_metrics["mrc_passed"] = 1.0 if mrc_result.passed else 0.0
-
-        if pvband_check:
-            pv = compute_pvband(result.mask, pixel_size_nm=pixel_nm)
-            sample_metrics.update(pv)
-
-        if sample_metrics:
-            all_metrics.append(sample_metrics)
-
-    litho_model.teardown()
 
     if not all_metrics:
         console.print("[yellow]Warning:[/yellow] No metrics computed.")

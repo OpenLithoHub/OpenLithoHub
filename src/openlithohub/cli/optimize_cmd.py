@@ -111,40 +111,40 @@ def run(
 
     step = _StepCounter()
 
-    console.print(f"[bold]Step {step.next()}:[/bold] Parsing layout...")
     try:
-        layout_tensor = _load_layout_as_tensor(input, pixel_nm, layer=layer)
-    except (ImportError, FileNotFoundError, ValueError) as e:
-        console.print(f"[red]Error:[/red] {e}")
+        console.print(f"[bold]Step {step.next()}:[/bold] Parsing layout...")
+        try:
+            layout_tensor = _load_layout_as_tensor(input, pixel_nm, layer=layer)
+        except (ImportError, FileNotFoundError, ValueError) as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1) from None
+
+        console.print(f"  Layout size: {layout_tensor.shape[0]}x{layout_tensor.shape[1]} pixels")
+
+        console.print(f"[bold]Step {step.next()}:[/bold] Tiling layout...")
+        from openlithohub.workflow.tiling import Tile, stitch_tiles, tile_layout
+
+        tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=overlap)
+        console.print(f"  Generated {len(tiles)} tiles ({tile_size}px, overlap={overlap})")
+
+        console.print(f"[bold]Step {step.next()}:[/bold] Running optimization...")
+        tile_results: list[tuple[Tile, torch.Tensor]] = []
+        perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Optimizing tiles", total=len(tiles))
+            for tile in tiles:
+                result = litho_model.predict(tile.tensor, **perf_kwargs)
+                tile_results.append((tile, result.mask))
+                progress.advance(task)
+    finally:
         litho_model.teardown()
-        raise typer.Exit(1) from None
-
-    console.print(f"  Layout size: {layout_tensor.shape[0]}x{layout_tensor.shape[1]} pixels")
-
-    console.print(f"[bold]Step {step.next()}:[/bold] Tiling layout...")
-    from openlithohub.workflow.tiling import Tile, stitch_tiles, tile_layout
-
-    tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=overlap)
-    console.print(f"  Generated {len(tiles)} tiles ({tile_size}px, overlap={overlap})")
-
-    console.print(f"[bold]Step {step.next()}:[/bold] Running optimization...")
-    tile_results: list[tuple[Tile, torch.Tensor]] = []
-    perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Optimizing tiles", total=len(tiles))
-        for tile in tiles:
-            result = litho_model.predict(tile.tensor, **perf_kwargs)
-            tile_results.append((tile, result.mask))
-            progress.advance(task)
-
-    litho_model.teardown()
 
     console.print(f"[bold]Step {step.next()}:[/bold] Stitching tiles...")
     h, w = layout_tensor.shape
@@ -240,12 +240,23 @@ def _load_layout_as_tensor(
     suffix = path.suffix.lower()
 
     if suffix == ".pt":
-        return torch.load(str(path), weights_only=True)  # type: ignore[no-any-return]
+        loaded = torch.load(str(path), weights_only=True)
+        if not isinstance(loaded, torch.Tensor) or loaded.ndim != 2:
+            raise ValueError(
+                f"{path}: expected a 2-D torch.Tensor for layout input, "
+                f"got {type(loaded).__name__}"
+                + (f" ndim={loaded.ndim}" if isinstance(loaded, torch.Tensor) else "")
+            )
+        return loaded.float()
 
     if suffix == ".npy":
         import numpy as np
 
         arr = np.load(str(path), allow_pickle=False)
+        if arr.ndim != 2:
+            raise ValueError(
+                f"{path}: expected a 2-D ndarray for layout input, got ndim={arr.ndim}"
+            )
         return torch.from_numpy(arr).float()
 
     try:

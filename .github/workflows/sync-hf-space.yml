@@ -54,5 +54,8 @@ jobs:
           git init -b main
           git add .
           git commit -m "Sync from OpenLithoHub@${GITHUB_SHA::7}"
-          git remote add space "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/OpenLithoHub/playground"
-          git push --force space main
+          # Pass credentials via http.extraheader so they never land in
+          # .git/config or surface in `git remote -v` / `set -x` output.
+          git remote add space "https://huggingface.co/spaces/OpenLithoHub/playground"
+          AUTH_HEADER="Authorization: Basic $(printf '%s:%s' "$HF_USERNAME" "$HF_TOKEN" | base64 | tr -d '\n')"
+          git -c http.extraheader="$AUTH_HEADER" push --force space main

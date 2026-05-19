@@ -35,21 +35,44 @@ LEADERBOARD_SCHEMA_VERSION = 1
 
 @contextlib.contextmanager
 def _file_lock(lock_path: Path) -> Iterator[None]:
-    """Cross-platform best-effort exclusive lock. Falls back to a no-op on Windows."""
+    """Cross-platform exclusive lock on a sidecar file.
+
+    POSIX uses ``fcntl.flock``; Windows uses ``msvcrt.locking``. The lock file
+    is opened in append mode so a fresh holder does not truncate the file
+    while a prior holder still has it open.
+    """
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         import fcntl
-    except ImportError:
-        # Windows: no fcntl. The atomic rename below still gives single-writer
-        # safety per write; concurrent reads of stale data are tolerated.
-        yield
+
+        with open(lock_path, "a") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         return
-    with open(lock_path, "w") as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+    except ImportError:
+        pass
+
+    # Windows: use msvcrt.locking on a single byte at offset 0.
+    import msvcrt
+
+    with open(lock_path, "a+b") as f:
+        f.seek(0)
+        # Block until the lock is acquired; retry on transient EAGAIN.
+        while True:
+            try:
+                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                break
+            except OSError:
+                time.sleep(0.05)
         try:
             yield
         finally:
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            f.seek(0)
+            with contextlib.suppress(OSError):
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 class LeaderboardStore:

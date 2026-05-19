@@ -186,7 +186,17 @@ class Iccad16Dataset(DatasetAdapter):
         top: Any,
         layer_spec: tuple[int, int],
     ) -> tuple[np.ndarray, tuple[float, float]]:
-        """Rasterize a single OASIS layer into a {0,1} numpy array."""
+        """Rasterize a single OASIS layer into a {0,1} numpy array.
+
+        Decomposes each polygon into trapezoids via klayout's
+        ``Polygon.decompose_trapezoids`` and fills each trapezoid's pixel
+        footprint. For Manhattan polygons every trapezoid is an
+        axis-aligned rectangle, so the fill is exact even for L-shapes
+        and other concave Manhattan geometry — a plain bbox fill would
+        over-fill the concave corner.
+        """
+        import klayout.db as kdb
+
         layer_index = layout.find_layer(*layer_spec)
         bbox = top.bbox()
         origin = (
@@ -200,33 +210,45 @@ class Iccad16Dataset(DatasetAdapter):
 
         arr = np.zeros((h, w), dtype=np.float32)
         ox_nm, oy_nm = origin
-        dbu_um = layout.dbu  # µm per dbu
+        dbu_um = layout.dbu
 
-        # Walk shapes; convert each polygon's bbox-in-dbu to nm then to
-        # pixel indices. Using bboxes is fast and exact for orthogonal
-        # Manhattan polygons, which is what the ICCAD16 layouts contain.
-        for shape_obj in top.shapes(layer_index).each():
-            poly = shape_obj.polygon if shape_obj.is_polygon() else None
-            if poly is None and shape_obj.is_box():
-                box = shape_obj.box
-            elif poly is None and shape_obj.is_path():
-                box = shape_obj.path.bbox()
-            elif poly is not None:
-                box = poly.bbox()
-            else:
-                continue
-
-            x0_nm = box.left * dbu_um * 1000.0 - ox_nm
-            y0_nm = box.bottom * dbu_um * 1000.0 - oy_nm
-            x1_nm = box.right * dbu_um * 1000.0 - ox_nm
-            y1_nm = box.top * dbu_um * 1000.0 - oy_nm
-
+        def _fill_box(b: Any) -> None:
+            x0_nm = b.left * dbu_um * 1000.0 - ox_nm
+            y0_nm = b.bottom * dbu_um * 1000.0 - oy_nm
+            x1_nm = b.right * dbu_um * 1000.0 - ox_nm
+            y1_nm = b.top * dbu_um * 1000.0 - oy_nm
             i0 = max(0, int(np.floor(x0_nm / self.pixel_nm)))
             j0 = max(0, int(np.floor(y0_nm / self.pixel_nm)))
             i1 = min(w, int(np.ceil(x1_nm / self.pixel_nm)))
             j1 = min(h, int(np.ceil(y1_nm / self.pixel_nm)))
             if i1 > i0 and j1 > j0:
                 arr[j0:j1, i0:i1] = 1.0
+
+        for shape_obj in top.shapes(layer_index).each():
+            if shape_obj.is_box():
+                _fill_box(shape_obj.box)
+                continue
+            if shape_obj.is_path():
+                # Convert path to polygon then trapezoidize below.
+                poly = shape_obj.path.polygon()
+            elif shape_obj.is_polygon():
+                poly = shape_obj.polygon
+            else:
+                continue
+            # Manhattan polygons decompose into axis-aligned rectangles;
+            # a non-Manhattan polygon would yield trapezoids whose bbox is
+            # a pessimistic over-fill (one pixel wide at most for typical
+            # foundry tilt — accepted given ICCAD16 is Manhattan).
+            try:
+                trapezoids = list(poly.decompose_trapezoids(kdb.Polygon.TD_simple))
+            except AttributeError:
+                # Older klayout: fall back to whole-polygon bbox (still over-fills
+                # concavities, but no worse than the historical behavior).
+                _fill_box(poly.bbox())
+                continue
+            for tz in trapezoids:
+                _fill_box(tz.bbox())
+
         return arr, origin
 
     def _collect_clip_sites(

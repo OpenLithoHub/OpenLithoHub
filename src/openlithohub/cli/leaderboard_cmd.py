@@ -33,6 +33,12 @@ def view(
     results = get_leaderboard(dataset=dataset, process_node=node, store=store)
 
     if not results:
+        if dataset or node:
+            console.print(
+                f"[yellow]No leaderboard entries match[/yellow] "
+                f"(dataset={dataset!r}, node={node!r}). Drop filters to see all entries."
+            )
+            raise typer.Exit(1)
         console.print("[yellow]No leaderboard entries found.[/yellow]")
         raise typer.Exit(0)
 

@@ -11,8 +11,33 @@ The emitted files are pure text. No EDA tool is invoked here.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
+
+# Cell names follow OASIS / Verilog identifier rules — letters, digits,
+# underscore, dollar; must start with a letter or underscore. Restricting
+# to this set keeps a malicious cell_name from injecting SVRF directives
+# (e.g. SYSTEM, INCLUDE) into the rule deck via embedded quotes/newlines.
+_CELL_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
+
+
+def _validate_cell_name(cell_name: str) -> None:
+    if not _CELL_NAME_RE.match(cell_name):
+        raise ValueError(
+            f"Invalid cell_name {cell_name!r}: must match {_CELL_NAME_RE.pattern} "
+            "(OASIS/Verilog identifier rules) — refusing to interpolate "
+            "untrusted text into a Calibre/ICV rule deck."
+        )
+
+
+def _validate_oasis_path(oasis_path: Path) -> None:
+    s = str(oasis_path)
+    if '"' in s or "\n" in s or "\r" in s:
+        raise ValueError(
+            f"Invalid oasis_path {s!r}: must not contain quotes or newlines — "
+            "refusing to interpolate untrusted text into a Calibre/ICV rule deck."
+        )
 
 
 @dataclass(frozen=True)
@@ -99,7 +124,9 @@ def emit_calibre_svrf(
     output_path: str | Path | None = None,
 ) -> Path:
     """Emit a minimal Calibre nmDRC ``.svrf`` rule deck next to the OASIS file."""
+    _validate_cell_name(cell_name)
     oasis_path = Path(oasis_path)
+    _validate_oasis_path(oasis_path)
     out = Path(output_path) if output_path else oasis_path.with_suffix(".svrf")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
@@ -124,7 +151,9 @@ def emit_icv_runset(
     output_path: str | Path | None = None,
 ) -> Path:
     """Emit a minimal Synopsys IC Validator runset next to the OASIS file."""
+    _validate_cell_name(cell_name)
     oasis_path = Path(oasis_path)
+    _validate_oasis_path(oasis_path)
     out = Path(output_path) if output_path else oasis_path.with_suffix(".rs")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
@@ -148,7 +177,9 @@ def emit_bridge_bundle(
     cell_name: str = "TOP",
 ) -> dict[str, Path]:
     """Emit Calibre + IC Validator templates and a short README for the bundle."""
+    _validate_cell_name(cell_name)
     oasis_path = Path(oasis_path)
+    _validate_oasis_path(oasis_path)
     svrf = emit_calibre_svrf(oasis_path, rules, cell_name=cell_name)
     runset = emit_icv_runset(oasis_path, rules, cell_name=cell_name)
     readme = oasis_path.with_suffix(".bridge.md")
