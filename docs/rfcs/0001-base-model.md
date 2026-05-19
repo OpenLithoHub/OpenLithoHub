@@ -77,8 +77,9 @@ Three tiers, in order of preference:
    `openlithohub.synth.generate_synthetic_batch` — unlimited, MRC-clean
    by construction, but distribution is narrow (3 pattern families × 2
    PDKs).
-2. **Public academic releases** — `phdyang007/damo-via-rs`,
-   `phdyang007/damo-mb`, ICCAD-style benchmark suites. Each is small
+2. **Public academic releases** — `phdyang007/dlhsd` (DAC'17 hotspot
+   detection), `phdyang007/ICCAD16-N7M2EUV` (ICCAD'16 EUV hotspot
+   benchmark), and `phdyang007/GAN-OPC` (TCAD'20). Each is small
    (≤10k images) and licence-permissive.
 3. **User-contributed PDK rasterisations** under a
    contributor-licence-agreement model. v0.2 ships a contribution
@@ -111,7 +112,7 @@ Pretraining is "good enough to ship" iff *all* of:
    eval splits at mask ratio 0.75.
 2. **Linear probe — hotspot detection**: linear classifier on frozen
    features beats a from-scratch ResNet-18 on
-   `phdyang007/damo-mb` patches (target: ≥+5 F1 absolute).
+   `phdyang007/dlhsd` patches (target: ≥+5 F1 absolute).
 3. **Fine-tune transfer — OPC**: backbone + small UNet decoder, fine-tuned
    for 5k steps on FreePDK45 OPC pairs, beats the same architecture
    trained from scratch (target: ≥10% lower mean EPE).

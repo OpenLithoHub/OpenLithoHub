@@ -15,6 +15,7 @@ from openlithohub._utils.morphology import (
     connected_components,
     distance_transform,
 )
+from openlithohub._utils.sampling import evenly_spaced_indices
 from openlithohub._utils.tensor_ops import ensure_2d
 
 
@@ -141,11 +142,7 @@ def _add_violations(
     total = int(len(ys))
     if total == 0:
         return
-    n = min(total, max_reports)
-    # Evenly spaced indices into the violation list — guaranteed to emit
-    # exactly ``n`` reports without the off-by-one that ``range(0, total, step)``
-    # would produce when ``step`` does not divide ``total`` cleanly.
-    indices = np.linspace(0, total - 1, num=n).astype(np.int64)
+    indices = evenly_spaced_indices(total, max_reports)
     for idx in indices:
         y_px = int(ys[idx].item())
         x_px = int(xs[idx].item())

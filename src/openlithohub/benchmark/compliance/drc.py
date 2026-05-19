@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import torch
 
 from openlithohub._utils.morphology import binary_dilation, binary_erosion, connected_components
+from openlithohub._utils.sampling import evenly_spaced_indices
 from openlithohub._utils.tensor_ops import ensure_2d
 
 
@@ -194,15 +195,13 @@ def _sample_violations(
         return []
 
     ys, xs = torch.where(violation_mask)
-    n = min(len(ys), max_reports)
-    step = max(1, len(ys) // n)
+    total = int(len(ys))
+    indices = evenly_spaced_indices(total, max_reports)
 
     rule_code = {"width": 0.0, "spacing": 1.0, "area": 2.0, "notch": 3.0}.get(rule_name, 9.0)
     violations: list[dict[str, float]] = []
 
-    for idx in range(0, len(ys), step):
-        if len(violations) >= max_reports:
-            break
+    for idx in indices:
         violations.append(
             {
                 "rule": rule_code,

@@ -17,6 +17,7 @@ from openlithohub._utils.resist_model import (
     simulate_resist,
     simulate_resist_soft,
 )
+from openlithohub._utils.sampling import evenly_spaced_indices
 from openlithohub._utils.tensor_ops import ensure_2d
 
 __all__ = [
@@ -29,6 +30,7 @@ __all__ = [
     "differentiable_threshold",
     "distance_transform",
     "ensure_2d",
+    "evenly_spaced_indices",
     "simulate_aerial_image_hopkins",
     "simulate_resist",
     "simulate_resist_soft",

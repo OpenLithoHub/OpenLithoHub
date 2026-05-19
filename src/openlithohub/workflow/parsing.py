@@ -52,7 +52,10 @@ def parse_layout(path: str | Path) -> dict[str, Any]:
             }
         )
 
-    top_cell = layout.top_cell()
+    top_cells = list(layout.top_cells())
+    if not top_cells:
+        raise ValueError(f"Layout {path.name} has no top cells.")
+    top_cell = top_cells[0]
     bbox = top_cell.bbox()
     bounding_box = {
         "x_min": bbox.left,

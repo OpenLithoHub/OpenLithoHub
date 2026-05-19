@@ -270,7 +270,10 @@ def _load_layout_as_tensor(
     layout = db.Layout()
     layout.read(str(path))
 
-    top_cell = layout.top_cell()
+    top_cells = list(layout.top_cells())
+    if not top_cells:
+        raise ValueError(f"{path}: layout has no top cells.")
+    top_cell = top_cells[0]
     bbox = top_cell.bbox()
 
     width_dbu = bbox.width()
