@@ -56,6 +56,9 @@ nav:
   - Community: community.md
   - Announcements:
     - "v0.1 Launch (2026-05)": announcements/2026-05-launch.md
+  - RFCs:
+    - "0001 — Layout-MAE Base Model": rfcs/0001-base-model.md
+    - "0002 — Layout Tokens": rfcs/0002-layout-tokens.md
   - Contributing: contributing.md
 
 markdown_extensions:
