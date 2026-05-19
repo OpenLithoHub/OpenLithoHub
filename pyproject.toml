@@ -112,6 +112,12 @@ markers = [
     "requires_klayout: marks tests that need klayout installed",
     "benchmark: performance benchmarks (deselect with -m 'not benchmark')",
 ]
+filterwarnings = [
+    # torch >=2.x emits this from inside torch.jit when our hopkins
+    # tests touch torch.fft. Not actionable from our side; keep the
+    # filter narrow so genuine deprecation warnings still surface.
+    "ignore:`torch.jit.script_method` is deprecated.*:DeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["openlithohub"]

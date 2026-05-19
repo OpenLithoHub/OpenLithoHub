@@ -37,6 +37,7 @@ from typing import Any
 
 import torch
 
+from openlithohub.data._layers import LAYERS
 from openlithohub.data.asap7 import rasterize_cell_layer
 from openlithohub.data.base import DatasetAdapter, LithoSample
 
@@ -58,9 +59,10 @@ CANONICAL_CELLS: tuple[str, ...] = (
 )
 
 # Default design layer = metal1 (11, 0) per FreePDK45's
-# rtk-stream-out.map. Override via `design_layer` for metal2 (13, 0)
-# or higher routing layers.
-DEFAULT_DESIGN_LAYER: tuple[int, int] = (11, 0)
+# rtk-stream-out.map. Sourced from the central PDK layer registry so
+# the value is asserted in exactly one place. Override via
+# ``design_layer`` for metal2 (13, 0) or higher routing layers.
+DEFAULT_DESIGN_LAYER: tuple[int, int] = LAYERS["freepdk45"].metal1
 
 
 class FreePdk45Dataset(DatasetAdapter):

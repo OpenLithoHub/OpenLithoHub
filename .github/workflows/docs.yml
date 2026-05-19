@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[docs]"
 
+      - name: Lint docs link boundaries
+        run: python scripts/lint_docs_links.py
+
       - name: Build docs
         run: mkdocs build --strict
 

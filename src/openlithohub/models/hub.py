@@ -124,6 +124,30 @@ class ModelHub:
 
     Supports HuggingFace Hub (if installed) and direct URL downloads.
     Direct URL downloads MUST come with a SHA256 checksum.
+
+    Cache-key contract
+    ------------------
+    Three identifier shapes flow through this class. Knowing which
+    shape goes where prevents the kind of round-trip bug fixed in the
+    May 2026 review:
+
+    - ``owner/repo`` — the **public** form a caller passes to
+      :meth:`download_weights` for a HuggingFace-style model.
+    - ``owner--repo`` — the **on-disk** form, with the path separator
+      rewritten to a double-dash so the segment is filesystem-safe.
+      :meth:`list_cached` decodes this back to ``owner/repo``.
+    - ``url--<hex>`` — the **on-disk** form for direct-URL downloads,
+      where ``<hex>`` is the first 32 hex chars of
+      ``sha256(url.encode())``. :meth:`list_cached` returns this
+      verbatim (there is no public ``owner/repo``-shaped name to decode
+      back to), and :meth:`clear_cache` accepts both the original URL
+      and the verbatim ``url--<hex>`` segment so the
+      ``list_cached → clear_cache`` pipeline composes cleanly.
+
+    Every caller-supplied identifier passes through
+    ``_safe_cache_segment`` (or the URL hash) before it touches the
+    filesystem; ``..``, embedded slashes, NUL bytes, and absolute
+    paths are rejected. URL-keyed segments accept only hex suffixes.
     """
 
     def __init__(self, cache_dir: Path | None = None) -> None:

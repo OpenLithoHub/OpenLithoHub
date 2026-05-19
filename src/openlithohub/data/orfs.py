@@ -37,6 +37,7 @@ from typing import Any
 import numpy as np
 import torch
 
+from openlithohub.data._layers import LAYERS
 from openlithohub.data.asap7 import (
     ASAP7_LICENSE,
     ASAP7_LICENSE_URL,
@@ -46,11 +47,12 @@ from openlithohub.data.base import DatasetAdapter, LithoSample
 
 # ORFS-routed ASAP7 layouts use the platform's stream-out map (defined
 # under flow/platforms/asap7/). The post-route GDS numbers metal1 as
-# layer 20/0 — not 10/0 like the cell-library source. Verified against
-# a fresh `make` of asap7/mock-alu (issue #4 Phase 3): the top cell
-# has shapes on layers 19, 20, 30, 40, 50, 60, 70, with 20/0 being the
-# densest (~45k shapes) — that's M1.
-DEFAULT_DESIGN_LAYER: tuple[int, int] = (20, 0)
+# layer 20/0 — not 10/0 like the cell-library source. Sourced from the
+# central PDK layer registry (key ``orfs_asap7``) so the value lives in
+# exactly one place. Verified against a fresh `make` of asap7/mock-alu
+# (issue #4 Phase 3): the top cell has shapes on layers 19, 20, 30, 40,
+# 50, 60, 70, with 20/0 being the densest (~45k shapes) — that's M1.
+DEFAULT_DESIGN_LAYER: tuple[int, int] = LAYERS["orfs_asap7"].metal1
 
 # AI-OPC inference windows. ICCAD16 hotspots are 1.2 µm; AI-OPC papers
 # evaluate on 2 µm and 5 µm tiles. We expose both as canonical sizes.

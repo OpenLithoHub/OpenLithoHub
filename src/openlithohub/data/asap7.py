@@ -31,6 +31,7 @@ from typing import Any
 import numpy as np
 import torch
 
+from openlithohub.data._layers import LAYERS
 from openlithohub.data.base import DatasetAdapter, LithoSample
 
 ASAP7_UPSTREAM_URL = "https://github.com/The-OpenROAD-Project/asap7"
@@ -52,10 +53,10 @@ CANONICAL_CELLS: tuple[str, ...] = (
     "DFFHQNx1_ASAP7_75t_R",
 )
 
-# Default design layer to rasterize. ASAP7 GDS uses unnamed layer numbers;
-# 10/0 is M1 in the asap7sc7p5t_27 layer map. Override via `design_layer`
-# if you want M2 (12/0), M3 (14/0), etc.
-DEFAULT_DESIGN_LAYER: tuple[int, int] = (10, 0)
+# Default design layer to rasterize. Sourced from the central PDK
+# layer registry (see openlithohub.data._layers) so the (10, 0) value
+# is asserted in exactly one place across the codebase.
+DEFAULT_DESIGN_LAYER: tuple[int, int] = LAYERS["asap7"].metal1
 
 
 def rasterize_cell_layer(

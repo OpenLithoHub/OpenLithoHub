@@ -108,3 +108,39 @@ class TestModelHub:
         for entry in cached:
             hub.clear_cache(entry)
         assert hub.list_cached() == []
+
+    def test_url_download_writes_under_url_segment_and_round_trips(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Lock the URL-cache layout: download_weights(url, sha256=...) MUST
+        # write under cache_dir/url--<sha256(url)[:32]>/<filename>, and the
+        # resulting on-disk segment must be exactly what list_cached returns
+        # (which clear_cache then accepts). This is the write side of the
+        # contract that originally drifted from list_cached/clear_cache.
+        import hashlib
+
+        url = "https://example.com/weights.bin"
+        payload = b"fake-weights"
+        digest = hashlib.sha256(payload).hexdigest()
+        expected_segment = "url--" + hashlib.sha256(url.encode()).hexdigest()[:32]
+
+        def fake_download_url(self: ModelHub, u: str, target: Path, sha256: str) -> Path:
+            # The real _download_url does host vetting + pinned TLS; for the
+            # contract test we just need to confirm download_weights routes
+            # through here with the right target path.
+            assert u == url
+            assert sha256 == digest
+            assert target.parent.name == expected_segment
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
+            return target
+
+        monkeypatch.setattr(ModelHub, "_download_url", fake_download_url)
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        out = hub.download_weights(url, filename="weights.bin", sha256=digest)
+
+        assert out == hub.cache_dir / expected_segment / "weights.bin"
+        assert out.read_bytes() == payload
+        assert hub.list_cached() == [expected_segment]
+        hub.clear_cache(expected_segment)
+        assert hub.list_cached() == []
