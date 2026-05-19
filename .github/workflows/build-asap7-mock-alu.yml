@@ -58,11 +58,16 @@ jobs:
         working-directory: orfs/flow
         run: |
           set -euxo pipefail
-          # Source ORFS env if present — sets OPENROAD_EXE / YOSYS_EXE /
-          # KLAYOUT_CMD when the bundled binaries live outside PATH.
-          if [ -f ../env.sh ]; then . ../env.sh; fi
-          export OPENROAD_EXE="${OPENROAD_EXE:-$(command -v openroad)}"
-          export YOSYS_EXE="${YOSYS_EXE:-$(command -v yosys)}"
+          # Do NOT source ../env.sh: the openroad/orfs container already
+          # has openroad / yosys / klayout on PATH at /usr/local/bin/.
+          # env.sh overrides PATH to point at orfs/tools/install/, which
+          # is empty in this checkout (we don't build from source).
+          export OPENROAD_EXE="$(command -v openroad)"
+          export YOSYS_EXE="$(command -v yosys)"
+          export KLAYOUT_CMD="$(command -v klayout)"
+          test -x "$OPENROAD_EXE"
+          test -x "$YOSYS_EXE"
+          test -x "$KLAYOUT_CMD"
           make DESIGN_CONFIG=./designs/asap7/${{ inputs.design }}/config.mk
 
       - name: Locate produced GDS + reports
