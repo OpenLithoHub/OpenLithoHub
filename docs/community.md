@@ -61,8 +61,7 @@ channel is live.
 
 When the server opens, every new member sees:
 
-1. A pinned `#welcome` post linking to this page, the
-   [Code of Conduct](../CODE_OF_CONDUCT.md), and the
+1. A pinned `#welcome` post linking to this page and the
    [getting-started guide](getting-started.md).
 2. A 60-second self-introduction template:
    ```
@@ -88,7 +87,6 @@ lurker-to-contributor conversion. The intro is a norm, not a wall.
 
 ## Code of Conduct
 
-The Discord server follows the project
-[Code of Conduct](../CODE_OF_CONDUCT.md). Violations can be reported to
-the moderator team via DM or to `conduct@openlithohub.org` (mailbox
-active once the channel launches).
+The Discord server follows the etiquette rules above. Violations can be
+reported to the moderator team via DM or to `conduct@openlithohub.org`
+(mailbox active once the channel launches).

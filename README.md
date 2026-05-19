@@ -324,8 +324,7 @@ ruff format src/ tests/
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. By participating you
-agree to abide by the [Code of Conduct](CODE_OF_CONDUCT.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
