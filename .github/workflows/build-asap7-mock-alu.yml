@@ -28,6 +28,12 @@ jobs:
       image: openroad/orfs:latest
       options: --user root
 
+    defaults:
+      run:
+        # The openroad/orfs container's default shell is dash, which
+        # rejects `set -o pipefail`. Force bash on every run step.
+        shell: bash
+
     steps:
       - name: Check out ORFS at pinned ref
         uses: actions/checkout@v4

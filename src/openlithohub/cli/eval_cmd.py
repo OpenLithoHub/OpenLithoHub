@@ -18,7 +18,7 @@ def run(
         "lithobench",
         "--dataset",
         "-d",
-        help="Dataset to evaluate on (lithobench/lithosim/asap7/freepdk45).",
+        help="Dataset to evaluate on (lithobench/lithosim/asap7/freepdk45/orfs).",
     ),
     data_root: Path = typer.Option(
         ..., "--data-root", "-r", help="Path to dataset root directory."
@@ -86,6 +86,15 @@ def run(
             "ignored for datasets that have no license gate."
         ),
     ),
+    tile_nm: float = typer.Option(
+        2000.0,
+        "--tile-nm",
+        help=(
+            "Tile edge length in nm for --dataset orfs. Default 2000 (2 µm); "
+            "5000 (5 µm) is the other canonical AI-OPC inference window. "
+            "Ignored by other datasets."
+        ),
+    ),
 ) -> None:
     """Run evaluation of a lithography model on a benchmark dataset."""
     console = Console()
@@ -135,7 +144,7 @@ def run(
 
     try:
         try:
-            adapter = _load_dataset(dataset, data_root, pixel_nm, accept_license)
+            adapter = _load_dataset(dataset, data_root, pixel_nm, accept_license, tile_nm)
         except (FileNotFoundError, ValueError, RuntimeError) as e:
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1) from None
@@ -236,12 +245,14 @@ def _load_dataset(
     data_root: Path,
     pixel_nm: float,
     accept_license: bool = False,
+    tile_nm: float = 2000.0,
 ) -> Any:
     from openlithohub.data import (
         Asap7Dataset,
         FreePdk45Dataset,
         LithoBenchDataset,
         LithoSimDataset,
+        OrfsArtifactDataset,
     )
 
     if dataset == "lithobench":
@@ -274,8 +285,23 @@ def _load_dataset(
                 f"--accept-license to confirm."
             )
         return FreePdk45Dataset(root=data_root, pixel_nm=pixel_nm)
+    if dataset == "orfs":
+        if not accept_license:
+            from openlithohub.data.asap7 import ASAP7_LICENSE, ASAP7_LICENSE_URL
+
+            raise RuntimeError(
+                f"--dataset orfs requires --accept-license: ORFS layouts are "
+                f"routed against ASAP7 ({ASAP7_LICENSE}). Read the terms at "
+                f"{ASAP7_LICENSE_URL} and re-run with --accept-license to confirm."
+            )
+        # data_root is the path to a single GDS file produced by ORFS.
+        # If it's a directory, find the first .gds inside.
+        gds = data_root if data_root.is_file() else next(data_root.rglob("*.gds"), None)
+        if gds is None:
+            raise FileNotFoundError(f"No .gds found under {data_root}")
+        return OrfsArtifactDataset(gds_path=gds, pixel_nm=pixel_nm, tile_nm=tile_nm)
     raise ValueError(
-        f"Unknown dataset '{dataset}'. Choose from: lithobench, lithosim, asap7, freepdk45"
+        f"Unknown dataset '{dataset}'. Choose from: lithobench, lithosim, asap7, freepdk45, orfs"
     )
 
 

@@ -8,6 +8,7 @@ from openlithohub.data.ganopc import GanOpcDataset
 from openlithohub.data.iccad16 import HotspotAnnotation, Iccad16Dataset
 from openlithohub.data.lithobench import LithoBenchDataset
 from openlithohub.data.lithosim import LithoSimDataset
+from openlithohub.data.orfs import OrfsArtifactDataset
 
 __all__ = [
     "DatasetAdapter",
@@ -19,6 +20,7 @@ __all__ = [
     "HotspotAnnotation",
     "LithoBenchDataset",
     "LithoSimDataset",
+    "OrfsArtifactDataset",
     "DummyLayoutSpec",
     "generate_dummy_layout",
     "generate_dummy_pair",
