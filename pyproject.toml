@@ -66,6 +66,10 @@ jupyter = [
 ]
 export = [
     "onnx>=1.14",
+    # onnxscript powers the dynamo-based exporter (torch.export.export
+    # → ONNX), the default on PyTorch 2.9+. Without it, export_cmd
+    # silently falls back to the deprecated TorchScript path.
+    "onnxscript>=0.1",
 ]
 all = ["openlithohub[data,workflow,models,dev,docs,jupyter,export]"]
 
@@ -122,6 +126,18 @@ filterwarnings = [
     # tests touch torch.fft. Not actionable from our side; keep the
     # filter narrow so genuine deprecation warnings still surface.
     "ignore:`torch.jit.script_method` is deprecated.*:DeprecationWarning",
+    # torch.jit.trace / trace_method / load — emitted by torch internals
+    # when our export tests TorchScript-trace a model. Out of our hands
+    # until torch.jit is removed; keep narrow.
+    "ignore:`torch.jit.trace` is deprecated.*:DeprecationWarning",
+    "ignore:`torch.jit.trace_method` is deprecated.*:DeprecationWarning",
+    "ignore:`torch.jit.load` is deprecated.*:DeprecationWarning",
+    # Legacy TorchScript-based ONNX exporter — we try the dynamo path
+    # first (export_cmd.py) and only fall back to legacy when the model
+    # can't be torch.export-ed. Out of our hands until upstream models
+    # are dynamo-friendly.
+    "ignore:You are using the legacy TorchScript-based ONNX export.*:DeprecationWarning",
+    "ignore:The feature will be removed\\. Please remove usage of this function:DeprecationWarning",
 ]
 
 [tool.coverage.run]

@@ -163,6 +163,63 @@ def _export_onnx(
     dynamic_batch: bool,
     console: Console,
 ) -> None:
+    # PyTorch 2.9 deprecated the TorchScript-based exporter; the
+    # dynamo-based exporter (torch.export.export → ONNX) is now the
+    # default. Try dynamo first when onnxscript is available, then fall
+    # back to the legacy path — many existing models (any module that
+    # can't be torch.export-ed) only work via the legacy path today.
+    try:
+        import onnxscript  # noqa: F401
+
+        have_dynamo = True
+    except ImportError:
+        have_dynamo = False
+
+    if have_dynamo:
+        dynamic_shapes: dict[str, dict[int, torch.export.Dim]] | None = None
+        if dynamic_batch:
+            batch = torch.export.Dim("batch")
+            dynamic_shapes = {"input": {0: batch}}
+        try:
+            torch.onnx.export(
+                module,
+                (dummy,),
+                str(output),
+                input_names=["input"],
+                output_names=["output"],
+                opset_version=opset,
+                dynamic_shapes=dynamic_shapes,
+                dynamo=True,
+            )
+            console.print(
+                f"[green]Saved ONNX graph to {output}[/green] "
+                f"(opset={opset}, dynamic_batch={dynamic_batch}, exporter=dynamo)"
+            )
+            return
+        except Exception as e:
+            msg = str(e)
+            if "Module onnx is not installed" in msg or "No module named 'onnx" in msg:
+                console.print(
+                    "[red]Error:[/red] ONNX export needs the optional 'onnx' package. "
+                    "Install with:\n  pip install 'openlithohub[export]'\n  # or: pip install onnx"
+                )
+                raise typer.Exit(3) from None
+            console.print(
+                f"[yellow]dynamo-based ONNX export failed ({type(e).__name__}); "
+                "falling back to the deprecated TorchScript exporter.[/yellow]"
+            )
+
+    _export_onnx_legacy(module, dummy, output, opset, dynamic_batch, console)
+
+
+def _export_onnx_legacy(
+    module: torch.nn.Module,
+    dummy: torch.Tensor,
+    output: Path,
+    opset: int,
+    dynamic_batch: bool,
+    console: Console,
+) -> None:
     dynamic_axes: dict[str, dict[int, str]] | None = None
     if dynamic_batch:
         dynamic_axes = {
@@ -193,5 +250,5 @@ def _export_onnx(
         raise
     console.print(
         f"[green]Saved ONNX graph to {output}[/green] "
-        f"(opset={opset}, dynamic_batch={dynamic_batch})"
+        f"(opset={opset}, dynamic_batch={dynamic_batch}, exporter=legacy)"
     )

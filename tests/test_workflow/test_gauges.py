@@ -123,7 +123,9 @@ def test_reexport_from_workflow_namespace() -> None:
 def test_blank_lines_ignored_in_calibre(tmp_path: Path) -> None:
     p = tmp_path / "site.gg"
     p.write_text(
-        "\n# x y tangent target_cd measured_cd weight\n100 200 0 32 31.5 1\n\n150 200 90 32 32.4 2\n\n"
+        "\n# x y tangent target_cd measured_cd weight\n"
+        "100 200 0 32 31.5 1\n\n"
+        "150 200 90 32 32.4 2\n\n"
     )
     gt = parse_gauge(p)
     assert len(gt) == 2

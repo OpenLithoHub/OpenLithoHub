@@ -28,6 +28,11 @@ from openlithohub.leaderboard.schema import BenchmarkResult
 _DEFAULT_LEADERBOARD_DIR = Path.home() / ".openlithohub"
 _LEADERBOARD_FILENAME = "leaderboard.json"
 
+# Submission IDs prefix `model_name` truncated to this many characters,
+# then 8 hex chars of randomness. The truncation is for table readability
+# (schema.py allows 120-char names) — full name is on the entry itself.
+_ID_NAME_PREFIX_LEN = 20
+
 # Bump when the on-disk shape changes (new required fields, renamed fields,
 # changed enum values). Files without this key are treated as v1 (legacy).
 # Add a migration in `_migrate_entries` when bumping.
@@ -172,7 +177,7 @@ class LeaderboardStore:
 
 
 def _generate_id(model_name: str) -> str:
-    safe_name = model_name.replace(" ", "-").lower()[:20]
+    safe_name = model_name.replace(" ", "-").lower()[:_ID_NAME_PREFIX_LEN]
     return f"{safe_name}-{secrets.token_hex(4)}"
 
 

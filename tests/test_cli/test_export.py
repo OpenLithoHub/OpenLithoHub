@@ -132,3 +132,25 @@ def test_export_rejects_bad_format(runner: CliRunner, tmp_path: Path) -> None:
     )
     assert result.exit_code != 0
     assert "format" in result.output.lower()
+
+
+def test_export_onnx_dynamo_path_used_when_module_supports_it(tmp_path: Path) -> None:
+    """The dynamo-based exporter (PyTorch 2.9+ default) is used when onnxscript
+    is available and the module is torch.export-compatible. A trivial Linear
+    module covers both."""
+    pytest.importorskip("onnx")
+    pytest.importorskip("onnxscript")
+
+    from rich.console import Console
+
+    from openlithohub.cli.export_cmd import _export_onnx
+
+    out = tmp_path / "linear.onnx"
+    module = torch.nn.Linear(8, 8).eval()
+    dummy = torch.zeros(1, 8)
+    console = Console(record=True)
+    _export_onnx(module, dummy, out, opset=18, dynamic_batch=True, console=console)
+
+    text = console.export_text()
+    assert "exporter=dynamo" in text, text
+    assert out.exists()
