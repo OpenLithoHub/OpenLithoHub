@@ -342,6 +342,10 @@ Want to be notified when the invite goes live? **[Open an issue with the
 or watch this repo. Charter, channel structure, etiquette, and onboarding
 flow are documented in [docs/community.md](docs/community.md).
 
+📣 **Read the launch announcement:**
+[v0.1 release post](docs/announcements/2026-05-launch.md) — includes
+paste-ready copy for X / LinkedIn / 知乎 / HuggingFace Forum.
+
 ---
 
 ## Disclaimer
