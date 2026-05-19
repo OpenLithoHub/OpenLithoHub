@@ -4,6 +4,8 @@
 
 # OpenLithoHub
 
+> ⭐ **If you find this project helpful, please drop us a star!** It helps us get discovered by the community and is by far the most useful thing you can do for an early-stage open-source project.
+
 **Open-source computational lithography benchmarking and workflow toolkit for advanced EUV/curvilinear mask processes.**
 
 [![PyPI](https://img.shields.io/pypi/v/openlithohub?include_prereleases&label=PyPI)](https://pypi.org/project/openlithohub/)
@@ -27,6 +29,7 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
 - **OASIS workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear)
 - **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface
+- **JIT-accelerated forward model** — Hopkins/SOCS forward is wrapped with `torch.compile` by default, for free kernel-fusion speedups on PyTorch 2.x (use `--no-compile` to disable)
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐

@@ -37,7 +37,7 @@ def run(
         "fp32", "--dtype", help="Compute dtype for the forward model: fp32 or bf16."
     ),
     compile_forward: bool = typer.Option(
-        False, "--compile/--no-compile", help="Wrap the Hopkins forward with torch.compile."
+        True, "--compile/--no-compile", help="Wrap the Hopkins forward with torch.compile."
     ),
     pretrained: bool = typer.Option(
         False,
