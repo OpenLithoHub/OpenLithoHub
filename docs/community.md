@@ -72,7 +72,7 @@ When the server opens, every new member sees:
    ```
 3. A "first task" suggestion: pick one of the [good-first-issue
    labels](https://github.com/OpenLithoHub/OpenLithoHub/labels/good-first-issue)
-   or run the [Colab BYOM notebook](../notebooks/colab_byom.ipynb) and
+   or run the [Colab BYOM notebook](https://colab.research.google.com/github/OpenLithoHub/OpenLithoHub/blob/main/notebooks/colab_byom.ipynb) and
    share a result in `#showcase`.
 
 We deliberately do not gate posting behind self-introduction — gates kill
