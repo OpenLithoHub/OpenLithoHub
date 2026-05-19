@@ -2,6 +2,9 @@
 
 from datetime import datetime
 
+import pytest
+from pydantic import ValidationError
+
 from openlithohub.leaderboard.schema import (
     BenchmarkResult,
     MaskTopology,
@@ -52,3 +55,48 @@ def test_process_node_values():
 def test_mask_topology_values():
     assert MaskTopology.MANHATTAN.value == "manhattan"
     assert MaskTopology.CURVILINEAR.value == "curvilinear"
+
+
+def _valid_payload(**overrides):
+    base = dict(
+        model_name="test-model",
+        dataset="lithobench",
+        process_node="45nm",
+        mask_topology="manhattan",
+        epe_mean_nm=1.0,
+        epe_max_nm=2.0,
+    )
+    base.update(overrides)
+    return base
+
+
+def test_extra_fields_are_rejected():
+    """The schema is the firewall in front of `auto-leaderboard.yml` —
+    submitters must not be able to inject undeclared keys that round-trip
+    into the canonical store."""
+    with pytest.raises(ValidationError, match="Extra inputs"):
+        BenchmarkResult.model_validate(_valid_payload(injected_field="payload"))
+
+
+def test_url_must_be_http_or_https():
+    with pytest.raises(ValidationError, match="must start with http"):
+        BenchmarkResult.model_validate(_valid_payload(paper_url="javascript:alert(1)"))
+    with pytest.raises(ValidationError, match="must start with http"):
+        BenchmarkResult.model_validate(_valid_payload(code_url="file:///etc/passwd"))
+
+
+def test_string_length_bounded():
+    with pytest.raises(ValidationError):
+        BenchmarkResult.model_validate(_valid_payload(model_name="x" * 200))
+    with pytest.raises(ValidationError):
+        BenchmarkResult.model_validate(_valid_payload(notes="x" * 5000))
+
+
+def test_negative_metrics_rejected():
+    with pytest.raises(ValidationError):
+        BenchmarkResult.model_validate(_valid_payload(epe_mean_nm=-1.0))
+
+
+def test_unknown_enum_rejected():
+    with pytest.raises(ValidationError):
+        BenchmarkResult.model_validate(_valid_payload(process_node="999nm"))

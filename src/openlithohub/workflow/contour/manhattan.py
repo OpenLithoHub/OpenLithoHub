@@ -81,23 +81,22 @@ def extract_manhattan_contour(
         x1, y1, x2, y2 = start_edge
         polygon_vertices.append((x1, y1))
         current_vertex = (x2, y2)
+        in_dir = (x2 - x1, y2 - y1)
         remaining.discard(start_edge)
 
         while current_vertex != (x1, y1):
             polygon_vertices.append(current_vertex)
             candidates = vertex_to_edges.get(current_vertex, [])
-            next_edge = None
-            for e in candidates:
-                if e in remaining:
-                    next_edge = e
-                    break
+            next_edge = _pick_next_edge(current_vertex, in_dir, candidates, remaining)
 
             if next_edge is None:
                 break
 
             remaining.discard(next_edge)
             ex1, ey1, ex2, ey2 = next_edge
-            current_vertex = (ex2, ey2) if (ex1, ey1) == current_vertex else (ex1, ey1)
+            next_vertex = (ex2, ey2) if (ex1, ey1) == current_vertex else (ex1, ey1)
+            in_dir = (next_vertex[0] - current_vertex[0], next_vertex[1] - current_vertex[1])
+            current_vertex = next_vertex
 
         # Convert to physical coordinates (subtract 1 for padding offset)
         scaled: list[tuple[float, float]] = []
@@ -108,6 +107,48 @@ def extract_manhattan_contour(
             polygons.append(_simplify_collinear(scaled))
 
     return polygons
+
+
+def _pick_next_edge(
+    vertex: tuple[int, int],
+    in_dir: tuple[int, int],
+    candidates: list[tuple[int, int, int, int]],
+    remaining: set[tuple[int, int, int, int]],
+) -> tuple[int, int, int, int] | None:
+    """Pick the next edge at a junction so the trace stays on one polygon.
+
+    At an X- or T-junction (two foreground regions meeting at a single corner)
+    multiple remaining edges are incident to ``vertex``. Picking arbitrarily
+    can jump onto a different polygon and leave the original loop unclosed.
+
+    To preserve the invariant that foreground stays on the right of the
+    traversal direction, prefer turn directions in this order: right turn
+    (clockwise) > straight > left turn > U-turn. Edges already consumed
+    (not in ``remaining``) are ignored.
+    """
+    best: tuple[int, int, int, int] | None = None
+    best_rank = 5
+    for edge in candidates:
+        if edge not in remaining:
+            continue
+        ex1, ey1, ex2, ey2 = edge
+        out_dir = (ex2 - ex1, ey2 - ey1) if (ex1, ey1) == vertex else (ex1 - ex2, ey1 - ey2)
+
+        cross = in_dir[0] * out_dir[1] - in_dir[1] * out_dir[0]
+        dot = in_dir[0] * out_dir[0] + in_dir[1] * out_dir[1]
+        if cross > 0:
+            rank = 0  # right turn (image y grows downward, so cross > 0 is CW)
+        elif cross == 0 and dot > 0:
+            rank = 1  # straight
+        elif cross < 0:
+            rank = 2  # left turn
+        else:
+            rank = 3  # U-turn
+
+        if rank < best_rank:
+            best = edge
+            best_rank = rank
+    return best
 
 
 def _simplify_collinear(vertices: list[tuple[float, float]]) -> list[tuple[float, float]]:

@@ -100,7 +100,6 @@ def run(
         raise typer.Exit(1) from None
 
     litho_model.setup()
-
     try:
         try:
             module = litho_model.to_torch_module()

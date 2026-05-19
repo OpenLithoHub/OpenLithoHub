@@ -39,11 +39,14 @@ def _vet_address(addr: str, host: str) -> None:
         )
 
 
-def _resolve_and_vet(host: str) -> str:
-    """Resolve `host`, refuse private IPs, return the single vetted IP to dial.
+def _resolve_and_vet(host: str) -> list[str]:
+    """Resolve `host`, refuse private IPs, return every vetted IP to dial.
 
-    Returns one address — the connection is later forced to that exact IP so
-    a DNS rebinder cannot swap in a private IP between vet-time and dial-time.
+    Returns the full list of vetted addresses in `getaddrinfo` order so the
+    caller can iterate them and fall back from a broken IPv6 record to a
+    working IPv4 one (common in CI runners with disabled IPv6). The
+    connection is later forced to whichever IP succeeds, so a DNS rebinder
+    cannot swap in a private IP between vet-time and dial-time.
     """
     try:
         infos = socket.getaddrinfo(host, None)
@@ -51,10 +54,15 @@ def _resolve_and_vet(host: str) -> str:
         raise ValueError(f"Could not resolve host {host!r}: {exc}") from exc
     if not infos:
         raise ValueError(f"Host {host!r} did not resolve to any address")
+    addrs: list[str] = []
+    seen: set[str] = set()
     for info in infos:
-        addr = info[4][0]
-        _vet_address(str(addr), host)
-    return str(infos[0][4][0])
+        addr = str(info[4][0])
+        _vet_address(addr, host)
+        if addr not in seen:
+            seen.add(addr)
+            addrs.append(addr)
+    return addrs
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
@@ -233,15 +241,31 @@ class ModelHub:
         path = parsed.path or "/"
         if parsed.query:
             path = f"{path}?{parsed.query}"
-        ip = _resolve_and_vet(host)
+        ips = _resolve_and_vet(host)
 
         target.parent.mkdir(parents=True, exist_ok=True)
         max_size = 2 * 1024 * 1024 * 1024  # 2 GB
 
         ctx = ssl.create_default_context()
-        # Connect to the vetted IP directly; SNI/host header still uses the
-        # original hostname so cert validation works.
-        conn = _PinnedHTTPSConnection(host, ip, port=port, timeout=self.timeout, context=ctx)
+        # Try each vetted IP in order — falls back from a broken IPv6 to a
+        # working IPv4 record. SNI/host header still use the original hostname
+        # so cert validation works.
+        conn: _PinnedHTTPSConnection | None = None
+        last_err: Exception | None = None
+        for ip in ips:
+            candidate = _PinnedHTTPSConnection(
+                host, ip, port=port, timeout=self.timeout, context=ctx
+            )
+            try:
+                candidate.connect()
+            except OSError as exc:
+                candidate.close()
+                last_err = exc
+                continue
+            conn = candidate
+            break
+        if conn is None:
+            raise ValueError(f"Could not connect to any vetted address for {host!r}: {last_err}")
         try:
             conn.request("GET", path, headers={"Host": host})
             response = conn.getresponse()

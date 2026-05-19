@@ -16,6 +16,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import secrets
 import tempfile
 import time
 from collections.abc import Iterator
@@ -113,7 +114,12 @@ class LeaderboardStore:
                 f"(got {type(data).__name__}); refusing to load."
             )
         version = int(data.get("schema_version", 1))
-        entries: list[dict[str, Any]] = data.get("entries", [])
+        entries = data.get("entries", [])
+        if not isinstance(entries, list):
+            raise ValueError(
+                f"Leaderboard file at {self._path} has a non-list 'entries' "
+                f"(got {type(entries).__name__}); refusing to load."
+            )
         return _migrate_entries(entries, from_version=version)
 
     def _write_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -166,9 +172,8 @@ class LeaderboardStore:
 
 
 def _generate_id(model_name: str) -> str:
-    ts_hex = f"{int(time.time() * 1000):x}"[-8:]
     safe_name = model_name.replace(" ", "-").lower()[:20]
-    return f"{safe_name}-{ts_hex}"
+    return f"{safe_name}-{secrets.token_hex(4)}"
 
 
 def _migrate_entries(entries: list[dict[str, Any]], *, from_version: int) -> list[dict[str, Any]]:

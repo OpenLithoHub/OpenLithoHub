@@ -317,3 +317,25 @@ class TestManhattanContour:
         assert len(contours) == 1
         # Full mask boundary is the image boundary: 4 corners
         assert len(contours[0]) == 4
+
+    def test_diagonal_touch_junction(self):
+        """Two foreground regions meeting at a single corner (X-junction).
+
+        Each region should produce its own closed polygon — the tracer must
+        not jump from one region's boundary onto the other at the shared
+        vertex, which would leave both polygons unclosed.
+        """
+        mask = torch.zeros(8, 8)
+        mask[2, 2] = 1.0
+        mask[3, 3] = 1.0
+        contours = extract_manhattan_contour(mask, pixel_size_nm=1.0)
+        # Each unit pixel produces one closed 4-vertex square.
+        assert len(contours) == 2
+        for poly in contours:
+            assert len(poly) == 4
+            # Closed: first and last edges connect; in a unit square the
+            # extents are exactly 1.0 wide and 1.0 tall.
+            xs = [v[0] for v in poly]
+            ys = [v[1] for v in poly]
+            assert max(xs) - min(xs) == 1.0
+            assert max(ys) - min(ys) == 1.0

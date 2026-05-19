@@ -42,6 +42,7 @@ and clip-site centers live in ``metadata``.
 from __future__ import annotations
 
 import csv
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -282,9 +283,12 @@ class Iccad16Dataset(DatasetAdapter):
 
     def _load_hotspots(self, csv_path: Path) -> list[HotspotAnnotation]:
         out: list[HotspotAnnotation] = []
+        n_rows = 0
+        n_skipped = 0
         with open(csv_path, encoding="utf-8", newline="") as f:
             reader = csv.DictReader(f)
             for row in reader:
+                n_rows += 1
                 try:
                     out.append(
                         HotspotAnnotation(
@@ -294,8 +298,22 @@ class Iccad16Dataset(DatasetAdapter):
                             y_nm=float(row["y"]),
                         )
                     )
-                except (KeyError, ValueError):
-                    continue
+                except (KeyError, ValueError) as exc:
+                    n_skipped += 1
+                    warnings.warn(
+                        f"Skipped malformed row in {csv_path.name}: {exc!r}",
+                        stacklevel=2,
+                    )
+        if n_rows > 0 and not out:
+            raise ValueError(
+                f"All {n_rows} rows in {csv_path} were malformed — the CSV "
+                f"header may have changed (expected columns: id, category, x, y)."
+            )
+        if n_skipped:
+            warnings.warn(
+                f"{n_skipped}/{n_rows} rows in {csv_path.name} were skipped as malformed.",
+                stacklevel=2,
+            )
         return out
 
     def download(self, root: str) -> None:

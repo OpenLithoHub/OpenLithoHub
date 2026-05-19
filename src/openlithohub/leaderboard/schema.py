@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ProcessNode(str, Enum):
@@ -40,10 +40,22 @@ class LeaderboardTrack(str, Enum):
 
 
 class BenchmarkResult(BaseModel):
-    """A single benchmark submission for the leaderboard."""
+    """A single benchmark submission for the leaderboard.
 
-    model_name: str = Field(..., description="Name of the evaluated model")
-    dataset: str = Field(..., description="Dataset used (lithobench/lithosim)")
+    The leaderboard ingests this schema from community pull requests via the
+    ``auto-leaderboard`` workflow. The schema is the only firewall between
+    PR-supplied YAML and the canonical store, so it forbids extra fields,
+    bounds string lengths, and validates URL fields.
+    """
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+    model_name: str = Field(
+        ..., min_length=1, max_length=120, description="Name of the evaluated model"
+    )
+    dataset: str = Field(
+        ..., min_length=1, max_length=120, description="Dataset used (lithobench/lithosim)"
+    )
     process_node: ProcessNode
     mask_topology: MaskTopology
     track: LeaderboardTrack = Field(
@@ -61,7 +73,18 @@ class BenchmarkResult(BaseModel):
     stochastic_robustness: float | None = Field(None, ge=0, le=1)
 
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    submission_id: str | None = Field(None, description="Auto-assigned submission ID (read-only).")
-    paper_url: str | None = None
-    code_url: str | None = None
-    notes: str | None = None
+    submission_id: str | None = Field(
+        None, max_length=64, description="Auto-assigned submission ID (read-only)."
+    )
+    paper_url: str | None = Field(None, max_length=2048)
+    code_url: str | None = Field(None, max_length=2048)
+    notes: str | None = Field(None, max_length=2000)
+
+    @field_validator("paper_url", "code_url")
+    @classmethod
+    def _validate_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not (v.startswith("https://") or v.startswith("http://")):
+            raise ValueError("URL must start with http:// or https://")
+        return v

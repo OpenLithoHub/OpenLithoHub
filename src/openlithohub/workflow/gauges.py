@@ -153,6 +153,11 @@ def _read_calibre(path: Path) -> tuple[list[list[str]], list[str]]:
     cover all four required canonical columns (x, y, tangent, target_cd)
     after alias resolution. This avoids mistaking arbitrary commentary
     like '# Calibre OPCverify dump' for a header.
+
+    A header is REQUIRED. The previous behaviour fell back to the canonical
+    column order when no header was found, which silently produced wrong
+    EPE numbers on hand-written .gg variants that use a different column
+    order. Refusing the file forces the caller to fix the input.
     """
     header: list[str] | None = None
     rows: list[list[str]] = []
@@ -169,7 +174,11 @@ def _read_calibre(path: Path) -> tuple[list[list[str]], list[str]]:
                 continue
             rows.append(line.split())
     if header is None:
-        header = list(_CANONICAL)
+        raise ValueError(
+            f"Gauge file {path.name} has no recognizable header. Calibre .gg "
+            f"files must start with a '#'-prefixed line naming all four required "
+            f"columns (x, y, tangent, target_cd)."
+        )
     return rows, header
 
 

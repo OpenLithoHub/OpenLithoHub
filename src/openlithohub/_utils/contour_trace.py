@@ -36,7 +36,12 @@ def trace_contour(binary: np.ndarray) -> list[np.ndarray]:
             cy, cx = start_y, start_x
             entry_dir = 0
 
-            max_steps = 4 * (h + w)
+            # The boundary of an arbitrary connected region on an H*W grid is
+            # O(H*W), not O(H+W) — a serpentine shape can have a perimeter that
+            # threads through every pixel. Bound by 2*h*w (each pixel can be
+            # visited from at most two directions in Moore tracing) so we never
+            # truncate a real boundary.
+            max_steps = 2 * h * w + 8
             for _ in range(max_steps):
                 points.append((cy - 1, cx - 1))
                 visited_edges.add((cy, cx))

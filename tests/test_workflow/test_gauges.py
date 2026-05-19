@@ -11,17 +11,17 @@ from openlithohub.workflow.gauges import GaugePoint, GaugeTable, parse_gauge
 
 
 def test_parse_calibre_no_header(tmp_path: Path) -> None:
-    """No header → assume canonical column order."""
+    """No recognizable header → refuse the file rather than silently
+    assuming a column order. Wrong-order columns previously produced
+    confidently-wrong EPE numbers."""
     p = tmp_path / "site.gg"
     p.write_text(
         "# Calibre OPCverify gauge dump\n"
         "100.0 200.0 0.0 32.0 31.5 1.0\n"
         "150.5 200.0 90.0 32.0 32.4 2.0\n"
     )
-    gt = parse_gauge(p)
-    assert len(gt) == 2
-    assert gt.points[0] == GaugePoint(100.0, 200.0, 0.0, 32.0, 31.5, 1.0)
-    assert gt.points[1].weight == 2.0
+    with pytest.raises(ValueError, match="no recognizable header"):
+        parse_gauge(p)
 
 
 def test_parse_calibre_with_header(tmp_path: Path) -> None:
@@ -122,6 +122,8 @@ def test_reexport_from_workflow_namespace() -> None:
 
 def test_blank_lines_ignored_in_calibre(tmp_path: Path) -> None:
     p = tmp_path / "site.gg"
-    p.write_text("\n# header comment\n100 200 0 32 31.5 1\n\n150 200 90 32 32.4 2\n\n")
+    p.write_text(
+        "\n# x y tangent target_cd measured_cd weight\n100 200 0 32 31.5 1\n\n150 200 90 32 32.4 2\n\n"
+    )
     gt = parse_gauge(p)
     assert len(gt) == 2
