@@ -1,0 +1,5 @@
+/* Swap to the light-on-dark logo mark when MkDocs Material is in dark (slate) mode. */
+[data-md-color-scheme="slate"] .md-header__button.md-logo img,
+[data-md-color-scheme="slate"] .md-nav__button.md-logo img {
+  content: url("../assets/logo-dark.png");
+}
