@@ -78,7 +78,10 @@ def compute_epe(
         return {"epe_mean_nm": 0.0, "epe_max_nm": 0.0, "epe_std_nm": 0.0, "valid": True}
     if pred_empty or tgt_empty:
         inf = float("inf")
-        return {"epe_mean_nm": inf, "epe_max_nm": inf, "epe_std_nm": 0.0, "valid": False}
+        # Std is undefined when one edge set is empty — return nan rather
+        # than 0.0 so callers can distinguish "no data" from a real zero
+        # spread, matching the single-edge-pixel convention below.
+        return {"epe_mean_nm": inf, "epe_max_nm": inf, "epe_std_nm": float("nan"), "valid": False}
 
     # Compute pairwise distances in chunks along BOTH axes to keep peak
     # memory at chunk_size^2 floats regardless of edge count. With a single

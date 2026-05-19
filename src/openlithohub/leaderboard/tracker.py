@@ -78,6 +78,17 @@ class LeaderboardStore:
             return []
         text = self._path.read_text(encoding="utf-8")
         data = json.loads(text)
+        # Pre-schema-versioned files were written as a top-level JSON list.
+        # Treat that as version 0 so the migration path is a single
+        # well-defined funnel and a corrupted file is a clear error rather
+        # than an `AttributeError` deep inside `.get`.
+        if isinstance(data, list):
+            return _migrate_entries(data, from_version=0)
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Leaderboard file at {self._path} is neither a JSON object nor a list "
+                f"(got {type(data).__name__}); refusing to load."
+            )
         version = int(data.get("schema_version", 1))
         entries: list[dict[str, Any]] = data.get("entries", [])
         return _migrate_entries(entries, from_version=version)

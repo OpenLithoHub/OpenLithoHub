@@ -343,6 +343,11 @@ def load_leaderboard():
 def _build_upload_examples() -> list[list[str]]:
     """Materialize the synthetic patterns as PNG (pred, target) pairs.
 
+    Failures here must not crash app startup — on the HF Space cold path,
+    tempdir or PIL hiccups would otherwise leave the Space dead before
+    Gradio mounts any routes. Caller fans out to an empty list, which
+    Gradio renders as "no examples available" rather than a 500.
+
     Returns rows shaped to match the Upload tab inputs:
     [pred_path, target_path, pixel_size_nm, min_width_nm, min_spacing_nm].
     """
@@ -365,6 +370,21 @@ def _build_upload_examples() -> list[list[str]]:
         Image.fromarray((target * 255).astype(np.uint8)).save(tgt_path)
         rows.append([str(pred_path), str(tgt_path), 1.0, 40.0, 40.0])
     return rows
+
+
+_upload_examples_cache: list[list[str]] | None = None
+
+
+def _get_upload_examples() -> list[list[str]]:
+    """Lazy, fault-tolerant accessor for the upload examples list."""
+    global _upload_examples_cache
+    if _upload_examples_cache is None:
+        try:
+            _upload_examples_cache = _build_upload_examples()
+        except Exception as exc:  # noqa: BLE001 — don't crash the Space on cold-start
+            print(f"OpenLithoHub: failed to build upload examples ({exc!r}); skipping.")
+            _upload_examples_cache = []
+    return _upload_examples_cache
 
 
 # ---------------------------------------------------------------------------
@@ -455,7 +475,7 @@ with gr.Blocks(
             )
 
             gr.Examples(
-                examples=_build_upload_examples(),
+                examples=_get_upload_examples(),
                 inputs=[pred_upload, tgt_upload, px_size_upload, mw_upload, ms_upload],
                 label="Try a synthetic example",
                 examples_per_page=3,

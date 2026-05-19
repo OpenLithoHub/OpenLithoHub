@@ -92,27 +92,26 @@ def run(
     console.print(f"  Node:   {node}")
     console.print()
 
+    requested_kwargs = _build_model_kwargs(pretrained, sha256)
     try:
-        litho_model = registry.get(model, **_build_model_kwargs(pretrained, sha256))
+        support = registry.supports_kwargs(model, requested_kwargs)
     except KeyError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from None
-    except TypeError:
-        # Selected model does not accept pretrained / sha256 kwargs.
-        if pretrained or sha256 is not None:
-            console.print(
-                f"[yellow]Warning:[/yellow] Model {model!r} does not support "
-                "--pretrained / --sha256; ignoring."
-            )
-        try:
-            litho_model = registry.get(model)
-        except KeyError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1) from None
+
+    if (pretrained or sha256 is not None) and not all(support.values()):
+        console.print(
+            f"[yellow]Warning:[/yellow] Model {model!r} does not support "
+            "--pretrained / --sha256; ignoring."
+        )
+
+    litho_model = registry.get(model, **requested_kwargs)
 
     litho_model.setup()
 
-    console.print("[bold]Step 1:[/bold] Parsing layout...")
+    step = _StepCounter()
+
+    console.print(f"[bold]Step {step.next()}:[/bold] Parsing layout...")
     try:
         layout_tensor = _load_layout_as_tensor(input, pixel_nm, layer=layer)
     except (ImportError, FileNotFoundError, ValueError) as e:
@@ -122,13 +121,13 @@ def run(
 
     console.print(f"  Layout size: {layout_tensor.shape[0]}x{layout_tensor.shape[1]} pixels")
 
-    console.print("[bold]Step 2:[/bold] Tiling layout...")
+    console.print(f"[bold]Step {step.next()}:[/bold] Tiling layout...")
     from openlithohub.workflow.tiling import Tile, stitch_tiles, tile_layout
 
     tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=overlap)
     console.print(f"  Generated {len(tiles)} tiles ({tile_size}px, overlap={overlap})")
 
-    console.print("[bold]Step 3:[/bold] Running optimization...")
+    console.print(f"[bold]Step {step.next()}:[/bold] Running optimization...")
     tile_results: list[tuple[Tile, torch.Tensor]] = []
     perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
 
@@ -147,14 +146,14 @@ def run(
 
     litho_model.teardown()
 
-    console.print("[bold]Step 4:[/bold] Stitching tiles...")
+    console.print(f"[bold]Step {step.next()}:[/bold] Stitching tiles...")
     h, w = layout_tensor.shape
     optimized = stitch_tiles(tile_results, (h, w))
     optimized = (optimized > 0.5).float()
     console.print(f"  Stitched output: {optimized.shape[0]}x{optimized.shape[1]}")
 
     if drc_check:
-        console.print("[bold]Step 5:[/bold] Running compliance checks...")
+        console.print(f"[bold]Step {step.next()}:[/bold] Running compliance checks...")
         from openlithohub.benchmark.compliance.drc import check_drc
         from openlithohub.benchmark.compliance.mrc import check_mrc
 
@@ -172,7 +171,7 @@ def run(
             if not drc_result.passed:
                 console.print(f"  [yellow]DRC:[/yellow] {drc_result.violation_count} violations")
 
-    console.print(f"[bold]Step {'6' if drc_check else '5'}:[/bold] Exporting...")
+    console.print(f"[bold]Step {step.next()}:[/bold] Exporting...")
     export_mode = "curvilinear" if writer == "mbmw" else "manhattan"
 
     try:
@@ -189,6 +188,17 @@ def run(
 
     console.print()
     console.print("[bold green]Optimization complete.[/bold green]")
+
+
+class _StepCounter:
+    """Auto-increment counter for the human-readable Step N: log lines."""
+
+    def __init__(self) -> None:
+        self._n = 0
+
+    def next(self) -> int:
+        self._n += 1
+        return self._n
 
 
 def _build_perf_kwargs(device: str, dtype: str, compile_forward: bool) -> dict[str, Any]:

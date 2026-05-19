@@ -101,22 +101,20 @@ def run(
 
     console.print(f"[bold]Evaluating[/bold] model={model} dataset={dataset} node={node}")
 
+    requested_kwargs = _build_model_kwargs(pretrained, sha256)
     try:
-        litho_model = registry.get(model, **_build_model_kwargs(pretrained, sha256))
+        support = registry.supports_kwargs(model, requested_kwargs)
     except KeyError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1) from None
-    except TypeError:
-        if pretrained or sha256 is not None:
-            console.print(
-                f"[yellow]Warning:[/yellow] Model {model!r} does not support "
-                "--pretrained / --sha256; ignoring."
-            )
-        try:
-            litho_model = registry.get(model)
-        except KeyError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1) from None
+
+    if (pretrained or sha256 is not None) and not all(support.values()):
+        console.print(
+            f"[yellow]Warning:[/yellow] Model {model!r} does not support "
+            "--pretrained / --sha256; ignoring."
+        )
+
+    litho_model = registry.get(model, **requested_kwargs)
 
     litho_model.setup()
 

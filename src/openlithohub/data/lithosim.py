@@ -144,14 +144,29 @@ class LithoSimDataset(DatasetAdapter):
         return self._to_tensor(row[column])
 
     @staticmethod
+    def _array_to_tensor(arr: np.ndarray) -> torch.Tensor:
+        """Convert a numpy image array to a normalized float32 tensor in [0, 1].
+
+        SEM and aerial-image rows in industrial litho datasets are commonly
+        uint16; falling through to a plain ``astype(float32)`` would leave
+        values in [0, 65535] and silently break any downstream code that
+        assumes a [0, 1] resist threshold or EPE input range.
+        """
+        if arr.dtype == np.uint8:
+            return torch.from_numpy(arr.astype(np.float32) / 255.0)
+        if arr.dtype == np.uint16:
+            return torch.from_numpy(arr.astype(np.float32) / 65535.0)
+        if np.issubdtype(arr.dtype, np.integer):
+            raise TypeError(
+                f"Unsupported integer dtype {arr.dtype}; "
+                "expected uint8 or uint16 SEM/aerial images."
+            )
+        return torch.from_numpy(arr.astype(np.float32))
+
+    @staticmethod
     def _to_tensor(value: Any) -> torch.Tensor:
         if isinstance(value, np.ndarray):
-            arr = value
-            if arr.dtype == np.uint8:
-                arr = arr.astype(np.float32) / 255.0
-            else:
-                arr = arr.astype(np.float32)
-            return torch.from_numpy(arr)
+            return LithoSimDataset._array_to_tensor(value)
 
         if isinstance(value, (list, tuple)):
             return torch.tensor(value, dtype=torch.float32)
@@ -164,23 +179,13 @@ class LithoSimDataset(DatasetAdapter):
             ) from e
 
         if isinstance(value, Image.Image):
-            arr = np.array(value)
-            if arr.dtype == np.uint8:
-                arr = arr.astype(np.float32) / 255.0
-            else:
-                arr = arr.astype(np.float32)
-            return torch.from_numpy(arr)
+            return LithoSimDataset._array_to_tensor(np.array(value))
 
         if isinstance(value, dict) and "bytes" in value:
             import io
 
             img = Image.open(io.BytesIO(value["bytes"]))
-            arr = np.array(img)
-            if arr.dtype == np.uint8:
-                arr = arr.astype(np.float32) / 255.0
-            else:
-                arr = arr.astype(np.float32)
-            return torch.from_numpy(arr)
+            return LithoSimDataset._array_to_tensor(np.array(img))
 
         raise TypeError(f"Cannot convert {type(value)} to tensor")
 

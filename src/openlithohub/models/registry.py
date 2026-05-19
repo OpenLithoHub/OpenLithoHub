@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from openlithohub.models.base import LithographyModel
@@ -32,15 +33,59 @@ class ModelRegistry:
         return model_cls
 
     def get(self, name: str, **kwargs: Any) -> LithographyModel:
-        """Instantiate a registered model by name."""
+        """Instantiate a registered model by name.
+
+        Kwargs that the target model's ``__init__`` does not accept are
+        silently dropped, so optional CLI flags like ``--pretrained`` work
+        across the whole registry without each call site needing to know
+        which models support which options. Real bugs in the model's
+        ``__init__`` (mistyped args, missing required positionals) still
+        propagate as ``TypeError``.
+        """
         if name not in self._models:
             available = ", ".join(sorted(self._models.keys()))
             raise KeyError(f"Model '{name}' not found. Available: [{available}]")
-        return self._models[name](**kwargs)
+        cls = self._models[name]
+        return cls(**_filter_supported_kwargs(cls, kwargs))
+
+    def supports_kwargs(self, name: str, kwargs: dict[str, Any]) -> dict[str, bool]:
+        """Return a per-key flag indicating whether the named model accepts each kwarg."""
+        if name not in self._models:
+            raise KeyError(f"Model '{name}' not found.")
+        cls = self._models[name]
+        accepted = _accepted_kwargs(cls)
+        if accepted is None:
+            return {k: True for k in kwargs}
+        return {k: k in accepted for k in kwargs}
 
     def list_models(self) -> list[str]:
         """Return names of all registered models."""
         return sorted(self._models.keys())
+
+
+def _accepted_kwargs(cls: type[LithographyModel]) -> set[str] | None:
+    """Names accepted by ``cls.__init__``. Returns None if it accepts ``**kwargs``."""
+    try:
+        sig = inspect.signature(cls)
+    except (TypeError, ValueError):
+        return None
+    names: set[str] = set()
+    for param in sig.parameters.values():
+        if param.kind is inspect.Parameter.VAR_KEYWORD:
+            return None
+        if param.kind in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        ):
+            names.add(param.name)
+    return names
+
+
+def _filter_supported_kwargs(cls: type[LithographyModel], kwargs: dict[str, Any]) -> dict[str, Any]:
+    accepted = _accepted_kwargs(cls)
+    if accepted is None:
+        return kwargs
+    return {k: v for k, v in kwargs.items() if k in accepted}
 
 
 registry = ModelRegistry()

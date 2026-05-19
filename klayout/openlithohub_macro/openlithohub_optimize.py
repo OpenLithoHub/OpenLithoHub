@@ -6,6 +6,7 @@ KLayout ships its own bundled Python without `pip`, so doing it that way
 avoids the dep-packaging nightmare of injecting torch + openlithohub into
 that interpreter. The cost is per-invocation startup latency (~1-2 s).
 """
+
 from __future__ import annotations
 
 import datetime
@@ -23,9 +24,7 @@ def _require_pya():  # type: ignore[no-untyped-def]
     try:
         import pya  # type: ignore[import-not-found]
     except ImportError as exc:
-        raise RuntimeError(
-            "This macro must run inside KLayout (pya unavailable)."
-        ) from exc
+        raise RuntimeError("This macro must run inside KLayout (pya unavailable).") from exc
     return pya
 
 
@@ -114,17 +113,20 @@ def run_from_menu() -> None:  # type: ignore[no-untyped-def]
             cli,
             "optimize",
             "run",
-            "--input", str(tile_path),
-            "--output", str(result_path),
-            "--model", "rule-based-opc",
-            "--tile-size", "1024",
-            "--pixel-nm", "1.0",
+            "--input",
+            str(tile_path),
+            "--output",
+            str(result_path),
+            "--model",
+            "rule-based-opc",
+            "--tile-size",
+            "1024",
+            "--pixel-nm",
+            "1.0",
         ]
         pya.Logger.info(f"OpenLithoHub: running {' '.join(cmd)}")
 
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, check=False
-        )
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if proc.stdout:
             pya.Logger.info(proc.stdout)
         if proc.returncode != 0:
