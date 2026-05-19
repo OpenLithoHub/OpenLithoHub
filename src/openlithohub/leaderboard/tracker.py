@@ -56,14 +56,14 @@ def _file_lock(lock_path: Path) -> Iterator[None]:
         pass
 
     # Windows: use msvcrt.locking on a single byte at offset 0.
-    import msvcrt
+    import msvcrt  # type: ignore[import-not-found,unused-ignore]
 
     with open(lock_path, "a+b") as f:
         f.seek(0)
         # Block until the lock is acquired; retry on transient EAGAIN.
         while True:
             try:
-                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined,unused-ignore]
                 break
             except OSError:
                 time.sleep(0.05)
@@ -72,7 +72,7 @@ def _file_lock(lock_path: Path) -> Iterator[None]:
         finally:
             f.seek(0)
             with contextlib.suppress(OSError):
-                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined,unused-ignore]
 
 
 class LeaderboardStore:

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import math
 
+import matplotlib.axes
+import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -32,9 +34,9 @@ def plot_epe_heatmap(
     target: np.ndarray | torch.Tensor,
     *,
     pixel_size_nm: float = 1.0,
-    ax: plt.Axes | None = None,
+    ax: matplotlib.axes.Axes | None = None,
     title: str = "EPE Heatmap",
-) -> plt.Figure:
+) -> matplotlib.figure.Figure:
     """Render predicted-edge pixels coloured by their distance (in nm) to the nearest target edge.
 
     The colormap is "turbo" capped at 5×pixel_size_nm or the actual max,
@@ -61,7 +63,9 @@ def plot_epe_heatmap(
     if ax is None:
         fig, ax = plt.subplots(figsize=(4.5, 4.5))
     else:
-        fig = ax.figure
+        fig_or_sub = ax.figure
+        assert isinstance(fig_or_sub, matplotlib.figure.Figure)
+        fig = fig_or_sub
 
     ax.imshow(tgt_t.numpy(), cmap="gray", interpolation="nearest", alpha=0.4)
     finite = masked[np.isfinite(masked)]
@@ -81,9 +85,9 @@ def plot_mrc_overlay(
     min_width_nm: float = 40.0,
     min_spacing_nm: float = 40.0,
     pixel_size_nm: float = 1.0,
-    ax: plt.Axes | None = None,
+    ax: matplotlib.axes.Axes | None = None,
     title: str = "MRC Violations",
-) -> plt.Figure:
+) -> matplotlib.figure.Figure:
     """Render the mask in grayscale with width and spacing violations highlighted in red.
 
     Width-violation pixels (foreground that disappears under morphological
@@ -123,7 +127,9 @@ def plot_mrc_overlay(
     if ax is None:
         fig, ax = plt.subplots(figsize=(4.5, 4.5))
     else:
-        fig = ax.figure
+        fig_or_sub = ax.figure
+        assert isinstance(fig_or_sub, matplotlib.figure.Figure)
+        fig = fig_or_sub
 
     ax.imshow(rgba, interpolation="nearest")
     subtitle = f"width={width_count}px, spacing={spacing_count}px"

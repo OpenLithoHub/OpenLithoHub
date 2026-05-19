@@ -31,6 +31,7 @@ workflow that produces the GDS as a release-style artifact.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -173,6 +174,14 @@ class OrfsArtifactDataset(DatasetAdapter):
             top_cells = list(layout.top_cells())
             if not top_cells:
                 raise ValueError(f"GDS {self.gds_path.name} has no top cells.")
+            if len(top_cells) > 1:
+                names = [c.name for c in top_cells]
+                warnings.warn(
+                    f"GDS {self.gds_path.name} has {len(top_cells)} top cells "
+                    f"({names!r}); picking {names[0]!r}. Pass cell_name=... to "
+                    "select explicitly.",
+                    stacklevel=2,
+                )
             cell = top_cells[0]
         design_arr, origin = rasterize_cell_layer(layout, cell, self.design_layer, self.pixel_nm)
         self._design_arr = design_arr

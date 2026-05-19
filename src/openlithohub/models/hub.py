@@ -150,9 +150,10 @@ class ModelHub:
     paths are rejected. URL-keyed segments accept only hex suffixes.
     """
 
-    def __init__(self, cache_dir: Path | None = None) -> None:
+    def __init__(self, cache_dir: Path | None = None, timeout: float = 300.0) -> None:
         self.cache_dir = cache_dir or _DEFAULT_CACHE_DIR
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.timeout = timeout
 
     def download_weights(
         self,
@@ -240,7 +241,7 @@ class ModelHub:
         ctx = ssl.create_default_context()
         # Connect to the vetted IP directly; SNI/host header still uses the
         # original hostname so cert validation works.
-        conn = _PinnedHTTPSConnection(host, ip, port=port, timeout=300, context=ctx)
+        conn = _PinnedHTTPSConnection(host, ip, port=port, timeout=self.timeout, context=ctx)
         try:
             conn.request("GET", path, headers={"Host": host})
             response = conn.getresponse()

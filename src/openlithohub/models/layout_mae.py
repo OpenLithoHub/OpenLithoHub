@@ -160,7 +160,7 @@ class LayoutMAE(nn.Module):
         for blk in self.encoder_blocks:
             x = blk(x)
         x = self.encoder_norm(x)
-        return x
+        return x  # type: ignore[no-any-return]
 
     def forward(
         self, imgs: torch.Tensor, mask_ratio: float | None = None
@@ -209,6 +209,6 @@ def train_step(
     pred, mask, _ = model(imgs)
     loss = model.reconstruction_loss(imgs, pred, mask)
     optimizer.zero_grad(set_to_none=True)
-    loss.backward()
+    loss.backward()  # type: ignore[no-untyped-call]
     optimizer.step()
     return float(loss.detach())

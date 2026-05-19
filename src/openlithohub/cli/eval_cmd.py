@@ -167,9 +167,10 @@ def run(
             if sample.mask is not None:
                 epe = compute_epe(result.mask, sample.mask, pixel_size_nm=pixel_nm)
                 # `valid` is a non-numeric flag describing edge-set health for this
-                # sample; drop it before aggregation so we don't average a bool.
-                epe.pop("valid", None)
-                sample_metrics.update(epe)
+                # sample; copy only numeric fields so we don't average a bool.
+                sample_metrics["epe_mean_nm"] = epe["epe_mean_nm"]
+                sample_metrics["epe_max_nm"] = epe["epe_max_nm"]
+                sample_metrics["epe_std_nm"] = epe["epe_std_nm"]
 
             if mrc_check:
                 mrc_result = check_mrc(

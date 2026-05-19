@@ -26,6 +26,18 @@ jobs:
       - name: Ruff format check
         run: ruff format --check src/ tests/ spaces/ scripts/ klayout/ notebooks/
 
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install package with dev deps
+        run: pip install -e ".[dev]"
+      - name: Mypy (strict, per pyproject)
+        run: mypy src
+
   test:
     runs-on: ubuntu-latest
     strategy:
