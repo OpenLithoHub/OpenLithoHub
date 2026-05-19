@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from pathlib import Path
 
 # Upper bound on the longest side of an uploaded mask. EPE uses a distance
@@ -131,10 +130,45 @@ def generate_sram(size: int = 256) -> np.ndarray:
     return mask
 
 
+def generate_random_logic(size: int = 256, *, seed: int = 7) -> np.ndarray:
+    """Manhattan random-logic routing on a coarse grid (back-end-of-line look)."""
+    rng = np.random.default_rng(seed)
+    mask = np.zeros((size, size), dtype=np.float32)
+    grid = 16
+    for gy in range(grid // 2, size, grid):
+        for gx in range(grid // 2, size, grid):
+            roll = rng.random()
+            if roll < 0.35:
+                length = rng.integers(8, 28)
+                width = rng.integers(2, 5)
+                x0 = max(0, gx - length // 2)
+                x1 = min(size, gx + length // 2)
+                y0 = max(0, gy - width // 2)
+                y1 = min(size, gy + width // 2)
+                mask[y0:y1, x0:x1] = 1.0
+            elif roll < 0.65:
+                length = rng.integers(8, 28)
+                width = rng.integers(2, 5)
+                y0 = max(0, gy - length // 2)
+                y1 = min(size, gy + length // 2)
+                x0 = max(0, gx - width // 2)
+                x1 = min(size, gx + width // 2)
+                mask[y0:y1, x0:x1] = 1.0
+            elif roll < 0.72:
+                via = 4
+                y0 = max(0, gy - via // 2)
+                y1 = min(size, gy + via // 2)
+                x0 = max(0, gx - via // 2)
+                x1 = min(size, gx + via // 2)
+                mask[y0:y1, x0:x1] = 1.0
+    return mask
+
+
 PATTERN_GENERATORS = {
     "Line/Space": generate_line_space,
     "Contact Holes": generate_contact_holes,
     "SRAM-like": generate_sram,
+    "Random Logic": generate_random_logic,
 }
 
 
@@ -341,54 +375,40 @@ def load_leaderboard():
 
 
 # ---------------------------------------------------------------------------
-# Upload-tab example generation
+# Built-in preset examples (committed to spaces/examples/)
 # ---------------------------------------------------------------------------
 
+# Source of truth for the demo PNGs is ``scripts/generate_demo_samples.py``.
+# Shipping them under spaces/examples/ avoids the prior tempdir-on-cold-start
+# fragility on HF Space and gives users browseable inputs in the repo.
+_EXAMPLES_DIR = Path(__file__).resolve().parent / "examples"
 
-def _build_upload_examples() -> list[list[str]]:
-    """Materialize the synthetic patterns as PNG (pred, target) pairs.
+_PRESET_SAMPLES: list[tuple[str, str, float, float, float]] = [
+    ("line_space", "Line/Space", 1.0, 10.0, 10.0),
+    ("contact_holes", "Contact Holes", 1.0, 10.0, 10.0),
+    ("sram_like", "SRAM-like", 1.0, 10.0, 10.0),
+    ("random_logic", "Random Logic", 1.0, 10.0, 10.0),
+]
 
-    Failures here must not crash app startup — on the HF Space cold path,
-    tempdir or PIL hiccups would otherwise leave the Space dead before
-    Gradio mounts any routes. Caller fans out to an empty list, which
-    Gradio renders as "no examples available" rather than a 500.
 
-    Returns rows shaped to match the Upload tab inputs:
-    [pred_path, target_path, pixel_size_nm, min_width_nm, min_spacing_nm].
+def _get_upload_examples() -> list[list[str | float]]:
+    """Return Upload-tab examples as [pred, target, px_nm, mw_nm, ms_nm] rows.
+
+    Missing PNGs (e.g., a checkout without scripts/generate_demo_samples.py
+    output) are silently skipped — the Space stays up.
     """
-    from PIL import Image
-
-    out_dir = Path(tempfile.mkdtemp(prefix="olh_upload_examples_"))
-    rng = np.random.default_rng(0)
-
-    rows: list[list[str]] = []
-    for name, gen in PATTERN_GENERATORS.items():
-        target = gen(size=256)
-        noise = rng.normal(0, 0.15, target.shape).astype(np.float32)
-        predicted = ((target + noise) > 0.5).astype(np.float32)
-
-        slug = name.lower().replace("/", "_").replace(" ", "_").replace("-", "_")
-        pred_path = out_dir / f"{slug}_pred.png"
-        tgt_path = out_dir / f"{slug}_target.png"
-        Image.fromarray((predicted * 255).astype(np.uint8)).save(pred_path)
-        Image.fromarray((target * 255).astype(np.uint8)).save(tgt_path)
-        rows.append([str(pred_path), str(tgt_path), 1.0, 40.0, 40.0])
+    rows: list[list[str | float]] = []
+    for slug, _label, px, mw, ms in _PRESET_SAMPLES:
+        pred = _EXAMPLES_DIR / f"{slug}_pred.png"
+        tgt = _EXAMPLES_DIR / f"{slug}_target.png"
+        if pred.exists() and tgt.exists():
+            rows.append([str(pred), str(tgt), px, mw, ms])
     return rows
 
 
-_upload_examples_cache: list[list[str]] | None = None
-
-
-def _get_upload_examples() -> list[list[str]]:
-    """Lazy, fault-tolerant accessor for the upload examples list."""
-    global _upload_examples_cache
-    if _upload_examples_cache is None:
-        try:
-            _upload_examples_cache = _build_upload_examples()
-        except Exception as exc:  # noqa: BLE001 — don't crash the Space on cold-start
-            print(f"OpenLithoHub: failed to build upload examples ({exc!r}); skipping.")
-            _upload_examples_cache = []
-    return _upload_examples_cache
+def _get_pattern_examples() -> list[list[str | float]]:
+    """Return Synthetic-tab examples as [pattern, noise, px_nm, mw_nm, ms_nm] rows."""
+    return [[label, 0.10, px, mw, ms] for _slug, label, px, mw, ms in _PRESET_SAMPLES]
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +474,13 @@ with gr.Blocks(
                 outputs=[plot_output, metrics_output],
             )
 
+            gr.Examples(
+                examples=_get_pattern_examples(),
+                inputs=[pattern_type, noise_level, pixel_size, min_width, min_spacing],
+                label="Try a preset",
+                examples_per_page=4,
+            )
+
         # Tab 2: Upload evaluation
         with gr.TabItem("Upload Masks"):
             gr.Markdown(
@@ -481,8 +508,8 @@ with gr.Blocks(
             gr.Examples(
                 examples=_get_upload_examples(),
                 inputs=[pred_upload, tgt_upload, px_size_upload, mw_upload, ms_upload],
-                label="Try a synthetic example",
-                examples_per_page=3,
+                label="Try a preset",
+                examples_per_page=4,
             )
 
         # Tab 3: Leaderboard
