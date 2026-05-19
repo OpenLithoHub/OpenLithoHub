@@ -1,0 +1,88 @@
+name: Build ASAP7 mock-alu GDS (Phase 3)
+
+# Phase 3 of issue #4 ships a tile-cutting adapter against a real
+# ASAP7-routed RISC-V layout. This workflow generates the GDS using
+# OpenROAD-flow-scripts (ORFS) on a Linux runner — the only platform
+# where ORFS reliably builds. Triggered manually so it doesn't burn
+# CI minutes on every push; the produced GDS is uploaded as a
+# workflow artifact for downstream consumption.
+
+on:
+  workflow_dispatch:
+    inputs:
+      orfs_ref:
+        description: "ORFS git ref to check out (default: pinned SHA)."
+        required: false
+        default: "74b5f9610c107e9a155ac50e6eac4ad146e75344"
+      design:
+        description: "ORFS design directory under flow/designs/asap7/."
+        required: false
+        default: "mock-alu"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+
+    container:
+      image: openroad/orfs:latest
+      options: --user root
+
+    steps:
+      - name: Check out ORFS at pinned ref
+        uses: actions/checkout@v4
+        with:
+          repository: The-OpenROAD-Project/OpenROAD-flow-scripts
+          ref: ${{ inputs.orfs_ref }}
+          path: orfs
+          submodules: recursive
+
+      - name: Inspect ORFS environment
+        working-directory: orfs
+        run: |
+          set -euxo pipefail
+          # The openroad/orfs image bundles openroad / yosys / klayout. ORFS
+          # reads OPENROAD_EXE and YOSYS_EXE from the environment when set.
+          which openroad || true
+          which yosys || true
+          which klayout || true
+          ls flow/designs/asap7/${{ inputs.design }}
+
+      - name: Run ORFS make for asap7/${{ inputs.design }}
+        working-directory: orfs/flow
+        run: |
+          set -euxo pipefail
+          # Source ORFS env if present — sets OPENROAD_EXE / YOSYS_EXE /
+          # KLAYOUT_CMD when the bundled binaries live outside PATH.
+          if [ -f ../env.sh ]; then . ../env.sh; fi
+          export OPENROAD_EXE="${OPENROAD_EXE:-$(command -v openroad)}"
+          export YOSYS_EXE="${YOSYS_EXE:-$(command -v yosys)}"
+          make DESIGN_CONFIG=./designs/asap7/${{ inputs.design }}/config.mk
+
+      - name: Locate produced GDS + reports
+        id: locate
+        working-directory: orfs/flow
+        run: |
+          set -euxo pipefail
+          # ORFS writes final artifacts under
+          # flow/results/asap7/<design>/base/<design>.gds (and .odb, .sdc).
+          gds=$(find results -name '*.gds' -path "*/asap7/${{ inputs.design }}/*" | head -1)
+          if [ -z "$gds" ]; then
+            echo "no GDS produced; failing." >&2
+            find results -maxdepth 5 -type f | head -50 >&2
+            exit 1
+          fi
+          echo "gds=$gds" >> "$GITHUB_OUTPUT"
+          du -h "$gds"
+
+      - name: Upload GDS + log artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: asap7-${{ inputs.design }}-gds
+          path: |
+            orfs/flow/results/asap7/${{ inputs.design }}/**/*.gds
+            orfs/flow/results/asap7/${{ inputs.design }}/**/*.odb
+            orfs/flow/logs/asap7/${{ inputs.design }}/**/*.log
+            orfs/flow/reports/asap7/${{ inputs.design }}/**
+          retention-days: 30
+          if-no-files-found: error
