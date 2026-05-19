@@ -57,3 +57,35 @@ and the PV-band convolution scales O(N²). Reproduce with:
 
 EPE columns omitted for the same reason as ASAP7 — the FreePDK45 cells
 ship without a reference OPC mask.
+
+## ORFS-routed ASAP7 mock-alu (Phase 3)
+
+First baseline against a real RTL→GDSII flow output. mock-alu is the
+smallest ASAP7 design in OpenROAD-flow-scripts (~25 min on a Linux
+runner, vs. hours for full RISC-V cores). The post-route GDS is a
+57.3 µm × 57.3 µm block with metal1 on layer 20/0; the adapter cuts
+it into 2 µm and 5 µm tiles — the canonical AI-OPC inference windows
+called out in the ICCAD literature.
+
+Reproduce by triggering `.github/workflows/build-asap7-mock-alu.yml`,
+downloading the artifact, and running:
+
+```
+.venv/bin/openlithohub eval run \
+  --dataset orfs --node 7nm --accept-license \
+  --data-root /path/to/6_final.gds \
+  --tile-nm 2000 --pixel-nm 4.0 \
+  --no-drc --no-mrc \
+  --model dummy-identity
+```
+
+| Window | Tiles total | Samples | PVB mean (nm) | PVB max (nm) |
+|---|---|---|---|---|
+| 2 µm × 2 µm | 729 | 50 | 15.073 | 29.600 |
+| 5 µm × 5 µm | 121 | 20 | 14.980 | 39.600 |
+
+Built from ORFS commit `74b5f96` against `flow/designs/asap7/mock-alu`,
+metal1 layer 20/0, `pixel_nm=4.0`. EPE columns omitted (no reference
+OPC mask). DRC/MRC checks were disabled for this baseline because
+they treat the entire routed-block tile as a mask candidate; tile-aware
+DRC/MRC is its own follow-up.

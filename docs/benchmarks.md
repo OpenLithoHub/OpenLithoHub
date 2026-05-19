@@ -58,6 +58,46 @@ The same `results.json` / `results.md` artifacts land under the chosen
 output directory. Submit them to the public leaderboard with
 `openlithohub leaderboard submit --file <results.json>`.
 
+## ORFS-routed ASAP7 — RISC-V mock-alu (Phase 3)
+
+OpenLithoHub also supports real ASAP7-routed RTL→GDSII outputs via the
+`OrfsArtifactDataset` adapter. The first end-to-end target is
+`mock-alu` from
+[OpenROAD-flow-scripts](https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts):
+the smallest RISC-V-style ALU design that exercises a complete flow
+(yosys → OpenROAD → routed GDS) in ~25 minutes on a Linux runner.
+
+The adapter rasterizes one design layer of the routed block, then cuts
+it into fixed-size tiles. The default 2 µm × 2 µm and 5 µm × 5 µm
+windows match the AI-OPC inference scales used in the literature.
+
+![ORFS mock-alu — 2 µm tile, design / rule-OPC mask / resist contour](assets/orfs-mock-alu-tile.png)
+
+To produce the GDS, trigger the
+[`build-asap7-mock-alu` workflow](https://github.com/OpenLithoHub/OpenLithoHub/actions/workflows/build-asap7-mock-alu.yml)
+(`gh workflow run build-asap7-mock-alu.yml`), download the artifact,
+and run:
+
+```bash
+.venv/bin/openlithohub eval run \
+  --dataset orfs --node 7nm --accept-license \
+  --data-root /path/to/6_final.gds \
+  --tile-nm 2000 --pixel-nm 4.0 \
+  --no-drc --no-mrc \
+  --model dummy-identity
+```
+
+| Window | Tiles total | PVB mean (nm) | PVB max (nm) |
+|---|---|---|---|
+| 2 µm × 2 µm | 729 | 15.073 | 29.600 |
+| 5 µm × 5 µm | 121 | 14.980 | 39.600 |
+
+ORFS pinned at `74b5f96`; metal1 layer 20/0; `pixel_nm=4.0` (a 1 nm
+grid would be 16× more pixels and the PV-band convolution scales
+O(N²)). Linux-only locally — see
+[`scripts/build_riscv_alu.sh`](https://github.com/OpenLithoHub/OpenLithoHub/blob/main/scripts/build_riscv_alu.sh)
+for the equivalent local commands.
+
 ## Hotspot detection — ICCAD 2016 Problem C
 
 The ICCAD'16 EUV hotspot benchmark is wired in via

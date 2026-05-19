@@ -1,0 +1,8 @@
+{
+  "pvband_max_nm": 29.600000381469727,
+  "pvband_mean_nm": 15.07348918914795,
+  "model": "dummy-identity",
+  "dataset": "orfs",
+  "node": "7nm",
+  "num_samples": 50
+}

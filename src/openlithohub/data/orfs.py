@@ -44,9 +44,13 @@ from openlithohub.data.asap7 import (
 )
 from openlithohub.data.base import DatasetAdapter, LithoSample
 
-# ORFS metal1 on ASAP7 is layer 10/0, same numbering as the cell library
-# adapter — this is set by the asap7 platform's stream-out map.
-DEFAULT_DESIGN_LAYER: tuple[int, int] = (10, 0)
+# ORFS-routed ASAP7 layouts use the platform's stream-out map (defined
+# under flow/platforms/asap7/). The post-route GDS numbers metal1 as
+# layer 20/0 — not 10/0 like the cell-library source. Verified against
+# a fresh `make` of asap7/mock-alu (issue #4 Phase 3): the top cell
+# has shapes on layers 19, 20, 30, 40, 50, 60, 70, with 20/0 being the
+# densest (~45k shapes) — that's M1.
+DEFAULT_DESIGN_LAYER: tuple[int, int] = (20, 0)
 
 # AI-OPC inference windows. ICCAD16 hotspots are 1.2 µm; AI-OPC papers
 # evaluate on 2 µm and 5 µm tiles. We expose both as canonical sizes.
