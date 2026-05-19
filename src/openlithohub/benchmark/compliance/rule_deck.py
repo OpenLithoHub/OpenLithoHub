@@ -37,7 +37,7 @@ else:  # Python 3.10
     try:
         import tomli as _tomllib
     except ModuleNotFoundError:  # pragma: no cover - exercised only on 3.10 w/o tomli
-        _tomllib = None  # type: ignore[assignment]
+        _tomllib = None  # type: ignore[assignment, unused-ignore]
 
 
 def _load_toml(fh: IO[bytes]) -> dict[str, Any]:
@@ -47,7 +47,8 @@ def _load_toml(fh: IO[bytes]) -> dict[str, Any]:
             "TOML rule decks on Python 3.10 require 'tomli'. "
             "Install with: pip install tomli — or use a .json deck instead."
         )
-    return _tomllib.load(fh)
+    data: dict[str, Any] = _tomllib.load(fh)
+    return data
 
 
 # Single source of truth: every rule-deck file must validate against this.
