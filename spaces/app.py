@@ -77,14 +77,12 @@ def check_mrc(
         min_spacing_nm=min_spacing_nm,
         pixel_size_nm=pixel_size_nm,
     )
-    width_violations = sum(1 for v in result.violations if v.get("type_code") == 0.0)
-    spacing_violations = sum(1 for v in result.violations if v.get("type_code") == 1.0)
     return {
         "passed": result.passed,
         "violation_count": result.violation_count,
         "violation_rate": result.violation_rate,
-        "width_violations": width_violations,
-        "spacing_violations": spacing_violations,
+        "width_violations": result.width_violation_count,
+        "spacing_violations": result.spacing_violation_count,
     }
 
 

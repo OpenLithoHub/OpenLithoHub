@@ -26,6 +26,8 @@ class MRCResult:
     violation_count: int
     violation_rate: float
     violations: list[dict[str, float]]
+    width_violation_count: int = 0
+    spacing_violation_count: int = 0
 
 
 @dataclass
@@ -120,6 +122,8 @@ def check_mrc(
         violation_count=violation_count,
         violation_rate=violation_rate,
         violations=violations,
+        width_violation_count=width_violation_count,
+        spacing_violation_count=spacing_violation_count,
     )
 
 
