@@ -32,3 +32,28 @@ EPE columns are not populated for ASAP7 because the cells ship without a
 reference OPC mask (`LithoSample.mask is None`). EPE will populate once
 Phase 2 introduces a reference-mask source or Phase 3 adds OPC ground
 truth via the lithography forward model.
+
+## FreePDK45 + NanGate standard cells (Phase 2)
+
+Smoke-test baseline against the 4 canonical NanGate cells (`INV_X1`,
+`NAND2_X1`, `NOR2_X1`, `DFF_X1` from `stdcells.gds` in the mflowgen
+FreePDK45 mirror), metal1 layer (11/0), `pixel_nm=4.0`. The coarser
+4 nm grid (vs. ASAP7's 1 nm) is intentional: NanGate X1 cells are
+~600–3500 nm wide, so a 1 nm grid would be 16× more pixels than ASAP7
+and the PV-band convolution scales O(N²). Reproduce with:
+
+```
+.venv/bin/openlithohub eval run \
+  --dataset freepdk45 --node 45nm \
+  --data-root /path/to/freepdk-45nm \
+  --accept-license \
+  --pixel-nm 4.0 \
+  --model dummy-identity
+```
+
+| Model | Samples | PVB mean (nm) | PVB max (nm) | MRC pass | DRC pass |
+|---|---|---|---|---|---|
+| `dummy-identity` | 4 | 8.379 | 16.000 | 100% | 100% |
+
+EPE columns omitted for the same reason as ASAP7 — the FreePDK45 cells
+ship without a reference OPC mask.

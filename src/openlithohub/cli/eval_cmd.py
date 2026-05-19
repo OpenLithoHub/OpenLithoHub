@@ -15,7 +15,10 @@ eval_app = typer.Typer(no_args_is_help=True)
 def run(
     model: str = typer.Option(..., "--model", "-m", help="Model name or path to load."),
     dataset: str = typer.Option(
-        "lithobench", "--dataset", "-d", help="Dataset to evaluate on (lithobench/lithosim)."
+        "lithobench",
+        "--dataset",
+        "-d",
+        help="Dataset to evaluate on (lithobench/lithosim/asap7/freepdk45).",
     ),
     data_root: Path = typer.Option(
         ..., "--data-root", "-r", help="Path to dataset root directory."
@@ -78,8 +81,9 @@ def run(
         "--accept-license",
         help=(
             "Acknowledge the upstream PDK license. Required for "
-            "--dataset asap7 (BSD-3-Clause attribution); ignored for "
-            "datasets that have no license gate."
+            "--dataset asap7 (BSD-3-Clause attribution) and "
+            "--dataset freepdk45 (FreePDK45 + NanGate OCL stacked terms); "
+            "ignored for datasets that have no license gate."
         ),
     ),
 ) -> None:
@@ -233,7 +237,12 @@ def _load_dataset(
     pixel_nm: float,
     accept_license: bool = False,
 ) -> Any:
-    from openlithohub.data import Asap7Dataset, LithoBenchDataset, LithoSimDataset
+    from openlithohub.data import (
+        Asap7Dataset,
+        FreePdk45Dataset,
+        LithoBenchDataset,
+        LithoSimDataset,
+    )
 
     if dataset == "lithobench":
         return LithoBenchDataset(root=data_root, pixel_nm=pixel_nm)
@@ -249,7 +258,25 @@ def _load_dataset(
                 f"re-run with --accept-license to confirm."
             )
         return Asap7Dataset(root=data_root, pixel_nm=pixel_nm)
-    raise ValueError(f"Unknown dataset '{dataset}'. Choose from: lithobench, lithosim, asap7")
+    if dataset == "freepdk45":
+        if not accept_license:
+            from openlithohub.data.freepdk45 import (
+                FREEPDK45_LICENSE,
+                FREEPDK45_LICENSE_URL,
+                NANGATE_LICENSE_URL,
+            )
+
+            raise RuntimeError(
+                f"--dataset freepdk45 requires --accept-license: stacked license "
+                f"({FREEPDK45_LICENSE}). Read both terms at "
+                f"{FREEPDK45_LICENSE_URL} (FreePDK45) and "
+                f"{NANGATE_LICENSE_URL} (NanGate OCL), then re-run with "
+                f"--accept-license to confirm."
+            )
+        return FreePdk45Dataset(root=data_root, pixel_nm=pixel_nm)
+    raise ValueError(
+        f"Unknown dataset '{dataset}'. Choose from: lithobench, lithosim, asap7, freepdk45"
+    )
 
 
 def _aggregate_metrics(metrics_list: list[dict[str, float]]) -> dict[str, Any]:
