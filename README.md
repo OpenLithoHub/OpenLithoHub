@@ -324,7 +324,23 @@ ruff format src/ tests/
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. By participating you
+agree to abide by the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+---
+
+## Community
+
+![Status](https://img.shields.io/badge/Discord-launching%20soon-5865F2?logo=discord&logoColor=white)
+
+A **Discord** server for OpenLithoHub is launching **2026-Q3** — channels
+for model discussion, physics simulation, help, and showcase. The place
+to debate model design, reproducibility, and benchmarks.
+
+Want to be notified when the invite goes live? **[Open an issue with the
+`community` label](https://github.com/OpenLithoHub/OpenLithoHub/issues/new?labels=community&title=Community+launch+notification)**
+or watch this repo. Charter, channel structure, etiquette, and onboarding
+flow are documented in [docs/community.md](docs/community.md).
 
 ---
 
