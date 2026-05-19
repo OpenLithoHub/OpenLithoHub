@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "model_name": "ci-dryrun-dummy",
+      "dataset": "lithobench",
+      "process_node": "7nm",
+      "mask_topology": "manhattan",
+      "track": "open",
+      "epe_mean_nm": 0.503,
+      "epe_max_nm": 1.414,
+      "pvband_mean_nm": null,
+      "pvband_max_nm": null,
+      "mrc_violation_rate": 0.00275,
+      "drc_pass": null,
+      "shot_count": null,
+      "stochastic_robustness": null,
+      "submitted_at": "2026-05-19T03:34:48.976374Z",
+      "submission_id": "ci-dryrun-dummy-3e4cec57",
+      "paper_url": "https://github.com/OpenLithoHub/OpenLithoHub",
+      "code_url": "https://github.com/OpenLithoHub/OpenLithoHub",
+      "notes": "CI dry-run dummy \u2014 exercises the Auto-Leaderboard workflow end-to-end.\nNumbers reproduce notebooks/quickstart.ipynb on the built-in dummy layout.\n"
+    }
+  ]
+}
