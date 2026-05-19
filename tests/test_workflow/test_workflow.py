@@ -220,6 +220,17 @@ class TestTileLayout:
         assert isinstance(t, Tile)
         assert t.overlap == 0
 
+    def test_no_duplicate_origins_when_step_underflows_layout(self):
+        # 120x120 layout with tile=64 step=56 puts the last sliding-window
+        # position past the edge; anchoring snaps it back onto the previous
+        # tile's origin. Without dedup this emits 9 tiles for 4 unique
+        # origins, doubling forward-model work.
+        layout = torch.ones(120, 120)
+        tiles = tile_layout(layout, tile_size=64, overlap=8)
+        origins = [(t.origin_x, t.origin_y) for t in tiles]
+        assert len(origins) == len(set(origins))
+        assert set(origins) == {(0, 0), (56, 0), (0, 56), (56, 56)}
+
 
 class TestStitchTiles:
     def test_basic_stitch_no_overlap(self):

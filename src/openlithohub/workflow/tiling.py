@@ -55,6 +55,7 @@ def tile_layout(
     h, w = layout_tensor.shape[-2], layout_tensor.shape[-1]
     step = tile_size - overlap
     tiles: list[Tile] = []
+    seen_origins: set[tuple[int, int]] = set()
 
     y = 0
     while y < h:
@@ -94,16 +95,23 @@ def tile_layout(
                 pad_right = tile_size - tile_w_real
                 tile_data = functional.pad(tile_data, (0, pad_right, 0, pad_bottom), value=0.0)
 
-            tiles.append(
-                Tile(
-                    tensor=tile_data,
-                    origin_x=x_origin,
-                    origin_y=y_origin,
-                    width=tile_w_real,
-                    height=tile_h_real,
-                    overlap=overlap,
+            # When the sliding window's last position past the layout edge
+            # gets anchored back to the same origin as a previous tile, skip
+            # it — emitting two tiles with identical origins doubles forward-
+            # model work and does not change the stitched output.
+            origin_key = (x_origin, y_origin)
+            if origin_key not in seen_origins:
+                seen_origins.add(origin_key)
+                tiles.append(
+                    Tile(
+                        tensor=tile_data,
+                        origin_x=x_origin,
+                        origin_y=y_origin,
+                        width=tile_w_real,
+                        height=tile_h_real,
+                        overlap=overlap,
+                    )
                 )
-            )
 
             x += step
         y += step

@@ -333,6 +333,27 @@ class TestLithoSimTensorConversion:
         tensor = LithoSimDataset._to_tensor(arr)
         assert tensor.max() == 1.0
 
+    def test_uint16_normalization(self):
+        # SEM/aerial-image rows in industrial litho datasets are commonly
+        # uint16; without the dedicated branch the values would land in
+        # [0, 65535] and silently break the [0, 1] resist threshold.
+        arr = np.full((32, 32), 65535, dtype=np.uint16)
+        tensor = LithoSimDataset._to_tensor(arr)
+        assert tensor.dtype == torch.float32
+        assert tensor.max() == 1.0
+        assert tensor.min() == 1.0
+
+    def test_uint16_midrange(self):
+        arr = np.full((4, 4), 32768, dtype=np.uint16)
+        tensor = LithoSimDataset._to_tensor(arr)
+        assert tensor.dtype == torch.float32
+        assert abs(tensor[0, 0].item() - 32768 / 65535) < 1e-6
+
+    def test_unsupported_integer_dtype_raises(self):
+        arr = np.zeros((4, 4), dtype=np.int32)
+        with pytest.raises(TypeError, match="Unsupported integer dtype"):
+            LithoSimDataset._to_tensor(arr)
+
     def test_pil_image_conversion(self):
         from PIL import Image
 

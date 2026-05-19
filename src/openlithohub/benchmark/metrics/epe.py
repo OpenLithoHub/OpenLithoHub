@@ -2,16 +2,33 @@
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 import torch
 import torch.nn.functional as functional
+
+
+class EPEResult(TypedDict):
+    """Per-sample EPE summary. Numeric fields are always ``float`` so callers
+    can do arithmetic on them without first narrowing away ``bool``."""
+
+    epe_mean_nm: float
+    epe_max_nm: float
+    epe_std_nm: float
+    valid: bool
 
 
 def _extract_edges(binary: torch.Tensor) -> torch.Tensor:
     """Extract edge pixels from a binary mask using Sobel filtering.
 
+    The input is thresholded at 0.5 first so a soft mask passed in by
+    mistake (e.g. a raw resist field that hasn't been binarized) still
+    yields meaningful edges instead of the noisy gradient of a continuous
+    field.
+
     Returns a boolean tensor marking edge pixel locations.
     """
-    inp = binary.float().unsqueeze(0).unsqueeze(0)
+    inp = (binary > 0.5).float().unsqueeze(0).unsqueeze(0)
 
     sobel_x = torch.tensor(
         [[-1.0, 0.0, 1.0], [-2.0, 0.0, 2.0], [-1.0, 0.0, 1.0]],
@@ -41,7 +58,7 @@ def compute_epe(
     predicted: torch.Tensor,
     target: torch.Tensor,
     pixel_size_nm: float = 1.0,
-) -> dict[str, float | bool]:
+) -> EPEResult:
     """Compute Edge Placement Error between predicted and target contours.
 
     Extracts edges from both binary masks via Sobel operators, then computes
