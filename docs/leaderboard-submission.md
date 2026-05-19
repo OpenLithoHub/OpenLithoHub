@@ -3,7 +3,7 @@
 OpenLithoHub's leaderboard is a **claim + verify-by-numbers** registry.
 Contributors submit a small YAML file describing the result; the CI
 validates it against a strict schema and opens a follow-up PR that
-updates `data/leaderboard.json`. **No contributor-supplied code is
+updates `leaderboard/leaderboard.json`. **No contributor-supplied code is
 executed by CI.**
 
 If you want a fully automated rerun-the-model leaderboard, see the
@@ -17,7 +17,7 @@ not yet have.
    following the schema below.
 3. Open a PR. Add the `submission` label.
 4. CI will validate the YAML and (on success) open a follow-up PR that
-   appends your entry to `data/leaderboard.json`. A maintainer merges
+   appends your entry to `leaderboard/leaderboard.json`. A maintainer merges
    that PR. Your entry appears on the next docs build.
 
 ## Submission YAML schema
@@ -55,7 +55,7 @@ notes: |
    `gh api ... contents` — no shell scripts, no notebooks, no model code.
 3. Parses each YAML with `yaml.safe_load` and validates it against
    `BenchmarkResult.model_validate`.
-4. Calls `submit_result` against `data/leaderboard.json`.
+4. Calls `submit_result` against `leaderboard/leaderboard.json`.
 5. Opens a follow-up PR with the updated JSON.
 
 If validation fails, CI annotates the failing file/line and the
@@ -76,7 +76,7 @@ reputation on the link they provided," same as arXiv.
 
 ## Withdrawing or correcting a submission
 
-Open a PR that edits `data/leaderboard.json` directly. Add the
+Open a PR that edits `leaderboard/leaderboard.json` directly. Add the
 `leaderboard-correction` label and explain the change in the PR body.
 
 ## Roadmap: sandboxed re-runs

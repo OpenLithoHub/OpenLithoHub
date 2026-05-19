@@ -102,7 +102,10 @@ jobs:
           from openlithohub.leaderboard.schema import BenchmarkResult
           from openlithohub.leaderboard.tracker import LeaderboardStore, submit_result
 
-          store_path = Path("data/leaderboard.json")
+          # Canonical store lives at leaderboard/leaderboard.json
+          # (data/ is gitignored, so the follow-up PR cannot stage a
+          # file written there).
+          store_path = Path("leaderboard/leaderboard.json")
           store_path.parent.mkdir(parents=True, exist_ok=True)
           store = LeaderboardStore(store_path)
 
@@ -117,7 +120,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           add-paths: |
-            data/leaderboard.json
+            leaderboard/leaderboard.json
           branch: auto-leaderboard/pr-${{ github.event.pull_request.number }}
           base: ${{ github.event.pull_request.base.ref }}
           commit-message: |
@@ -127,7 +130,7 @@ jobs:
             Auto-generated from #${{ github.event.pull_request.number }}.
 
             The submission YAML(s) in that PR were validated against
-            `BenchmarkResult` and appended to `data/leaderboard.json`.
+            `BenchmarkResult` and appended to `leaderboard/leaderboard.json`.
 
             See `docs/leaderboard-submission.md` for the submission policy.
 
@@ -139,5 +142,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: 'Submission YAML validated. Follow-up PR updating `data/leaderboard.json` has been opened — once that lands, this submission will appear on the leaderboard.'
+              body: 'Submission YAML validated. Follow-up PR updating `leaderboard/leaderboard.json` has been opened — once that lands, this submission will appear on the leaderboard.'
             })
