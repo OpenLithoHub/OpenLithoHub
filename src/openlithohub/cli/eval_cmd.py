@@ -31,6 +31,7 @@ def run(
     limit: int | None = typer.Option(
         None, "--limit", "-l", help="Max samples to evaluate (default: all)."
     ),
+    drc_check: bool = typer.Option(True, "--drc/--no-drc", help="Run DRC compliance check."),
     mrc_check: bool = typer.Option(True, "--mrc/--no-mrc", help="Run MRC compliance check."),
     pvband_check: bool = typer.Option(
         True, "--pvband/--no-pvband", help="Compute Process Variation Band metrics."
@@ -80,6 +81,7 @@ def run(
     import openlithohub.models.levelset_ilt  # noqa: F401
     import openlithohub.models.neural_ilt  # noqa: F401
     import openlithohub.models.rule_based_opc  # noqa: F401
+    from openlithohub.benchmark.compliance.drc import check_drc
     from openlithohub.benchmark.compliance.mrc import check_mrc
     from openlithohub.benchmark.metrics.epe import compute_epe
     from openlithohub.benchmark.metrics.pvband import compute_pvband
@@ -129,6 +131,10 @@ def run(
         console.print(f"Running on {n_samples} samples...")
 
         all_metrics: list[dict[str, float]] = []
+        # Per-sample compliance flags tracked out-of-band so we never average
+        # a Boolean as if it were a continuous metric.
+        mrc_pass_flags: list[bool] = []
+        drc_pass_flags: list[bool] = []
         perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
         for i in range(n_samples):
             sample = adapter[i]
@@ -151,7 +157,11 @@ def run(
                     pixel_size_nm=pixel_nm,
                 )
                 sample_metrics["mrc_violation_rate"] = mrc_result.violation_rate
-                sample_metrics["mrc_passed"] = 1.0 if mrc_result.passed else 0.0
+                mrc_pass_flags.append(mrc_result.passed)
+
+            if drc_check:
+                drc_result = check_drc(result.mask, pixel_size_nm=pixel_nm)
+                drc_pass_flags.append(drc_result.passed)
 
             if pvband_check:
                 pv = compute_pvband(result.mask, pixel_size_nm=pixel_nm)
@@ -171,6 +181,10 @@ def run(
     aggregated["dataset"] = dataset
     aggregated["node"] = node
     aggregated["num_samples"] = n_samples
+    if mrc_pass_flags:
+        aggregated["mrc_passed_all"] = all(mrc_pass_flags)
+    if drc_pass_flags:
+        aggregated["drc_passed_all"] = all(drc_pass_flags)
 
     report = generate_report(aggregated, output_format=format)
     console.print(report, highlight=False)
@@ -194,9 +208,7 @@ def run(
                 pvband_mean_nm=aggregated.get("pvband_mean_nm"),
                 pvband_max_nm=aggregated.get("pvband_max_nm"),
                 mrc_violation_rate=aggregated.get("mrc_violation_rate"),
-                drc_pass=(
-                    aggregated.get("mrc_passed", 0.0) == 1.0 if "mrc_passed" in aggregated else None
-                ),
+                drc_pass=aggregated.get("drc_passed_all"),
                 paper_url=paper_url,
                 code_url=code_url,
             )

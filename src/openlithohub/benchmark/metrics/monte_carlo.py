@@ -13,6 +13,7 @@ forward model" entry point that the v0.1 roadmap calls for.
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -87,38 +88,35 @@ def monte_carlo_failure_probability(
     if seed is not None:
         generator.manual_seed(seed)
 
-    nominal_dose = simulator.config.dose
-    nominal_threshold = simulator.config.threshold
+    nominal_config = simulator.config
     bridge_count = 0
     break_count = 0
 
-    try:
-        for _trial in range(num_trials):
-            dose_factor = 1.0 + dose_jitter_sigma * torch.randn(1, generator=generator).item()
-            threshold_offset = threshold_jitter_sigma * torch.randn(1, generator=generator).item()
-            simulator.config.__dict__["dose"] = nominal_dose * float(max(dose_factor, 1e-6))
-            simulator.config.__dict__["threshold"] = float(
-                max(nominal_threshold + threshold_offset, 1e-6)
-            )
+    for _trial in range(num_trials):
+        dose_factor = 1.0 + dose_jitter_sigma * torch.randn(1, generator=generator).item()
+        threshold_offset = threshold_jitter_sigma * torch.randn(1, generator=generator).item()
+        trial_config = dataclasses.replace(
+            nominal_config,
+            dose=nominal_config.dose * float(max(dose_factor, 1e-6)),
+            threshold=float(max(nominal_config.threshold + threshold_offset, 1e-6)),
+        )
+        trial_simulator = simulator.with_config(trial_config)
 
-            trial_mask = perturb(m, generator) if perturb is not None else m
-            result = simulator.simulate(trial_mask)
-            resist = (
-                result.resist
-                if result.resist is not None
-                else (result.aerial >= simulator.config.threshold * simulator.config.dose).to(
-                    result.aerial.dtype
-                )
+        trial_mask = perturb(m, generator) if perturb is not None else m
+        result = trial_simulator.simulate(trial_mask)
+        resist = (
+            result.resist
+            if result.resist is not None
+            else (result.aerial >= trial_config.threshold * trial_config.dose).to(
+                result.aerial.dtype
             )
-            trial_components = _count_components(resist)
+        )
+        trial_components = _count_components(resist)
 
-            if trial_components < nominal_components:
-                bridge_count += 1
-            elif trial_components > nominal_components:
-                break_count += 1
-    finally:
-        simulator.config.__dict__["dose"] = nominal_dose
-        simulator.config.__dict__["threshold"] = nominal_threshold
+        if trial_components < nominal_components:
+            bridge_count += 1
+        elif trial_components > nominal_components:
+            break_count += 1
 
     bridge_p = bridge_count / max(num_trials, 1)
     break_p = break_count / max(num_trials, 1)

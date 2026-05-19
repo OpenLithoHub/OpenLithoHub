@@ -52,9 +52,11 @@ def find_most_complex_window(mask: torch.Tensor, *, window_size: int) -> BBox:
 
     score = score_complexity(mask, window_px=min(window_size // 4, max(h, w) // 8) or 1)
     # Restrict the argmax search to centres that keep a full window in-bounds.
+    # half+1 lower-bounds the high end so the slice is always non-empty even
+    # when h or w equals window_size exactly.
     half = window_size // 2
-    y_lo, y_hi = half, max(half, h - (window_size - half))
-    x_lo, x_hi = half, max(half, w - (window_size - half))
+    y_lo, y_hi = half, max(half + 1, h - (window_size - half))
+    x_lo, x_hi = half, max(half + 1, w - (window_size - half))
     interior = score[y_lo:y_hi, x_lo:x_hi]
     flat_idx = int(torch.argmax(interior).item())
     cy = y_lo + flat_idx // interior.shape[1]

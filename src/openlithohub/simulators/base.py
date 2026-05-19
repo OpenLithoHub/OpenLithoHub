@@ -88,6 +88,16 @@ class BaseSimulator(ABC):
         that callers can amortise it across many simulate() calls.
         """
 
+    def with_config(self, config: SimulatorConfig) -> BaseSimulator:
+        """Return a sibling simulator using ``config``, sharing cached state where possible.
+
+        Default builds a fresh instance via ``type(self)(config)``. Subclasses
+        with expensive per-config setup (SOCS kernels, vendor sessions) should
+        override to clone cheaply when the new config only differs in fields
+        the cached state does not depend on (typically ``dose`` / ``threshold``).
+        """
+        return type(self)(config)
+
     @abstractmethod
     def simulate(self, mask: torch.Tensor) -> SimulatorResult:
         """Simulate the aerial image (and resist contour, if available).

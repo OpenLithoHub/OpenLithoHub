@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from openlithohub.models.hub import ModelHub
 
 
@@ -42,3 +44,19 @@ class TestModelHub:
         checksum = hub.get_checksum(test_file)
         assert len(checksum) == 64  # SHA256 hex digest
         assert checksum == hub.get_checksum(test_file)  # deterministic
+
+    @pytest.mark.parametrize(
+        "filename",
+        ["../../etc/passwd", "/etc/passwd", "..\\..\\windows\\system32", "subdir/weights.pt"],
+    )
+    def test_filename_path_traversal_rejected(self, tmp_path: Path, filename: str) -> None:
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        with pytest.raises(ValueError):
+            hub.download_weights("org/model", filename=filename)
+
+    def test_model_id_path_traversal_rejected(self, tmp_path: Path) -> None:
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        # Slashes get rewritten to `--` for HF-style ids before sanitisation,
+        # so direct path traversal must come via raw `..` in the segment.
+        with pytest.raises(ValueError):
+            hub.download_weights("..", filename="model.pt")

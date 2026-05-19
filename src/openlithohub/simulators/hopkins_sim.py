@@ -31,6 +31,38 @@ class HopkinsSimulator(BaseSimulator):
         super().__init__(config)
         self._hparams = self._build_hparams(self.config)
 
+    def with_config(self, config: SimulatorConfig) -> HopkinsSimulator:
+        """Clone, reusing cached SOCS kernels when only dose/threshold changed.
+
+        SOCS kernel construction depends on optical fields
+        (wavelength/NA/sigma/illumination/defocus/pixel_size_nm/num_kernels).
+        When those are unchanged, we can hand the new sibling our pre-built
+        :class:`HopkinsParams` instead of recomputing.
+        """
+        sibling = type(self).__new__(type(self))
+        BaseSimulator.__init__(sibling, config)
+        if self._hparams_match(config):
+            sibling._hparams = self._hparams
+        else:
+            sibling._hparams = self._build_hparams(config)
+        return sibling
+
+    def _hparams_match(self, other: SimulatorConfig) -> bool:
+        a, b = self.config, other
+        if (
+            a.wavelength_nm != b.wavelength_nm
+            or a.na != b.na
+            or a.sigma != b.sigma
+            or a.sigma_inner != b.sigma_inner
+            or a.pixel_size_nm != b.pixel_size_nm
+            or a.defocus_nm != b.defocus_nm
+        ):
+            return False
+        ax = a.extra or {}
+        bx = b.extra or {}
+        keys = ("num_kernels", "illumination", "dipole_angle_deg", "pole_opening_deg")
+        return all(ax.get(k) == bx.get(k) for k in keys)
+
     @staticmethod
     def _build_hparams(config: SimulatorConfig) -> HopkinsParams:
         extra = config.extra or {}

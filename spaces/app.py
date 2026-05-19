@@ -293,20 +293,17 @@ def evaluate_uploaded(
     if pred_file is None or target_file is None:
         return None, "Please upload both predicted and target mask images."
 
-    pred_img = Image.open(pred_file)
-    tgt_img = Image.open(target_file)
+    with Image.open(pred_file) as pred_img_raw, Image.open(target_file) as tgt_img_raw:
+        src_w, src_h = pred_img_raw.size
+        pred_img = pred_img_raw.convert("L")
+        tgt_img = tgt_img_raw.convert("L")
 
-    src_w, src_h = pred_img.size
+        # Resize to match if different
+        if pred_img.size != tgt_img.size:
+            tgt_img = tgt_img.resize(pred_img.size, Image.NEAREST)
 
-    pred_img = pred_img.convert("L")
-    tgt_img = tgt_img.convert("L")
-
-    # Resize to match if different
-    if pred_img.size != tgt_img.size:
-        tgt_img = tgt_img.resize(pred_img.size, Image.NEAREST)
-
-    predicted = (np.array(pred_img, dtype=np.float32) / 255.0 > 0.5).astype(np.float32)
-    target = (np.array(tgt_img, dtype=np.float32) / 255.0 > 0.5).astype(np.float32)
+        predicted = (np.array(pred_img, dtype=np.float32) / 255.0 > 0.5).astype(np.float32)
+        target = (np.array(tgt_img, dtype=np.float32) / 255.0 > 0.5).astype(np.float32)
 
     # Auto-Crop: if either axis exceeds MAX_UPLOAD_DIM, locate the densest
     # MAX_UPLOAD_DIM-square window on the predicted mask and crop both tensors

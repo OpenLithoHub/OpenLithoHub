@@ -137,12 +137,16 @@ def _add_violations(
     threshold_nm: float,
     max_reports: int = 100,
 ) -> None:
-    """Add sampled violation reports (limited to max_reports)."""
-    n = min(len(ys), max_reports)
-    step = max(1, len(ys) // n)
-    for idx in range(0, len(ys), step):
-        if len(violations) >= max_reports:
-            break
+    """Add up to ``max_reports`` evenly spaced violation samples."""
+    total = int(len(ys))
+    if total == 0:
+        return
+    n = min(total, max_reports)
+    # Evenly spaced indices into the violation list — guaranteed to emit
+    # exactly ``n`` reports without the off-by-one that ``range(0, total, step)``
+    # would produce when ``step`` does not divide ``total`` cleanly.
+    indices = np.linspace(0, total - 1, num=n).astype(np.int64)
+    for idx in indices:
         y_px = int(ys[idx].item())
         x_px = int(xs[idx].item())
         actual_nm = float(dist_map[y_px, x_px].item()) * 2.0 * pixel_size_nm

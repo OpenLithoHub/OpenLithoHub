@@ -75,7 +75,11 @@ def distance_transform(mask: torch.Tensor) -> torch.Tensor:
 
     dist = torch.zeros_like(fg)
     current = fg.unsqueeze(0).unsqueeze(0)
-    max_iterations = min(h, w) // 2 + 1
+    # Worst-case chessboard distance for a near-full mask is bounded by
+    # max(h, w) // 2 + 1 — using min() under-clips elongated foreground.
+    # We add the early `current.sum() == 0` short-circuit to keep the cost
+    # in line with the actual distance reached.
+    max_iterations = max(h, w) // 2 + 1
 
     for _ in range(max_iterations):
         if current.sum() == 0:

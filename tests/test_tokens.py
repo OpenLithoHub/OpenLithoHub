@@ -17,6 +17,7 @@ from openlithohub.tokens import (
     TOK_CLOSE,
     TOK_EOS,
     TOK_POLYGON,
+    DecodedLayout,
     LayoutTokenizer,
 )
 
@@ -30,8 +31,11 @@ def test_vocabulary_size() -> None:
 def test_roundtrip_empty_mask() -> None:
     tok = LayoutTokenizer.from_pdk("freepdk45", canvas_size=64)
     mask = torch.zeros(64, 64)
-    out = tok.decode(tok.encode(mask))
-    assert torch.equal(mask, out)
+    decoded = tok.decode(tok.encode(mask))
+    assert isinstance(decoded, DecodedLayout)
+    assert torch.equal(mask, decoded.mask)
+    assert decoded.report.ok
+    assert decoded.report.polygons_drawn == 0
     encoded = tok.encode(mask)
     assert encoded.ids.tolist() == [TOK_BOS, TOK_EOS]
 
@@ -47,7 +51,10 @@ def test_roundtrip_single_rectangle() -> None:
     assert ids[-1] == TOK_EOS
     assert ids.count(TOK_POLYGON) == 1
     assert ids.count(TOK_CLOSE) == 1
-    assert torch.equal(mask, tok.decode(enc))
+    decoded = tok.decode(enc)
+    assert torch.equal(mask, decoded.mask)
+    assert decoded.report.polygons_drawn == 1
+    assert decoded.report.ok
 
 
 def test_roundtrip_synthetic_sram() -> None:
@@ -55,8 +62,9 @@ def test_roundtrip_synthetic_sram() -> None:
     batch = generate_synthetic_batch(PatternKind.SRAM, n=2, size=256, seed=1)
     for i in range(batch.masks.shape[0]):
         mask = batch.masks[i]
-        out = tok.decode(tok.encode(mask))
-        assert torch.equal(mask, out), f"sample {i}: round-trip differs"
+        decoded = tok.decode(tok.encode(mask))
+        assert torch.equal(mask, decoded.mask), f"sample {i}: round-trip differs"
+        assert decoded.report.ok
 
 
 def test_roundtrip_synthetic_contact_array() -> None:
@@ -64,8 +72,9 @@ def test_roundtrip_synthetic_contact_array() -> None:
     batch = generate_synthetic_batch(PatternKind.CONTACT_ARRAY, n=2, size=256, seed=2)
     for i in range(batch.masks.shape[0]):
         mask = batch.masks[i]
-        out = tok.decode(tok.encode(mask))
-        assert torch.equal(mask, out), f"sample {i}: round-trip differs"
+        decoded = tok.decode(tok.encode(mask))
+        assert torch.equal(mask, decoded.mask), f"sample {i}: round-trip differs"
+        assert decoded.report.ok
 
 
 def test_compression_ratio_reasonable() -> None:
@@ -91,3 +100,28 @@ def test_vertices_are_in_canvas_range() -> None:
         if t >= N_RESERVED:
             v = tok._coord_value(t)
             assert 0 <= v <= 64
+
+
+def test_decode_flags_unknown_token() -> None:
+    """Out-of-vocabulary tokens between polygons must be reported, not eaten silently."""
+    tok = LayoutTokenizer.from_pdk("freepdk45", canvas_size=64)
+    bogus = tok.vocab_size + 7  # outside both reserved + coord ranges
+    ids = torch.tensor([TOK_BOS, bogus, TOK_EOS], dtype=torch.int64)
+    decoded = tok.decode(ids)
+    assert decoded.report.unknown_tokens == 1
+    assert decoded.report.polygons_drawn == 0
+    assert not decoded.report.ok
+
+
+def test_decode_flags_truncated_polygon() -> None:
+    """A polygon opener with no CLOSE/EOS is reported as skipped + truncated."""
+    tok = LayoutTokenizer.from_pdk("freepdk45", canvas_size=64)
+    # POLYGON, then one stray coord pair, then end-of-stream — no CLOSE, no EOS.
+    ids = torch.tensor(
+        [TOK_BOS, TOK_POLYGON, tok._coord_id(0), tok._coord_id(0)],
+        dtype=torch.int64,
+    )
+    decoded = tok.decode(ids)
+    assert decoded.report.polygons_skipped == 1
+    assert decoded.report.truncated
+    assert decoded.report.polygons_drawn == 0

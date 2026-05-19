@@ -183,7 +183,7 @@ def test_eval_run_with_mrc():
         json_start = result.output.index("{")
         parsed = json.loads(result.output[json_start:])
         assert "mrc_violation_rate" in parsed
-        assert "mrc_passed" in parsed
+        assert "mrc_passed_all" in parsed
 
 
 def test_eval_run_no_mrc():

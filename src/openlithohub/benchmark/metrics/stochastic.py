@@ -50,34 +50,22 @@ def compute_stochastic_robustness(
     nominal_edge_dist = distance_transform(resist_nominal)
     nominal_edges = (nominal_edge_dist > 0) & (nominal_edge_dist <= 1.5)
 
-    batch_size = min(10, num_trials)
-    trials_done = 0
+    for _ in range(num_trials):
+        photons = torch.poisson(lambda_map, generator=generator)
+        noisy_intensity = photons / max(dose_photons_per_nm2 * pixel_area_nm2, 1e-12)
+        noisy_resist = apply_resist_threshold(noisy_intensity, threshold=0.5)
 
-    while trials_done < num_trials:
-        current_batch = min(batch_size, num_trials - trials_done)
+        noisy_fg_components = _count_connected_components(noisy_resist)
 
-        for _ in range(current_batch):
-            if seed is not None:
-                trial_seed = seed + trials_done
-                generator.manual_seed(trial_seed)
+        if noisy_fg_components < nominal_fg_components:
+            bridge_count += 1
+        if noisy_fg_components > nominal_fg_components:
+            break_count += 1
 
-            photons = torch.poisson(lambda_map, generator=generator)
-            noisy_intensity = photons / max(dose_photons_per_nm2 * pixel_area_nm2, 1e-12)
-            noisy_resist = apply_resist_threshold(noisy_intensity, threshold=0.5)
-
-            noisy_fg_components = _count_connected_components(noisy_resist)
-
-            if noisy_fg_components < nominal_fg_components:
-                bridge_count += 1
-            if noisy_fg_components > nominal_fg_components:
-                break_count += 1
-
-            diff = (noisy_resist - resist_nominal).abs()
-            if nominal_edges.any():
-                edge_displacement = diff[nominal_edges].mean().item() * pixel_size_nm
-                ler_values.append(edge_displacement)
-
-            trials_done += 1
+        diff = (noisy_resist - resist_nominal).abs()
+        if nominal_edges.any():
+            edge_displacement = diff[nominal_edges].mean().item() * pixel_size_nm
+            ler_values.append(edge_displacement)
 
     bridge_probability = bridge_count / max(num_trials, 1)
     break_probability = break_count / max(num_trials, 1)

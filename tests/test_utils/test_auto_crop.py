@@ -55,6 +55,16 @@ class TestFindMostComplexWindow:
         assert y1 - y0 == 128
         assert x1 - x0 == 128
 
+    def test_smaller_axis_equals_window_size(self) -> None:
+        # Regression: when one axis equals window_size exactly while the other
+        # exceeds it, the centre-search slice was empty and argmax raised.
+        mask = torch.zeros(128, 512)
+        mask[60:90, 240:280] = 1.0
+        y0, x0, y1, x1 = find_most_complex_window(mask, window_size=128)
+        assert (y1 - y0, x1 - x0) == (128, 128)
+        assert 0 <= y0 < y1 <= 128
+        assert 0 <= x0 < x1 <= 512
+
 
 class TestAutoCrop:
     def test_passthrough_when_within_budget(self) -> None:
