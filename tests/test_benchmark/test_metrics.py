@@ -295,6 +295,20 @@ class TestStochasticRobustness:
         assert result["break_probability"] > 0.5
         assert result["bridge_probability"] < 0.1
 
+    def test_numerical_regression_pinned_seed(self):
+        # Pin exact output for a fixed mask + seed so future RNG refactors
+        # (e.g. removing the per-trial reseed, switching generators) cannot
+        # silently change semantics. Update only when the change is intentional.
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        result = compute_stochastic_robustness(
+            mask, num_trials=20, dose_photons_per_nm2=30.0, seed=2026
+        )
+        assert result["bridge_probability"] == pytest.approx(0.0)
+        assert result["break_probability"] == pytest.approx(0.3)
+        assert result["ler_mean_nm"] == pytest.approx(0.2216666679829359, abs=1e-9)
+        assert result["robustness_score"] == pytest.approx(0.85)
+
 
 class TestHotspotDetection:
     def test_perfect_match(self):

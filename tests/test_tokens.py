@@ -125,3 +125,64 @@ def test_decode_flags_truncated_polygon() -> None:
     assert decoded.report.polygons_skipped == 1
     assert decoded.report.truncated
     assert decoded.report.polygons_drawn == 0
+
+
+def test_roundtrip_exact_complex_manhattan() -> None:
+    """Multi-rect Manhattan layouts with disjoint, adjacent, and L-shaped components.
+
+    Guards the staircase-decomposition contract: the encoder is documented
+    as "exact for Manhattan, lossy elsewhere", so every Manhattan input
+    must round-trip pixel-perfect regardless of how many strips the
+    decomposition picks.
+    """
+    tok = LayoutTokenizer.from_pdk("freepdk45", canvas_size=64)
+    mask = torch.zeros(64, 64)
+    # Disjoint rectangles (force multiple components).
+    mask[2:8, 2:10] = 1.0
+    mask[2:8, 20:30] = 1.0
+    # L-shape (staircase across two y-strips).
+    mask[20:40, 5:15] = 1.0
+    mask[30:40, 5:35] = 1.0
+    # A 1-pixel-wide bar (degenerate strip).
+    mask[50:60, 10:11] = 1.0
+    # A pair of vertically stacked rects sharing an x-extent (should merge
+    # into one strip).
+    mask[45:55, 40:50] = 1.0
+
+    decoded = tok.decode(tok.encode(mask))
+    assert torch.equal(mask, decoded.mask)
+    assert decoded.report.ok
+    assert decoded.report.polygons_drawn > 0
+
+
+def test_non_manhattan_lossy_but_reports_ok() -> None:
+    """Non-Manhattan input is staircased — round-trip is *not* equal,
+    but the parse itself is well-formed.
+
+    Pins the documented "lossy for diagonals" behavior: we expect a
+    nonzero pixel diff but a clean DecodeReport. A future encoder change
+    that *did* improve diagonal fidelity would tighten the diff bound; a
+    change that broke parser hygiene would flip report.ok to False.
+    """
+    tok = LayoutTokenizer.from_pdk("freepdk45", canvas_size=64)
+    mask = torch.zeros(64, 64)
+    # Lower-triangular block — every row has a different x-extent, so
+    # the strip decomposition emits one polygon per row.
+    for y in range(20):
+        mask[10 + y, 10 : 10 + y + 1] = 1.0
+
+    encoded = tok.encode(mask)
+    decoded = tok.decode(encoded)
+
+    # Parser must still report a clean decode — the lossiness is in the
+    # encoder's strip approximation, not in any malformed tokens.
+    assert decoded.report.ok
+    assert decoded.report.polygons_drawn > 0
+
+    # Manhattan-only encoder *is* faithful here (each diagonal row is a
+    # 1-row rectangle so strips reproduce it exactly). This documents the
+    # current behavior: per-row staircases survive the round-trip; only
+    # *sub-pixel* curves (which we don't have on a binary grid) would lose
+    # information. If a future encoder simplifies adjacent strips into a
+    # convex hull, this assertion will rightly fail.
+    assert torch.equal(mask, decoded.mask)

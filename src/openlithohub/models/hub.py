@@ -86,26 +86,32 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
         self.sock = self.context.wrap_socket(sock, server_hostname=self.host)  # type: ignore[attr-defined]
 
 
-def _safe_cache_segment(value: str, *, kind: str, allow_separators: bool = False) -> str:
-    """Return ``value`` stripped of path-traversal components for use as a cache path segment.
+def _safe_cache_segment(value: str, *, kind: str) -> str:
+    """Return ``value`` validated and normalized as a single cache path segment.
 
-    Refuses absolute paths, path separators, and ``..`` components — these
-    would let a caller-controlled ``filename`` or model id escape the cache
-    directory (e.g. ``../../etc/passwd``). For ``model_id`` the slash separator
-    is the legal HF Hub ``owner/repo`` form, which the caller has already
-    rewritten to ``--`` before reaching here, so by default we additionally
-    forbid raw separators in ``value``.
+    Refuses absolute paths, path separators, and ``..``/``.`` components —
+    these would let a caller-controlled ``filename`` or model id escape the
+    cache directory (e.g. ``../../etc/passwd``).
+
+    For ``kind="model_id"`` the legal HF Hub form is ``owner/repo``; this
+    helper accepts the raw id, validates each slash-separated component, and
+    returns the ``owner--repo`` form used on disk. Folding normalization in
+    here keeps the validation authoritative: a caller that only saw the
+    pre-normalized value (e.g. ``../foo``) would otherwise rewrite slashes
+    away (``..--foo``) and slip the ``..`` past per-segment checks.
     """
     if not value or value.strip() == "":
         raise ValueError(f"{kind} must be a non-empty string")
     if "\x00" in value or value.startswith("/") or value.startswith("\\"):
         raise ValueError(f"Refusing unsafe {kind}: {value!r}")
-    if not allow_separators and ("/" in value or "\\" in value):
-        raise ValueError(f"Refusing path separator in {kind}: {value!r}")
     parts = value.replace("\\", "/").split("/")
     if any(part in ("", "..", ".") for part in parts):
         raise ValueError(f"Refusing path-traversal in {kind}: {value!r}")
-    return value
+    if kind == "model_id":
+        return "--".join(parts)
+    if len(parts) > 1:
+        raise ValueError(f"Refusing path separator in {kind}: {value!r}")
+    return parts[0]
 
 
 class ModelHub:
@@ -136,7 +142,10 @@ class ModelHub:
                 expected file contents. The Hub path uses HuggingFace's own
                 hash verification and ignores this argument.
         """
-        cache_segment = _safe_cache_segment(model_id.replace("/", "--"), kind="model_id")
+        if model_id.startswith("http://") or model_id.startswith("https://"):
+            cache_segment = "url--" + hashlib.sha256(model_id.encode("utf-8")).hexdigest()[:32]
+        else:
+            cache_segment = _safe_cache_segment(model_id, kind="model_id")
         safe_filename = _safe_cache_segment(filename, kind="filename")
         cached_path = self.cache_dir / cache_segment / safe_filename
         if cached_path.exists():

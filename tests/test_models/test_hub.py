@@ -60,3 +60,23 @@ class TestModelHub:
         # so direct path traversal must come via raw `..` in the segment.
         with pytest.raises(ValueError):
             hub.download_weights("..", filename="model.pt")
+
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "../foo",  # traversal hidden in multi-segment id (the boundary bug)
+            "foo/..",
+            "owner/../etc",
+            "/abs/path",
+            "owner\\..\\repo",
+            "owner/repo/extra",  # HF ids are exactly owner/repo
+            "owner//repo",  # empty middle segment
+            ".",
+            "owner/.",
+            "with\x00null",
+        ],
+    )
+    def test_model_id_multi_segment_traversal_rejected(self, tmp_path: Path, model_id: str) -> None:
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        with pytest.raises(ValueError):
+            hub.download_weights(model_id, filename="model.pt")
