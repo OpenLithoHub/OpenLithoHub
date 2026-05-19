@@ -30,6 +30,7 @@ model_name: my-curvilinear-ilt          # *
 dataset: lithobench                     # * one of: lithobench, lithosim, custom-<name>
 process_node: 7nm                       # * one of: 45nm, 28nm, 7nm, 5nm-euv, 3nm-euv, 2nm-euv
 mask_topology: curvilinear              # * manhattan | curvilinear
+track: open                             # optional: open | hackathon-2026q3 (default open)
 
 epe_mean_nm: 1.42                       # * mean EPE in nm, ≥ 0
 epe_max_nm: 4.10                        # * max EPE in nm, ≥ 0
