@@ -43,28 +43,39 @@ jobs:
           path: orfs
           submodules: recursive
 
-      - name: Inspect ORFS environment
-        working-directory: orfs
+      - name: Locate ORFS-bundled binaries in container
+        id: probe
         run: |
           set -euxo pipefail
-          # The openroad/orfs image bundles openroad / yosys / klayout. ORFS
-          # reads OPENROAD_EXE and YOSYS_EXE from the environment when set.
-          which openroad || true
-          which yosys || true
-          which klayout || true
-          ls flow/designs/asap7/${{ inputs.design }}
+          # The openroad/orfs image pre-builds ORFS at /OpenROAD-flow-scripts/.
+          # openroad lives under that tree, not /usr/local/bin. Find it.
+          openroad_bin=$(find / -name openroad -type f -executable 2>/dev/null | grep -E '/(bin|build)/' | head -1)
+          yosys_bin=$(command -v yosys || find / -name yosys -type f -executable 2>/dev/null | head -1)
+          klayout_bin=$(command -v klayout || find / -name klayout -type f -executable 2>/dev/null | head -1)
+          echo "openroad=$openroad_bin"
+          echo "yosys=$yosys_bin"
+          echo "klayout=$klayout_bin"
+          test -x "$openroad_bin"
+          test -x "$yosys_bin"
+          test -x "$klayout_bin"
+          "$openroad_bin" -version
+          "$yosys_bin" -V | head -1
+          echo "openroad=$openroad_bin" >> "$GITHUB_OUTPUT"
+          echo "yosys=$yosys_bin" >> "$GITHUB_OUTPUT"
+          echo "klayout=$klayout_bin" >> "$GITHUB_OUTPUT"
+          ls orfs/flow/designs/asap7/${{ inputs.design }}
 
       - name: Run ORFS make for asap7/${{ inputs.design }}
         working-directory: orfs/flow
+        env:
+          OPENROAD_EXE: ${{ steps.probe.outputs.openroad }}
+          YOSYS_EXE: ${{ steps.probe.outputs.yosys }}
+          KLAYOUT_CMD: ${{ steps.probe.outputs.klayout }}
         run: |
           set -euxo pipefail
-          # Do NOT source ../env.sh: the openroad/orfs container already
-          # has openroad / yosys / klayout on PATH at /usr/local/bin/.
-          # env.sh overrides PATH to point at orfs/tools/install/, which
-          # is empty in this checkout (we don't build from source).
-          export OPENROAD_EXE="$(command -v openroad)"
-          export YOSYS_EXE="$(command -v yosys)"
-          export KLAYOUT_CMD="$(command -v klayout)"
+          # Do NOT source ../env.sh: it overrides PATH to point at
+          # orfs/tools/install/, which is empty when we checkout-only.
+          # We use binaries probed from the openroad/orfs image instead.
           test -x "$OPENROAD_EXE"
           test -x "$YOSYS_EXE"
           test -x "$KLAYOUT_CMD"
