@@ -1,0 +1,103 @@
+"""Tests for EUV 3D-mask and Monte Carlo metrics."""
+
+from __future__ import annotations
+
+import pytest
+import torch
+
+from openlithohub.benchmark import (
+    Mask3DParams,
+    apply_3d_shadow,
+    compute_3d_mask_residual,
+    monte_carlo_failure_probability,
+)
+from openlithohub.simulators import HopkinsSimulator, SimulatorConfig
+
+
+def _checkerboard_mask(size: int = 64) -> torch.Tensor:
+    mask = torch.zeros(size, size)
+    for r in range(0, size, 8):
+        mask[r : r + 4, ::2] = 1.0
+    return mask
+
+
+class TestEuv3D:
+    def test_apply_3d_shadow_preserves_shape_and_range(self) -> None:
+        mask = _checkerboard_mask()
+        out = apply_3d_shadow(mask)
+        assert out.shape == mask.shape
+        assert (out >= 0).all() and (out <= 1).all()
+
+    def test_zero_thickness_is_identity(self) -> None:
+        mask = _checkerboard_mask()
+        params = Mask3DParams(absorber_thickness_nm=0.0, chief_ray_angle_deg=0.0)
+        out = apply_3d_shadow(mask, params)
+        assert torch.allclose(out, mask, atol=1e-5)
+
+    def test_residual_grows_with_thickness(self) -> None:
+        mask = torch.zeros(64, 64)
+        mask[20:44, 20:44] = 1.0
+        cfg = SimulatorConfig(wavelength_nm=13.5, na=0.33, sigma=0.7, pixel_size_nm=1.0)
+        thin = compute_3d_mask_residual(
+            mask,
+            Mask3DParams(absorber_thickness_nm=10.0, pixel_size_nm=1.0),
+            cfg,
+        )
+        thick = compute_3d_mask_residual(
+            mask,
+            Mask3DParams(absorber_thickness_nm=200.0, pixel_size_nm=1.0),
+            cfg,
+        )
+        assert thick["residual_l2"] > thin["residual_l2"]
+
+    def test_residual_keys(self) -> None:
+        mask = _checkerboard_mask()
+        out = compute_3d_mask_residual(mask)
+        assert {"residual_l2", "residual_linf", "hv_bias_nm"} == set(out)
+        assert out["residual_l2"] >= 0
+
+
+class TestMonteCarloFailure:
+    def test_zero_jitter_yields_zero_failure(self) -> None:
+        mask = _checkerboard_mask()
+        sim = HopkinsSimulator(SimulatorConfig(pixel_size_nm=4.0))
+        result = monte_carlo_failure_probability(
+            mask,
+            sim,
+            num_trials=5,
+            dose_jitter_sigma=0.0,
+            threshold_jitter_sigma=0.0,
+            seed=0,
+        )
+        assert result.failure_probability == 0.0
+        assert result.num_trials == 5
+
+    def test_jitter_runs_and_returns_in_unit_interval(self) -> None:
+        mask = _checkerboard_mask()
+        sim = HopkinsSimulator(SimulatorConfig(pixel_size_nm=4.0))
+        result = monte_carlo_failure_probability(
+            mask,
+            sim,
+            num_trials=4,
+            dose_jitter_sigma=0.05,
+            threshold_jitter_sigma=0.02,
+            seed=42,
+        )
+        assert 0.0 <= result.bridge_probability <= 1.0
+        assert 0.0 <= result.break_probability <= 1.0
+        assert 0.0 <= result.failure_probability <= 2.0
+
+    def test_simulator_config_restored_after_run(self) -> None:
+        mask = _checkerboard_mask()
+        cfg = SimulatorConfig(pixel_size_nm=4.0, dose=1.0, threshold=0.225)
+        sim = HopkinsSimulator(cfg)
+        monte_carlo_failure_probability(
+            mask,
+            sim,
+            num_trials=3,
+            dose_jitter_sigma=0.1,
+            threshold_jitter_sigma=0.1,
+            seed=7,
+        )
+        assert sim.config.dose == pytest.approx(1.0)
+        assert sim.config.threshold == pytest.approx(0.225)

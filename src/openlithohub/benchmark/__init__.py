@@ -3,16 +3,30 @@
 from openlithohub.benchmark.compliance.drc import check_drc
 from openlithohub.benchmark.compliance.mrc import check_curvilinear_mrc, check_mrc
 from openlithohub.benchmark.metrics.epe import compute_epe
+from openlithohub.benchmark.metrics.euv_3d import (
+    Mask3DParams,
+    apply_3d_shadow,
+    compute_3d_mask_residual,
+)
+from openlithohub.benchmark.metrics.monte_carlo import (
+    MonteCarloFailureResult,
+    monte_carlo_failure_probability,
+)
 from openlithohub.benchmark.metrics.pvband import compute_pvband
 from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
 from openlithohub.benchmark.metrics.stochastic import compute_stochastic_robustness
 
 __all__ = [
-    "compute_epe",
-    "compute_pvband",
-    "estimate_shot_count",
-    "compute_stochastic_robustness",
-    "check_mrc",
+    "Mask3DParams",
+    "MonteCarloFailureResult",
+    "apply_3d_shadow",
     "check_curvilinear_mrc",
     "check_drc",
+    "check_mrc",
+    "compute_3d_mask_residual",
+    "compute_epe",
+    "compute_pvband",
+    "compute_stochastic_robustness",
+    "estimate_shot_count",
+    "monte_carlo_failure_probability",
 ]
