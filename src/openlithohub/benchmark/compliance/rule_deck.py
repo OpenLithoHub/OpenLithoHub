@@ -26,9 +26,29 @@ Usage::
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
+
+if sys.version_info >= (3, 11):
+    import tomllib as _tomllib  # noqa: F401  # re-exported via _load_toml
+else:  # Python 3.10
+    try:
+        import tomli as _tomllib
+    except ModuleNotFoundError:  # pragma: no cover - exercised only on 3.10 w/o tomli
+        _tomllib = None  # type: ignore[assignment]
+
+
+def _load_toml(fh: IO[bytes]) -> dict[str, Any]:
+    """Read a TOML file via stdlib (3.11+) or `tomli` fallback (3.10)."""
+    if _tomllib is None:
+        raise ImportError(
+            "TOML rule decks on Python 3.10 require 'tomli'. "
+            "Install with: pip install tomli — or use a .json deck instead."
+        )
+    return _tomllib.load(fh)
+
 
 # Single source of truth: every rule-deck file must validate against this.
 RULE_DECK_SCHEMA: dict[str, Any] = {
@@ -146,15 +166,8 @@ def load_rule_deck(path: str | Path) -> RuleDeck:
     if suffix == ".json":
         data = json.loads(p.read_text())
     elif suffix == ".toml":
-        try:
-            import tomllib
-        except ModuleNotFoundError as e:  # Python < 3.11
-            raise ImportError(
-                "TOML rule decks require Python 3.11+ (or 'pip install tomli'). "
-                "Use a .json deck instead."
-            ) from e
         with p.open("rb") as fh:
-            data = tomllib.load(fh)
+            data = _load_toml(fh)
     else:
         raise ValueError(f"Unsupported rule-deck format: {suffix!r}. Use .json or .toml.")
 

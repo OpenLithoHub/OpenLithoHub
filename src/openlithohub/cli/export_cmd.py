@@ -117,7 +117,7 @@ def run(
         output.parent.mkdir(parents=True, exist_ok=True)
 
         if fmt == "torchscript":
-            scripted = torch.jit.trace(module, dummy)
+            scripted = torch.jit.trace(module, dummy)  # type: ignore[no-untyped-call]
             scripted.save(str(output))
             console.print(f"[green]Saved TorchScript module to {output}[/green]")
             return

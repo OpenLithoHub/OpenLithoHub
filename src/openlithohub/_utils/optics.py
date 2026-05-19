@@ -28,8 +28,12 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import torch
+
+if TYPE_CHECKING:
+    import numpy as np
 
 # Noll → (n, m) for Zernikes 1..37. Reference: Noll (1976), JOSA 66.
 # The polynomials below are normalized so ∫ Z² dA / (π R²) = 1 over
@@ -146,7 +150,7 @@ def load_source_intensity(
     return arr.to(device=device, dtype=torch.float32).contiguous()
 
 
-def _pil_to_float32(img: object) -> object:
+def _pil_to_float32(img: object) -> np.ndarray:
     """PIL Image → numpy float32 array. Handles 16-bit and float TIFFs."""
     import numpy as np
     from PIL import Image

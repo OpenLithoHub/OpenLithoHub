@@ -99,7 +99,7 @@ class GaugeTable:
         if wsum == 0.0:
             raise ValueError("All gauge weights are zero; weighted RMS is undefined.")
         num = sum(p.weight * e * e for p, e in zip(self.points, epes, strict=True))
-        return (num / wsum) ** 0.5
+        return float((num / wsum) ** 0.5)
 
 
 def parse_gauge(path: str | Path) -> GaugeTable:
