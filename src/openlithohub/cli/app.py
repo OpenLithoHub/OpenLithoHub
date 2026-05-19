@@ -8,6 +8,7 @@ from openlithohub.cli.eval_cmd import eval_app
 from openlithohub.cli.leaderboard_cmd import leaderboard_app
 from openlithohub.cli.optimize_cmd import optimize_app
 from openlithohub.cli.simulate_cmd import simulate_app
+from openlithohub.cli.synth_cmd import synth_app
 
 app = typer.Typer(
     name="openlithohub",
@@ -21,6 +22,7 @@ app.add_typer(
     leaderboard_app, name="leaderboard", help="View, submit, and export leaderboard results."
 )
 app.add_typer(simulate_app, name="simulate", help="Run a forward simulator on a mask.")
+app.add_typer(synth_app, name="synth", help="Generate synthetic PDK-aware layouts.")
 
 
 @app.callback(invoke_without_command=True)
