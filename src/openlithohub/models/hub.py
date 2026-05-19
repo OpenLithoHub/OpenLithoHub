@@ -108,6 +108,11 @@ def _safe_cache_segment(value: str, *, kind: str) -> str:
     if any(part in ("", "..", ".") for part in parts):
         raise ValueError(f"Refusing path-traversal in {kind}: {value!r}")
     if kind == "model_id":
+        if len(parts) != 2:
+            raise ValueError(
+                f"Refusing {kind} {value!r}: HuggingFace Hub ids must be "
+                f"exactly owner/repo (got {len(parts)} segments)."
+            )
         return "--".join(parts)
     if len(parts) > 1:
         raise ValueError(f"Refusing path separator in {kind}: {value!r}")

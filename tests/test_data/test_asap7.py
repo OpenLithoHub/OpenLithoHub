@@ -7,8 +7,13 @@ from pathlib import Path
 import pytest
 import torch
 
-from openlithohub.data import Asap7Dataset, LithoSample
-from openlithohub.data.asap7 import (
+# klayout is in the [workflow] extra; CI runs with [dev] only, so skip
+# the whole module when klayout is unavailable. iccad16/asap7 are the
+# only adapters that need it.
+pytest.importorskip("klayout.db")
+
+from openlithohub.data import Asap7Dataset, LithoSample  # noqa: E402
+from openlithohub.data.asap7 import (  # noqa: E402
     ASAP7_LICENSE,
     ASAP7_LICENSE_URL,
     CANONICAL_CELLS,
