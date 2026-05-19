@@ -293,14 +293,15 @@ def _load_layout_as_tensor(
     drawer = ImageDraw.Draw(canvas)
 
     shapes = top_cell.shapes(selected_layer_idx)
+
+    def _project(point: Any) -> tuple[int, int]:
+        px = int((point.x - bbox.left) * pixels_per_dbu)
+        py = int((point.y - bbox.bottom) * pixels_per_dbu)
+        return (max(0, min(px, w_px - 1)), max(0, min(py, h_px - 1)))
+
     for shape in shapes.each():
         if shape.is_polygon() or shape.is_box():
             poly = shape.polygon if shape.is_polygon() else shape.box.to_poly()
-
-            def _project(point: Any) -> tuple[int, int]:
-                px = int((point.x - bbox.left) * pixels_per_dbu)
-                py = int((point.y - bbox.bottom) * pixels_per_dbu)
-                return (max(0, min(px, w_px - 1)), max(0, min(py, h_px - 1)))
 
             hull = [_project(p) for p in poly.each_point_hull()]
             if len(hull) >= 3:

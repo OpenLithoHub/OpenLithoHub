@@ -238,9 +238,16 @@ class ModelHub:
         if not host:
             raise ValueError(f"URL has no host component: {url}")
         port = parsed.port or 443
-        path = parsed.path or "/"
+        # Build the request target by joining the (already URL-encoded) path
+        # and query verbatim — re-quoting either part would corrupt
+        # already-encoded characters. ``parsed.path`` is empty for URLs like
+        # ``https://host?x=1``; default to ``/`` per HTTP/1.1 spec.
+        request_target = parsed.path or "/"
         if parsed.query:
-            path = f"{path}?{parsed.query}"
+            request_target = f"{request_target}?{parsed.query}"
+        # Preserve the port in the Host header for non-default ports — some
+        # virtual-host-aware origins use it for routing.
+        host_header = host if port == 443 else f"{host}:{port}"
         ips = _resolve_and_vet(host)
 
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -267,7 +274,7 @@ class ModelHub:
         if conn is None:
             raise ValueError(f"Could not connect to any vetted address for {host!r}: {last_err}")
         try:
-            conn.request("GET", path, headers={"Host": host})
+            conn.request("GET", request_target, headers={"Host": host_header})
             response = conn.getresponse()
             # Reject redirects — we vetted only the original host, and a
             # 30x to a different host would leak the SSRF guard.

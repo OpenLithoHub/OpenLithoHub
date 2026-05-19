@@ -27,29 +27,35 @@ from pathlib import Path
 # from +x; measurement is taken perpendicular to it.
 _CANONICAL = ("x", "y", "tangent", "target_cd", "measured_cd", "weight")
 
-# Common synonyms seen in the wild. Lowercased keys → canonical name.
-_ALIASES: dict[str, str] = {
-    "x": "x",
-    "y": "y",
-    "x_nm": "x",
-    "y_nm": "y",
-    "x_um": "x",
-    "y_um": "y",
-    "tangent": "tangent",
-    "tangent_deg": "tangent",
-    "angle": "tangent",
-    "theta": "tangent",
-    "target": "target_cd",
-    "target_cd": "target_cd",
-    "target_nm": "target_cd",
-    "cd_target": "target_cd",
-    "measured": "measured_cd",
-    "measured_cd": "measured_cd",
-    "measured_nm": "measured_cd",
-    "cd_measured": "measured_cd",
-    "cd": "measured_cd",
-    "weight": "weight",
-    "w": "weight",
+# Common synonyms seen in the wild. Lowercased keys → (canonical name, scale-to-nm).
+# Downstream consumers (eval_cmd, weighted_rms_epe) treat all length-bearing
+# values as nm. ``_um`` aliases multiply by 1000 at parse time so an input file
+# in microns produces nm internally — silently mismatching units used to be a
+# 1000x error in the EPE numbers.
+_ALIASES: dict[str, tuple[str, float]] = {
+    "x": ("x", 1.0),
+    "y": ("y", 1.0),
+    "x_nm": ("x", 1.0),
+    "y_nm": ("y", 1.0),
+    "x_um": ("x", 1000.0),
+    "y_um": ("y", 1000.0),
+    "tangent": ("tangent", 1.0),
+    "tangent_deg": ("tangent", 1.0),
+    "angle": ("tangent", 1.0),
+    "theta": ("tangent", 1.0),
+    "target": ("target_cd", 1.0),
+    "target_cd": ("target_cd", 1.0),
+    "target_nm": ("target_cd", 1.0),
+    "target_um": ("target_cd", 1000.0),
+    "cd_target": ("target_cd", 1.0),
+    "measured": ("measured_cd", 1.0),
+    "measured_cd": ("measured_cd", 1.0),
+    "measured_nm": ("measured_cd", 1.0),
+    "measured_um": ("measured_cd", 1000.0),
+    "cd_measured": ("measured_cd", 1.0),
+    "cd": ("measured_cd", 1.0),
+    "weight": ("weight", 1.0),
+    "w": ("weight", 1.0),
 }
 
 
@@ -57,9 +63,11 @@ _ALIASES: dict[str, str] = {
 class GaugePoint:
     """One gauge measurement point.
 
-    Coordinates and CDs are in the file's native units (typically nm).
-    Tangent is degrees CCW from +x. ``measured_cd`` may be ``None`` when
-    the gauge file specifies targets only (pre-measurement).
+    Coordinates and CDs are in nanometers. Inputs labeled with ``_um`` are
+    converted to nm at parse time so all downstream consumers can assume
+    nm units uniformly. Tangent is degrees CCW from +x. ``measured_cd``
+    may be ``None`` when the gauge file specifies targets only
+    (pre-measurement).
     """
 
     x: float
@@ -186,7 +194,7 @@ def _is_header_line(tokens: list[str]) -> bool:
     """A header line must name all four required canonical columns."""
     if not tokens or any(not _looks_like_name(t) for t in tokens):
         return False
-    resolved = {_ALIASES.get(t.lower()) for t in tokens}
+    resolved = {_ALIASES.get(t.lower(), (None, 1.0))[0] for t in tokens}
     return {"x", "y", "tangent", "target_cd"}.issubset(resolved)
 
 
@@ -198,13 +206,13 @@ def _looks_like_name(token: str) -> bool:
     return False
 
 
-def _canonicalize(names: list[str]) -> dict[str, int]:
-    """Map canonical name → column index. Unknown columns are dropped."""
-    out: dict[str, int] = {}
+def _canonicalize(names: list[str]) -> dict[str, tuple[int, float]]:
+    """Map canonical name → (column index, scale-to-nm). Unknown columns are dropped."""
+    out: dict[str, tuple[int, float]] = {}
     for i, name in enumerate(names):
-        key = _ALIASES.get(name.lower())
-        if key is not None and key not in out:
-            out[key] = i
+        resolved = _ALIASES.get(name.lower())
+        if resolved is not None and resolved[0] not in out:
+            out[resolved[0]] = (i, resolved[1])
     missing = [c for c in ("x", "y", "tangent", "target_cd") if c not in out]
     if missing:
         raise ValueError(
@@ -214,14 +222,16 @@ def _canonicalize(names: list[str]) -> dict[str, int]:
     return out
 
 
-def _row_to_point(row: list[str], canon: dict[str, int]) -> GaugePoint:
+def _row_to_point(row: list[str], canon: dict[str, tuple[int, float]]) -> GaugePoint:
     def f(key: str) -> float:
-        return float(row[canon[key]])
+        idx, scale = canon[key]
+        return float(row[idx]) * scale
 
     measured: float | None
     if "measured_cd" in canon:
-        raw = row[canon["measured_cd"]].strip()
-        measured = None if raw == "" or raw.upper() == "NA" else float(raw)
+        idx, scale = canon["measured_cd"]
+        raw = row[idx].strip()
+        measured = None if raw == "" or raw.upper() == "NA" else float(raw) * scale
     else:
         measured = None
 

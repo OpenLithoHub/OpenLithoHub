@@ -158,23 +158,6 @@ def _add_violations(
         )
 
 
-def _menger_curvature(p0: np.ndarray, p1: np.ndarray, p2: np.ndarray) -> float:
-    """Discrete curvature at p1 via the circumscribed-circle radius of (p0, p1, p2).
-
-    Returns 1/R. Returns 0.0 if the three points are collinear (infinite radius).
-    """
-    a = np.linalg.norm(p1 - p0)
-    b = np.linalg.norm(p2 - p1)
-    c = np.linalg.norm(p2 - p0)
-    if a < 1e-9 or b < 1e-9 or c < 1e-9:
-        return 0.0
-    cross = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
-    area2 = abs(cross)
-    if area2 < 1e-12:
-        return 0.0
-    return float(2.0 * area2 / (a * b * c))
-
-
 def _smooth_loop(loop: np.ndarray, window: int) -> np.ndarray:
     """Periodic moving-average smoother for closed contour loops.
 
@@ -297,25 +280,41 @@ def check_curvilinear_mrc(
                 continue
             loop_nm = _smooth_loop(loop, smoothing_window) * pixel_size_nm
             n = len(loop_nm)
-            for i in range(n):
-                p0 = loop_nm[(i - skip) % n]
-                p1 = loop_nm[i]
-                p2 = loop_nm[(i + skip) % n]
-                kappa = _menger_curvature(p0, p1, p2)
-                if kappa <= 0.0:
-                    continue
-                radius_nm = 1.0 / kappa
-                if min_radius_observed is None or radius_nm < min_radius_observed:
-                    min_radius_observed = radius_nm
-                if kappa > threshold_kappa and len(curvature_violations) < max_reports:
-                    curvature_violations.append(
-                        {
-                            "x_nm": float(p1[1]),
-                            "y_nm": float(p1[0]),
-                            "actual_radius_nm": radius_nm,
-                            "required_radius_nm": min_curvature_radius_nm,
-                        }
-                    )
+            # Vectorized Menger curvature over the whole closed loop.
+            idx = np.arange(n)
+            p0 = loop_nm[(idx - skip) % n]
+            p1 = loop_nm[idx]
+            p2 = loop_nm[(idx + skip) % n]
+            a = np.linalg.norm(p1 - p0, axis=1)
+            b = np.linalg.norm(p2 - p1, axis=1)
+            c = np.linalg.norm(p2 - p0, axis=1)
+            cross = (p1[:, 0] - p0[:, 0]) * (p2[:, 1] - p0[:, 1]) - (p1[:, 1] - p0[:, 1]) * (
+                p2[:, 0] - p0[:, 0]
+            )
+            denom = a * b * c
+            valid = (a >= 1e-9) & (b >= 1e-9) & (c >= 1e-9) & (np.abs(cross) >= 1e-12)
+            kappa = np.zeros(n, dtype=np.float64)
+            np.divide(2.0 * np.abs(cross), denom, out=kappa, where=valid)
+
+            valid_kappa = kappa[valid]
+            if valid_kappa.size > 0:
+                loop_min_radius = 1.0 / float(valid_kappa.max())
+                if min_radius_observed is None or loop_min_radius < min_radius_observed:
+                    min_radius_observed = loop_min_radius
+
+            (violator_indices,) = np.nonzero(kappa > threshold_kappa)
+            for vi in violator_indices:
+                if len(curvature_violations) >= max_reports:
+                    break
+                radius_nm = 1.0 / float(kappa[vi])
+                curvature_violations.append(
+                    {
+                        "x_nm": float(p1[vi, 1]),
+                        "y_nm": float(p1[vi, 0]),
+                        "actual_radius_nm": radius_nm,
+                        "required_radius_nm": min_curvature_radius_nm,
+                    }
+                )
 
     violation_count = len(curvature_violations) + len(area_violations)
     return CurvilinearMRCResult(

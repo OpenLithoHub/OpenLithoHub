@@ -129,3 +129,15 @@ def test_blank_lines_ignored_in_calibre(tmp_path: Path) -> None:
     )
     gt = parse_gauge(p)
     assert len(gt) == 2
+
+
+def test_um_columns_are_converted_to_nm(tmp_path: Path) -> None:
+    """``_um`` aliases are scaled by 1000x at parse time so downstream
+    consumers (which assume nm) get correct values."""
+    p = tmp_path / "site.csv"
+    p.write_text("x_um,y_um,tangent,target_um,measured_um,weight\n0.1,0.2,0.0,0.032,0.0315,1.0\n")
+    gt = parse_gauge(p)
+    assert math.isclose(gt.points[0].x, 100.0)
+    assert math.isclose(gt.points[0].y, 200.0)
+    assert math.isclose(gt.points[0].target_cd, 32.0)
+    assert math.isclose(gt.points[0].measured_cd or 0.0, 31.5)

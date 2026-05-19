@@ -30,7 +30,11 @@ def run(
         "table", "--format", "-f", help="Output format: table, json, or markdown."
     ),
     node: str = typer.Option("45nm", "--node", "-n", help="Process node for evaluation context."),
-    pixel_nm: float = typer.Option(1.0, "--pixel-nm", help="Pixel size in nanometers."),
+    pixel_nm: float | None = typer.Option(
+        None,
+        "--pixel-nm",
+        help="Pixel size in nanometers. Defaults to the process node's pixel size.",
+    ),
     limit: int | None = typer.Option(
         None, "--limit", "-l", help="Max samples to evaluate (default: all)."
     ),
@@ -39,11 +43,15 @@ def run(
     pvband_check: bool = typer.Option(
         True, "--pvband/--no-pvband", help="Compute Process Variation Band metrics."
     ),
-    min_width_nm: float = typer.Option(
-        40.0, "--min-width-nm", help="Minimum feature width for MRC (nm)."
+    min_width_nm: float | None = typer.Option(
+        None,
+        "--min-width-nm",
+        help="Minimum feature width for MRC (nm). Defaults to the process node's min feature.",
     ),
-    min_spacing_nm: float = typer.Option(
-        40.0, "--min-spacing-nm", help="Minimum spacing for MRC (nm)."
+    min_spacing_nm: float | None = typer.Option(
+        None,
+        "--min-spacing-nm",
+        help="Minimum spacing for MRC (nm). Defaults to the process node's min spacing.",
     ),
     submit_to_leaderboard: bool = typer.Option(
         False, "--submit/--no-submit", help="Auto-submit results to leaderboard."
@@ -111,17 +119,26 @@ def run(
     from openlithohub.models.registry import registry
     from openlithohub.workflow.process_node import PROCESS_NODES
 
-    # Auto-configure from process node if available
+    # Resolve unset CLI options from the process-node defaults. Using a
+    # ``None`` sentinel rather than equality-with-default lets a user
+    # explicitly pass ``--pixel-nm 1.0`` without it being silently overridden.
     if node in PROCESS_NODES:
         from openlithohub.workflow.process_node import get_node
 
         node_config = get_node(node)
-        if pixel_nm == 1.0:
+        if pixel_nm is None:
             pixel_nm = node_config.pixel_size_nm
-        if min_width_nm == 40.0:
+        if min_width_nm is None:
             min_width_nm = node_config.min_feature_nm
-        if min_spacing_nm == 40.0:
+        if min_spacing_nm is None:
             min_spacing_nm = node_config.min_spacing_nm
+    # Fall back to historical hard-coded defaults when the node is unknown.
+    if pixel_nm is None:
+        pixel_nm = 1.0
+    if min_width_nm is None:
+        min_width_nm = 40.0
+    if min_spacing_nm is None:
+        min_spacing_nm = 40.0
 
     console.print(f"[bold]Evaluating[/bold] model={model} dataset={dataset} node={node}")
 
@@ -157,6 +174,12 @@ def run(
         # a Boolean as if it were a continuous metric.
         mrc_pass_flags: list[bool] = []
         drc_pass_flags: list[bool] = []
+        # Track raw violation counts + pixel counts so we can compute a
+        # properly weighted aggregate (sum violations / sum pixels) instead
+        # of averaging per-sample ratios — equal-weighting tiny and huge
+        # masks would skew the leaderboard number.
+        mrc_violation_counts: list[int] = []
+        mrc_total_pixels: list[int] = []
         perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
         for i in range(n_samples):
             sample = adapter[i]
@@ -179,8 +202,19 @@ def run(
                     min_spacing_nm=min_spacing_nm,
                     pixel_size_nm=pixel_nm,
                 )
-                sample_metrics["mrc_violation_rate"] = mrc_result.violation_rate
                 mrc_pass_flags.append(mrc_result.passed)
+                mrc_violation_counts.append(mrc_result.violation_count)
+                # Recover the per-sample pixel count from the recorded rate.
+                # check_mrc returns 0.0 when total_pixels is 0; in that case
+                # the sample contributes nothing to the weighted aggregate.
+                if mrc_result.violation_rate > 0:
+                    mrc_total_pixels.append(
+                        int(round(mrc_result.violation_count / mrc_result.violation_rate))
+                    )
+                else:
+                    # Fall back to deriving size from the mask shape itself.
+                    h, w = result.mask.shape[-2:]
+                    mrc_total_pixels.append(int(h) * int(w))
 
             if drc_check:
                 drc_result = check_drc(result.mask, pixel_size_nm=pixel_nm)
@@ -195,7 +229,7 @@ def run(
     finally:
         litho_model.teardown()
 
-    if not all_metrics:
+    if not all_metrics and not mrc_pass_flags and not drc_pass_flags:
         console.print("[yellow]Warning:[/yellow] No metrics computed.")
         raise typer.Exit(1)
 
@@ -206,6 +240,12 @@ def run(
     aggregated["num_samples"] = n_samples
     if mrc_pass_flags:
         aggregated["mrc_passed_all"] = all(mrc_pass_flags)
+        # Weighted aggregate: total violations across all samples divided by
+        # total pixels across all samples. Avoids equal-weighting masks of
+        # very different sizes — see _aggregate_metrics docstring.
+        total_pixels = sum(mrc_total_pixels)
+        if total_pixels > 0:
+            aggregated["mrc_violation_rate"] = sum(mrc_violation_counts) / total_pixels
     if drc_pass_flags:
         aggregated["drc_passed_all"] = all(drc_pass_flags)
 

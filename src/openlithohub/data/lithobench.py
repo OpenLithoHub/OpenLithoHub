@@ -118,6 +118,12 @@ class LithoBenchDataset(DatasetAdapter):
         )
 
     def _resolve_path(self, sample_id: str, kind: str) -> Path:
+        # Sample IDs feed directly into a filesystem path; refuse anything that
+        # could escape ``self.root`` via traversal. The legitimate index
+        # (populated from sorted file globs) only ever contains plain names,
+        # so this is a guard against caller-supplied IDs (``has_kind``).
+        if not sample_id or "/" in sample_id or "\\" in sample_id or sample_id in (".", ".."):
+            raise ValueError(f"Invalid sample_id: {sample_id!r}")
         if self._layout == "subdirectory":
             return self.root / kind / f"{sample_id}.npy"
         return self.root / f"{sample_id}_{kind}.npy"

@@ -44,13 +44,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p _pr_submissions
-          # Pull the list of changed files in the PR. Only accept paths
-          # under submissions/ that end in .yaml or .yml.
+          # Pin the head SHA once, before iterating, so a force-push mid-run
+          # can't yield a mixed snapshot of files from different revisions.
+          sha=$(gh pr view "$PR_NUMBER" --json headRefOid -q .headRefOid)
+          # Only accept paths under submissions/ that end in .yaml or .yml,
+          # restrict the character class so traversal segments (`..`) and
+          # exotic characters cannot reach `gh api`.
           gh pr diff "$PR_NUMBER" --name-only \
-            | grep -E '^submissions/.+\.(ya?ml)$' \
+            | grep -E '^submissions/[A-Za-z0-9_./-]+\.(ya?ml)$' \
+            | grep -v -E '(^|/)\.\.(/|$)' \
             | while read -r path; do
-                gh pr view "$PR_NUMBER" --json headRefOid -q .headRefOid > /tmp/sha
-                sha=$(cat /tmp/sha)
                 mkdir -p "_pr_submissions/$(dirname "$path")"
                 gh api "repos/${{ github.repository }}/contents/${path}?ref=${sha}" \
                   --jq '.content' | base64 -d > "_pr_submissions/${path}"

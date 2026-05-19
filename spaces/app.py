@@ -360,13 +360,30 @@ def evaluate_uploaded(
 
 
 def _leaderboard_path() -> Path:
+    here = Path(__file__).parent.resolve()
+    home_dir = (Path.home() / ".openlithohub").resolve()
     env = os.environ.get("OPENLITHOHUB_LEADERBOARD_PATH")
     if env:
-        return Path(env)
-    here = Path(__file__).parent
+        # Restrict the env-var override to absolute paths under the Space
+        # directory or the user's ~/.openlithohub/ — operator-controlled,
+        # but the same code path runs locally where a stray env var should
+        # not point at /etc/shadow or similar.
+        candidate = Path(env).resolve()
+        try:
+            candidate.relative_to(here)
+            return candidate
+        except ValueError:
+            pass
+        try:
+            candidate.relative_to(home_dir)
+            return candidate
+        except ValueError:
+            pass
+        # Silently fall through to the default candidates rather than
+        # crashing the Space at import time on a misconfigured env var.
     candidates = [
         here / "leaderboard.json",
-        Path.home() / ".openlithohub" / "leaderboard.json",
+        home_dir / "leaderboard.json",
     ]
     for c in candidates:
         if c.exists():
