@@ -1,0 +1,68 @@
+# OpenLithoHub Mini-Hackathon — 2026-Q3 manifest.
+#
+# This file pins the contract for the hackathon: which test split, what
+# tag, what target EPE, what gates. Charter: docs/hackathon.md.
+#
+# Editing rule: once `status: open` ships in a tagged release, do NOT
+# change `dataset.tag`, `dataset.commit_sha`, `dataset.sample_count`, or
+# the gate thresholds. Adjustments after open → invalidates entries.
+
+track: hackathon-2026q3
+status: charter           # charter | open | closed
+process_node: 7nm         # gate against MaskTopology + ProcessNode
+
+# --- Frozen test split ----------------------------------------------------
+# When `status: open`, organisers pin:
+#   - tag: a tagged release of the OpenLithoHub repo whose
+#     `data/hackathon-2026q3-test/` directory contains the LithoBench
+#     subset used for evaluation. The CI re-runs each PR against
+#     exactly this tag.
+#   - commit_sha: the resolved commit at tag time, recorded for the
+#     historical record (tags are mutable, commits are not).
+#   - sample_count: number of test samples in the split. CI verifies
+#     `len(dataset) == sample_count` before scoring.
+dataset:
+  source: lithobench
+  tag: hackathon-2026q3-test-v1
+  commit_sha: TBD          # filled at `status: open` time
+  sample_count: TBD        # filled at `status: open` time
+  pixel_nm: 1.0
+  split: test
+
+# --- Hard gates -----------------------------------------------------------
+# Submissions that fail any gate are rejected by the leaderboard CI.
+gates:
+  mrc_violation_rate_max: 0.0
+  drc_pass_required: true
+
+# --- Target EPE -----------------------------------------------------------
+# Calibration recipe (runs at open time, not at charter time):
+#   1. Run the strongest open-leaderboard baseline against the frozen
+#      test split with the bundled HopkinsParams for the node above.
+#   2. Compute EPE mean (nm) via openlithohub.benchmark.compute_epe.
+#   3. Set `target_epe_mean_nm` to that number, rounded to 0.1 nm.
+# Beating the target unlocks the prize tier; not beating it still
+# places the entry on the ranked board if hard gates pass.
+target:
+  baseline_method: strongest-open-leaderboard-2026q3
+  target_epe_mean_nm: TBD  # filled at `status: open` time
+  rationale: >
+    Pins the hackathon target to the strongest *reproducible*
+    open-leaderboard EPE at calibration time, so winners must
+    actually push the SOTA forward rather than redeem easy headroom.
+
+# --- Ranking --------------------------------------------------------------
+# Primary: EPE mean (nm), ascending. Ties broken by EPE max, then by
+# PV-Band mean. Mirror this in the website hackathon page.
+ranking:
+  primary: epe_mean_nm
+  tiebreakers:
+    - epe_max_nm
+    - pvband_mean_nm
+
+# --- Timeline (placeholders, finalised at status: open) -------------------
+timeline:
+  registration_open: TBD
+  submission_window_weeks: 4
+  verification_weeks: 1
+  awards_post_window_weeks: 1

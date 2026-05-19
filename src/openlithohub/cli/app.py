@@ -5,6 +5,7 @@ from __future__ import annotations
 import typer
 
 from openlithohub.cli.eval_cmd import eval_app
+from openlithohub.cli.hackathon_cmd import hackathon_app
 from openlithohub.cli.leaderboard_cmd import leaderboard_app
 from openlithohub.cli.optimize_cmd import optimize_app
 from openlithohub.cli.simulate_cmd import simulate_app
@@ -23,6 +24,7 @@ app.add_typer(
 )
 app.add_typer(simulate_app, name="simulate", help="Run a forward simulator on a mask.")
 app.add_typer(synth_app, name="synth", help="Generate synthetic PDK-aware layouts.")
+app.add_typer(hackathon_app, name="hackathon", help="Inspect the current hackathon contract.")
 
 
 @app.callback(invoke_without_command=True)

@@ -39,6 +39,9 @@ submission pipeline (`submissions/<handle>/<model>.yaml`) but with
 - **Evaluation**: a frozen LithoBench-derived test split published as
   a tagged release of the repo when the hackathon opens. The exact
   commit SHA + tag will pin the test set so future-you can rerun.
+  The contract — tag name, sample count, gates, target — lives in
+  [`hackathon/2026q3.yaml`](https://github.com/OpenLithoHub/OpenLithoHub/blob/main/hackathon/2026q3.yaml)
+  and freezes at `status: open` time.
 
 ## Metrics & gating
 
@@ -61,7 +64,8 @@ ties broken by PV-Band mean.
 ## Target
 
 The organisers will publish a **target EPE mean** when the hackathon
-opens (calibrated against the strongest open baseline at that time).
+opens (calibrated against the strongest open baseline at that time —
+recipe pinned in [`hackathon/2026q3.yaml`](https://github.com/OpenLithoHub/OpenLithoHub/blob/main/hackathon/2026q3.yaml)).
 Beating the target unlocks the prize tier; not beating it still places
 you on the ranked board if the hard gates pass.
 
