@@ -101,7 +101,9 @@ class OrfsArtifactDataset(DatasetAdapter):
         cell_name: Optional explicit top-cell name. Defaults to the
             GDS file's basename (matches ORFS naming convention).
         design_layer: ``(layer, datatype)`` to rasterize. Defaults to
-            metal1 (10, 0).
+            metal1 (20, 0) — post-route ORFS-ASAP7 GDS numbers M1 as
+            20/0, *not* 10/0 like the cell-library source. See the
+            module docstring for the full layer-numbering caveat.
         pixel_nm: Raster pixel size in nm. Default 1.0; ASAP7 dbu is
             0.25 nm so the rasterizer downsamples 4×.
         tile_nm: Tile edge length in nm. Default 2000 (2 µm); also

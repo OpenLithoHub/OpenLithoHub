@@ -254,23 +254,57 @@ class ModelHub:
         return target
 
     def list_cached(self) -> list[str]:
-        """List model IDs that have cached weights."""
+        """List model IDs that have cached weights.
+
+        HF-Hub-style entries are decoded from the on-disk ``owner--repo`` form
+        back to ``owner/repo``. URL-keyed entries (stored under
+        ``url--<sha256>``) are returned verbatim so a caller can hand the
+        result straight back to :meth:`clear_cache` without re-keying.
+        """
         if not self.cache_dir.exists():
             return []
-        return sorted(d.name.replace("--", "/") for d in self.cache_dir.iterdir() if d.is_dir())
+        names: list[str] = []
+        for d in self.cache_dir.iterdir():
+            if not d.is_dir():
+                continue
+            if d.name.startswith("url--"):
+                names.append(d.name)
+            else:
+                names.append(d.name.replace("--", "/"))
+        return sorted(names)
 
     def clear_cache(self, model_id: str | None = None) -> None:
-        """Remove cached weights for a model (or all if model_id is None)."""
+        """Remove cached weights for a model (or all if model_id is None).
+
+        ``model_id`` is routed through the same per-segment validator used by
+        ``download_weights`` so a caller-supplied ``..`` cannot escape the
+        cache directory and rmtree something it shouldn't. URL-keyed entries
+        (cached under the ``url--<sha256>`` segment that ``download_weights``
+        creates) are also accepted.
+        """
         import shutil
 
         if model_id is None:
             if self.cache_dir.exists():
                 shutil.rmtree(self.cache_dir)
                 self.cache_dir.mkdir(parents=True, exist_ok=True)
+            return
+
+        if model_id.startswith("http://") or model_id.startswith("https://"):
+            cache_segment = "url--" + hashlib.sha256(model_id.encode("utf-8")).hexdigest()[:32]
+        elif model_id.startswith("url--"):
+            # The exact on-disk segment as returned by `list_cached` for
+            # URL-keyed entries. Validate the suffix is a clean hex segment
+            # so a caller can't sneak `..` past us via this branch.
+            suffix = model_id[len("url--") :]
+            if not suffix or any(c not in "0123456789abcdef" for c in suffix):
+                raise ValueError(f"Refusing unsafe url-keyed cache id: {model_id!r}")
+            cache_segment = model_id
         else:
-            model_dir = self.cache_dir / model_id.replace("/", "--")
-            if model_dir.exists():
-                shutil.rmtree(model_dir)
+            cache_segment = _safe_cache_segment(model_id, kind="model_id")
+        model_dir = self.cache_dir / cache_segment
+        if model_dir.exists():
+            shutil.rmtree(model_dir)
 
     def get_checksum(self, path: Path) -> str:
         """Compute SHA256 checksum of a file."""

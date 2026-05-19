@@ -80,3 +80,31 @@ class TestModelHub:
         hub = ModelHub(cache_dir=tmp_path / "models")
         with pytest.raises(ValueError):
             hub.download_weights(model_id, filename="model.pt")
+
+    @pytest.mark.parametrize(
+        "model_id",
+        ["..", "../foo", "owner/../etc", "/abs/path", "with\x00null"],
+    )
+    def test_clear_cache_traversal_rejected(self, tmp_path: Path, model_id: str) -> None:
+        # `clear_cache` must apply the same per-segment validation as
+        # `download_weights`; otherwise a caller-controlled `..` would
+        # let `shutil.rmtree` escape the cache directory.
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        sentinel = tmp_path / "sibling"
+        sentinel.mkdir()
+        with pytest.raises(ValueError):
+            hub.clear_cache(model_id)
+        assert sentinel.exists()
+        assert hub.cache_dir.exists()
+
+    def test_list_cached_round_trips_through_clear_cache(self, tmp_path: Path) -> None:
+        # Whatever shape `list_cached` returns must be a valid input to
+        # `clear_cache` so the pair is composable.
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        (hub.cache_dir / "owner--repo").mkdir()
+        (hub.cache_dir / "url--abc123").mkdir()
+        cached = hub.list_cached()
+        assert sorted(cached) == ["owner/repo", "url--abc123"]
+        for entry in cached:
+            hub.clear_cache(entry)
+        assert hub.list_cached() == []
