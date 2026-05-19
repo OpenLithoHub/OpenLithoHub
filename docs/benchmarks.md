@@ -58,7 +58,7 @@ The same `results.json` / `results.md` artifacts land under the chosen
 output directory. Submit them to the public leaderboard with
 `openlithohub leaderboard submit --file <results.json>`.
 
-## ORFS-routed ASAP7 — RISC-V mock-alu (Phase 3)
+## ORFS-routed ASAP7 — RISC-V mock-alu (issue #4 Phase 3)
 
 OpenLithoHub also supports real ASAP7-routed RTL→GDSII outputs via the
 `OrfsArtifactDataset` adapter. The first end-to-end target is

@@ -10,7 +10,7 @@ default model configuration shipped with OpenLithoHub.
 | `levelset-ilt` | 8 | 0.036 | 0.250 | 2.128 | 0% |
 | `neural-ilt` | 8 | 15.074 | 24.637 | 2.497 | 100% |
 
-## ASAP7 standard cells (Phase 1)
+## ASAP7 standard cells (issue #4 Phase 1)
 
 Smoke-test baseline against the 4 canonical ASAP7 cells (`INVx1`,
 `NAND2x1`, `NOR2x1`, `DFFHQNx1` from `asap7sc7p5t_27_R`), M1 layer,
@@ -33,7 +33,7 @@ reference OPC mask (`LithoSample.mask is None`). EPE will populate once
 Phase 2 introduces a reference-mask source or Phase 3 adds OPC ground
 truth via the lithography forward model.
 
-## FreePDK45 + NanGate standard cells (Phase 2)
+## FreePDK45 + NanGate standard cells (issue #4 Phase 2)
 
 Smoke-test baseline against the 4 canonical NanGate cells (`INV_X1`,
 `NAND2_X1`, `NOR2_X1`, `DFF_X1` from `stdcells.gds` in the mflowgen
@@ -58,7 +58,7 @@ and the PV-band convolution scales O(N²). Reproduce with:
 EPE columns omitted for the same reason as ASAP7 — the FreePDK45 cells
 ship without a reference OPC mask.
 
-## ORFS-routed ASAP7 mock-alu (Phase 3)
+## ORFS-routed ASAP7 mock-alu (issue #4 Phase 3)
 
 First baseline against a real RTL→GDSII flow output. mock-alu is the
 smallest ASAP7 design in OpenROAD-flow-scripts (~25 min on a Linux

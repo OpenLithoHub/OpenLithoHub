@@ -111,6 +111,11 @@ Once registered, your model is available via the CLI:
 openlithohub eval run --model my-opc --dataset lithobench --data-root ./data
 ```
 
+To evaluate against a real PDK instead of LithoBench, swap `--dataset` for
+`asap7`, `freepdk45`, or `orfs` and pass `--accept-license` to acknowledge
+the upstream PDK terms. See [Benchmarks](benchmarks.md) for the full
+ORFS-routed RISC-V mock-alu walkthrough.
+
 ## Try It Without a Dataset
 
 If you don't have LithoBench/LithoSim handy (or you're running on Colab), you

@@ -18,7 +18,7 @@
 
 OpenLithoHub 为计算光刻研究提供统一的评测与工作流框架，打通从学术 Tensor 优化到工业掩膜制造的完整链路：
 
-- **统一数据接入** — 通过单一接口加载 LithoBench、LithoSim、GAN-OPC、ICCAD'16 hotspot 等光刻数据集
+- **统一数据接入** — 通过单一接口加载 LithoBench、LithoSim、GAN-OPC、ICCAD'16 hotspot、ASAP7、FreePDK45 + NanGate OCL、ORFS 布线后的 RISC-V 版图等光刻数据集
 - **零设置假数据** — `generate_dummy_layout` 在纯 NumPy/PyTorch 下生成确定性的、满足基本 DRC 的版图，可直接用于 CI 与 Colab
 - **PDK 感知合成版图生成器** — `openlithohub.synth` 在 FreePDK45 / ASAP7 上生成 SRAM、接触阵列与随机金属布线，按构造满足 MRC，含 `openlithohub synth` CLI 与 RFC 0001/0002 占位的扩散模型生成路径
 - **标准化评估指标** — EPE、PV Band、Shot Count、EUV 随机鲁棒性、EUV 3D-mask 阴影代理、Hotspot 检测 (recall / precision / F1)
@@ -193,6 +193,9 @@ class MyOPCModel(LithographyModel):
 | **LithoSim** | HuggingFace Parquet | Sub-28nm | 掩膜优化 | NeurIPS'25 |
 | **GAN-OPC** | 配对 PNG | — | AI-OPC 训练 | TCAD'20 |
 | **ICCAD'16 Problem C** | OASIS + CSV | N7 EUV | Hotspot 检测 | ICCAD'16 |
+| **ASAP7 标准单元** | GDSII (klayout) | 7nm 预测 | PDK 感知 OPC | The-OpenROAD-Project/asap7 |
+| **FreePDK45 + NanGate OCL** | GDSII (klayout) | 45nm 预测 | PDK 感知 OPC | mflowgen/freepdk-45nm |
+| **ORFS 布线 ASAP7** | GDSII (klayout) | 7nm | RISC-V 切片热点 | OpenROAD-flow-scripts |
 
 ---
 
@@ -216,15 +219,16 @@ ruff format src/ tests/
 
 ## 路线图
 
-- [x] Phase 1: 统一数据适配、EPE 指标、`eval` CLI
-- [x] Phase 2: MRC 合规、Manhattan 轮廓提取、切片、Shot Count
-- [x] Phase 3: OASIS 工作流、PV Band、随机鲁棒性、DRC、B 样条拟合、`optimize` CLI
-- [x] Phase 4: 公开排行榜、MkDocs 文档站、文档 CI/CD
-- [x] Phase 5: Web 演示平台（HuggingFace Spaces）
-- [x] Phase 6: 真实 ILT 模型（LevelSet-ILT、Neural-ILT U-Net）、DTCO 工艺节点、光刻胶仿真、模型 Hub、Jupyter 集成、PyPI/Docker CI/CD
-- [x] Phase 7: 论文级出图、假数据生成器、EDA 桥接模板、Colab 教程
-- [x] Phase 8: 多阶段 KLayout Docker、面向 AI 工程师的术语指南、Auto-Leaderboard CI、社区章程（Discord）、v0.1 发布公告
-- [x] Phase 9: PDK 感知合成版图生成器、厂商中立 Simulator Hook API、EUV 3D-mask 阴影代理、蒙特卡洛失效指标、Mini-Hackathon (2026-Q3)、RFC 0001 (Layout-MAE) + RFC 0002 (Layout Tokens)
+- [x] 里程碑 1：统一数据适配、EPE 指标、`eval` CLI
+- [x] 里程碑 2：MRC 合规、Manhattan 轮廓提取、切片、Shot Count
+- [x] 里程碑 3：OASIS 工作流、PV Band、随机鲁棒性、DRC、B 样条拟合、`optimize` CLI
+- [x] 里程碑 4：公开排行榜、MkDocs 文档站、文档 CI/CD
+- [x] 里程碑 5：Web 演示平台（HuggingFace Spaces）
+- [x] 里程碑 6：真实 ILT 模型（LevelSet-ILT、Neural-ILT U-Net）、DTCO 工艺节点、光刻胶仿真、模型 Hub、Jupyter 集成、PyPI/Docker CI/CD
+- [x] 里程碑 7：论文级出图、假数据生成器、EDA 桥接模板、Colab 教程
+- [x] 里程碑 8：多阶段 KLayout Docker、面向 AI 工程师的术语指南、Auto-Leaderboard CI、社区章程（Discord）、v0.1 发布公告
+- [x] 里程碑 9：PDK 感知合成版图生成器、厂商中立 Simulator Hook API、EUV 3D-mask 阴影代理、蒙特卡洛失效指标、Mini-Hackathon (2026-Q3)、RFC 0001 (Layout-MAE) + RFC 0002 (Layout Tokens)
+- [x] 里程碑 10：真实 PDK 接入 — ASAP7 标准单元、FreePDK45 + NanGate OCL、ORFS 布线后的 RISC-V mock-alu（issue [#4](https://github.com/OpenLithoHub/OpenLithoHub/issues/4)）
 
 ---
 

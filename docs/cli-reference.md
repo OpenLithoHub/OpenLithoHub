@@ -29,16 +29,25 @@ openlithohub eval run [OPTIONS]
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
 | `--model`, `-m` | TEXT | Model name to evaluate (required). | — |
-| `--dataset`, `-d` | TEXT | Dataset name (`lithobench` or `lithosim`). | `lithobench` |
+| `--dataset`, `-d` | TEXT | Dataset name (`lithobench`, `lithosim`, `asap7`, `freepdk45`, or `orfs`). | `lithobench` |
 | `--data-root`, `-r` | PATH | Path to dataset root directory (required). | — |
 | `--output`, `-o` | PATH | Path to save the evaluation report. | unset |
 | `--format`, `-f` | TEXT | Output format: `table`, `json`, or `markdown`. | `table` |
 | `--node`, `-n` | TEXT | Process node for evaluation context. | `45nm` |
 | `--pixel-nm` | FLOAT | Pixel size in nanometers. | `1.0` |
 | `--limit`, `-l` | INT | Max samples to evaluate (default: all). | unset |
+| `--drc / --no-drc` | FLAG | Run DRC compliance check. | `--drc` |
 | `--mrc / --no-mrc` | FLAG | Run MRC compliance check. | `--mrc` |
+| `--pvband / --no-pvband` | FLAG | Compute Process Variation Band metrics. | `--pvband` |
 | `--min-width-nm` | FLOAT | Minimum feature width for MRC (nm). | `40.0` |
 | `--min-spacing-nm` | FLOAT | Minimum spacing for MRC (nm). | `40.0` |
+| `--accept-license` | FLAG | Acknowledge upstream PDK license — required for `asap7`, `freepdk45`, `orfs`. | off |
+| `--tile-nm` | FLOAT | Tile edge length in nm (used by `--dataset orfs`; `2000` and `5000` are the canonical AI-OPC windows). | `2000.0` |
+| `--device` | TEXT | Torch device for the forward model (`cpu`, `cuda`, `mps`). | `cpu` |
+| `--dtype` | TEXT | Compute dtype for the forward model (`fp32`, `bf16`). | `fp32` |
+| `--compile / --no-compile` | FLAG | Wrap the Hopkins forward with `torch.compile`. | `--no-compile` |
+| `--pretrained / --no-pretrained` | FLAG | Load pretrained weights for the selected model (when supported). | `--no-pretrained` |
+| `--sha256` | TEXT | Expected SHA256 digest for direct-URL weight downloads. | unset |
 | `--submit / --no-submit` | FLAG | Auto-submit results to leaderboard. | `--no-submit` |
 | `--topology` | TEXT | Mask topology: `manhattan` or `curvilinear`. | `manhattan` |
 | `--paper-url` | TEXT | Paper URL (used when submitting). | unset |

@@ -21,7 +21,7 @@
 
 OpenLithoHub provides a unified evaluation and workflow framework for computational lithography research. It bridges the gap between academic tensor-based optimization and industrial mask manufacturing by offering:
 
-- **Unified dataset access** — single interface to LithoBench, LithoSim, GAN-OPC, ICCAD'16 hotspot, and other lithography datasets
+- **Unified dataset access** — single interface to LithoBench, LithoSim, GAN-OPC, ICCAD'16 hotspot, ASAP7, FreePDK45 + NanGate OCL, and ORFS-routed RISC-V layouts
 - **Standardized metrics** — EPE, PV Band, shot count, EUV stochastic robustness, hotspot detection (recall / precision / F1)
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
 - **OASIS workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear)
@@ -226,6 +226,9 @@ suite, and formatting a leaderboard submission.
 | **LithoSim** | HuggingFace Parquet | Sub-28nm | Mask optimization | NeurIPS'25 |
 | **GAN-OPC** | Paired PNGs | — | AI-OPC training | TCAD'20 |
 | **ICCAD'16 Problem C** | OASIS + CSV | N7 EUV | Hotspot detection | ICCAD'16 |
+| **ASAP7 standard cells** | GDSII (klayout) | 7nm predictive | PDK-aware OPC | The-OpenROAD-Project/asap7 |
+| **FreePDK45 + NanGate OCL** | GDSII (klayout) | 45nm predictive | PDK-aware OPC | mflowgen/freepdk-45nm |
+| **ORFS-routed ASAP7** | GDSII (klayout) | 7nm | RISC-V tile-cut hotspots | OpenROAD-flow-scripts |
 
 ---
 
@@ -301,12 +304,16 @@ ruff format src/ tests/
 
 ## Roadmap
 
-- [x] Phase 1: Unified data adapters, EPE metric, `eval` CLI
-- [x] Phase 2: MRC compliance, Manhattan contour extraction, tiling, shot count
-- [x] Phase 3: OASIS workflow, PV Band, stochastic robustness, DRC, B-spline fitting, `optimize` CLI
-- [x] Phase 4: Public leaderboard, MkDocs documentation site, CI/CD for docs
-- [x] Phase 5: Web playground (HuggingFace Spaces)
-- [x] Phase 6: Real ILT models (LevelSet-ILT, Neural-ILT U-Net), DTCO process nodes, resist simulation, model hub, Jupyter integration, PyPI/Docker CI/CD
+- [x] Milestone 1: Unified data adapters, EPE metric, `eval` CLI
+- [x] Milestone 2: MRC compliance, Manhattan contour extraction, tiling, shot count
+- [x] Milestone 3: OASIS workflow, PV Band, stochastic robustness, DRC, B-spline fitting, `optimize` CLI
+- [x] Milestone 4: Public leaderboard, MkDocs documentation site, CI/CD for docs
+- [x] Milestone 5: Web playground (HuggingFace Spaces)
+- [x] Milestone 6: Real ILT models (LevelSet-ILT, Neural-ILT U-Net), DTCO process nodes, resist simulation, model hub, Jupyter integration, PyPI/Docker CI/CD
+- [x] Milestone 7: Paper-ready visualization, dummy layout generator, EDA bridge templates, Colab quickstart
+- [x] Milestone 8: Multi-stage KLayout Docker, AI-engineer terminology guide, Auto-Leaderboard CI, community charter (Discord), v0.1 launch announcement
+- [x] Milestone 9: PDK-aware synthetic layout generator, vendor-neutral simulator hook API, EUV 3D-mask shadow proxy, Monte Carlo failure metric, Mini-Hackathon (2026-Q3), RFC 0001 (Layout-MAE) + RFC 0002 (Layout Tokens)
+- [x] Milestone 10: Real PDK rollout — ASAP7 standard cells, FreePDK45 + NanGate OCL, ORFS-routed RISC-V mock-alu (issue [#4](https://github.com/OpenLithoHub/OpenLithoHub/issues/4))
 
 ---
 
