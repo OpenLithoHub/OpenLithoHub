@@ -177,9 +177,18 @@ PATTERN_GENERATORS = {
 # ---------------------------------------------------------------------------
 
 
-def visualize_masks(predicted: np.ndarray, target: np.ndarray) -> plt.Figure:
-    """Create side-by-side visualization of predicted vs target with edge overlay."""
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+def visualize_masks(
+    predicted: np.ndarray,
+    target: np.ndarray,
+    *,
+    pixel_size_nm: float = 1.0,
+    min_width_nm: float = 40.0,
+    min_spacing_nm: float = 40.0,
+) -> plt.Figure:
+    """5-panel visualization: target, predicted, edge overlay, EPE heatmap, MRC overlay."""
+    from openlithohub.vis import plot_epe_heatmap, plot_mrc_overlay
+
+    fig, axes = plt.subplots(1, 5, figsize=(22, 4.6))
 
     axes[0].imshow(target, cmap="gray", interpolation="nearest")
     axes[0].set_title("Target (Design)")
@@ -199,8 +208,17 @@ def visualize_masks(predicted: np.ndarray, target: np.ndarray) -> plt.Figure:
     overlay[both] = [1.0, 1.0, 0.0]  # yellow = overlap
 
     axes[2].imshow(overlay, interpolation="nearest")
-    axes[2].set_title("Edge Overlay (Green=Target, Red=Pred)")
+    axes[2].set_title("Edge Overlay (G=Tgt, R=Pred)")
     axes[2].axis("off")
+
+    plot_epe_heatmap(predicted, target, pixel_size_nm=pixel_size_nm, ax=axes[3])
+    plot_mrc_overlay(
+        predicted,
+        min_width_nm=min_width_nm,
+        min_spacing_nm=min_spacing_nm,
+        pixel_size_nm=pixel_size_nm,
+        ax=axes[4],
+    )
 
     plt.tight_layout()
     return fig
@@ -238,7 +256,13 @@ def evaluate_pattern(
     )
 
     # Visualization
-    fig = visualize_masks(predicted, target)
+    fig = visualize_masks(
+        predicted,
+        target,
+        pixel_size_nm=pixel_size_nm,
+        min_width_nm=min_width_nm,
+        min_spacing_nm=min_spacing_nm,
+    )
 
     metrics_text = (
         f"## Evaluation Results\n\n"
@@ -266,21 +290,15 @@ def evaluate_uploaded(
     """Evaluate uploaded mask images."""
     from PIL import Image
 
+    from openlithohub._utils.auto_crop import auto_crop
+
     if pred_file is None or target_file is None:
         return None, "Please upload both predicted and target mask images."
 
     pred_img = Image.open(pred_file)
     tgt_img = Image.open(target_file)
 
-    longest = max(pred_img.size[0], pred_img.size[1], tgt_img.size[0], tgt_img.size[1])
-    if longest > MAX_UPLOAD_DIM:
-        pred_img.close()
-        tgt_img.close()
-        return None, (
-            f"Uploaded mask is {longest}px on its longest side; the playground "
-            f"caps inputs at {MAX_UPLOAD_DIM}px to keep evaluation under the free "
-            f"HF Space memory budget. Downsample or crop your mask and retry."
-        )
+    src_w, src_h = pred_img.size
 
     pred_img = pred_img.convert("L")
     tgt_img = tgt_img.convert("L")
@@ -292,6 +310,23 @@ def evaluate_uploaded(
     predicted = (np.array(pred_img, dtype=np.float32) / 255.0 > 0.5).astype(np.float32)
     target = (np.array(tgt_img, dtype=np.float32) / 255.0 > 0.5).astype(np.float32)
 
+    # Auto-Crop: if either axis exceeds MAX_UPLOAD_DIM, locate the densest
+    # MAX_UPLOAD_DIM-square window on the predicted mask and crop both tensors
+    # at the same bbox. Keeps EPE on the user's actual area of interest
+    # instead of bailing out, and stays within the HF free-tier memory budget.
+    crop_notice = ""
+    if max(predicted.shape) > MAX_UPLOAD_DIM:
+        pred_t = torch.from_numpy(predicted)
+        _, bbox = auto_crop(pred_t, target_size=MAX_UPLOAD_DIM)
+        y0, x0, y1, x1 = bbox
+        predicted = predicted[y0:y1, x0:x1]
+        target = target[y0:y1, x0:x1]
+        crop_notice = (
+            f"\n\n*Auto-cropped from {src_w}×{src_h} to "
+            f"{x1 - x0}×{y1 - y0} at bbox y={y0}..{y1}, x={x0}..{x1} "
+            f"(densest window).*"
+        )
+
     epe = compute_epe(predicted, target, pixel_size_nm=pixel_size_nm)
     mrc = check_mrc(
         predicted,
@@ -300,7 +335,13 @@ def evaluate_uploaded(
         pixel_size_nm=pixel_size_nm,
     )
 
-    fig = visualize_masks(predicted, target)
+    fig = visualize_masks(
+        predicted,
+        target,
+        pixel_size_nm=pixel_size_nm,
+        min_width_nm=min_width_nm,
+        min_spacing_nm=min_spacing_nm,
+    )
 
     metrics_text = (
         f"## Evaluation Results\n\n"
@@ -312,7 +353,7 @@ def evaluate_uploaded(
         f"| MRC Passed | {'Yes' if mrc['passed'] else 'No'} |\n"
         f"| Width Violations | {mrc['width_violations']} |\n"
         f"| Spacing Violations | {mrc['spacing_violations']} |\n"
-        f"| Violation Rate | {mrc['violation_rate']:.6f} |\n"
+        f"| Violation Rate | {mrc['violation_rate']:.6f} |\n" + crop_notice
     )
 
     return fig, metrics_text
