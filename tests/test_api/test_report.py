@@ -70,6 +70,16 @@ def test_evaluate_rejects_shape_mismatch() -> None:
         engine.evaluate(pred, target)
 
 
+def test_evaluate_rejects_pixel_size_mismatch() -> None:
+    """EPE is reported in nm; comparing two masks at different pitches without
+    resampling silently produces wrong physical numbers."""
+    engine = LitheEngine(model="dummy-identity")
+    pred = Mask.from_tensor(torch.zeros(64, 64), pixel_size_nm=1.0)
+    target = Mask.from_tensor(torch.zeros(64, 64), pixel_size_nm=0.5)
+    with pytest.raises(ValueError, match="pixel_size_nm mismatch"):
+        engine.evaluate(pred, target)
+
+
 def test_evaluate_accepts_raw_tensors(
     sample_design: torch.Tensor, sample_mask: torch.Tensor
 ) -> None:

@@ -31,9 +31,12 @@ class Mask:
     """A 2-D mask tensor with its physical pixel pitch and (optional) source layer.
 
     The fab/EDA-facing handle that ``LitheEngine`` consumes and produces.
-    Construction is via classmethod constructors — never by mutating the
-    fields. The dataclass is frozen so a caller cannot accidentally
-    invalidate the ``(tensor, pixel_size_nm, layer)`` triplet.
+    Construction is via classmethod constructors. The dataclass is frozen,
+    so the three fields cannot be rebound after construction — but note
+    that ``frozen=True`` does not protect against in-place mutation of the
+    underlying tensor (``mask.tensor[i, j] = 0`` still mutates storage).
+    Treat ``Mask`` as a structural binding of ``(tensor, pixel_size_nm,
+    layer)``, not as a deep-immutable value.
     """
 
     tensor: torch.Tensor

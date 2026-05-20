@@ -48,11 +48,9 @@ def test_dummy_identity_is_identity_after_binarise(sample_design: torch.Tensor) 
     assert torch.equal(out.tensor, expected)
 
 
-def test_setup_called_once_on_construction() -> None:
-    """Engine should call setup() exactly once at construction, not per optimize()."""
-
+def _make_counting_model_class(name: str) -> type[LithographyModel]:
     class CountingModel(LithographyModel):
-        NAME = "counting-model"
+        NAME = name
         SUPPORTS_CURVILINEAR = False
         RECEPTIVE_FIELD_PX = 0
 
@@ -65,13 +63,45 @@ def test_setup_called_once_on_construction() -> None:
         def predict(self, design: torch.Tensor, **_: object) -> PredictionResult:
             return PredictionResult(mask=design.clone())
 
-    model = CountingModel()
+    return CountingModel
+
+
+def test_engine_does_not_call_setup_on_caller_supplied_model() -> None:
+    """Caller owns the lifecycle of an externally constructed model.
+
+    `setup()` is not idempotent for some models (e.g. NeuralILTModel re-loads
+    weights on every call). The caller has presumably already called setup;
+    the engine must not call it again.
+    """
+    cls = _make_counting_model_class("counting-supplied")
+    model = cls()
+    model.setup()  # caller does it
+    assert model.setup_calls == 1
     engine = LitheEngine(model=model)
     t = torch.zeros(64, 64)
     t[16:48, 16:48] = 1.0
     engine.optimize(t)
     engine.optimize(t)
-    assert model.setup_calls == 1
+    assert model.setup_calls == 1  # engine did not double-setup
+
+
+def test_engine_calls_setup_once_when_constructing_by_name() -> None:
+    """When the engine constructs the model by name, it owns setup()."""
+    cls = _make_counting_model_class("counting-by-name")
+    # Register so registry.get can build it.
+    from openlithohub.models.registry import registry
+
+    registry.register(cls)
+    try:
+        engine = LitheEngine(model="counting-by-name")
+        assert engine.model.setup_calls == 1  # type: ignore[attr-defined]
+        t = torch.zeros(64, 64)
+        t[16:48, 16:48] = 1.0
+        engine.optimize(t)
+        engine.optimize(t)
+        assert engine.model.setup_calls == 1  # type: ignore[attr-defined]
+    finally:
+        registry._models.pop("counting-by-name", None)
 
 
 def test_instance_model_rejects_kwargs() -> None:
@@ -92,6 +122,16 @@ def test_instance_model_rejects_kwargs() -> None:
 def test_unknown_model_name_raises() -> None:
     with pytest.raises(KeyError):
         LitheEngine(model="not-a-real-model")
+
+
+def test_unknown_node_name_raises() -> None:
+    """Typos in `node` must surface, not silently fall back to no node config.
+
+    Silent coercion to None hides physics-affecting misconfiguration: halo
+    drops to DEFAULT_HALO_PX and pixel_size never picks up the node's pitch.
+    """
+    with pytest.raises(KeyError):
+        LitheEngine(model="dummy-identity", node="3nm-uev")  # typo
 
 
 def test_node_overrides_default_pixel_pitch(sample_design: torch.Tensor) -> None:

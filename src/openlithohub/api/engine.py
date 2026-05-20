@@ -21,7 +21,7 @@ from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
 from openlithohub.models.base import LithographyModel
 from openlithohub.models.registry import register_builtin_models, registry
 from openlithohub.workflow.halo import compute_halo_px
-from openlithohub.workflow.process_node import PROCESS_NODES, ProcessNodeConfig, get_node
+from openlithohub.workflow.process_node import ProcessNodeConfig, get_node
 from openlithohub.workflow.tiling import stitch_tiles, tile_layout
 
 
@@ -49,22 +49,26 @@ class LitheEngine:
             if pretrained:
                 kwargs.setdefault("pretrained", True)
             self._model: LithographyModel = registry.get(model, **kwargs)
+            # Engine constructed the instance, so it owns the setup() call.
+            self._model.setup()
         elif isinstance(model, LithographyModel):
             if model_kwargs or pretrained:
                 raise ValueError(
                     "model_kwargs / pretrained only apply when `model` is a name; "
                     "pass a fully constructed LithographyModel without them."
                 )
+            # Caller-supplied instance: assume the caller has already called
+            # setup(). Calling it again would re-load weights / re-init GPU
+            # state in non-idempotent models like NeuralILTModel.
             self._model = model
         else:
             raise TypeError(
                 f"`model` must be a name (str) or LithographyModel, got {type(model).__name__}"
             )
 
-        self._model.setup()
-        self._node_config: ProcessNodeConfig | None = (
-            get_node(node) if node is not None and node in PROCESS_NODES else None
-        )
+        # Let `get_node` raise KeyError on typos; silently coercing unknown
+        # node names to None hides physics-affecting misconfiguration.
+        self._node_config: ProcessNodeConfig | None = get_node(node) if node is not None else None
         self._tile_size = tile_size
 
     @property
@@ -134,6 +138,12 @@ class LitheEngine:
         tgt = self._coerce_to_mask(target)
         if pred.shape != tgt.shape:
             raise ValueError(f"shape mismatch: predicted {pred.shape} vs target {tgt.shape}")
+        if pred.pixel_size_nm != tgt.pixel_size_nm:
+            raise ValueError(
+                f"pixel_size_nm mismatch: predicted {pred.pixel_size_nm} vs "
+                f"target {tgt.pixel_size_nm}. EPE is reported in nanometers, so "
+                f"masks at different pitches cannot be compared without resampling."
+            )
 
         pixel_nm = self._resolve_pixel_size(pred.pixel_size_nm)
 
