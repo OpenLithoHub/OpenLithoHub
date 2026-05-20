@@ -73,6 +73,39 @@ class TestGenerate:
         )
 
 
+class TestEnforceDRC:
+    """Verify the DRC pass corrects constructed violations.
+
+    The round-trip-on-clean tests above only confirm generators emit valid
+    output; they would still pass if `_enforce_drc` were a no-op. These
+    tests construct known-bad inputs and assert correction.
+    """
+
+    def test_sub_min_width_sliver_is_removed(self) -> None:
+        from openlithohub.synth.rule_based import _enforce_drc
+
+        rules = get_pdk("freepdk45")
+        # Single-pixel-wide vertical sliver — narrower than min_width_px.
+        mask = torch.zeros(64, 64)
+        mask[10:50, 30] = 1.0
+        assert mask.sum() > 0  # sanity
+        cleaned = _enforce_drc(mask, rules)
+        # Opening at radius >= 1 must remove a 1-px-wide line.
+        assert cleaned.sum() == 0
+
+    def test_at_threshold_feature_survives(self) -> None:
+        from openlithohub.synth.rule_based import _enforce_drc
+
+        rules = get_pdk("freepdk45")
+        w = rules.min_width_px
+        mask = torch.zeros(64, 64)
+        mask[10:54, 20 : 20 + w] = 1.0
+        cleaned = _enforce_drc(mask, rules)
+        # Feature exactly at min_width_px must be preserved by opening
+        # with radius (min_width_px - 1) // 2.
+        assert cleaned.sum() > 0
+
+
 class TestDiffusionStub:
     def test_construct_then_sample_raises(self) -> None:
         gen = DiffusionLayoutGenerator(pdk="freepdk45")

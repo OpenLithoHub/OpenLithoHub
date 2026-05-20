@@ -63,6 +63,14 @@ def check_drc(
     """Run Design Rule Check on a mask layout.
 
     Checks: minimum width, minimum spacing, minimum area, notch detection.
+
+    Notch semantics. ``min_notch_nm`` flags only **fully-enclosed** background
+    concavities — small bg pockets surrounded on all sides by foreground —
+    that a closing of the foreground at radius ``min_notch_nm / 2`` would fill
+    in. Through-channels (narrow bg gaps that touch the image border) and the
+    open exterior background are intentionally excluded; those are spacing
+    violations and are reported by ``min_spacing_nm`` instead. This split
+    avoids double-counting the same physical defect under two rules.
     """
     m = ensure_2d(mask)
     binary = (m > 0.5).float()
