@@ -36,6 +36,8 @@ class Report:
 
     model_name: str
     pixel_size_nm: float
+    tile_size: int
+    halo_px: int
 
     raw_epe: EPEResult
     raw_drc: DRCResult
@@ -54,5 +56,6 @@ class Report:
             f"epe_mean={self.epe_mean_nm:.3f} nm "
             f"pvband_mean={self.pvband_mean_nm:.3f} nm "
             f"drc={self.drc_violations} mrc={self.mrc_violations} "
-            f"shots={self.shot_count})"
+            f"shots={self.shot_count} "
+            f"tile={self.tile_size} halo={self.halo_px})"
         )

@@ -56,9 +56,13 @@ def _make_counting_model_class(name: str) -> type[LithographyModel]:
 
         def __init__(self) -> None:
             self.setup_calls = 0
+            self.teardown_calls = 0
 
         def setup(self) -> None:
             self.setup_calls += 1
+
+        def teardown(self) -> None:
+            self.teardown_calls += 1
 
         def predict(self, design: torch.Tensor, **_: object) -> PredictionResult:
             return PredictionResult(mask=design.clone())
@@ -148,3 +152,42 @@ def test_node_does_not_override_explicit_pitch(sample_design: torch.Tensor) -> N
     mask = Mask.from_tensor(sample_design, pixel_size_nm=0.25)
     out = engine.optimize(mask)
     assert out.pixel_size_nm == 0.25
+
+
+def test_context_manager_calls_teardown_for_engine_owned_model() -> None:
+    cls = _make_counting_model_class("counting-ctx-owned")
+    from openlithohub.models.registry import registry
+
+    registry.register(cls)
+    try:
+        with LitheEngine(model="counting-ctx-owned") as engine:
+            assert engine.model.setup_calls == 1  # type: ignore[attr-defined]
+            assert engine.model.teardown_calls == 0  # type: ignore[attr-defined]
+        assert engine.model.teardown_calls == 1  # type: ignore[attr-defined]
+    finally:
+        registry._models.pop("counting-ctx-owned", None)
+
+
+def test_context_manager_does_not_teardown_caller_supplied_model() -> None:
+    """Caller owns the lifecycle of an externally constructed model — teardown
+    must not yank resources out from under code the engine never opened."""
+    cls = _make_counting_model_class("counting-ctx-supplied")
+    model = cls()
+    model.setup()
+    with LitheEngine(model=model):
+        pass
+    assert model.teardown_calls == 0
+
+
+def test_close_is_idempotent() -> None:
+    cls = _make_counting_model_class("counting-close-idempotent")
+    from openlithohub.models.registry import registry
+
+    registry.register(cls)
+    try:
+        engine = LitheEngine(model="counting-close-idempotent")
+        engine.close()
+        engine.close()
+        assert engine.model.teardown_calls == 1  # type: ignore[attr-defined]
+    finally:
+        registry._models.pop("counting-close-idempotent", None)

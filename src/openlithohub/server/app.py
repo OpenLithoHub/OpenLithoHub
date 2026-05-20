@@ -58,7 +58,7 @@ def _run_optimize(
 ) -> dict[str, Any]:
     """Synchronous optimization core. Mirrors the CLI optimize flow but
     with no Rich I/O — returns a small JSON-friendly summary."""
-    from openlithohub.cli.optimize_cmd import _load_layout_as_tensor
+    from openlithohub.data.io import load_layout
     from openlithohub.workflow.export import export_oasis
     from openlithohub.workflow.halo import compute_halo_px
     from openlithohub.workflow.process_node import PROCESS_NODES, get_node
@@ -71,7 +71,7 @@ def _run_optimize(
     model_kwargs: dict[str, Any] = {"pretrained": True} if pretrained else {}
     model = _get_or_load_model(model_name, model_kwargs)
 
-    layout_tensor = _load_layout_as_tensor(input_path, pixel_nm, layer=layer)
+    layout_tensor = load_layout(input_path, pixel_nm, layer=layer)
     halo_px = compute_halo_px(
         node=node_config,
         model=model,

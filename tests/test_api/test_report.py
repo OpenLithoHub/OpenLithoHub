@@ -86,3 +86,19 @@ def test_evaluate_accepts_raw_tensors(
     engine = LitheEngine(model="dummy-identity")
     report = engine.evaluate(sample_mask, sample_design)
     assert isinstance(report, Report)
+
+
+def test_report_exposes_tile_size_and_halo_px(
+    sample_design: torch.Tensor, sample_mask: torch.Tensor
+) -> None:
+    """Reproducibility: the engine's tile/halo configuration shows up on the
+    report so power users tuning these can confirm what was actually used."""
+    engine = LitheEngine(model="dummy-identity", tile_size=1024)
+    report = engine.evaluate(Mask.from_tensor(sample_mask), Mask.from_tensor(sample_design))
+    assert report.tile_size == 1024
+    assert isinstance(report.halo_px, int)
+    assert report.halo_px >= 0
+    # Round-trip through to_dict() so JSON-bound consumers also see the fields.
+    payload = report.to_dict()
+    assert payload["tile_size"] == 1024
+    assert payload["halo_px"] == report.halo_px

@@ -344,129 +344,20 @@ def _load_layout_as_tensor(
     pixel_nm: float,
     layer: str | None = None,
 ) -> torch.Tensor:
-    """Load a layout file and rasterize to a binary tensor.
+    """Backwards-compatible alias for :func:`openlithohub.data.io.load_layout`.
 
-    For OASIS/GDSII inputs with more than one layer, ``layer`` must be set
-    to a ``"LAYER:DTYPE"`` string (e.g. ``"1:0"``); otherwise the loader
-    refuses rather than collapsing every layer onto the same mask.
+    The canonical loader now lives at ``openlithohub.data.io.load_layout``.
+    This shim is kept for callers that still import the underscored name
+    (the HTTP server and the API façade have been updated to use the
+    public name; remove this shim once the v0.1 import surface is dropped).
     """
-    if not path.exists():
-        raise FileNotFoundError(f"Input file not found: {path}")
+    from openlithohub.data.io import load_layout
 
-    suffix = path.suffix.lower()
-
-    if suffix == ".pt":
-        loaded = torch.load(str(path), weights_only=True)
-        if not isinstance(loaded, torch.Tensor) or loaded.ndim != 2:
-            raise ValueError(
-                f"{path}: expected a 2-D torch.Tensor for layout input, "
-                f"got {type(loaded).__name__}"
-                + (f" ndim={loaded.ndim}" if isinstance(loaded, torch.Tensor) else "")
-            )
-        return loaded.float()
-
-    if suffix == ".npy":
-        import numpy as np
-
-        arr = np.load(str(path), allow_pickle=False)
-        if arr.ndim != 2:
-            raise ValueError(
-                f"{path}: expected a 2-D ndarray for layout input, got ndim={arr.ndim}"
-            )
-        return torch.from_numpy(arr).float()
-
-    try:
-        import klayout.db as db
-    except ImportError:
-        raise ImportError(
-            "klayout is required for OASIS/GDSII parsing. "
-            "Install with: pip install openlithohub[workflow]"
-        ) from None
-
-    layout = db.Layout()
-    layout.read(str(path))
-
-    top_cells = list(layout.top_cells())
-    if not top_cells:
-        raise ValueError(f"{path}: layout has no top cells.")
-    top_cell = top_cells[0]
-    bbox = top_cell.bbox()
-
-    width_dbu = bbox.width()
-    height_dbu = bbox.height()
-    dbu_nm = layout.dbu * 1000.0
-    pixels_per_dbu = dbu_nm / pixel_nm
-
-    w_px = max(1, int(width_dbu * pixels_per_dbu))
-    h_px = max(1, int(height_dbu * pixels_per_dbu))
-
-    selected_layer_idx = _select_layer(layout, layer)
-
-    import numpy as np
-    from PIL import Image, ImageDraw
-
-    canvas = Image.new("L", (w_px, h_px), 0)
-    drawer = ImageDraw.Draw(canvas)
-
-    shapes = top_cell.shapes(selected_layer_idx)
-
-    def _project(point: Any) -> tuple[int, int]:
-        px = int((point.x - bbox.left) * pixels_per_dbu)
-        py = int((point.y - bbox.bottom) * pixels_per_dbu)
-        return (max(0, min(px, w_px - 1)), max(0, min(py, h_px - 1)))
-
-    for shape in shapes.each():
-        if shape.is_polygon() or shape.is_box():
-            poly = shape.polygon if shape.is_polygon() else shape.box.to_poly()
-
-            hull = [_project(p) for p in poly.each_point_hull()]
-            if len(hull) >= 3:
-                drawer.polygon(hull, fill=255)
-            for hole_idx in range(poly.holes()):
-                hole = [_project(p) for p in poly.each_point_hole(hole_idx)]
-                if len(hole) >= 3:
-                    drawer.polygon(hole, fill=0)
-
-    raster = np.array(canvas, dtype=np.float32) / 255.0
-    return torch.from_numpy(raster)
+    return load_layout(path, pixel_nm, layer=layer)
 
 
 def _select_layer(layout: Any, layer: str | None) -> int:
-    """Resolve a CLI --layer 'NUM:DTYPE' to a klayout layer index.
+    """Backwards-compatible alias for :func:`openlithohub.data.io._select_layer`."""
+    from openlithohub.data.io import _select_layer as _impl
 
-    Refuses multi-layer files when the user did not specify a layer — the
-    historical behavior of OR-ing every layer into one mask collapses
-    multi-layer designs into nonsense input.
-    """
-    layer_indices = list(layout.layer_indices())
-    if not layer_indices:
-        raise ValueError("Layout contains no layers.")
-
-    if layer is None:
-        if len(layer_indices) > 1:
-            available = ", ".join(
-                f"{layout.get_info(idx).layer}:{layout.get_info(idx).datatype}"
-                for idx in layer_indices
-            )
-            raise ValueError(
-                f"Layout has {len(layer_indices)} layers; pass --layer LAYER:DTYPE "
-                f"(available: [{available}])."
-            )
-        return int(layer_indices[0])
-
-    if ":" not in layer:
-        raise ValueError(f"--layer must be 'LAYER:DTYPE' (e.g. '1:0'); got {layer!r}")
-    try:
-        layer_num_s, dtype_s = layer.split(":", 1)
-        layer_num = int(layer_num_s)
-        dtype = int(dtype_s)
-    except ValueError:
-        raise ValueError(
-            f"--layer must be 'LAYER:DTYPE' with integer components; got {layer!r}"
-        ) from None
-
-    for idx in layer_indices:
-        info = layout.get_info(idx)
-        if info.layer == layer_num and info.datatype == dtype:
-            return int(idx)
-    raise ValueError(f"Layer {layer!r} not found in layout.")
+    return _impl(layout, layer)

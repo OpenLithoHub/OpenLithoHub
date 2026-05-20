@@ -49,8 +49,10 @@ class LitheEngine:
             if pretrained:
                 kwargs.setdefault("pretrained", True)
             self._model: LithographyModel = registry.get(model, **kwargs)
-            # Engine constructed the instance, so it owns the setup() call.
+            # Engine constructed the instance, so it owns the setup() call —
+            # and, symmetrically, the teardown() in __exit__.
             self._model.setup()
+            self._owns_model = True
         elif isinstance(model, LithographyModel):
             if model_kwargs or pretrained:
                 raise ValueError(
@@ -59,8 +61,10 @@ class LitheEngine:
                 )
             # Caller-supplied instance: assume the caller has already called
             # setup(). Calling it again would re-load weights / re-init GPU
-            # state in non-idempotent models like NeuralILTModel.
+            # state in non-idempotent models like NeuralILTModel. The caller
+            # also owns teardown — we must not close resources we did not open.
             self._model = model
+            self._owns_model = False
         else:
             raise TypeError(
                 f"`model` must be a name (str) or LithographyModel, got {type(model).__name__}"
@@ -83,6 +87,23 @@ class LitheEngine:
     def list_models() -> list[str]:
         register_builtin_models()
         return registry.list_models()
+
+    def close(self) -> None:
+        """Tear down the underlying model if the engine constructed it.
+
+        Safe to call multiple times. No-op for caller-supplied models
+        (the caller owns those — closing them here would yank resources
+        out from under code the engine never owned).
+        """
+        if self._owns_model and self._model is not None:
+            self._model.teardown()
+            self._owns_model = False
+
+    def __enter__(self) -> LitheEngine:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
 
     def _resolve_pixel_size(self, supplied: float) -> float:
         # Mirror server/app.py:67–69 — when the caller did not override the
@@ -158,6 +179,16 @@ class LitheEngine:
             else None
         )
 
+        # Recompute the same halo `optimize()` would have used at this pitch,
+        # so the report documents the tile/halo configuration that produced
+        # (or would produce) `predicted` — useful for reproducing a run.
+        halo_px = compute_halo_px(
+            node=self._node_config,
+            model=self._model,
+            pixel_nm=pixel_nm,
+            tile_size=self._tile_size,
+        )
+
         return Report(
             epe_mean_nm=float(epe["epe_mean_nm"]),
             epe_max_nm=float(epe["epe_max_nm"]),
@@ -172,6 +203,8 @@ class LitheEngine:
             estimated_write_time_s=float(shots["estimated_write_time_s"]),
             model_name=self._model.name,
             pixel_size_nm=pixel_nm,
+            tile_size=int(self._tile_size),
+            halo_px=int(halo_px),
             raw_epe=epe,
             raw_drc=drc,
             raw_mrc=mrc,

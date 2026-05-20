@@ -2,7 +2,7 @@
 
 Wraps OpenLithoHub's existing layout I/O so callers can write
 ``Mask.from_oasis("design.oas", layer="1:0")`` instead of going through
-``_load_layout_as_tensor`` and ``export_oasis`` directly.
+``load_layout`` and ``export_oasis`` directly.
 """
 
 from __future__ import annotations
@@ -17,12 +17,7 @@ import torch
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-# `_load_layout_as_tensor` is the canonical reader (handles .pt / .npy /
-# .oas / .gds + the "NUM:DTYPE" layer selector). It currently lives under
-# `cli/` and carries a leading underscore; the HTTP server already imports
-# it the same way (see server/app.py). A future PR can promote it to
-# `openlithohub.data.io.load_layout` — out of scope here.
-from openlithohub.cli.optimize_cmd import _load_layout_as_tensor
+from openlithohub.data.io import load_layout
 from openlithohub.workflow.export import export_oasis
 
 
@@ -51,7 +46,10 @@ class Mask:
     def __array__(self, dtype: object = None) -> NDArray[np.float32]:
         arr = self.tensor.detach().cpu().numpy()
         if dtype is not None:
-            arr = arr.astype(dtype)
+            # numpy hands `dtype` in via the protocol as an arbitrary object
+            # (numpy's own type isn't exposed for this hook), so we narrow
+            # it to what `astype` accepts before calling.
+            arr = arr.astype(dtype)  # type: ignore[call-overload]
         return arr
 
     @classmethod
@@ -70,12 +68,12 @@ class Mask:
 
     @classmethod
     def from_pt(cls, path: str | Path, *, pixel_size_nm: float = 1.0) -> Mask:
-        t = _load_layout_as_tensor(Path(path), pixel_size_nm)
+        t = load_layout(Path(path), pixel_size_nm)
         return cls(tensor=t, pixel_size_nm=pixel_size_nm, layer=None)
 
     @classmethod
     def from_npy(cls, path: str | Path, *, pixel_size_nm: float = 1.0) -> Mask:
-        t = _load_layout_as_tensor(Path(path), pixel_size_nm)
+        t = load_layout(Path(path), pixel_size_nm)
         return cls(tensor=t, pixel_size_nm=pixel_size_nm, layer=None)
 
     @classmethod
@@ -86,7 +84,7 @@ class Mask:
         pixel_size_nm: float = 1.0,
         layer: str | None = None,
     ) -> Mask:
-        t = _load_layout_as_tensor(Path(path), pixel_size_nm, layer=layer)
+        t = load_layout(Path(path), pixel_size_nm, layer=layer)
         return cls(tensor=t, pixel_size_nm=pixel_size_nm, layer=layer)
 
     @classmethod
@@ -97,7 +95,7 @@ class Mask:
         pixel_size_nm: float = 1.0,
         layer: str | None = None,
     ) -> Mask:
-        t = _load_layout_as_tensor(Path(path), pixel_size_nm, layer=layer)
+        t = load_layout(Path(path), pixel_size_nm, layer=layer)
         return cls(tensor=t, pixel_size_nm=pixel_size_nm, layer=layer)
 
     @classmethod
@@ -116,10 +114,10 @@ class Mask:
         if suffix in {".pt", ".npy"}:
             if layer is not None:
                 raise ValueError(f"layer is meaningless for {suffix} inputs")
-            t = _load_layout_as_tensor(Path(path), pixel_size_nm)
+            t = load_layout(Path(path), pixel_size_nm)
             return cls(tensor=t, pixel_size_nm=pixel_size_nm, layer=None)
         if suffix in {".oas", ".gds"}:
-            t = _load_layout_as_tensor(Path(path), pixel_size_nm, layer=layer)
+            t = load_layout(Path(path), pixel_size_nm, layer=layer)
             return cls(tensor=t, pixel_size_nm=pixel_size_nm, layer=layer)
         raise ValueError(f"unsupported extension {suffix!r} — expected .pt / .npy / .oas / .gds")
 
