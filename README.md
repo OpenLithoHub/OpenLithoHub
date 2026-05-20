@@ -32,15 +32,15 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 - **JIT-accelerated forward model** — Hopkins/SOCS forward is wrapped with `torch.compile` by default, for free kernel-fusion speedups on PyTorch 2.x (use `--no-compile` to disable)
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                       OpenLithoHub                              │
-├─────────────┬──────────────┬──────────────┬───────────┬─────────┤
-│  Data Layer │  Benchmark   │   Workflow   │ Vis & UX  │   CLI   │
-│ LithoBench  │  EPE/PVBand  │ Tiling/Stitch│ Paper figs│ eval    │
-│ LithoSim    │  MRC/DRC     │ Contour Ext. │ Jupyter   │ optimize│
-│ Transforms  │  Stochastic  │ OASIS Export │ EDA bridge│leaderbd │
-│ Dummy gen.  │  Shot Count  │ B-spline Fit │           │         │
-└─────────────┴──────────────┴──────────────┴───────────┴─────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          OpenLithoHub                                   │
+├─────────────┬──────────────┬──────────────┬───────────┬─────────────────┤
+│  Data Layer │  Benchmark   │   Workflow   │ Vis & UX  │      CLI        │
+│ LithoBench  │  EPE/PVBand  │ Tiling/Stitch│ Paper figs│ eval / optimize │
+│ LithoSim    │  MRC/DRC     │ Contour Ext. │ Jupyter   │ leaderboard     │
+│ Transforms  │  Stochastic  │ OASIS Export │ EDA bridge│ simulate / synth│
+│ Dummy gen.  │  Shot Count  │ B-spline Fit │           │ hackathon/export│
+└─────────────┴──────────────┴──────────────┴───────────┴─────────────────┘
 ```
 
 ---
@@ -64,6 +64,10 @@ pip install --pre 'openlithohub[workflow]'
 # Everything
 pip install --pre 'openlithohub[all]'
 ```
+
+Available extras: `data`, `workflow`, `models`, `jupyter`, `export`,
+`docs`, `dev`, and the aggregate `all`. Combine with comma syntax, e.g.
+`'openlithohub[data,workflow,jupyter]'`.
 
 **From source (development):**
 
@@ -208,7 +212,7 @@ suite, and formatting a leaderboard submission.
 | **Benchmark** | `openlithohub.benchmark` | EPE, PV Band, shot count, stochastic robustness, hotspot detection, MRC/DRC compliance |
 | **Models** | `openlithohub.models` | Abstract `LithographyModel` interface + decorator-based registry |
 | **Workflow** | `openlithohub.workflow` | Layout parsing, tiling, contour extraction (manhattan/curvilinear), OASIS export |
-| **CLI** | `openlithohub.cli` | `eval`, `optimize`, and `leaderboard` command groups via Typer |
+| **CLI** | `openlithohub.cli` | `eval`, `optimize`, `leaderboard`, `simulate`, `synth`, `hackathon`, `export` command groups via Typer |
 
 ---
 

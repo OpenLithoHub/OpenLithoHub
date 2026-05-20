@@ -37,6 +37,8 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 - **EDA bridge** — minimal Calibre nmDRC / IC Validator templates emitted alongside OASIS exports
 - **Paper-ready visualization** — IEEE / SPIE column-width contour figures via `openlithohub.vis`
 - **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface
+- **JIT-accelerated forward model** — Hopkins/SOCS forward is wrapped with `torch.compile` by default for kernel-fusion speedups on PyTorch 2.x; use `--no-compile` to disable
+- **PDK-aware synthetic layouts** — `openlithohub.synth` / `openlithohub synth run` produce ASAP7 / FreePDK45 layouts that pass MRC by construction, for hermetic CI and quick iteration
 - **Public leaderboard** — track SOTA results across models, datasets, and process nodes
 
 ## Quick Links

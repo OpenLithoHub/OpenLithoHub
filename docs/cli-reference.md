@@ -12,9 +12,10 @@ openlithohub [OPTIONS] COMMAND [SUBCOMMAND] [ARGS]...
 |--------|-------------|
 | `--version`, `-V` | Print the installed version and exit. |
 
-The CLI is organized into three command groups: `eval`, `optimize`, and
-`leaderboard`. Each group exposes one or more subcommands; the most common is
-`run` for the workflow groups.
+The CLI is organized into seven command groups: `eval`, `optimize`,
+`leaderboard`, `simulate`, `synth`, `hackathon`, and `export`. Each group
+exposes one or more subcommands; the most common is `run` for the
+workflow groups.
 
 ## Commands
 
@@ -45,7 +46,7 @@ openlithohub eval run [OPTIONS]
 | `--tile-nm` | FLOAT | Tile edge length in nm (used by `--dataset orfs`; `2000` and `5000` are the canonical AI-OPC windows). | `2000.0` |
 | `--device` | TEXT | Torch device for the forward model (`cpu`, `cuda`, `mps`). | `cpu` |
 | `--dtype` | TEXT | Compute dtype for the forward model (`fp32`, `bf16`). | `fp32` |
-| `--compile / --no-compile` | FLAG | Wrap the Hopkins forward with `torch.compile`. | `--no-compile` |
+| `--compile / --no-compile` | FLAG | Wrap the Hopkins forward with `torch.compile`. | `--compile` |
 | `--pretrained / --no-pretrained` | FLAG | Load pretrained weights for the selected model (when supported). | `--no-pretrained` |
 | `--sha256` | TEXT | Expected SHA256 digest for direct-URL weight downloads. | unset |
 | `--submit / --no-submit` | FLAG | Auto-submit results to leaderboard. | `--no-submit` |
@@ -172,3 +173,117 @@ openlithohub leaderboard export [OPTIONS]
 | `--format`, `-f` | TEXT | Export format: `json` or `markdown`. |
 | `--dataset`, `-d` | TEXT | Filter by dataset. |
 | `--node`, `-n` | TEXT | Filter by process node. |
+
+---
+
+### `simulate` — Forward Simulator
+
+Run an optical forward simulator on a mask. The Hopkins backend ships in
+the core install; vendor adapters (Calibre nmOPC, Tachyon) are
+config-validated stubs that activate when the corresponding toolchain is
+on `PATH`.
+
+#### `simulate run`
+
+Forward-simulate a mask with the selected backend.
+
+```bash
+openlithohub simulate run [OPTIONS] MASK_PATH
+```
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `MASK_PATH` (positional) | PATH | Path to mask `.npy` or grayscale image. Required. | — |
+| `--backend`, `-b` | TEXT | Simulator backend. | `hopkins` |
+| `--out`, `-o` | PATH | Where to write the aerial image. | `aerial.npy` |
+| `--pixel-size-nm` | FLOAT | Pixel size in nm. | `1.0` |
+| `--wavelength-nm` | FLOAT | Exposure wavelength in nm. | `193.0` |
+| `--na` | FLOAT | Numerical aperture. | `1.35` |
+| `--sigma` | FLOAT | Outer partial-coherence factor. | `0.7` |
+| `--threshold` | FLOAT | Resist threshold. | `0.225` |
+| `--dose` | FLOAT | Dose multiplier. | `1.0` |
+
+#### `simulate list-backends`
+
+Print registered simulator backends.
+
+```bash
+openlithohub simulate list-backends
+```
+
+---
+
+### `synth` — Synthetic PDK-Aware Layouts
+
+Generate hermetic synthetic layouts that pass MRC by construction. Useful
+for CI, Colab, and quick iteration without dataset downloads.
+
+#### `synth run`
+
+Generate `n` synthetic layouts and write them as `.npy`.
+
+```bash
+openlithohub synth run [OPTIONS]
+```
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `--out`, `-o` | PATH | Output directory. | `synth_out` |
+| `--pdk` | TEXT | PDK preset: `asap7` or `freepdk45`. | `freepdk45` |
+| `--pattern`, `-p` | `sram` \| `contact_array` \| `random_logic` | Pattern type. | `random_logic` |
+| `--n`, `-n` | INT | Number of layouts. | `10` |
+| `--size`, `-s` | INT | Edge length in pixels. | `256` |
+| `--seed` | INT | PRNG seed. | `0` |
+
+#### `synth list-pdks`
+
+Print registered PDK presets and their key rules.
+
+```bash
+openlithohub synth list-pdks
+```
+
+---
+
+### `hackathon` — Inspect Current Contract
+
+Print the active hackathon contract — frozen test-set tag, sample count,
+hard gates, and target metric. Sourced from `hackathon/2026q3.yaml`.
+
+#### `hackathon info`
+
+```bash
+openlithohub hackathon info [OPTIONS]
+```
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `--manifest`, `-m` | PATH | Path to manifest YAML. | repo default |
+
+See the [Hackathon contributor guide](hackathon.md) for the full
+submission flow.
+
+---
+
+### `export` — Export a Model
+
+Export a registered model to a production-friendly artifact. Uses the
+PyTorch `dynamo` ONNX path with a TorchScript fallback for models that
+are not `torch.export`-able (e.g. Neural-ILT in some configurations).
+
+#### `export run`
+
+```bash
+openlithohub export run [OPTIONS]
+```
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `--model`, `-m` | TEXT | Model name from the registry. Required. | — |
+| `--format`, `-f` | TEXT | `onnx`, `torchscript`, or `tensorrt`. | `onnx` |
+| `--output`, `-o` | PATH | Output file path. Required. | — |
+| `--shape` | TEXT | Input HxW shape used to trace the model (e.g. `256x256`). | `256x256` |
+| `--opset` | INT | ONNX opset version (ignored for non-ONNX formats). | `17` |
+| `--pretrained / --no-pretrained` | FLAG | Load pretrained weights when supported. | `--no-pretrained` |
+| `--device` | TEXT | Torch device to trace on (`cpu`, `cuda`, `mps`). | `cpu` |
+| `--dynamic-batch / --static-batch` | FLAG | Mark the batch dimension as dynamic in the exported graph. | `--dynamic-batch` |
