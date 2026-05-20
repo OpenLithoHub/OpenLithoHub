@@ -144,8 +144,15 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "tomli.*", "onnxscript.*", "fastapi", "fastapi.*", "uvicorn", "uvicorn.*"]
+module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "tomli.*", "onnxscript.*", "fastapi", "fastapi.*", "uvicorn"]
 ignore_missing_imports = true
+
+# server/app.py uses fastapi decorators which mypy flags as untyped when
+# fastapi is not installed in the typecheck environment (the `server`
+# extra is opt-in). Disable the cascade for this single module.
+[[tool.mypy.overrides]]
+module = ["openlithohub.server.app"]
+disallow_untyped_decorators = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
