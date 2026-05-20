@@ -57,8 +57,8 @@ def parallel_tile_inference(
     shards = _round_robin_shards(len(tiles), effective)
 
     ctx = mp.get_context("spawn")
-    queue: mp.Queue = ctx.Queue()
-    processes: list[mp.Process] = []
+    queue: mp.Queue[Any] = ctx.Queue()
+    processes: list[Any] = []
 
     for rank, indices in enumerate(shards):
         payload = [(idx, tiles[idx].tensor) for idx in indices]
@@ -149,7 +149,7 @@ def _worker(
     model_kwargs: dict[str, Any],
     base_perf_kwargs: dict[str, Any],
     payload: list[tuple[int, torch.Tensor]],
-    result_queue: mp.Queue,
+    result_queue: mp.Queue[Any],
 ) -> None:
     try:
         from openlithohub.models.registry import register_builtin_models, registry
@@ -175,7 +175,7 @@ def _worker(
         raise
 
 
-def _terminate(processes: list[mp.Process]) -> None:
+def _terminate(processes: list[Any]) -> None:
     for p in processes:
         if p.is_alive():
             p.terminate()

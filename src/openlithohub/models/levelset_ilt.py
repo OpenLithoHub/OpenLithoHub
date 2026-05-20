@@ -16,6 +16,10 @@ from openlithohub._utils.hopkins import (
 from openlithohub._utils.resist_model import differentiable_threshold
 from openlithohub.models.base import LithographyModel, PredictionResult
 from openlithohub.models.registry import registry
+from openlithohub.workflow.process_window import (
+    DEFAULT_PW_CORNERS,
+    pw_fidelity_loss,
+)
 
 ForwardModelKind = Literal["gaussian", "hopkins"]
 
@@ -89,7 +93,15 @@ class LevelSetILTModel(LithographyModel):
         Args:
             design: Target design pattern (H, W), binary.
             **kwargs: Optional overrides — iterations, lr, sigma_px, tv_weight,
-                forward_model, hopkins_params, device, dtype, compile_forward.
+                forward_model, hopkins_params, device, dtype, compile_forward,
+                process_window, pw_corners.
+
+                ``process_window=True`` swaps the nominal-only fidelity loss
+                for ``workflow.process_window.pw_fidelity_loss`` evaluated
+                across ``pw_corners`` (defaults to
+                ``workflow.process_window.DEFAULT_PW_CORNERS``). Currently only
+                supported on the ``gaussian`` forward model — pass
+                ``forward_model="gaussian"`` (the default) when enabling PW.
         """
         target = design.detach().float()
         if target.ndim > 2:
@@ -104,6 +116,14 @@ class LevelSetILTModel(LithographyModel):
         dtype = kwargs.get("dtype", torch.float32)
         compile_forward = kwargs.get("compile_forward", False)
         device = kwargs.get("device")
+        process_window = kwargs.get("process_window", False)
+        pw_corners = kwargs.get("pw_corners", DEFAULT_PW_CORNERS)
+        if process_window and forward_model != "gaussian":
+            raise ValueError(
+                "process_window=True currently only supports forward_model='gaussian'; "
+                "Hopkins corner sweeps will land in a follow-up. Set "
+                "forward_model='gaussian' or process_window=False."
+            )
         if device is not None:
             target = target.to(device)
 
@@ -171,7 +191,16 @@ class LevelSetILTModel(LithographyModel):
                 aerial, threshold=0.5, steepness=self._resist_steepness
             )
 
-            fidelity_loss = torch.nn.functional.mse_loss(resist, target)
+            if process_window:
+                fidelity_loss = pw_fidelity_loss(
+                    mask_continuous,
+                    target,
+                    corners=pw_corners,
+                    threshold=0.5,
+                    steepness=self._resist_steepness,
+                )
+            else:
+                fidelity_loss = torch.nn.functional.mse_loss(resist, target)
             tv_loss = _total_variation(mask_continuous)
             loss = fidelity_loss + tv_weight * tv_loss
 
@@ -190,5 +219,7 @@ class LevelSetILTModel(LithographyModel):
                 "iterations": iterations,
                 "sigma_px": sigma_px,
                 "forward_model": forward_model,
+                "process_window": process_window,
+                "pw_corner_count": len(pw_corners) if process_window else 0,
             },
         )

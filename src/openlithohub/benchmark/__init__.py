@@ -14,6 +14,7 @@ from openlithohub.benchmark.metrics.monte_carlo import (
 )
 from openlithohub.benchmark.metrics.pvband import compute_pvband
 from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
+from openlithohub.benchmark.metrics.sraf import sraf_print_penalty
 from openlithohub.benchmark.metrics.stochastic import compute_stochastic_robustness
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "compute_stochastic_robustness",
     "estimate_shot_count",
     "monte_carlo_failure_probability",
+    "sraf_print_penalty",
 ]

@@ -309,6 +309,7 @@ def _resolve_halo(
         )
 
     if overlap_explicit:
+        assert overlap is not None  # narrowed by overlap_explicit
         console.print(f"  Halo: {overlap} px (from --overlap)")
         return int(overlap)
 

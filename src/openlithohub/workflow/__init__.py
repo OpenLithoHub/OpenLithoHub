@@ -11,6 +11,12 @@ from openlithohub.workflow.gauges import GaugePoint, GaugeTable, parse_gauge
 from openlithohub.workflow.halo import DEFAULT_HALO_PX, compute_halo_px, describe_halo
 from openlithohub.workflow.parsing import parse_layout
 from openlithohub.workflow.process_node import ProcessNodeConfig, get_node, list_nodes
+from openlithohub.workflow.process_window import (
+    DEFAULT_PW_CORNERS,
+    ProcessWindowCorner,
+    pw_aerial_images,
+    pw_fidelity_loss,
+)
 from openlithohub.workflow.tiling import stitch_tiles, tile_layout
 
 __all__ = [
@@ -31,4 +37,8 @@ __all__ = [
     "compute_halo_px",
     "describe_halo",
     "DEFAULT_HALO_PX",
+    "DEFAULT_PW_CORNERS",
+    "ProcessWindowCorner",
+    "pw_aerial_images",
+    "pw_fidelity_loss",
 ]

@@ -118,6 +118,7 @@ ignore = ["B008", "B027", "A002"]
 # fixed argv built from operator-supplied paths; rule_based pattern synth
 # uses random.Random for deterministic seeding, not crypto.
 "src/openlithohub/_utils/optics.py" = ["S101"]
+"src/openlithohub/cli/optimize_cmd.py" = ["S101"]
 "src/openlithohub/data/asap7.py" = ["S603", "S607"]
 "src/openlithohub/data/freepdk45.py" = ["S603", "S607"]
 "src/openlithohub/data/orfs.py" = ["S101"]

@@ -1,5 +1,6 @@
 """Tests for openlithohub.models.levelset_ilt."""
 
+import pytest
 import torch
 
 from openlithohub._utils.hopkins import HopkinsParams, clear_kernel_cache
@@ -112,3 +113,29 @@ class TestLevelSetILTHopkinsForwardModel:
         design[10:22, 10:22] = 1.0
         result = model.predict(design)
         assert result.metadata["final_loss"] < 1.0  # finite, no NaN explosion
+
+
+class TestLevelSetILTProcessWindow:
+    def test_pw_smoke_runs(self) -> None:
+        model = LevelSetILTModel(iterations=5)
+        design = torch.zeros(32, 32)
+        design[10:22, 10:22] = 1.0
+        result = model.predict(design, process_window=True)
+        assert result.mask.shape == design.shape
+        assert result.metadata["process_window"] is True
+        assert result.metadata["pw_corner_count"] >= 1
+
+    def test_pw_default_off(self) -> None:
+        model = LevelSetILTModel(iterations=3)
+        design = torch.zeros(16, 16)
+        design[4:12, 4:12] = 1.0
+        result = model.predict(design)
+        assert result.metadata["process_window"] is False
+        assert result.metadata["pw_corner_count"] == 0
+
+    def test_pw_rejects_hopkins(self) -> None:
+        model = LevelSetILTModel(iterations=3, forward_model="hopkins")
+        design = torch.zeros(16, 16)
+        design[4:12, 4:12] = 1.0
+        with pytest.raises(ValueError, match="forward_model='gaussian'"):
+            model.predict(design, process_window=True)
