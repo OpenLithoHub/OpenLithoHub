@@ -94,4 +94,4 @@ including the CLA requirement.
 
 If you believe a dataset listed here is misattributed, has changed
 license, or has been removed from its upstream source, please email
-**teller.lin@outlook.com** or open a GitHub issue.
+**openlithohub@163.com** or open a GitHub issue.

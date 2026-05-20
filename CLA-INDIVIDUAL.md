@@ -94,4 +94,4 @@ I have read the CLA Document and I hereby sign the CLA
 Your signature will be recorded automatically. Until the bot is configured,
 include the same statement in your first PR description.
 
-For questions about this CLA, contact: teller.lin@outlook.com
+For questions about this CLA, contact: openlithohub@163.com

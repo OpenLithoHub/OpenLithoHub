@@ -88,5 +88,4 @@ lurker-to-contributor conversion. The intro is a norm, not a wall.
 ## Code of Conduct
 
 The Discord server follows the etiquette rules above. Violations can be
-reported to the moderator team via DM or to `conduct@openlithohub.org`
-(mailbox active once the channel launches).
+reported to the moderator team via DM or to `openlithohub@163.com`.
