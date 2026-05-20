@@ -2,6 +2,9 @@
 
 Thank you for your interest in contributing! This guide will help you get started.
 
+By participating in this project you agree to abide by our
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Project Scope & Responsibility Boundary
 
 OpenLithoHub 生态由两个独立仓库组成，职责清晰分离：

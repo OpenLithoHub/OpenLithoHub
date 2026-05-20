@@ -6,6 +6,11 @@ labels: bug
 assignees: ''
 ---
 
+> **Security issue?** Do not file a public issue with a working PoC,
+> exploit, or vulnerability details. Email `support@openlithohub.com`
+> instead — see [SECURITY.md](../../SECURITY.md) for the disclosure
+> process.
+
 ## Description
 
 A clear description of the bug.
