@@ -30,6 +30,23 @@ class MRCResult:
     width_violation_count: int = 0
     spacing_violation_count: int = 0
 
+    def _repr_html_(self) -> str:
+        from openlithohub.jupyter._html import (
+            kv_table,
+            panel,
+            pass_fail_badge,
+            violation_table,
+        )
+
+        rows = [
+            ("Total violations", str(self.violation_count)),
+            ("Violation rate", f"{self.violation_rate:.4%}"),
+            ("Width violations", str(self.width_violation_count)),
+            ("Spacing violations", str(self.spacing_violation_count)),
+        ]
+        body = kv_table(rows) + violation_table(self.violations)
+        return panel(title="MRC", header_html=pass_fail_badge(self.passed), body_html=body)
+
 
 @dataclass
 class CurvilinearMRCResult:
@@ -47,6 +64,37 @@ class CurvilinearMRCResult:
     area_violations: list[dict[str, float]] = field(default_factory=list)
     min_radius_observed_nm: float | None = None
     min_area_observed_nm2: float | None = None
+
+    def _repr_html_(self) -> str:
+        from openlithohub.jupyter._html import (
+            kv_table,
+            panel,
+            pass_fail_badge,
+            violation_table,
+        )
+
+        def _fmt(v: float | None, suffix: str) -> str:
+            return f"{v:.3g} {suffix}" if v is not None else "—"
+
+        rows = [
+            ("Total violations", str(self.violation_count)),
+            ("Curvature violations", str(len(self.curvature_violations))),
+            ("Area violations", str(len(self.area_violations))),
+            ("Min radius observed", _fmt(self.min_radius_observed_nm, "nm")),
+            ("Min area observed", _fmt(self.min_area_observed_nm2, "nm²")),
+        ]
+        body = kv_table(rows)
+        if self.curvature_violations:
+            body += '<div style="margin-top:6px;font-size:90%;color:#555;">Curvature</div>'
+            body += violation_table(self.curvature_violations)
+        if self.area_violations:
+            body += '<div style="margin-top:6px;font-size:90%;color:#555;">Area</div>'
+            body += violation_table(self.area_violations)
+        return panel(
+            title="Curvilinear MRC",
+            header_html=pass_fail_badge(self.passed),
+            body_html=body,
+        )
 
 
 def check_mrc(

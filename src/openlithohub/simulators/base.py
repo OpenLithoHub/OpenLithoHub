@@ -61,6 +61,43 @@ class SimulatorResult:
     backend: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def _repr_html_(self) -> str:
+        from openlithohub.jupyter._html import (
+            kv_table,
+            mask_thumbnail_png_b64,
+            panel,
+            png_b64_to_img_tag,
+        )
+
+        shape = "x".join(str(d) for d in tuple(self.aerial.shape))
+        rows = [
+            ("backend", self.backend or "—"),
+            ("aerial shape", shape),
+            ("aerial dtype", str(self.aerial.dtype)),
+            ("resist", "yes" if self.resist is not None else "no"),
+        ]
+        for k, v in list(self.metadata.items())[:6]:
+            rows.append((f"meta:{k}", str(v)))
+
+        preview_tensor = self.resist if self.resist is not None else self.aerial
+        if preview_tensor is not None:
+            preview = preview_tensor.detach().cpu()
+            if preview.numel() > 0:
+                lo, hi = float(preview.min()), float(preview.max())
+                if hi > lo:
+                    preview = (preview - lo) / (hi - lo)
+        img_html = png_b64_to_img_tag(
+            mask_thumbnail_png_b64(preview_tensor),
+            alt=self.backend or "simulation",
+        )
+        body = (
+            f'<div style="display:flex;gap:10px;align-items:flex-start;">'
+            f'<div style="flex:0 0 auto;">{img_html}</div>'
+            f'<div style="flex:1 1 auto;">{kv_table(rows)}</div>'
+            f"</div>"
+        )
+        return panel(title="SimulatorResult", header_html="", body_html=body)
+
 
 class BaseSimulator(ABC):
     """Abstract simulator backend.

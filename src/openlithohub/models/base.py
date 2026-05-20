@@ -17,6 +17,32 @@ class PredictionResult:
     contour: torch.Tensor | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def _repr_html_(self) -> str:
+        from openlithohub.jupyter._html import (
+            kv_table,
+            mask_thumbnail_png_b64,
+            panel,
+            png_b64_to_img_tag,
+        )
+
+        shape = "x".join(str(d) for d in tuple(self.mask.shape)) if self.mask is not None else "—"
+        rows = [
+            ("mask shape", shape),
+            ("mask dtype", str(self.mask.dtype) if self.mask is not None else "—"),
+            ("contour", "yes" if self.contour is not None else "no"),
+        ]
+        for k, v in self.metadata.items():
+            rows.append((f"meta:{k}", str(v)))
+
+        img = png_b64_to_img_tag(mask_thumbnail_png_b64(self.mask), alt="mask")
+        body = (
+            f'<div style="display:flex;gap:10px;align-items:flex-start;">'
+            f'<div style="flex:0 0 auto;">{img}</div>'
+            f'<div style="flex:1 1 auto;">{kv_table(rows)}</div>'
+            f"</div>"
+        )
+        return panel(title="PredictionResult", header_html="", body_html=body)
+
 
 class LithographyModel(ABC):
     """Abstract interface for lithography optimization models.

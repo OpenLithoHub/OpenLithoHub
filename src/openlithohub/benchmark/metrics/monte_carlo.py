@@ -33,6 +33,22 @@ class MonteCarloFailureResult:
     failure_probability: float
     num_trials: int
 
+    def _repr_html_(self) -> str:
+        from openlithohub.jupyter._html import kv_table, panel, pass_fail_badge
+
+        passed = self.failure_probability < 0.01
+        rows = [
+            ("Failure probability", f"{self.failure_probability:.4%}"),
+            ("Bridge probability", f"{self.bridge_probability:.4%}"),
+            ("Break probability", f"{self.break_probability:.4%}"),
+            ("Trials", str(self.num_trials)),
+        ]
+        return panel(
+            title="Monte Carlo failure",
+            header_html=pass_fail_badge(passed),
+            body_html=kv_table(rows),
+        )
+
 
 def _count_components(binary: torch.Tensor) -> int:
     _, n = connected_components(binary, connectivity=8)

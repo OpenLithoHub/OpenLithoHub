@@ -31,6 +31,19 @@ class DRCResult:
     violations: list[dict[str, float]]
     rule_summary: dict[str, int] = field(default_factory=dict)
 
+    def _repr_html_(self) -> str:
+        from openlithohub.jupyter._html import (
+            kv_table,
+            panel,
+            pass_fail_badge,
+            violation_table,
+        )
+
+        rows: list[tuple[str, str]] = [("Total violations", str(self.violation_count))]
+        rows.extend((rule, str(count)) for rule, count in sorted(self.rule_summary.items()))
+        body = kv_table(rows) + violation_table(self.violations)
+        return panel(title="DRC", header_html=pass_fail_badge(self.passed), body_html=body)
+
 
 _DEFAULT_RULES = DRCRuleDeck()
 

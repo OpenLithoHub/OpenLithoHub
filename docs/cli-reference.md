@@ -12,10 +12,10 @@ openlithohub [OPTIONS] COMMAND [SUBCOMMAND] [ARGS]...
 |--------|-------------|
 | `--version`, `-V` | Print the installed version and exit. |
 
-The CLI is organized into seven command groups: `eval`, `optimize`,
-`leaderboard`, `simulate`, `synth`, `hackathon`, and `export`. Each group
-exposes one or more subcommands; the most common is `run` for the
-workflow groups.
+The CLI is organized into eight command groups: `eval`, `optimize`,
+`leaderboard`, `simulate`, `synth`, `hackathon`, `export`, and `serve`.
+Each group exposes one or more subcommands; the most common is `run`
+for the workflow groups.
 
 ## Commands
 
@@ -304,3 +304,57 @@ openlithohub export run [OPTIONS]
 | `--pretrained / --no-pretrained` | FLAG | Load pretrained weights when supported. | `--no-pretrained` |
 | `--device` | TEXT | Torch device to trace on (`cpu`, `cuda`, `mps`). | `cpu` |
 | `--dynamic-batch / --static-batch` | FLAG | Mark the batch dimension as dynamic in the exported graph. | `--dynamic-batch` |
+
+---
+
+### `serve` — Run the HTTP Engine
+
+Start a FastAPI micro-service exposing the OpenLithoHub optimization
+engine. Models are loaded lazily on first request and cached in-process,
+so repeat calls against the same model skip weight loading. Designed to
+be embedded in fab-side schedulers (Slurm / LSF) and called from C++,
+Java, or Perl pipelines that cannot embed the Python interpreter.
+
+Install the optional dependency group first:
+
+```bash
+pip install "openlithohub[server]"
+```
+
+```bash
+openlithohub serve [OPTIONS]
+```
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `--host` | TEXT | Bind address. | `127.0.0.1` |
+| `--port`, `-p` | INT | TCP port. | `8000` |
+| `--workers`, `-w` | INT | Uvicorn worker count. | `1` |
+| `--log-level` | TEXT | uvicorn log level. | `info` |
+| `--reload` | FLAG | Auto-reload on code changes (dev only). | off |
+
+#### Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET`  | `/v1/health` | Liveness probe. |
+| `GET`  | `/v1/models` | List registered model names. |
+| `POST` | `/v1/optimize` | Multipart upload of a layout file + model name; returns the optimized layout binary. |
+
+`POST /v1/optimize` form fields: `layout` (file), `model`, `node`,
+`pixel_nm`, `tile_size`, `writer` (`mbmw` or `vsb`), `layer`
+(`LAYER:DTYPE`, required for multi-layer files), `pretrained`. The
+response carries `X-OLH-Tiles`, `X-OLH-Halo-Px`, `X-OLH-Export-Format`,
+and `X-OLH-Shape` headers describing the run.
+
+##### Example
+
+```bash
+openlithohub serve --port 8000 &
+
+curl -X POST http://localhost:8000/v1/optimize \
+     -F "layout=@chip.oas" \
+     -F "model=neural-ilt" \
+     -F "writer=mbmw" \
+     -o optimized.oas
+```

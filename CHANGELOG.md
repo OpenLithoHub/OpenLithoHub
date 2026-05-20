@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`openlithohub serve` HTTP micro-service** (`openlithohub.server`) —
+  FastAPI app exposing `GET /v1/health`, `GET /v1/models`, and
+  `POST /v1/optimize` so fab-side schedulers (Slurm, LSF) and legacy
+  C++/Perl pipelines can drive the optimization engine without
+  embedding the Python interpreter. Models are loaded lazily and
+  cached in-process; new `[server]` extra pulls in
+  `fastapi` / `uvicorn` / `python-multipart`. See the `serve` section
+  of the CLI reference for the curl example.
+- **Jupyter `_repr_html_` for result dataclasses** —
+  `PredictionResult`, `MRCResult`, `CurvilinearMRCResult`, `DRCResult`,
+  `MonteCarloFailureResult`, and `SimulatorResult` now render as
+  inline HTML panels (pass/fail badge, key/value table, violation
+  rows, mask thumbnail) when displayed in Jupyter / Colab / VS Code.
+  Helpers live in `openlithohub.jupyter._html` and degrade gracefully
+  to plain `repr` when matplotlib is unavailable.
 - **RFC 0003 — Standard MRC rule-deck schema**
   (`docs/rfcs/0003-mrc-rule-deck-schema.md`). A single JSON/TOML
   format covering every parameter the OpenLithoHub MRC checkers

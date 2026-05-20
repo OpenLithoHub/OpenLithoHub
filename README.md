@@ -132,6 +132,24 @@ openlithohub optimize run \
   --output optimized.oas
 ```
 
+### Run as an HTTP micro-service
+
+For fab-side schedulers (Slurm / LSF) or legacy C++/Perl pipelines that
+cannot embed Python, run the FastAPI engine and drive it with `curl`:
+
+```bash
+pip install "openlithohub[server]"
+openlithohub serve --port 8000 &
+
+curl -X POST http://localhost:8000/v1/optimize \
+     -F "layout=@design.oas" \
+     -F "model=your-model" \
+     -F "writer=mbmw" \
+     -o optimized.oas
+```
+
+Models stay resident in-process; repeat requests skip weight loading.
+
 ### Use as a Python library
 
 ```python

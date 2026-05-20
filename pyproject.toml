@@ -64,6 +64,11 @@ jupyter = [
     "ipython>=8.0",
     "matplotlib>=3.7",
 ]
+server = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "python-multipart>=0.0.9",
+]
 export = [
     "onnx>=1.14",
     # onnxscript powers the dynamo-based exporter (torch.export.export
@@ -71,7 +76,7 @@ export = [
     # silently falls back to the deprecated TorchScript path.
     "onnxscript>=0.1",
 ]
-all = ["openlithohub[data,workflow,models,dev,docs,jupyter,export]"]
+all = ["openlithohub[data,workflow,models,dev,docs,jupyter,server,export]"]
 
 [project.urls]
 Homepage = "https://openlithohub.com"

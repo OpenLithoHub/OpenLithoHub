@@ -9,6 +9,7 @@ from openlithohub.cli.export_cmd import export_app
 from openlithohub.cli.hackathon_cmd import hackathon_app
 from openlithohub.cli.leaderboard_cmd import leaderboard_app
 from openlithohub.cli.optimize_cmd import optimize_app
+from openlithohub.cli.serve_cmd import serve_app
 from openlithohub.cli.simulate_cmd import simulate_app
 from openlithohub.cli.synth_cmd import synth_app
 
@@ -27,6 +28,7 @@ app.add_typer(simulate_app, name="simulate", help="Run a forward simulator on a 
 app.add_typer(synth_app, name="synth", help="Generate synthetic PDK-aware layouts.")
 app.add_typer(hackathon_app, name="hackathon", help="Inspect the current hackathon contract.")
 app.add_typer(export_app, name="export", help="Export a model to ONNX / TorchScript.")
+app.add_typer(serve_app, name="serve", help="Run the HTTP micro-service engine (FastAPI).")
 
 
 @app.callback(invoke_without_command=True)
