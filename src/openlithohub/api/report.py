@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from openlithohub.benchmark.compliance.drc import DRCResult
     from openlithohub.benchmark.compliance.mrc import CurvilinearMRCResult, MRCResult
     from openlithohub.benchmark.metrics.epe import EPEResult
+    from openlithohub.benchmark.metrics.l2_error import L2ErrorResult
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,8 @@ class Report:
     epe_wafer_mean_nm: float
     epe_wafer_max_nm: float
     epe_wafer_std_nm: float
+    l2_error_pixels: float
+    l2_error_nm2: float
     pvband_mean_nm: float
     pvband_max_nm: float
 
@@ -44,6 +47,7 @@ class Report:
 
     raw_epe: EPEResult
     raw_wafer_epe: EPEResult
+    raw_l2: L2ErrorResult
     raw_drc: DRCResult
     raw_mrc: MRCResult
     raw_pvband: dict[str, float]

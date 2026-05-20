@@ -8,6 +8,7 @@ from openlithohub.benchmark.metrics.euv_3d import (
     apply_3d_shadow,
     compute_3d_mask_residual,
 )
+from openlithohub.benchmark.metrics.l2_error import compute_l2_error
 from openlithohub.benchmark.metrics.monte_carlo import (
     MonteCarloFailureResult,
     monte_carlo_failure_probability,
@@ -27,6 +28,7 @@ __all__ = [
     "compute_3d_mask_residual",
     "compute_epe",
     "compute_wafer_epe",
+    "compute_l2_error",
     "compute_pvband",
     "compute_stochastic_robustness",
     "estimate_shot_count",

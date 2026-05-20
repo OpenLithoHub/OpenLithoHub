@@ -114,6 +114,7 @@ def run(
     from openlithohub.benchmark.compliance.drc import check_drc
     from openlithohub.benchmark.compliance.mrc import check_mrc
     from openlithohub.benchmark.metrics.epe import compute_epe, compute_wafer_epe
+    from openlithohub.benchmark.metrics.l2_error import compute_l2_error
     from openlithohub.benchmark.metrics.pvband import compute_pvband
     from openlithohub.benchmark.report import generate_report
     from openlithohub.models.registry import registry
@@ -204,6 +205,13 @@ def run(
                 sample_metrics["epe_wafer_mean_nm"] = wafer_epe["epe_mean_nm"]
                 sample_metrics["epe_wafer_max_nm"] = wafer_epe["epe_max_nm"]
                 sample_metrics["epe_wafer_std_nm"] = wafer_epe["epe_std_nm"]
+
+                # L2 wafer error per the Neural-ILT eval contract: forward-sim
+                # then sum |wafer - target|. This is the canonical academic
+                # printability scalar paired with PV-band.
+                l2 = compute_l2_error(result.mask, sample.mask, pixel_size_nm=pixel_nm)
+                sample_metrics["l2_error_pixels"] = l2["l2_error_pixels"]
+                sample_metrics["l2_error_nm2"] = l2["l2_error_nm2"]
 
             if mrc_check:
                 mrc_result = check_mrc(

@@ -72,6 +72,35 @@ def test_wafer_epe_identity_is_nonzero():
     assert result["epe_max_nm"] >= result["epe_mean_nm"]
 
 
+def test_l2_error_identity_is_nonzero():
+    # Mirror of the wafer-EPE regression: a square mask passed unchanged
+    # through the Identity model must accumulate nonzero L2 wafer error
+    # because diffraction reshapes the printed contour. This pins the
+    # Neural-ILT-compatible scoring contract: forward-sim then compare.
+    from openlithohub.benchmark.metrics.l2_error import compute_l2_error
+    from openlithohub.simulators.base import SimulatorConfig
+    from openlithohub.simulators.hopkins_sim import HopkinsSimulator
+
+    mask = torch.zeros(256, 256)
+    mask[64:192, 64:192] = 1.0
+
+    sim = HopkinsSimulator(SimulatorConfig(extra={"pixel_size_nm": 8.0}))
+    result = compute_l2_error(mask, mask, pixel_size_nm=8.0, simulator=sim)
+    assert result["l2_error_pixels"] > 0.0
+    # nm² conversion is l2_pixels * pixel_size_nm**2 (= 64 here).
+    assert result["l2_error_nm2"] == pytest.approx(result["l2_error_pixels"] * 64.0)
+    assert result["target_pixels"] == 128 * 128
+
+
+def test_l2_error_shape_mismatch():
+    from openlithohub.benchmark.metrics.l2_error import compute_l2_error
+
+    a = torch.zeros(32, 32)
+    b = torch.zeros(64, 64)
+    with pytest.raises(ValueError, match="Shape mismatch"):
+        compute_l2_error(a, b)
+
+
 def test_epe_one_empty_one_not_returns_inf_and_invalid():
     blank = torch.zeros(32, 32)
     nonblank = torch.zeros(32, 32)

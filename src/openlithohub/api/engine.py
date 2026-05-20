@@ -16,6 +16,7 @@ from openlithohub.api.report import Report
 from openlithohub.benchmark.compliance.drc import check_drc
 from openlithohub.benchmark.compliance.mrc import check_curvilinear_mrc, check_mrc
 from openlithohub.benchmark.metrics.epe import compute_epe, compute_wafer_epe
+from openlithohub.benchmark.metrics.l2_error import compute_l2_error
 from openlithohub.benchmark.metrics.pvband import compute_pvband
 from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
 from openlithohub.models.base import LithographyModel
@@ -174,6 +175,10 @@ class LitheEngine:
         # one isn't, since diffraction and resist threshold reshape the
         # printed contour.
         wafer_epe = compute_wafer_epe(pred.tensor, tgt.tensor, pixel_size_nm=pixel_nm)
+        # L2 wafer error — Neural-ILT canonical printability scalar.
+        # Same forward-sim path as wafer_epe, different aggregation:
+        # |wafer - target|.sum() instead of edge-distance.
+        l2 = compute_l2_error(pred.tensor, tgt.tensor, pixel_size_nm=pixel_nm)
         pvband = compute_pvband(pred.tensor, pixel_size_nm=pixel_nm)
         drc = check_drc(pred.tensor, pixel_size_nm=pixel_nm)
         mrc = check_mrc(pred.tensor, pixel_size_nm=pixel_nm)
@@ -201,6 +206,8 @@ class LitheEngine:
             epe_wafer_mean_nm=float(wafer_epe["epe_mean_nm"]),
             epe_wafer_max_nm=float(wafer_epe["epe_max_nm"]),
             epe_wafer_std_nm=float(wafer_epe["epe_std_nm"]),
+            l2_error_pixels=float(l2["l2_error_pixels"]),
+            l2_error_nm2=float(l2["l2_error_nm2"]),
             pvband_mean_nm=float(pvband["pvband_mean_nm"]),
             pvband_max_nm=float(pvband["pvband_max_nm"]),
             drc_violations=int(drc.violation_count),
@@ -215,6 +222,7 @@ class LitheEngine:
             halo_px=int(halo_px),
             raw_epe=epe,
             raw_wafer_epe=wafer_epe,
+            raw_l2=l2,
             raw_drc=drc,
             raw_mrc=mrc,
             raw_pvband=pvband,
