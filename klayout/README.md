@@ -29,6 +29,24 @@ KLayout (pya)                     User's Python env
 
 ## Install
 
+### Option A — One-click via `.salt` package (recommended)
+
+Each [GitHub Release](https://github.com/OpenLithoHub/OpenLithoHub/releases)
+ships an `openlithohub_macro-<version>.salt` asset.
+
+1. `Tools → Manage Packages → Install New Package → From file...` in KLayout.
+2. Pick the downloaded `.salt`.
+3. Restart KLayout.
+
+You still need `openlithohub` on your PATH for the macro to call into:
+
+```bash
+pip install openlithohub
+which openlithohub  # confirm it's on PATH
+```
+
+### Option B — Manual copy (for development)
+
 1. Install OpenLithoHub in any Python environment that's on your `PATH`:
 
    ```bash
@@ -64,7 +82,8 @@ KLayout (pya)                     User's Python env
 - **No progress bar in the GUI**: only the log panel.
 - **Hardcoded model**: rule-based OPC. Edit `openlithohub_optimize.py:113`
   to use `levelset-ilt`, `neural-ilt`, etc.
-- **Not on the KLayout Salt registry yet**: install manually for now.
+- **Not yet on the public KLayout Salt registry**: install via the per-release
+  `.salt` asset (Option A) or manual copy (Option B).
 
 ## Manual smoke test
 

@@ -1,0 +1,72 @@
+name: Package KLayout Salt
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag/version label for the salt package (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            tag="${{ github.event.release.tag_name }}"
+          else
+            tag="${{ inputs.tag }}"
+          fi
+          version="${tag#v}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp grain.xml with release version
+        run: |
+          python - <<'PY'
+          import os, re, pathlib
+          version = os.environ["VERSION"]
+          path = pathlib.Path("klayout/openlithohub_macro/grain.xml")
+          text = path.read_text()
+          new = re.sub(
+              r"<version>[^<]*</version>",
+              f"<version>{version}</version>",
+              text,
+              count=1,
+          )
+          path.write_text(new)
+          print(f"Stamped grain.xml version -> {version}")
+          PY
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Build .salt package
+        run: |
+          mkdir -p dist
+          # KLayout salt = zip whose top-level entry is the grain dir.
+          (cd klayout && zip -r "../dist/openlithohub_macro-${VERSION}.salt" openlithohub_macro)
+          ls -la dist/
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openlithohub-klayout-salt
+          path: dist/openlithohub_macro-*.salt
+
+      - name: Attach to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release upload "$TAG" dist/openlithohub_macro-*.salt --clobber

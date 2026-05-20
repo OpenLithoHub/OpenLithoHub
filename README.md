@@ -12,6 +12,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/OpenLithoHub/OpenLithoHub/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenLithoHub/OpenLithoHub/actions)
+[![codecov](https://codecov.io/gh/OpenLithoHub/OpenLithoHub/branch/main/graph/badge.svg)](https://codecov.io/gh/OpenLithoHub/OpenLithoHub)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/OpenLithoHub/OpenLithoHub/blob/main/notebooks/colab_byom.ipynb)
 
 > **Website:** [openlithohub.com](https://openlithohub.com) | **Docs:** [docs.openlithohub.com](https://docs.openlithohub.com) | **Playground:** [HuggingFace Space](https://huggingface.co/spaces/OpenLithoHub/playground)
@@ -76,6 +77,22 @@ git clone https://github.com/OpenLithoHub/OpenLithoHub.git
 cd OpenLithoHub
 pip install -e ".[dev]"
 ```
+
+**Docker (zero-config, GPU-ready):**
+
+Pre-built images are published to GitHub Container Registry on every release:
+
+```bash
+# CPU
+docker run --rm -v "$PWD":/data ghcr.io/openlithohub/openlithohub:latest \
+  eval run --model dummy-identity --dataset lithobench --data-root /data/lithobench
+
+# GPU (requires nvidia-container-toolkit on the host)
+docker run --rm --gpus all -v "$PWD":/data ghcr.io/openlithohub/openlithohub:latest \
+  optimize run --input /data/design.oas --output /data/optimized.oas
+```
+
+Tagged versions are also available (e.g. `ghcr.io/openlithohub/openlithohub:0.1`).
 
 ---
 
