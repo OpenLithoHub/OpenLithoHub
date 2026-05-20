@@ -149,6 +149,9 @@ curl -X POST http://localhost:8000/v1/optimize \
 ```
 
 Models stay resident in-process; repeat requests skip weight loading.
+Open `http://localhost:8000/docs` in a browser for the auto-generated
+Swagger UI: every endpoint is documented with its JSON schema and can
+be exercised interactively (file upload included), no client code needed.
 
 ### Use as a Python library
 

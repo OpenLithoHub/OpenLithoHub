@@ -358,3 +358,70 @@ curl -X POST http://localhost:8000/v1/optimize \
      -F "writer=mbmw" \
      -o optimized.oas
 ```
+
+##### Interactive API explorer
+
+The server is FastAPI under the hood, so it ships with two zero-config
+docs surfaces:
+
+| URL | What it is |
+|-----|------------|
+| `http://localhost:8000/docs` | Swagger UI — interactive playground; upload a layout, fire `/v1/optimize`, inspect headers and response body in the browser. |
+| `http://localhost:8000/redoc` | ReDoc — read-only, three-pane reference rendering of the same OpenAPI schema. |
+| `http://localhost:8000/openapi.json` | Raw OpenAPI 3.x schema — pipe into client generators (`openapi-generator`, `oapi-codegen`, etc.) to scaffold typed clients in any language. |
+
+##### C++ client example (`cpp-httplib`)
+
+Fab-side schedulers and OPC pipelines are usually C++. A self-contained
+client with the header-only [`cpp-httplib`](https://github.com/yhirose/cpp-httplib)
+is ~30 lines and links no extra runtime:
+
+```cpp
+// g++ -std=c++17 olh_client.cpp -o olh_client
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include "httplib.h"
+
+int main(int argc, char** argv) {
+    if (argc < 3) {
+        std::cerr << "usage: olh_client <input.oas> <output.oas>\n";
+        return 1;
+    }
+    std::ifstream in(argv[1], std::ios::binary);
+    std::stringstream buf;
+    buf << in.rdbuf();
+    const std::string layout = buf.str();
+
+    httplib::Client cli("http://localhost:8000");
+    cli.set_read_timeout(600, 0);  // OPC tiles take time
+
+    httplib::MultipartFormDataItems items = {
+        {"layout", layout, argv[1], "application/octet-stream"},
+        {"model",  "neural-ilt", "", ""},
+        {"node",   "3nm-euv",    "", ""},
+        {"writer", "mbmw",       "", ""},
+    };
+
+    auto res = cli.Post("/v1/optimize", items);
+    if (!res || res->status != 200) {
+        std::cerr << "optimize failed: "
+                  << (res ? std::to_string(res->status) : "no response") << '\n';
+        return 2;
+    }
+    std::ofstream out(argv[2], std::ios::binary);
+    out.write(res->body.data(), res->body.size());
+
+    std::cout << "tiles="    << res->get_header_value("X-OLH-Tiles")
+              << " halo_px=" << res->get_header_value("X-OLH-Halo-Px")
+              << " shape="   << res->get_header_value("X-OLH-Shape")
+              << " format="  << res->get_header_value("X-OLH-Export-Format")
+              << '\n';
+    return 0;
+}
+```
+
+For a `libcurl` build, substitute the body with a `CURLOPT_MIMEPOST`
+multipart form (`curl_mime_init` → `curl_mime_addpart` per field). The
+endpoint contract is the same — read the four `X-OLH-*` response
+headers to drive the downstream MDP / OPC step.

@@ -150,6 +150,9 @@ curl -X POST http://localhost:8000/v1/optimize \
 ```
 
 模型常驻进程内存，重复请求不会重新加载权重。
+浏览器打开 `http://localhost:8000/docs` 即可看到自动生成的 Swagger UI：
+每个端点都有 JSON Schema 文档，并支持直接上传文件交互调试，
+无需先写客户端代码。
 
 ### 作为 Python 库使用
 
