@@ -144,7 +144,7 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "tomli.*", "onnxscript.*"]
+module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "tomli.*", "onnxscript.*", "fastapi", "fastapi.*", "uvicorn", "uvicorn.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
