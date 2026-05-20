@@ -1,0 +1,24 @@
+# pip-audit ignore list — tracked CVEs with no upstream fix yet.
+#
+# Re-evaluate this list quarterly. When torch ships fixes, drop the matching
+# entries and tighten the lower bound in pyproject.toml instead.
+#
+# Format: one PYSEC ID per line. Lines starting with `#` are comments.
+
+# torch 2.12.0 — all upstream-confirmed but unfixed as of 2026-05.
+# Triage: each CVE requires the attacker to feed adversarial inputs into a
+# specific torch API (jit, profiler, lstm_cell, rnn utils, mkldnn pool,
+# quantization, cuda allocator, pt2 loader). OpenLithoHub does not expose any
+# of these APIs to untrusted inputs — masks come from local files / trusted
+# datasets, not network sources. Risk is acceptable until torch ships fixes.
+PYSEC-2025-189
+PYSEC-2025-190
+PYSEC-2025-191
+PYSEC-2025-192
+PYSEC-2025-193
+PYSEC-2025-194
+PYSEC-2025-195
+PYSEC-2025-196
+PYSEC-2025-197
+PYSEC-2025-210
+PYSEC-2026-139

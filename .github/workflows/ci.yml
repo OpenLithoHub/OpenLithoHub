@@ -92,7 +92,16 @@ jobs:
           pip install .
           pip install pip-audit bandit
       - name: pip-audit (installed environment)
-        run: pip-audit
+        run: |
+          # Build --ignore-vuln args from .github/pip-audit-ignore.txt (skip blanks/comments)
+          args=()
+          while IFS= read -r line; do
+            line="${line%%#*}"
+            line="${line//[[:space:]]/}"
+            [ -z "$line" ] || args+=(--ignore-vuln "$line")
+          done < .github/pip-audit-ignore.txt
+          echo "Ignoring ${#args[@]} entries"
+          pip-audit "${args[@]}"
       - name: Bandit (gate on high severity)
         run: bandit -r src/ -lll
       - name: Bandit (gate on medium severity)

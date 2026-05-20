@@ -214,10 +214,10 @@ def _check_notch(
     if num == 0:
         return []
     border_labels: set[int] = set()
-    border_labels.update(int(v) for v in labels[0, :].unique().tolist() if int(v) != -1)
-    border_labels.update(int(v) for v in labels[-1, :].unique().tolist() if int(v) != -1)
-    border_labels.update(int(v) for v in labels[:, 0].unique().tolist() if int(v) != -1)
-    border_labels.update(int(v) for v in labels[:, -1].unique().tolist() if int(v) != -1)
+    border_labels.update(int(v) for v in torch.unique(labels[0, :]).tolist() if int(v) != -1)
+    border_labels.update(int(v) for v in torch.unique(labels[-1, :]).tolist() if int(v) != -1)
+    border_labels.update(int(v) for v in torch.unique(labels[:, 0]).tolist() if int(v) != -1)
+    border_labels.update(int(v) for v in torch.unique(labels[:, -1]).tolist() if int(v) != -1)
 
     enclosed_bg = bg.clone()
     for lbl in border_labels:
