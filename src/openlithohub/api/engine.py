@@ -1,0 +1,181 @@
+"""`LitheEngine` — thin wrapper over registry + tile/halo/stitch pipeline.
+
+Mirrors the body of ``server.app._run_optimize`` minus filesystem I/O so
+callers can drive the engine in-process without touching the HTTP server
+or the CLI helpers.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import torch
+
+from openlithohub.api.mask import Mask
+from openlithohub.api.report import Report
+from openlithohub.benchmark.compliance.drc import check_drc
+from openlithohub.benchmark.compliance.mrc import check_curvilinear_mrc, check_mrc
+from openlithohub.benchmark.metrics.epe import compute_epe
+from openlithohub.benchmark.metrics.pvband import compute_pvband
+from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
+from openlithohub.models.base import LithographyModel
+from openlithohub.models.registry import register_builtin_models, registry
+from openlithohub.workflow.halo import compute_halo_px
+from openlithohub.workflow.process_node import ProcessNodeConfig, get_node
+from openlithohub.workflow.tiling import stitch_tiles, tile_layout
+
+
+class LitheEngine:
+    """Object-oriented driver for the OpenLithoHub optimization pipeline.
+
+    ``engine = LitheEngine(model="neural-ilt", node="3nm-euv")``
+    ``optimized = engine.optimize(mask)``
+    ``report = engine.evaluate(optimized, target=mask)``
+    """
+
+    def __init__(
+        self,
+        model: str | LithographyModel,
+        *,
+        node: str | None = None,
+        tile_size: int = 2048,
+        pretrained: bool = False,
+        **model_kwargs: Any,
+    ) -> None:
+        register_builtin_models()
+
+        if isinstance(model, str):
+            kwargs: dict[str, Any] = dict(model_kwargs)
+            if pretrained:
+                kwargs.setdefault("pretrained", True)
+            self._model: LithographyModel = registry.get(model, **kwargs)
+            # Engine constructed the instance, so it owns the setup() call.
+            self._model.setup()
+        elif isinstance(model, LithographyModel):
+            if model_kwargs or pretrained:
+                raise ValueError(
+                    "model_kwargs / pretrained only apply when `model` is a name; "
+                    "pass a fully constructed LithographyModel without them."
+                )
+            # Caller-supplied instance: assume the caller has already called
+            # setup(). Calling it again would re-load weights / re-init GPU
+            # state in non-idempotent models like NeuralILTModel.
+            self._model = model
+        else:
+            raise TypeError(
+                f"`model` must be a name (str) or LithographyModel, got {type(model).__name__}"
+            )
+
+        # Let `get_node` raise KeyError on typos; silently coercing unknown
+        # node names to None hides physics-affecting misconfiguration.
+        self._node_config: ProcessNodeConfig | None = get_node(node) if node is not None else None
+        self._tile_size = tile_size
+
+    @property
+    def model(self) -> LithographyModel:
+        return self._model
+
+    @property
+    def node(self) -> ProcessNodeConfig | None:
+        return self._node_config
+
+    @staticmethod
+    def list_models() -> list[str]:
+        register_builtin_models()
+        return registry.list_models()
+
+    def _resolve_pixel_size(self, supplied: float) -> float:
+        # Mirror server/app.py:67–69 — when the caller did not override the
+        # default 1.0 nm/px and a process node is active, prefer the node's
+        # native pitch.
+        if self._node_config is not None and supplied == 1.0:
+            return self._node_config.pixel_size_nm
+        return supplied
+
+    def _coerce_to_mask(self, design: Mask | torch.Tensor) -> Mask:
+        if isinstance(design, Mask):
+            return design
+        if isinstance(design, torch.Tensor):
+            pixel_nm = self._node_config.pixel_size_nm if self._node_config is not None else 1.0
+            return Mask.from_tensor(design, pixel_size_nm=pixel_nm)
+        raise TypeError(f"expected Mask or torch.Tensor, got {type(design).__name__}")
+
+    def optimize(self, design: Mask | torch.Tensor) -> Mask:
+        """Run the model over ``design`` with tiling + halo + stitching.
+
+        Returns a binarised ``Mask`` matching the input shape and pixel pitch.
+        """
+        in_mask = self._coerce_to_mask(design)
+        pixel_nm = self._resolve_pixel_size(in_mask.pixel_size_nm)
+        tensor = in_mask.tensor
+
+        halo_px = compute_halo_px(
+            node=self._node_config,
+            model=self._model,
+            pixel_nm=pixel_nm,
+            tile_size=self._tile_size,
+        )
+
+        tiles = tile_layout(tensor, tile_size=self._tile_size, overlap=halo_px)
+        tile_results: list[tuple[Any, torch.Tensor]] = []
+        for tile in tiles:
+            result = self._model.predict(tile.tensor)
+            tile_results.append((tile, result.mask))
+
+        h, w = tensor.shape
+        stitched = stitch_tiles(tile_results, (int(h), int(w)))
+        binarised = (stitched > 0.5).float()
+
+        return Mask(tensor=binarised, pixel_size_nm=pixel_nm, layer=in_mask.layer)
+
+    def evaluate(
+        self,
+        predicted: Mask | torch.Tensor,
+        target: Mask | torch.Tensor,
+    ) -> Report:
+        """Compute the canonical metric / compliance battery on ``predicted`` vs ``target``."""
+        pred = self._coerce_to_mask(predicted)
+        tgt = self._coerce_to_mask(target)
+        if pred.shape != tgt.shape:
+            raise ValueError(f"shape mismatch: predicted {pred.shape} vs target {tgt.shape}")
+        if pred.pixel_size_nm != tgt.pixel_size_nm:
+            raise ValueError(
+                f"pixel_size_nm mismatch: predicted {pred.pixel_size_nm} vs "
+                f"target {tgt.pixel_size_nm}. EPE is reported in nanometers, so "
+                f"masks at different pitches cannot be compared without resampling."
+            )
+
+        pixel_nm = self._resolve_pixel_size(pred.pixel_size_nm)
+
+        epe = compute_epe(pred.tensor, tgt.tensor, pixel_size_nm=pixel_nm)
+        pvband = compute_pvband(pred.tensor, pixel_size_nm=pixel_nm)
+        drc = check_drc(pred.tensor, pixel_size_nm=pixel_nm)
+        mrc = check_mrc(pred.tensor, pixel_size_nm=pixel_nm)
+        shots = estimate_shot_count(pred.tensor, pixel_size_nm=pixel_nm)
+        curvilinear_mrc = (
+            check_curvilinear_mrc(pred.tensor, pixel_size_nm=pixel_nm)
+            if self._model.supports_curvilinear
+            else None
+        )
+
+        return Report(
+            epe_mean_nm=float(epe["epe_mean_nm"]),
+            epe_max_nm=float(epe["epe_max_nm"]),
+            epe_std_nm=float(epe["epe_std_nm"]),
+            pvband_mean_nm=float(pvband["pvband_mean_nm"]),
+            pvband_max_nm=float(pvband["pvband_max_nm"]),
+            drc_violations=int(drc.violation_count),
+            drc_passed=bool(drc.passed),
+            mrc_violations=int(mrc.violation_count),
+            mrc_passed=bool(mrc.passed),
+            shot_count=int(shots["shot_count"]),
+            estimated_write_time_s=float(shots["estimated_write_time_s"]),
+            model_name=self._model.name,
+            pixel_size_nm=pixel_nm,
+            raw_epe=epe,
+            raw_drc=drc,
+            raw_mrc=mrc,
+            raw_pvband=pvband,
+            raw_shot_count=shots,
+            raw_curvilinear_mrc=curvilinear_mrc,
+        )
