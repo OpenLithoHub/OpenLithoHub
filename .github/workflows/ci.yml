@@ -25,6 +25,8 @@ jobs:
         run: ruff check src/ tests/ spaces/ scripts/ klayout/ notebooks/
       - name: Ruff format check
         run: ruff format --check src/ tests/ spaces/ scripts/ klayout/ notebooks/
+      - name: README bilingual parity (English ⇄ Chinese)
+        run: python scripts/check_readme_parity.py
 
   typecheck:
     runs-on: ubuntu-latest

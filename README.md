@@ -17,7 +17,7 @@
 
 > **Website:** [openlithohub.com](https://openlithohub.com) | **Docs:** [docs.openlithohub.com](https://docs.openlithohub.com) | **Playground:** [HuggingFace Space](https://huggingface.co/spaces/OpenLithoHub/playground)
 
-[中文版 / Chinese Version](docs/README_zh.md)
+[中文版 / Chinese Version](README_zh.md) — kept in sync with this English README; if the two diverge, this English version is authoritative.
 
 ---
 
