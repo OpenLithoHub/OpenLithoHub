@@ -84,6 +84,10 @@ class GaugeTable:
 
     points: tuple[GaugePoint, ...]
     source: Path
+    # ICCAD'13 contest gauges carry a ±1 polarity flag per point (inside
+    # vs outside feature) that has no analogue in Calibre / CSV gauges.
+    # Populated only by :func:`parse_iccad13_gauge`; ``None`` otherwise.
+    iccad13_polarities: tuple[int, ...] | None = None
 
     def __len__(self) -> int:
         return len(self.points)
@@ -141,6 +145,90 @@ def parse_gauge(path: str | Path) -> GaugeTable:
     canon = _canonicalize(names)
     points = tuple(_row_to_point(row, canon) for row in rows)
     return GaugeTable(points=points, source=p)
+
+
+def parse_iccad13_gauge(path: str | Path) -> GaugeTable:
+    """Parse the ICCAD'13 contest gauge format.
+
+    The contest distributes 5-column whitespace-separated text with no
+    header: ``gauge_id  x_nm  y_nm  angle_deg  polarity``. ``polarity`` is
+    ``+1`` for an inside-feature gauge and ``-1`` for outside (the
+    convention used by the ICCAD'13 / SPIE contest scoring scripts).
+
+    The format has no ``target_cd`` or ``measured_cd`` column — the
+    contest scores EPE relative to the design intent encoded in the GDS,
+    not against a measurement column. We map ``target_cd=0.0`` and
+    ``measured_cd=None`` so downstream EPE code that reads
+    ``GaugeTable`` keeps working; callers that need the polarity can
+    inspect it via ``GaugeTable.iccad13_polarities`` after parsing.
+
+    Lines beginning with ``#`` are treated as comments and skipped.
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Gauge file not found: {p}")
+
+    points: list[GaugePoint] = []
+    polarities: list[int] = []
+    with p.open() as fh:
+        for lineno, raw in enumerate(fh, start=1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            tokens = line.split()
+            if len(tokens) != 5:
+                raise ValueError(
+                    f"{p.name}:{lineno}: ICCAD'13 gauge expects 5 columns "
+                    f"(gauge_id x y angle polarity); got {len(tokens)}: {tokens}"
+                )
+            try:
+                x = float(tokens[1])
+                y = float(tokens[2])
+                angle = float(tokens[3])
+                pol = int(tokens[4])
+            except ValueError as e:
+                raise ValueError(f"{p.name}:{lineno}: failed to parse row {tokens}: {e}") from None
+            if pol not in (-1, 1):
+                raise ValueError(f"{p.name}:{lineno}: polarity must be +1 or -1, got {pol}")
+            points.append(
+                GaugePoint(
+                    x=x,
+                    y=y,
+                    tangent=angle,
+                    target_cd=0.0,
+                    measured_cd=None,
+                    weight=1.0,
+                )
+            )
+            polarities.append(pol)
+
+    table = GaugeTable(points=tuple(points), source=p, iccad13_polarities=tuple(polarities))
+    return table
+
+
+def write_iccad13_gauge(
+    path: str | Path,
+    points: list[GaugePoint] | tuple[GaugePoint, ...],
+    polarities: list[int] | tuple[int, ...],
+) -> None:
+    """Write a gauge list to ICCAD'13 5-column text format.
+
+    ``polarities`` must have the same length as ``points``; every entry
+    must be ``+1`` or ``-1``. ``target_cd`` and ``measured_cd`` are not
+    serialized because the contest format has no slot for them — write
+    a CSV via :func:`parse_gauge` round-trip if you need those.
+    """
+    if len(points) != len(polarities):
+        raise ValueError(
+            f"points ({len(points)}) and polarities ({len(polarities)}) length mismatch"
+        )
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w") as fh:
+        for i, (pt, pol) in enumerate(zip(points, polarities, strict=True), start=1):
+            if pol not in (-1, 1):
+                raise ValueError(f"row {i}: polarity must be +1 or -1, got {pol}")
+            fh.write(f"{i}\t{pt.x:.4f}\t{pt.y:.4f}\t{pt.tangent:.4f}\t{pol}\n")
 
 
 def _read_csv(path: Path) -> tuple[list[list[str]], list[str]]:

@@ -34,6 +34,44 @@ def export_oasis(
         _export_curvilinear(m, output_path, pixel_size_nm)
 
 
+def export_gds(
+    mask: torch.Tensor,
+    output_path: str | Path,
+    *,
+    mode: str = "curvilinear",
+    pixel_size_nm: float = 1.0,
+    samples_per_curve: int = 64,
+) -> None:
+    """Export an optimized mask tensor to GDSII format.
+
+    GDSII is the academic / contest lingua franca (ICCAD, SPIE benchmarks
+    and the cuLitho whitepaper all use ``.gds``); OASIS is dominant in
+    mask-shop flows. This function covers the academic path so users do
+    not have to convert ``.oas`` → ``.gds`` themselves before running our
+    benchmark on contest-style inputs.
+
+    Same routing as :func:`export_oasis`: ``mode="manhattan"`` extracts
+    rectilinear polygons; ``mode="curvilinear"`` fits B-splines, samples
+    them to polygons (GDSII has no native curve primitive) and writes
+    a polygon-only ``.gds`` via KLayout. The polygon density is controlled
+    by ``samples_per_curve`` and matches the OASIS curvilinear writer's
+    default — a curvilinear OASIS and a curvilinear GDS exported from the
+    same mask are visually identical, but the GDS file is larger because
+    every curve becomes an explicit vertex list.
+    """
+    if mode not in ("manhattan", "curvilinear"):
+        raise ValueError(f"mode must be 'manhattan' or 'curvilinear', got '{mode}'")
+
+    m = ensure_2d(mask)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if mode == "manhattan":
+        _export_manhattan(m, output_path, pixel_size_nm)
+    else:
+        _export_curvilinear(m, output_path, pixel_size_nm, samples_per_curve=samples_per_curve)
+
+
 def _export_manhattan(mask: torch.Tensor, output_path: Path, pixel_size_nm: float) -> None:
     from openlithohub.workflow.contour.manhattan import extract_manhattan_contour
 
@@ -61,14 +99,27 @@ def _export_manhattan(mask: torch.Tensor, output_path: Path, pixel_size_nm: floa
     layout.write(str(output_path))
 
 
-def _export_curvilinear(mask: torch.Tensor, output_path: Path, pixel_size_nm: float) -> None:
+def _export_curvilinear(
+    mask: torch.Tensor,
+    output_path: Path,
+    pixel_size_nm: float,
+    *,
+    samples_per_curve: int = 64,
+) -> None:
     from openlithohub.workflow.contour.curvilinear import export_oasis_mbw, fit_bspline
 
     curves = fit_bspline(mask, tolerance_nm=pixel_size_nm * 0.5, pixel_size_nm=pixel_size_nm)
     if not curves:
         raise ValueError(
             "No curvilinear contours could be extracted from the mask — refusing "
-            "to write an empty OASIS file. Check that the mask contains foreground "
+            "to write an empty file. Check that the mask contains foreground "
             "pixels and that the tolerance is appropriate for the pixel pitch."
         )
-    export_oasis_mbw(curves, str(output_path), pixel_size_nm=pixel_size_nm)
+    # klayout auto-detects OASIS vs GDSII from the output extension; the
+    # writer name is historical — ``.oas`` and ``.gds`` are both supported.
+    export_oasis_mbw(
+        curves,
+        str(output_path),
+        pixel_size_nm=pixel_size_nm,
+        samples_per_curve=samples_per_curve,
+    )

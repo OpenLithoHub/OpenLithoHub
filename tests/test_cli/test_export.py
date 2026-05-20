@@ -154,3 +154,37 @@ def test_export_onnx_dynamo_path_used_when_module_supports_it(tmp_path: Path) ->
     text = console.export_text()
     assert "exporter=dynamo" in text, text
     assert out.exists()
+
+
+def test_export_onnx_runtime_round_trip(runner: CliRunner, tmp_path: Path) -> None:
+    """End-to-end smoke: exported graph must load + run under onnxruntime.
+
+    Catches the failure mode where ``torch.onnx.export`` returns successfully
+    but emits an op the runtime cannot execute (opset / shape-inference drift
+    between exporter and runtime). Skips if onnxruntime is not installed —
+    the CI installs ``openlithohub[export]`` which pulls it in.
+    """
+    ort = pytest.importorskip("onnxruntime")
+    out = tmp_path / "neural-ilt.onnx"
+    result = runner.invoke(
+        app,
+        [
+            "export",
+            "run",
+            "--model",
+            "neural-ilt",
+            "--format",
+            "onnx",
+            "--output",
+            str(out),
+            "--shape",
+            "32x32",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    sess = ort.InferenceSession(str(out), providers=["CPUExecutionProvider"])
+    input_name = sess.get_inputs()[0].name
+    import numpy as np
+
+    out_arr = sess.run(None, {input_name: np.zeros((1, 1, 32, 32), dtype=np.float32)})
+    assert out_arr[0].shape == (1, 1, 32, 32)

@@ -70,6 +70,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install package with dev deps
         run: pip install -e ".[dev]"
+      - name: Install export extras for CLI shard
+        # The test_cli shard exercises ONNX export + onnxruntime round-trip,
+        # so install onnx / onnxscript / onnxruntime here. Without this,
+        # those tests silently skip via importorskip and a regression in
+        # the dynamo exporter would ship green.
+        if: matrix.shard.name == 'other'
+        run: pip install -e ".[export]"
       - name: Run tests
         run: pytest ${{ matrix.shard.xdist }} --cov=openlithohub --cov-report=xml --cov-report= -v ${{ matrix.shard.paths }}
       - name: Upload coverage

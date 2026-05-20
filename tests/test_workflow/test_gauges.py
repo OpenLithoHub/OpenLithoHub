@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from openlithohub.workflow.gauges import GaugePoint, GaugeTable, parse_gauge
+from openlithohub.workflow.gauges import (
+    GaugePoint,
+    GaugeTable,
+    parse_gauge,
+    parse_iccad13_gauge,
+    write_iccad13_gauge,
+)
 
 
 def test_parse_calibre_no_header(tmp_path: Path) -> None:
@@ -141,3 +147,65 @@ def test_um_columns_are_converted_to_nm(tmp_path: Path) -> None:
     assert math.isclose(gt.points[0].y, 200.0)
     assert math.isclose(gt.points[0].target_cd, 32.0)
     assert math.isclose(gt.points[0].measured_cd or 0.0, 31.5)
+
+
+class TestICCAD13Gauge:
+    def test_round_trip(self, tmp_path: Path) -> None:
+        p = tmp_path / "iccad13.txt"
+        p.write_text(
+            "1\t100.0\t200.0\t0.0\t1\n2\t150.0\t200.0\t90.0\t-1\n3\t300.0\t400.0\t45.0\t1\n"
+        )
+        gt = parse_iccad13_gauge(p)
+        assert len(gt) == 3
+        assert gt.points[0].x == 100.0
+        assert gt.points[1].tangent == 90.0
+        assert gt.iccad13_polarities == (1, -1, 1)
+        # Contest format has no measurement column.
+        assert all(p.measured_cd is None for p in gt.points)
+
+    def test_writer_round_trip(self, tmp_path: Path) -> None:
+        points = (
+            GaugePoint(x=10.0, y=20.0, tangent=0.0, target_cd=0.0, measured_cd=None, weight=1.0),
+            GaugePoint(x=30.0, y=40.0, tangent=90.0, target_cd=0.0, measured_cd=None, weight=1.0),
+        )
+        out = tmp_path / "round.txt"
+        write_iccad13_gauge(out, points, [1, -1])
+        gt = parse_iccad13_gauge(out)
+        assert len(gt) == 2
+        assert gt.iccad13_polarities == (1, -1)
+        assert math.isclose(gt.points[0].x, 10.0)
+        assert math.isclose(gt.points[1].tangent, 90.0)
+
+    def test_comments_and_blank_lines_ignored(self, tmp_path: Path) -> None:
+        p = tmp_path / "iccad13.txt"
+        p.write_text(
+            "# ICCAD'13 gauge dump\n\n1 100 200 0 1\n# mid-file comment\n2 150 200 90 -1\n"
+        )
+        gt = parse_iccad13_gauge(p)
+        assert len(gt) == 2
+
+    def test_bad_polarity_rejected(self, tmp_path: Path) -> None:
+        p = tmp_path / "iccad13.txt"
+        p.write_text("1 100 200 0 2\n")
+        with pytest.raises(ValueError, match="polarity"):
+            parse_iccad13_gauge(p)
+
+    def test_wrong_column_count_rejected(self, tmp_path: Path) -> None:
+        p = tmp_path / "iccad13.txt"
+        p.write_text("1 100 200 0\n")  # 4 columns, not 5
+        with pytest.raises(ValueError, match="5 columns"):
+            parse_iccad13_gauge(p)
+
+    def test_writer_length_mismatch_rejected(self, tmp_path: Path) -> None:
+        points = (
+            GaugePoint(x=10.0, y=20.0, tangent=0.0, target_cd=0.0, measured_cd=None, weight=1.0),
+        )
+        with pytest.raises(ValueError, match="length mismatch"):
+            write_iccad13_gauge(tmp_path / "x.txt", points, [1, -1])
+
+    def test_writer_bad_polarity_rejected(self, tmp_path: Path) -> None:
+        points = (
+            GaugePoint(x=10.0, y=20.0, tangent=0.0, target_cd=0.0, measured_cd=None, weight=1.0),
+        )
+        with pytest.raises(ValueError, match="polarity"):
+            write_iccad13_gauge(tmp_path / "x.txt", points, [3])

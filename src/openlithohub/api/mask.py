@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 from openlithohub.data.io import load_layout
-from openlithohub.workflow.export import export_oasis
+from openlithohub.workflow.export import export_gds, export_oasis
 
 
 @dataclass(frozen=True)
@@ -133,6 +133,4 @@ class Mask:
         export_oasis(self.tensor, path, mode=mode, pixel_size_nm=self.pixel_size_nm)
 
     def to_gds(self, path: str | Path, *, mode: str = "curvilinear") -> None:
-        # `export_oasis` writes via klayout, which sniffs the format from the
-        # filename suffix — `.gds` produces GDSII, `.oas` produces OASIS.
-        export_oasis(self.tensor, path, mode=mode, pixel_size_nm=self.pixel_size_nm)
+        export_gds(self.tensor, path, mode=mode, pixel_size_nm=self.pixel_size_nm)

@@ -9,7 +9,7 @@ from openlithohub.workflow.tiling import Tile, stitch_tiles, tile_layout
 pytest.importorskip("scipy")
 
 from openlithohub.workflow.contour.curvilinear import BSplineCurve, export_oasis_mbw, fit_bspline
-from openlithohub.workflow.export import export_oasis
+from openlithohub.workflow.export import export_gds, export_oasis
 from openlithohub.workflow.parsing import parse_layout
 
 
@@ -145,6 +145,68 @@ class TestExportOASIS:
         mask[4:12, 4:12] = 1.0
         with pytest.raises(ValueError, match="mode"):
             export_oasis(mask, tmp_path / "out.oas", mode="invalid")
+
+
+class TestExportGDS:
+    def test_curvilinear_gds_round_trip(self, tmp_path):
+        # GDSII has no native curve primitive — export_gds samples B-splines
+        # to polygons and writes via klayout (which dispatches on extension).
+        # Round-trip verifies the file is a real GDS readable by KLayout.
+        db = pytest.importorskip("klayout.db")
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        out = tmp_path / "out_curvi.gds"
+        export_gds(mask, out, mode="curvilinear", pixel_size_nm=1.0)
+        assert out.exists()
+        assert out.stat().st_size > 0
+
+        layout = db.Layout()
+        layout.read(str(out))
+        assert layout.cells() >= 1
+        # At least one polygon was emitted on the default (1, 0) layer.
+        cell = layout.top_cell()
+        layer_idx = layout.layer(1, 0)
+        assert sum(1 for _ in cell.shapes(layer_idx).each()) >= 1
+
+    def test_manhattan_gds(self, tmp_path):
+        pytest.importorskip("klayout.db")
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        out = tmp_path / "out_man.gds"
+        export_gds(mask, out, mode="manhattan", pixel_size_nm=1.0)
+        assert out.exists()
+        assert out.stat().st_size > 0
+
+    def test_invalid_mode_raises(self, tmp_path):
+        mask = torch.zeros(16, 16)
+        mask[4:12, 4:12] = 1.0
+        with pytest.raises(ValueError, match="mode"):
+            export_gds(mask, tmp_path / "out.gds", mode="invalid")
+
+    def test_samples_per_curve_increases_vertex_count(self, tmp_path):
+        # Higher samples_per_curve must yield more polygon vertices —
+        # this is the user-facing knob for fidelity vs file size.
+        db = pytest.importorskip("klayout.db")
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+
+        out_lo = tmp_path / "lo.gds"
+        out_hi = tmp_path / "hi.gds"
+        export_gds(mask, out_lo, mode="curvilinear", pixel_size_nm=1.0, samples_per_curve=16)
+        export_gds(mask, out_hi, mode="curvilinear", pixel_size_nm=1.0, samples_per_curve=128)
+
+        def _vertex_count(path):
+            layout = db.Layout()
+            layout.read(str(path))
+            cell = layout.top_cell()
+            layer_idx = layout.layer(1, 0)
+            n = 0
+            for shape in cell.shapes(layer_idx).each():
+                if shape.is_polygon():
+                    n += shape.polygon.num_points()
+            return n
+
+        assert _vertex_count(out_hi) > _vertex_count(out_lo)
 
 
 class TestTileLayout:
