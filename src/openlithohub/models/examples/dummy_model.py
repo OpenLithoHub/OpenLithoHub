@@ -19,3 +19,19 @@ class DummyModel(LithographyModel):
 
     def predict(self, design: torch.Tensor, **kwargs: Any) -> PredictionResult:
         return PredictionResult(mask=design.clone())
+
+
+@registry.register
+class FailingDummyModel(LithographyModel):
+    """Dummy model whose ``predict`` always raises.
+
+    Exists so the multi-GPU tile pipeline can exercise worker error
+    propagation across processes — pickling a closure that raises does
+    not survive the spawn boundary, but a registered model name does.
+    """
+
+    NAME = "dummy-failing"
+    SUPPORTS_CURVILINEAR = False
+
+    def predict(self, design: torch.Tensor, **kwargs: Any) -> PredictionResult:
+        raise RuntimeError("dummy-failing: deliberate predict failure")

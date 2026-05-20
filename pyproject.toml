@@ -148,6 +148,7 @@ markers = [
     "slow: marks tests that require large data downloads",
     "requires_klayout: marks tests that need klayout installed",
     "benchmark: performance benchmarks (deselect with -m 'not benchmark')",
+    "gpu: marks tests that require >=2 CUDA GPUs (skipped in default CI)",
 ]
 filterwarnings = [
     # torch >=2.x emits this from inside torch.jit when our hopkins

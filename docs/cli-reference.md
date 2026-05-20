@@ -85,6 +85,7 @@ openlithohub optimize run [OPTIONS]
 | `--tile-size` | INT | Tile size for distributed processing (pixels). | `2048` |
 | `--overlap` | INT | Tile overlap for seamless stitching (pixels). | `128` |
 | `--pixel-nm` | FLOAT | Pixel size in nanometers. | `1.0` |
+| `--num-gpus` | INT | Worker processes for tile inference. `1` = sequential (default). `>1` spawns one worker per GPU and shards tiles round-robin. | `1` |
 
 **Example:**
 
@@ -96,6 +97,21 @@ openlithohub optimize run \
   --node 3nm-euv \
   --drc-check \
   --output optimized.oas
+```
+
+**Multi-GPU tile inference:**
+
+`--num-gpus N` (`N>1`) shards tiles round-robin across `N` worker processes
+spawned via `torch.multiprocessing` (spawn context, not fork — required for
+CUDA safety). Each worker pins itself to one CUDA device (`cuda:rank`) when
+enough GPUs are visible, and falls back to CPU dispatch otherwise so the
+flag is testable without GPUs. Tile geometry and stitching stay in the
+parent process; the model layer is unchanged, so ONNX/TorchScript export is
+unaffected. Single-node only — multi-node scheduling is out of scope for
+v0.3 (see RFC 0004).
+
+```bash
+openlithohub optimize run -i chip.oas -m neural-ilt --num-gpus 4 -o out.oas
 ```
 
 ---

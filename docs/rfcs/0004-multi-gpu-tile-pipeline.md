@@ -2,11 +2,11 @@
 
 | | |
 |-|-|
-| Status | Draft (research, no implementation) |
+| Status | Implemented in v0.3 |
 | Author | OpenLithoHub maintainers |
 | Created | 2026-05-20 |
-| Targets | v0.3 (provisional) |
-| Related | `openlithohub.workflow.tiling`, `openlithohub.cli.optimize_cmd`, RFC 0001 |
+| Targets | v0.3 |
+| Related | `openlithohub.workflow.tiling`, `openlithohub.workflow.parallel`, `openlithohub.cli.optimize_cmd`, RFC 0001 |
 
 ## Summary
 
@@ -195,3 +195,27 @@ The follow-up RFC should bound the work to:
    slow, subsequent ones aren't.)
 3. KeyboardInterrupt propagation — `mp.spawn` swallows signals in
    subtle ways. Worth a dedicated test.
+
+## Implementation (landed v0.3)
+
+- New module: `src/openlithohub/workflow/parallel.py` —
+  `parallel_tile_inference(model_name, model_kwargs, tiles, *, num_gpus,
+  base_perf_kwargs, progress_cb)`. Workers receive a registry name +
+  kwargs (factory, not a live model) and re-instantiate via
+  `register_builtin_models()` + `registry.get(...)`. Spawn context
+  (`mp.get_context("spawn")`), manual `ctx.Process` rather than
+  `mp.spawn` for cleaner error / KeyboardInterrupt propagation.
+- CLI: `--num-gpus N` added to `optimize run` (`cli/optimize_cmd.py`).
+  `N=1` (default) keeps the sequential path verbatim.
+- Models layer untouched. Export path
+  (`cli/export_cmd.py:litho_model.to_torch_module()`) is unaffected.
+- Tests: `tests/test_workflow/test_parallel.py` covers CPU dispatch,
+  sequential-vs-parallel parity, error propagation, round-robin
+  balancing, default-path regression, and a GPU-gated
+  (`@pytest.mark.gpu`) two-device test.
+- Resolved open questions:
+  - Q1: workers each load (no shared memory).
+  - Q2: progress advances on result drain — workers each pay one
+    `torch.compile` warmup, surfaced as a slow first tile per worker.
+  - Q3: covered by `test_parallel_worker_error_propagates` and the
+    `KeyboardInterrupt` branch in `parallel_tile_inference`.

@@ -110,7 +110,13 @@ The workflow layer converts tensor masks to fab-ready OASIS files:
 
 1. **Layout parsing** (`parse_layout`) — read `.oas` / `.gds` into tensors
 2. **Tiling** (`tile_layout`, `stitch_tiles`) — split large layouts into
-   manageable tiles with configurable overlap and stitch them back
+   manageable tiles with configurable overlap and stitch them back.
+   `optimize run --num-gpus N` (`N>1`) shards the tile loop across `N`
+   spawn-context worker processes via `workflow.parallel.parallel_tile_inference`;
+   the parent process owns the canonical tile geometry, workers each
+   instantiate the model from the registry, and results return over an
+   `mp.Queue`. The model layer stays untouched so ONNX/TorchScript export
+   is unaffected (RFC 0004).
 3. **Contour Extraction** — convert binary masks to polygon boundaries
    (manhattan or curvilinear)
 4. **B-spline Fitting** — smooth curvilinear contours with configurable

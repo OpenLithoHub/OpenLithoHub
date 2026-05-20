@@ -89,3 +89,16 @@ def _filter_supported_kwargs(cls: type[LithographyModel], kwargs: dict[str, Any]
 
 
 registry = ModelRegistry()
+
+
+def register_builtin_models() -> None:
+    """Side-effect import the in-tree models so the registry is populated.
+
+    Idempotent — Python caches modules in ``sys.modules`` so repeated calls
+    are cheap. Both the optimize CLI and the multiprocessing workers call
+    this so workers populate their registry the same way the parent does.
+    """
+    import openlithohub.models.examples.dummy_model  # noqa: F401
+    import openlithohub.models.levelset_ilt  # noqa: F401
+    import openlithohub.models.neural_ilt  # noqa: F401
+    import openlithohub.models.rule_based_opc  # noqa: F401

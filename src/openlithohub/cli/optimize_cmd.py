@@ -61,6 +61,16 @@ def run(
             "Required for multi-layer files; ignored for raw .pt/.npy inputs."
         ),
     ),
+    num_gpus: int = typer.Option(
+        1,
+        "--num-gpus",
+        help=(
+            "Number of worker processes for tile inference. 1 (default) keeps "
+            "the sequential single-device path. >1 spawns one worker per GPU "
+            "and shards tiles round-robin; falls back to CPU dispatch when "
+            "fewer GPUs are visible than requested."
+        ),
+    ),
 ) -> None:
     """Run end-to-end mask optimization on a layout file.
 
@@ -70,11 +80,12 @@ def run(
     """
     console = Console()
 
-    import openlithohub.models.examples.dummy_model  # noqa: F401
-    import openlithohub.models.levelset_ilt  # noqa: F401
-    import openlithohub.models.neural_ilt  # noqa: F401
-    import openlithohub.models.rule_based_opc  # noqa: F401
-    from openlithohub.models.registry import registry
+    if num_gpus < 1:
+        raise typer.BadParameter("--num-gpus must be >= 1")
+
+    from openlithohub.models.registry import register_builtin_models, registry
+
+    register_builtin_models()
     from openlithohub.workflow.process_node import PROCESS_NODES
 
     # Auto-configure from process node
@@ -107,44 +118,55 @@ def run(
 
     litho_model = registry.get(model, **requested_kwargs)
 
-    litho_model.setup()
-
     step = _StepCounter()
 
+    console.print(f"[bold]Step {step.next()}:[/bold] Parsing layout...")
     try:
-        console.print(f"[bold]Step {step.next()}:[/bold] Parsing layout...")
-        try:
-            layout_tensor = _load_layout_as_tensor(input, pixel_nm, layer=layer)
-        except (ImportError, FileNotFoundError, ValueError) as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(1) from None
+        layout_tensor = _load_layout_as_tensor(input, pixel_nm, layer=layer)
+    except (ImportError, FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
 
-        console.print(f"  Layout size: {layout_tensor.shape[0]}x{layout_tensor.shape[1]} pixels")
+    console.print(f"  Layout size: {layout_tensor.shape[0]}x{layout_tensor.shape[1]} pixels")
 
-        console.print(f"[bold]Step {step.next()}:[/bold] Tiling layout...")
-        from openlithohub.workflow.tiling import Tile, stitch_tiles, tile_layout
+    console.print(f"[bold]Step {step.next()}:[/bold] Tiling layout...")
+    from openlithohub.workflow.tiling import Tile, stitch_tiles, tile_layout
 
-        tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=overlap)
-        console.print(f"  Generated {len(tiles)} tiles ({tile_size}px, overlap={overlap})")
+    tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=overlap)
+    console.print(f"  Generated {len(tiles)} tiles ({tile_size}px, overlap={overlap})")
 
-        console.print(f"[bold]Step {step.next()}:[/bold] Running optimization...")
-        tile_results: list[tuple[Tile, torch.Tensor]] = []
-        perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
+    console.print(f"[bold]Step {step.next()}:[/bold] Running optimization...")
+    tile_results: list[tuple[Tile, torch.Tensor]] = []
+    perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Optimizing tiles", total=len(tiles))
-            for tile in tiles:
-                result = litho_model.predict(tile.tensor, **perf_kwargs)
-                tile_results.append((tile, result.mask))
-                progress.advance(task)
-    finally:
-        litho_model.teardown()
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Optimizing tiles", total=len(tiles))
+        if num_gpus == 1:
+            litho_model.setup()
+            try:
+                for tile in tiles:
+                    result = litho_model.predict(tile.tensor, **perf_kwargs)
+                    tile_results.append((tile, result.mask))
+                    progress.advance(task)
+            finally:
+                litho_model.teardown()
+        else:
+            from openlithohub.workflow.parallel import parallel_tile_inference
+
+            tile_results = parallel_tile_inference(
+                model_name=model,
+                model_kwargs=requested_kwargs,
+                tiles=tiles,
+                num_gpus=num_gpus,
+                base_perf_kwargs=perf_kwargs,
+                progress_cb=lambda: progress.advance(task),
+            )
 
     console.print(f"[bold]Step {step.next()}:[/bold] Stitching tiles...")
     h, w = layout_tensor.shape
