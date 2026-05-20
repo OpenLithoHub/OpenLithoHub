@@ -170,6 +170,30 @@ class FreePdk45Dataset(DatasetAdapter):
             "`FreePdk45Dataset.fetch(root, accept_license=True)` instead."
         )
 
+    # ---- Croissant metadata ----
+
+    def croissant_name(self) -> str:
+        return "FreePDK45"
+
+    def croissant_description(self) -> str:
+        return (
+            "FreePDK45 is the NCSU 45nm predictive academic PDK paired with NanGate "
+            "Open Cell Library. Cell layouts are rasterised on-the-fly for OPC / mask "
+            "optimisation research."
+        )
+
+    def croissant_license_url(self) -> str | None:
+        return FREEPDK45_LICENSE_URL
+
+    def croissant_url(self) -> str | None:
+        return "https://eda.ncsu.edu/freepdk/freepdk45/"
+
+    def croissant_citation(self) -> str | None:
+        return (
+            "Stine, J. E., et al. FreePDK: An Open-Source Variation-Aware Design Kit. "
+            "IEEE MSE 2007."
+        )
+
     @classmethod
     def fetch(
         cls,

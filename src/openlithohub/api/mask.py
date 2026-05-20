@@ -99,27 +99,58 @@ class Mask:
         return cls(tensor=t, pixel_size_nm=pixel_size_nm, layer=layer)
 
     @classmethod
+    def from_def(
+        cls,
+        path: str | Path,
+        *,
+        pixel_size_nm: float = 1.0,
+        layer: str | None = None,
+        lef_files: list[str | Path] | None = None,
+    ) -> Mask:
+        """Load a placed-and-routed DEF (IEEE 1481) layout.
+
+        DEF carries placement + routing geometry but not cell internals;
+        pass ``lef_files=[...]`` so KLayout can resolve cell abstracts.
+        Without LEF context, the resulting raster contains only routing
+        metal — std-cell internals are blank.
+        """
+        t = load_layout(Path(path), pixel_size_nm, layer=layer, lef_files=lef_files)
+        return cls(tensor=t, pixel_size_nm=pixel_size_nm, layer=layer)
+
+    @classmethod
     def load(
         cls,
         path: str | Path,
         *,
         pixel_size_nm: float = 1.0,
         layer: str | None = None,
+        lef_files: list[str | Path] | None = None,
     ) -> Mask:
         """Suffix-sniffing constructor.
 
-        ``.pt`` / ``.npy`` ignore ``layer``. ``.oas`` / ``.gds`` honour it.
+        ``.pt`` / ``.npy`` ignore ``layer``. ``.oas`` / ``.gds`` / ``.def``
+        / ``.lef`` honour it. ``lef_files`` is only meaningful for
+        ``.def`` / ``.lef`` inputs.
         """
         suffix = Path(path).suffix.lower()
         if suffix in {".pt", ".npy"}:
             if layer is not None:
                 raise ValueError(f"layer is meaningless for {suffix} inputs")
+            if lef_files is not None:
+                raise ValueError(f"lef_files is meaningless for {suffix} inputs")
             t = load_layout(Path(path), pixel_size_nm)
             return cls(tensor=t, pixel_size_nm=pixel_size_nm, layer=None)
         if suffix in {".oas", ".gds"}:
+            if lef_files is not None:
+                raise ValueError(f"lef_files is meaningless for {suffix} inputs")
             t = load_layout(Path(path), pixel_size_nm, layer=layer)
             return cls(tensor=t, pixel_size_nm=pixel_size_nm, layer=layer)
-        raise ValueError(f"unsupported extension {suffix!r} — expected .pt / .npy / .oas / .gds")
+        if suffix in {".def", ".lef"}:
+            t = load_layout(Path(path), pixel_size_nm, layer=layer, lef_files=lef_files)
+            return cls(tensor=t, pixel_size_nm=pixel_size_nm, layer=layer)
+        raise ValueError(
+            f"unsupported extension {suffix!r} — expected .pt / .npy / .oas / .gds / .def / .lef"
+        )
 
     def to_pt(self, path: str | Path) -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)

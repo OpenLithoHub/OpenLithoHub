@@ -255,3 +255,28 @@ class OrfsArtifactDataset(DatasetAdapter):
             "the produced artifact, and pass its path to "
             "OrfsArtifactDataset(gds_path=...)."
         )
+
+    # ---- Croissant metadata ----
+
+    def croissant_name(self) -> str:
+        return "ORFS-ASAP7-MockALU"
+
+    def croissant_description(self) -> str:
+        return (
+            "Tiles extracted from a GDS produced by OpenROAD-flow-scripts (ORFS) "
+            "routing a small ALU on the ASAP7 PDK. Each tile is a windowed view "
+            "of the layout suitable for AI-OPC inference research."
+        )
+
+    def croissant_license_url(self) -> str | None:
+        return ASAP7_LICENSE_URL
+
+    def croissant_url(self) -> str | None:
+        return "https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts"
+
+    def croissant_citation(self) -> str | None:
+        return (
+            "Ajayi, T., Blaauw, D. et al. OpenROAD: Toward a Self-Driving, "
+            "Open-Source Digital Layout Implementation Tool Chain. "
+            "DAC 2019 / GOMACTech 2019."
+        )

@@ -163,3 +163,24 @@ class LithoBenchDataset(DatasetAdapter):
     @property
     def sample_ids(self) -> list[str]:
         return list(self._index)
+
+    # ---- Croissant metadata ----
+
+    def croissant_name(self) -> str:
+        return "LithoBench"
+
+    def croissant_description(self) -> str:
+        return (
+            "LithoBench (NeurIPS'23) is a public benchmark for AI computational "
+            "lithography spanning multiple design topologies and metrics. This "
+            "adapter ingests the .npy distribution as (design, mask, resist) triples."
+        )
+
+    def croissant_url(self) -> str | None:
+        return "https://github.com/shelljane/lithobench"
+
+    def croissant_citation(self) -> str | None:
+        return (
+            "Zheng, S., Yang, H., Yu, B. et al. LithoBench: Benchmarking AI "
+            "Computational Lithography for Semiconductor Manufacturing. NeurIPS 2023."
+        )

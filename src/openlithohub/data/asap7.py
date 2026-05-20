@@ -242,6 +242,29 @@ class Asap7Dataset(DatasetAdapter):
             "Use `Asap7Dataset.fetch(root, accept_license=True)` instead."
         )
 
+    # ---- Croissant metadata ----
+
+    def croissant_name(self) -> str:
+        return "ASAP7"
+
+    def croissant_description(self) -> str:
+        return (
+            "ASAP7 is a 7nm predictive academic PDK released by ASU + ARM (BSD-3-Clause). "
+            "Cell layouts are rasterised on-the-fly into design-tensor samples for OPC research."
+        )
+
+    def croissant_license_url(self) -> str | None:
+        return ASAP7_LICENSE_URL
+
+    def croissant_url(self) -> str | None:
+        return "https://github.com/The-OpenROAD-Project/asap7"
+
+    def croissant_citation(self) -> str | None:
+        return (
+            "Clark, L. T., et al. ASAP7: A 7nm finFET predictive process design kit. "
+            "Microelectronics Journal 53 (2016): 105-115."
+        )
+
     @classmethod
     def fetch(
         cls,

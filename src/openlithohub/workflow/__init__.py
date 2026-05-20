@@ -15,6 +15,14 @@ from openlithohub.workflow.gauges import (
     write_iccad13_gauge,
 )
 from openlithohub.workflow.halo import DEFAULT_HALO_PX, compute_halo_px, describe_halo
+from openlithohub.workflow.layer_purpose import (
+    DATATYPE_TO_OA_PURPOSE,
+    OA_PURPOSE_TO_DATATYPE,
+    LayerPurpose,
+    classify_purpose,
+    datatype_for_purpose,
+    purpose_for_datatype,
+)
 from openlithohub.workflow.parsing import parse_layout
 from openlithohub.workflow.process_node import ProcessNodeConfig, get_node, list_nodes
 from openlithohub.workflow.process_window import (
@@ -50,4 +58,10 @@ __all__ = [
     "ProcessWindowCorner",
     "pw_aerial_images",
     "pw_fidelity_loss",
+    "LayerPurpose",
+    "classify_purpose",
+    "datatype_for_purpose",
+    "purpose_for_datatype",
+    "OA_PURPOSE_TO_DATATYPE",
+    "DATATYPE_TO_OA_PURPOSE",
 ]

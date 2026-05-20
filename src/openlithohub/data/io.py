@@ -18,15 +18,23 @@ def load_layout(
     path: Path | str,
     pixel_nm: float,
     layer: str | None = None,
+    *,
+    lef_files: list[Path | str] | None = None,
 ) -> torch.Tensor:
     """Load a layout file and rasterize to a 2-D float tensor.
 
     Supports ``.pt`` / ``.npy`` (returned verbatim, must be 2-D) and
-    ``.oas`` / ``.gds`` (rasterized via klayout at ``pixel_nm`` pitch).
+    ``.oas`` / ``.gds`` / ``.def`` / ``.lef`` (rasterized via klayout
+    at ``pixel_nm`` pitch).
 
     For OASIS/GDSII inputs with more than one layer, ``layer`` must be
     a ``"LAYER:DTYPE"`` string (e.g. ``"1:0"``); otherwise the loader
     refuses rather than collapsing every layer onto the same mask.
+
+    DEF inputs require companion LEF files (``lef_files=[...]``) to
+    resolve cell abstracts; without LEF context, a placed-and-routed
+    DEF reduces to placement records without the geometry that
+    OpenLithoHub needs.
     """
     path = Path(path)
     if not path.exists():
@@ -58,12 +66,23 @@ def load_layout(
         import klayout.db as db
     except ImportError:
         raise ImportError(
-            "klayout is required for OASIS/GDSII parsing. "
+            "klayout is required for OASIS / GDSII / DEF / LEF parsing. "
             "Install with: pip install openlithohub[workflow]"
         ) from None
 
     layout = db.Layout()
-    layout.read(str(path))
+    if suffix in (".def", ".lef"):
+        opts = db.LoadLayoutOptions()
+        if lef_files:
+            opts.lefdef_config.lef_files = [str(Path(p)) for p in lef_files]
+            # Suppress KLayout's auto-rescan of the DEF directory for
+            # *.lef when the caller hands us explicit LEF files —
+            # otherwise the same LEF parses twice and KLayout raises
+            # "Duplicate MACRO" before we see any geometry.
+            opts.lefdef_config.read_lef_with_def = False
+        layout.read(str(path), opts)
+    else:
+        layout.read(str(path))
 
     top_cells = list(layout.top_cells())
     if not top_cells:
@@ -87,16 +106,22 @@ def load_layout(
     canvas = Image.new("L", (w_px, h_px), 0)
     drawer = ImageDraw.Draw(canvas)
 
-    shapes = top_cell.shapes(selected_layer_idx)
+    shapes_iter = top_cell.begin_shapes_rec(selected_layer_idx)
 
     def _project(point: Any) -> tuple[int, int]:
         px = int((point.x - bbox.left) * pixels_per_dbu)
         py = int((point.y - bbox.bottom) * pixels_per_dbu)
         return (max(0, min(px, w_px - 1)), max(0, min(py, h_px - 1)))
 
-    for shape in shapes.each():
+    while not shapes_iter.at_end():
+        shape = shapes_iter.shape()
+        # Recursive iteration walks across hierarchy — each shape's
+        # geometry is in its own cell's coordinates, so transform up to
+        # the top cell before projecting.
+        trans = shapes_iter.trans()
         if shape.is_polygon() or shape.is_box():
-            poly = shape.polygon if shape.is_polygon() else shape.box.to_poly()
+            poly = shape.polygon if shape.is_polygon() else db.Polygon(shape.box)
+            poly = poly.transformed(trans)
 
             hull = [_project(p) for p in poly.each_point_hull()]
             if len(hull) >= 3:
@@ -105,6 +130,7 @@ def load_layout(
                 hole = [_project(p) for p in poly.each_point_hole(hole_idx)]
                 if len(hole) >= 3:
                     drawer.polygon(hole, fill=0)
+        shapes_iter.next()
 
     raster = np.array(canvas, dtype=np.float32) / 255.0
     return torch.from_numpy(raster)
