@@ -177,23 +177,45 @@ def _check_min_area(
 def _check_notch(
     binary: torch.Tensor, min_notch_nm: float, pixel_size_nm: float
 ) -> list[dict[str, float]]:
-    """Detect notches: narrow concavities in the background adjacent to features."""
+    """Detect notches: narrow bg concavities enclosed by foreground.
+
+    A notch is a small region of background that closing of the
+    foreground at radius ``min_notch_nm / 2`` fills back in, AND that
+    does not touch the image boundary (i.e. it is enclosed by features).
+    Through-channels and the open exterior background are excluded —
+    those are the domain of ``_check_spacing`` and not relevant here.
+    """
     radius = int(math.floor(min_notch_nm / (2.0 * pixel_size_nm)))
     if radius < 1:
         return []
 
-    bg = (binary < 0.5).float()
-    if bg.sum() == 0:
+    bg = binary < 0.5
+    if not bg.any():
         return []
 
-    closed_fg = binary_dilation(binary_erosion(binary, radius=radius), radius=radius)
-    notch_fill = (closed_fg > 0.5) & (binary < 0.5)
+    # Closing of foreground fills any bg concavity narrower than 2*radius.
+    closed_fg = binary_erosion(binary_dilation(binary, radius=radius), radius=radius)
+    notch_candidate = (closed_fg > 0.5) & bg
 
-    spacing_radius = int(math.floor(min_notch_nm / (2.0 * pixel_size_nm)))
-    opened_bg = binary_dilation(binary_erosion(bg, radius=spacing_radius), radius=spacing_radius)
-    spacing_violation = (bg > 0.5) & (opened_bg < 0.5)
+    if not notch_candidate.any():
+        return []
 
-    notch_mask = notch_fill & ~spacing_violation
+    # Drop bg components that touch the image border — those are open
+    # exterior, not enclosed notches.
+    labels, num = connected_components(bg.float(), connectivity=4)
+    if num == 0:
+        return []
+    border_labels: set[int] = set()
+    border_labels.update(int(v) for v in labels[0, :].unique().tolist() if int(v) != -1)
+    border_labels.update(int(v) for v in labels[-1, :].unique().tolist() if int(v) != -1)
+    border_labels.update(int(v) for v in labels[:, 0].unique().tolist() if int(v) != -1)
+    border_labels.update(int(v) for v in labels[:, -1].unique().tolist() if int(v) != -1)
+
+    enclosed_bg = bg.clone()
+    for lbl in border_labels:
+        enclosed_bg &= labels != lbl
+
+    notch_mask = notch_candidate & enclosed_bg
     return _sample_violations(notch_mask, "notch", min_notch_nm, pixel_size_nm)
 
 

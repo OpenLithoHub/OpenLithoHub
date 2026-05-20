@@ -21,7 +21,6 @@ import random
 from dataclasses import dataclass
 from enum import Enum
 
-import numpy as np
 import torch
 
 from openlithohub._utils.morphology import binary_dilation, binary_erosion
@@ -173,8 +172,6 @@ def generate_layout(
     rules = pdk if isinstance(pdk, PdkRules) else get_pdk(pdk)
     kind = PatternKind(pattern) if isinstance(pattern, str) else pattern
     rng = random.Random(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
 
     if kind == PatternKind.SRAM:
         raw = _generate_sram(size, rules, rng)

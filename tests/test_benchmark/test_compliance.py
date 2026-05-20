@@ -151,6 +151,26 @@ class TestDRC:
         assert isinstance(result.violations, list)
         assert isinstance(result.rule_summary, dict)
 
+    def test_notch_violation_detected(self):
+        from openlithohub.benchmark.compliance.drc import DRCRuleDeck
+
+        # Solid 40x40 fg block with a small enclosed bg pocket inside —
+        # the textbook notch signature: bg surrounded by fg, narrower than
+        # the notch threshold. Closing of the foreground at radius 2 fills
+        # the pocket; the rule reports the pocket as a notch.
+        mask = torch.zeros(64, 64)
+        mask[12:52, 12:52] = 1.0
+        mask[30:32, 30:32] = 0.0  # 2x2 enclosed bg pocket
+        rules = DRCRuleDeck(
+            min_area_nm2=2.0,
+            min_width_nm=2.0,
+            min_spacing_nm=2.0,
+            min_notch_nm=4.0,
+        )
+        result = check_drc(mask, rule_deck=rules, pixel_size_nm=1.0)
+        assert result.rule_summary["notch"] > 0
+        assert result.passed is False
+
 
 def _disk_mask(size: int, cy: float, cx: float, radius: float) -> torch.Tensor:
     """Return a binary mask with a single filled disk."""

@@ -21,7 +21,7 @@ from typing import Any
 
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +61,11 @@ def _run_optimize(
     from openlithohub.data.io import load_layout
     from openlithohub.workflow.export import export_oasis
     from openlithohub.workflow.halo import compute_halo_px
-    from openlithohub.workflow.process_node import PROCESS_NODES, get_node
+    from openlithohub.workflow.process_node import get_node
     from openlithohub.workflow.tiling import stitch_tiles, tile_layout
 
-    node_config = get_node(node) if node in PROCESS_NODES else None
-    if node_config is not None and pixel_nm == 1.0:
+    node_config = get_node(node)
+    if pixel_nm == 1.0:
         pixel_nm = node_config.pixel_size_nm
 
     model_kwargs: dict[str, Any] = {"pretrained": True} if pretrained else {}
@@ -145,7 +145,7 @@ def create_app() -> FastAPI:
             None, description="OASIS/GDSII layer 'LAYER:DTYPE'; required for multi-layer files."
         ),
         pretrained: bool = Form(False, description="Load pretrained weights when supported."),
-    ) -> FileResponse | JSONResponse:
+    ) -> Response | JSONResponse:
         if not layout.filename:
             raise HTTPException(status_code=400, detail="layout upload missing filename")
 
@@ -171,6 +171,11 @@ def create_app() -> FastAPI:
                     pretrained=pretrained,
                 )
             except KeyError as e:
+                # Both unknown model names and unknown node names raise KeyError;
+                # disambiguate by message so the client gets the right status.
+                msg = str(e)
+                if "process node" in msg.lower():
+                    raise HTTPException(status_code=400, detail=msg.strip("'\"")) from None
                 raise HTTPException(status_code=404, detail=f"unknown model: {e}") from None
             except (FileNotFoundError, ValueError) as e:
                 raise HTTPException(status_code=400, detail=str(e)) from None
@@ -184,19 +189,18 @@ def create_app() -> FastAPI:
             if not served_path.exists():
                 raise HTTPException(status_code=500, detail="optimization produced no output file")
 
-            persisted = Path(tempfile.mkdtemp(prefix="olh-out-")) / served_path.name
-            persisted.write_bytes(served_path.read_bytes())
+            payload = served_path.read_bytes()
 
-            return FileResponse(
-                path=str(persisted),
-                filename=served_path.name,
-                media_type="application/octet-stream",
-                headers={
-                    "X-OLH-Tiles": str(summary["tiles"]),
-                    "X-OLH-Halo-Px": str(summary["halo_px"]),
-                    "X-OLH-Export-Format": summary["export_format"],
-                    "X-OLH-Shape": "x".join(str(d) for d in summary["shape"]),
-                },
-            )
+        return Response(
+            content=payload,
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{served_path.name}"',
+                "X-OLH-Tiles": str(summary["tiles"]),
+                "X-OLH-Halo-Px": str(summary["halo_px"]),
+                "X-OLH-Export-Format": summary["export_format"],
+                "X-OLH-Shape": "x".join(str(d) for d in summary["shape"]),
+            },
+        )
 
     return app

@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -35,6 +35,9 @@ import torch
 from openlithohub.data.base import DatasetAdapter, LithoSample, natural_sort_key
 
 _FILENAME_RE = re.compile(r"^(?P<sample_id>.+?)_(?P<kind>design|mask|resist)\.npy$")
+_VALID_KINDS: frozenset[str] = frozenset({"design", "mask", "resist"})
+
+Kind = Literal["design", "mask", "resist"]
 
 
 class LithoBenchDataset(DatasetAdapter):
@@ -124,17 +127,19 @@ class LithoBenchDataset(DatasetAdapter):
         # so this is a guard against caller-supplied IDs (``has_kind``).
         if not sample_id or "/" in sample_id or "\\" in sample_id or sample_id in (".", ".."):
             raise ValueError(f"Invalid sample_id: {sample_id!r}")
+        if kind not in _VALID_KINDS:
+            raise ValueError(f"Invalid kind: {kind!r}. Expected one of {sorted(_VALID_KINDS)}.")
         if self._layout == "subdirectory":
             return self.root / kind / f"{sample_id}.npy"
         return self.root / f"{sample_id}_{kind}.npy"
 
-    def _load_array(self, sample_id: str, kind: str) -> np.ndarray:
+    def _load_array(self, sample_id: str, kind: Kind) -> np.ndarray:
         path = self._resolve_path(sample_id, kind)
         if not path.exists():
             raise FileNotFoundError(f"Required file not found: {path}")
         return np.load(path, allow_pickle=False)  # type: ignore[no-any-return]
 
-    def _try_load_array(self, sample_id: str, kind: str) -> np.ndarray | None:
+    def _try_load_array(self, sample_id: str, kind: Kind) -> np.ndarray | None:
         path = self._resolve_path(sample_id, kind)
         if path.exists():
             return np.load(path, allow_pickle=False)  # type: ignore[no-any-return]
