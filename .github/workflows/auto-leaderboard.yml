@@ -72,55 +72,10 @@ jobs:
 
       - name: Validate each submission against BenchmarkResult schema
         id: validate
-        run: |
-          python <<'PY'
-          import json
-          import sys
-          from pathlib import Path
-
-          import yaml
-          from openlithohub.leaderboard.schema import BenchmarkResult
-
-          subs = sorted(Path("_pr_submissions/submissions").rglob("*.y*ml"))
-          if not subs:
-              print("::error::No submission files found under submissions/.")
-              sys.exit(1)
-
-          out = []
-          for p in subs:
-              data = yaml.safe_load(p.read_text())
-              try:
-                  result = BenchmarkResult.model_validate(data)
-              except Exception as e:
-                  print(f"::error file={p}::Schema validation failed: {e}")
-                  sys.exit(1)
-              out.append((str(p), result.model_dump(mode="json")))
-              print(f"OK: {p} → {result.model_name} ({result.dataset}, {result.process_node.value})")
-
-          Path("_validated.json").write_text(json.dumps(out, indent=2, default=str))
-          PY
+        run: python scripts/leaderboard_validate_submissions.py
 
       - name: Append validated entries to leaderboard store
-        run: |
-          python <<'PY'
-          import json
-          from pathlib import Path
-
-          from openlithohub.leaderboard.schema import BenchmarkResult
-          from openlithohub.leaderboard.tracker import LeaderboardStore, submit_result
-
-          # Canonical store lives at leaderboard/leaderboard.json
-          # (data/ is gitignored, so the follow-up PR cannot stage a
-          # file written there).
-          store_path = Path("leaderboard/leaderboard.json")
-          store_path.parent.mkdir(parents=True, exist_ok=True)
-          store = LeaderboardStore(store_path)
-
-          for path, payload in json.loads(Path("_validated.json").read_text()):
-              result = BenchmarkResult.model_validate(payload)
-              sid = submit_result(result, store=store)
-              print(f"  inserted {sid} ← {path}")
-          PY
+        run: python scripts/leaderboard_append_entries.py
 
       - name: Open follow-up PR with updated leaderboard
         uses: peter-evans/create-pull-request@v6

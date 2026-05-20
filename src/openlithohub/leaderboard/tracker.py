@@ -197,14 +197,18 @@ def _migrate_entries(entries: list[dict[str, Any]], *, from_version: int) -> lis
     return entries
 
 
-_default_store: LeaderboardStore | None = None
-
-
 def _get_store() -> LeaderboardStore:
-    global _default_store  # noqa: PLW0603
-    if _default_store is None:
-        _default_store = LeaderboardStore()
-    return _default_store
+    """Resolve the default leaderboard store fresh each call.
+
+    Previously this memoized a single ``LeaderboardStore`` at module level,
+    which baked in whatever ``OPENLITHOHUB_LEADERBOARD_PATH`` happened to be
+    set the first time. That made the env var effectively unchangeable
+    across a process lifetime — fine in production, but it broke test
+    isolation and any caller that legitimately rebinds the env mid-run.
+    The default ``LeaderboardStore()`` constructor is cheap (no I/O until
+    submit), so re-instantiating is free.
+    """
+    return LeaderboardStore()
 
 
 def submit_result(result: BenchmarkResult, *, store: LeaderboardStore | None = None) -> str:

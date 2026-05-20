@@ -94,8 +94,36 @@ target-version = "py310"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "S"]
 ignore = ["B008", "B027", "A002"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately use `assert`, hard-coded localhost URLs, and tmp_path —
+# silence S101 / S104 / S105 / S106 / S108 / S311 in the test tree.
+"tests/**" = ["S101", "S104", "S105", "S106", "S108", "S311"]
+# Scripts may legitimately spawn subprocesses with shell-style strings the
+# user explicitly authored.
+"scripts/**" = ["S101", "S603", "S607", "S404"]
+# klayout macro entry points run under klayout's own Python and shell out
+# to the klayout CLI itself — the partial-path / subprocess warnings are
+# false positives.
+"klayout/**" = ["S603", "S607"]
+# Source-side: assert is used for mypy-narrowing invariants the type system
+# cannot otherwise express; subprocess calls in dataset fetchers run with
+# fixed argv built from operator-supplied paths; rule_based pattern synth
+# uses random.Random for deterministic seeding, not crypto.
+"src/openlithohub/_utils/optics.py" = ["S101"]
+"src/openlithohub/data/asap7.py" = ["S603", "S607"]
+"src/openlithohub/data/freepdk45.py" = ["S603", "S607"]
+"src/openlithohub/data/orfs.py" = ["S101"]
+"src/openlithohub/jupyter/magics.py" = ["S603"]
+"src/openlithohub/models/dino_lithography.py" = ["S101"]
+"src/openlithohub/models/hub.py" = ["S101"]
+"src/openlithohub/models/layout_mae.py" = ["S101"]
+"src/openlithohub/models/levelset_ilt.py" = ["S101"]
+"src/openlithohub/models/neural_ilt.py" = ["S101"]
+"src/openlithohub/synth/rule_based.py" = ["S311"]
+"src/openlithohub/vis/heatmaps.py" = ["S101"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["openlithohub"]

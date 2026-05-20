@@ -1,9 +1,12 @@
 """Tests for openlithohub.models.hub."""
 
+import hashlib
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from openlithohub.models import hub as hub_module
 from openlithohub.models.hub import ModelHub
 
 
@@ -117,7 +120,6 @@ class TestModelHub:
         # resulting on-disk segment must be exactly what list_cached returns
         # (which clear_cache then accepts). This is the write side of the
         # contract that originally drifted from list_cached/clear_cache.
-        import hashlib
 
         url = "https://example.com/weights.bin"
         payload = b"fake-weights"
@@ -144,3 +146,117 @@ class TestModelHub:
         assert hub.list_cached() == [expected_segment]
         hub.clear_cache(expected_segment)
         assert hub.list_cached() == []
+
+
+class _FakeResponse:
+    def __init__(self, body: bytes) -> None:
+        self.status = 200
+        self._body = body
+        self._read = False
+
+    def getheader(self, name: str) -> str | None:
+        if name == "Content-Length":
+            return str(len(self._body))
+        return None
+
+    def read(self, n: int = -1) -> bytes:
+        if self._read:
+            return b""
+        self._read = True
+        return self._body
+
+
+class _RecordingConn:
+    """Stand-in for ``_PinnedHTTPSConnection`` that records the request line.
+
+    We don't open a real socket — we just want to assert the (target, headers)
+    pair that ``_download_url`` produces from a parsed URL.
+    """
+
+    last: dict[str, Any] = {}
+    body: bytes = b""
+
+    def __init__(
+        self, host: str, ip: str, port: int = 443, timeout: float = 30, context: Any = None
+    ) -> None:
+        type(self).last = {"host": host, "ip": ip, "port": port}
+
+    def connect(self) -> None:
+        pass
+
+    def request(self, method: str, target: str, headers: dict[str, str] | None = None) -> None:
+        type(self).last["method"] = method
+        type(self).last["target"] = target
+        type(self).last["headers"] = dict(headers or {})
+
+    def getresponse(self) -> _FakeResponse:
+        return _FakeResponse(type(self).body)
+
+    def close(self) -> None:
+        pass
+
+
+def _patch_pinned_conn(monkeypatch: pytest.MonkeyPatch, body: bytes) -> type[_RecordingConn]:
+    cls = _RecordingConn
+    cls.body = body
+    cls.last = {}
+    monkeypatch.setattr(hub_module, "_PinnedHTTPSConnection", cls)
+    monkeypatch.setattr(hub_module, "_resolve_and_vet", lambda host: ["203.0.113.1"])
+    return cls
+
+
+class TestDownloadUrlHostHeader:
+    def test_host_header_includes_port_for_non_default_port(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        body = b"weights"
+        recorder = _patch_pinned_conn(monkeypatch, body)
+        digest = hashlib.sha256(body).hexdigest()
+
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        target = tmp_path / "out.bin"
+        hub._download_url("https://example.com:8443/path/file.bin", target, digest)
+
+        assert recorder.last["headers"]["Host"] == "example.com:8443"
+        assert recorder.last["port"] == 8443
+        assert recorder.last["target"] == "/path/file.bin"
+
+    def test_host_header_omits_default_port(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        body = b"weights"
+        recorder = _patch_pinned_conn(monkeypatch, body)
+        digest = hashlib.sha256(body).hexdigest()
+
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        target = tmp_path / "out.bin"
+        hub._download_url("https://example.com/path/file.bin", target, digest)
+
+        assert recorder.last["headers"]["Host"] == "example.com"
+        assert recorder.last["port"] == 443
+
+    def test_query_string_is_passed_verbatim(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        body = b"weights"
+        recorder = _patch_pinned_conn(monkeypatch, body)
+        digest = hashlib.sha256(body).hexdigest()
+
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        target = tmp_path / "out.bin"
+        hub._download_url("https://example.com/p?a=1&b=hello%20world", target, digest)
+
+        assert recorder.last["target"] == "/p?a=1&b=hello%20world"
+
+    def test_empty_path_defaults_to_slash(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        body = b"weights"
+        recorder = _patch_pinned_conn(monkeypatch, body)
+        digest = hashlib.sha256(body).hexdigest()
+
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        target = tmp_path / "out.bin"
+        hub._download_url("https://example.com?x=1", target, digest)
+
+        assert recorder.last["target"] == "/?x=1"
