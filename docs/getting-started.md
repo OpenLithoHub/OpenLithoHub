@@ -67,6 +67,24 @@ Output:
 
 ## Using as a Python Library
 
+The object-oriented façade — `Mask`, `LitheEngine`, `Report` — is the
+shortest path from a layout file to scored results. See
+[Object-oriented API](api/oo_api.md) for the full reference.
+
+```python
+from openlithohub import Mask, LitheEngine
+
+mask      = Mask.from_oasis("design.oas", layer="1:0", pixel_size_nm=1.0)
+engine    = LitheEngine(model="neural-ilt", node="3nm-euv")
+optimized = engine.optimize(mask)
+report    = engine.evaluate(optimized, target=mask)
+
+print(report.epe_mean_nm, report.pvband_mean_nm, report.drc_violations)
+optimized.to_oasis("optimized.oas")
+```
+
+The functional API stays available when you need fine-grained control:
+
 ```python
 import torch
 from openlithohub.benchmark.metrics import compute_epe, compute_pvband

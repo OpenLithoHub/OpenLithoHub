@@ -156,6 +156,22 @@ curl -X POST http://localhost:8000/v1/optimize \
 
 ### 作为 Python 库使用
 
+面向对象的门面 —— `Mask` / `LitheEngine` / `Report` —— 是从版图文件到打分结果最短的一条路径：
+
+```python
+from openlithohub import Mask, LitheEngine
+
+mask      = Mask.from_oasis("design.oas", layer="1:0", pixel_size_nm=1.0)
+engine    = LitheEngine(model="neural-ilt", node="3nm-euv")
+optimized = engine.optimize(mask)
+report    = engine.evaluate(optimized, target=mask)
+
+print(report.epe_mean_nm, report.pvband_mean_nm, report.drc_violations)
+optimized.to_oasis("optimized.oas")
+```
+
+需要更细粒度控制时，函数式 API 一直可用：
+
 ```python
 import torch
 from openlithohub.benchmark.metrics import compute_epe, compute_pvband
@@ -245,6 +261,7 @@ emit_bridge_bundle(
 
 | 层 | 模块 | 说明 |
 |----|------|------|
+| **API 门面** | `openlithohub.api` | 面向对象的入口（`Mask`、`LitheEngine`、`Report`），同时在包根重新导出 |
 | **数据层** | `openlithohub.data` | 统一适配 LithoBench (.npy)、LithoSim (HuggingFace)、GAN-OPC (paired PNG)、ICCAD'16 hotspot (klayout 读 OASIS) |
 | **评测层** | `openlithohub.benchmark` | EPE、PV Band、Shot Count、随机鲁棒性、Hotspot 检测、MRC/DRC 合规检查 |
 | **模型层** | `openlithohub.models` | 抽象 `LithographyModel` 接口 + 装饰器注册机制 |

@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Object-oriented API façade** (`openlithohub.api`) — `Mask`,
+  `LitheEngine`, and `Report` re-exported at the package root
+  (`from openlithohub import Mask, LitheEngine`). Thin wrapper over the
+  existing functional API for fab-/EDA-shaped callers who think in masks
+  and engines, not tensors and registries. `Mask` is a frozen dataclass
+  carrying `(tensor, pixel_size_nm, layer)` with explicit and
+  suffix-sniffing constructors (`Mask.from_oasis`, `Mask.from_pt`,
+  `Mask.from_npy`, `Mask.from_gds`, `Mask.load`); `LitheEngine` exposes
+  `optimize` / `evaluate` / a public `load_layout` plus a teardown
+  lifecycle so model resources release cleanly; `Report` aggregates
+  metrics, compliance, and tile/halo provenance. The functional API is
+  unchanged. Closes #10.
 - **Differentiable curvilinear MRC loss** (`openlithohub.benchmark.metrics.curvilinear_mrc_loss`) —
   three-term penalty (min-CD via soft morphological opening, min-spacing
   on the inverted mask, min-curvature via boundary-band gradient
@@ -99,6 +111,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **DRC notch detection** — `compliance.drc._find_notch_violations` now
+  rejects background components that touch the image border (those are
+  open exterior, not enclosed notches), eliminating false positives at
+  tile boundaries. Notch semantics clarified in the docstring and
+  covered by new constructed-violation tests.
+- **`mypy --strict` regression in `compliance.drc`** — switched from
+  `tensor.unique()` to `torch.unique(tensor)` so the typed-call gate
+  passes (the bound-method overload is currently unannotated upstream).
+- **`pip-audit` CI gate** — 11 unfixed PYSEC torch advisories triaged
+  via `.github/pip-audit-ignore.txt` (each requires attacker-controlled
+  inputs to specific torch APIs not reachable from OpenLithoHub's data
+  path; revisit quarterly).
 - **`contour_trace` truncation** — bound raised from `4*(h+w)` to
   `2*h*w` so serpentine boundaries no longer truncate silently.
 - **Manhattan tracer X/T-junction ambiguity** — resolved by always

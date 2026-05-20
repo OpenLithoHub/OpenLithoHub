@@ -6,6 +6,7 @@ OpenLithoHub uses a layered architecture designed for extensibility and separati
 
 | Layer | Module | Responsibility |
 |-------|--------|----------------|
+| **API façade** | `openlithohub.api` | Object-oriented entry points (`Mask`, `LitheEngine`, `Report`) re-exported at the package root for fab-/EDA-shaped callers |
 | **Data** | `openlithohub.data` | Dataset loading, format conversion, resolution alignment, dummy layout generation |
 | **Benchmark** | `openlithohub.benchmark` | Metrics computation, compliance checking, reporting |
 | **Models** | `openlithohub.models` | Abstract model interface, registry, example implementations, model hub |

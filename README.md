@@ -155,6 +155,23 @@ be exercised interactively (file upload included), no client code needed.
 
 ### Use as a Python library
 
+The object-oriented façade — `Mask`, `LitheEngine`, `Report` — is the
+shortest path from a layout file to scored results:
+
+```python
+from openlithohub import Mask, LitheEngine
+
+mask      = Mask.from_oasis("design.oas", layer="1:0", pixel_size_nm=1.0)
+engine    = LitheEngine(model="neural-ilt", node="3nm-euv")
+optimized = engine.optimize(mask)
+report    = engine.evaluate(optimized, target=mask)
+
+print(report.epe_mean_nm, report.pvband_mean_nm, report.drc_violations)
+optimized.to_oasis("optimized.oas")
+```
+
+The functional API stays available for fine-grained control:
+
 ```python
 import torch
 from openlithohub.benchmark.metrics import compute_epe, compute_pvband
@@ -246,6 +263,7 @@ suite, and formatting a leaderboard submission.
 
 | Layer | Module | Description |
 |-------|--------|-------------|
+| **API façade** | `openlithohub.api` | OO entry points (`Mask`, `LitheEngine`, `Report`) re-exported at the package root |
 | **Data** | `openlithohub.data` | Unified adapters for LithoBench (.npy), LithoSim (HuggingFace), GAN-OPC (paired PNGs), ICCAD'16 hotspot (OASIS via klayout) |
 | **Benchmark** | `openlithohub.benchmark` | EPE, PV Band, shot count, stochastic robustness, hotspot detection, MRC/DRC compliance |
 | **Models** | `openlithohub.models` | Abstract `LithographyModel` interface + decorator-based registry |
