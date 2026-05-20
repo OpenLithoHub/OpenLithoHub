@@ -15,7 +15,7 @@ from openlithohub.api.mask import Mask
 from openlithohub.api.report import Report
 from openlithohub.benchmark.compliance.drc import check_drc
 from openlithohub.benchmark.compliance.mrc import check_curvilinear_mrc, check_mrc
-from openlithohub.benchmark.metrics.epe import compute_epe
+from openlithohub.benchmark.metrics.epe import compute_epe, compute_wafer_epe
 from openlithohub.benchmark.metrics.pvband import compute_pvband
 from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
 from openlithohub.models.base import LithographyModel
@@ -169,6 +169,11 @@ class LitheEngine:
         pixel_nm = self._resolve_pixel_size(pred.pixel_size_nm)
 
         epe = compute_epe(pred.tensor, tgt.tensor, pixel_size_nm=pixel_nm)
+        # Wafer-level EPE: forward-simulate then compare. The mask-level
+        # `epe` above is 0 for an Identity model by construction; this
+        # one isn't, since diffraction and resist threshold reshape the
+        # printed contour.
+        wafer_epe = compute_wafer_epe(pred.tensor, tgt.tensor, pixel_size_nm=pixel_nm)
         pvband = compute_pvband(pred.tensor, pixel_size_nm=pixel_nm)
         drc = check_drc(pred.tensor, pixel_size_nm=pixel_nm)
         mrc = check_mrc(pred.tensor, pixel_size_nm=pixel_nm)
@@ -193,6 +198,9 @@ class LitheEngine:
             epe_mean_nm=float(epe["epe_mean_nm"]),
             epe_max_nm=float(epe["epe_max_nm"]),
             epe_std_nm=float(epe["epe_std_nm"]),
+            epe_wafer_mean_nm=float(wafer_epe["epe_mean_nm"]),
+            epe_wafer_max_nm=float(wafer_epe["epe_max_nm"]),
+            epe_wafer_std_nm=float(wafer_epe["epe_std_nm"]),
             pvband_mean_nm=float(pvband["pvband_mean_nm"]),
             pvband_max_nm=float(pvband["pvband_max_nm"]),
             drc_violations=int(drc.violation_count),
@@ -206,6 +214,7 @@ class LitheEngine:
             tile_size=int(self._tile_size),
             halo_px=int(halo_px),
             raw_epe=epe,
+            raw_wafer_epe=wafer_epe,
             raw_drc=drc,
             raw_mrc=mrc,
             raw_pvband=pvband,

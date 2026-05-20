@@ -113,7 +113,7 @@ def run(
     import openlithohub.models.rule_based_opc  # noqa: F401
     from openlithohub.benchmark.compliance.drc import check_drc
     from openlithohub.benchmark.compliance.mrc import check_mrc
-    from openlithohub.benchmark.metrics.epe import compute_epe
+    from openlithohub.benchmark.metrics.epe import compute_epe, compute_wafer_epe
     from openlithohub.benchmark.metrics.pvband import compute_pvband
     from openlithohub.benchmark.report import generate_report
     from openlithohub.models.registry import registry
@@ -194,6 +194,16 @@ def run(
                 sample_metrics["epe_mean_nm"] = epe["epe_mean_nm"]
                 sample_metrics["epe_max_nm"] = epe["epe_max_nm"]
                 sample_metrics["epe_std_nm"] = epe["epe_std_nm"]
+
+                # Wafer-level EPE: push the predicted mask through the
+                # forward optical/resist simulator before comparing to the
+                # target. This is the physically meaningful figure — an
+                # Identity model scores 0 on the mask-level EPE above but
+                # nonzero here because diffraction rounds corners.
+                wafer_epe = compute_wafer_epe(result.mask, sample.mask, pixel_size_nm=pixel_nm)
+                sample_metrics["epe_wafer_mean_nm"] = wafer_epe["epe_mean_nm"]
+                sample_metrics["epe_wafer_max_nm"] = wafer_epe["epe_max_nm"]
+                sample_metrics["epe_wafer_std_nm"] = wafer_epe["epe_std_nm"]
 
             if mrc_check:
                 mrc_result = check_mrc(

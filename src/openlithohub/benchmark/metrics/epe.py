@@ -1,11 +1,31 @@
-"""Edge Placement Error (EPE) computation."""
+"""Edge Placement Error (EPE) computation.
+
+Two flavors live here:
+
+* :func:`compute_epe` — mask-level. Compares predicted mask edges directly
+  to target edges. An Identity model (mask passed straight through) scores
+  0 by construction, which is useful as a sanity baseline but does NOT
+  reflect what would actually print on the wafer.
+* :func:`compute_wafer_epe` — wafer-level. Pushes the predicted mask
+  through a forward optical/resist simulator and compares the *resist*
+  contour to the target. This is the physically meaningful quantity for
+  OPC quality: a square mask will round at the corners after diffraction,
+  so an Identity model lands at a nonzero EPE.
+
+Both report the same ``EPEResult`` schema; the leaderboard surfaces them
+under separate keys (``epe_*`` vs ``epe_wafer_*``) so existing dashboards
+that compare against historical mask-level numbers stay valid.
+"""
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 import torch
 import torch.nn.functional as functional
+
+if TYPE_CHECKING:
+    from openlithohub.simulators.base import BaseSimulator
 
 
 class EPEResult(TypedDict):
@@ -132,3 +152,51 @@ def compute_epe(
         ),
         "valid": True,
     }
+
+
+def compute_wafer_epe(
+    predicted_mask: torch.Tensor,
+    target: torch.Tensor,
+    pixel_size_nm: float = 1.0,
+    simulator: BaseSimulator | None = None,
+) -> EPEResult:
+    """Compute EPE between the *printed wafer contour* and the target.
+
+    Pushes ``predicted_mask`` through a forward optical/resist simulator
+    and compares the resulting binarised resist image to ``target`` using
+    the same edge-distance routine as :func:`compute_epe`. This is the
+    physically meaningful EPE for OPC quality — an Identity model (mask
+    returned unchanged) lands at a nonzero value here because diffraction
+    rounds corners that the original mask had as right angles.
+
+    Args:
+        predicted_mask: Predicted mask (H, W), values in [0, 1]. The
+            simulator will be applied to this tensor.
+        target: Target wafer/contour pattern (H, W), values in {0, 1}.
+        pixel_size_nm: Physical pixel size in nanometers.
+        simulator: Forward simulator. Defaults to a fresh
+            :class:`HopkinsSimulator` with default config — callers that
+            need specific dose / threshold / illumination should pass an
+            explicit instance to keep results comparable across runs.
+
+    Returns:
+        Same ``EPEResult`` schema as :func:`compute_epe`.
+    """
+    if simulator is None:
+        # Local import: simulators package pulls in heavy SOCS kernel state,
+        # so we don't want benchmark.metrics.epe to drag it in at import time.
+        from openlithohub.simulators.hopkins_sim import HopkinsSimulator
+
+        simulator = HopkinsSimulator()
+
+    sim_result = simulator.simulate(predicted_mask)
+    # Prefer the binarised resist contour the simulator already produced.
+    # Fall back to thresholding the aerial image at the configured threshold
+    # for backends that only return aerial intensity.
+    if sim_result.resist is not None:
+        wafer = sim_result.resist
+    else:
+        threshold = simulator.config.threshold * simulator.config.dose
+        wafer = (sim_result.aerial >= threshold).to(sim_result.aerial.dtype)
+
+    return compute_epe(wafer, target, pixel_size_nm=pixel_size_nm)

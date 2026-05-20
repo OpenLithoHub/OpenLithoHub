@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from openlithohub.benchmark.metrics.epe import compute_epe
+from openlithohub.benchmark.metrics.epe import compute_epe, compute_wafer_epe
 from openlithohub.benchmark.metrics.hotspot import compute_hotspot_detection
 from openlithohub.benchmark.metrics.pvband import compute_pvband
 from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
@@ -47,6 +47,29 @@ def test_epe_empty_edges():
     result = compute_epe(blank, blank, pixel_size_nm=1.0)
     assert result["epe_mean_nm"] == 0.0
     assert result["valid"] is True
+
+
+def test_wafer_epe_identity_is_nonzero():
+    # A square mask passed straight through (Identity model) must NOT
+    # score 0 on wafer-level EPE: Hopkins diffraction rounds the corners
+    # of the printed contour, so the resist image differs from the mask.
+    # This is the regression guard for the bug where eval skipped the
+    # forward simulator and compared mask-against-mask.
+    #
+    # Use 8 nm/px so the 256x256 grid covers a 2 µm window — small
+    # enough to run fast, large enough that 193 nm ArF diffraction
+    # actually resolves edges instead of smearing into a DC value.
+    from openlithohub.simulators.base import SimulatorConfig
+    from openlithohub.simulators.hopkins_sim import HopkinsSimulator
+
+    mask = torch.zeros(256, 256)
+    mask[64:192, 64:192] = 1.0
+
+    sim = HopkinsSimulator(SimulatorConfig(extra={"pixel_size_nm": 8.0}))
+    result = compute_wafer_epe(mask, mask, pixel_size_nm=8.0, simulator=sim)
+    assert result["valid"] is True
+    assert result["epe_mean_nm"] > 0.0
+    assert result["epe_max_nm"] >= result["epe_mean_nm"]
 
 
 def test_epe_one_empty_one_not_returns_inf_and_invalid():

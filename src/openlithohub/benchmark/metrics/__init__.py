@@ -1,6 +1,6 @@
 """Benchmark metrics for computational lithography evaluation."""
 
-from openlithohub.benchmark.metrics.epe import compute_epe
+from openlithohub.benchmark.metrics.epe import compute_epe, compute_wafer_epe
 from openlithohub.benchmark.metrics.hotspot import compute_hotspot_detection
 from openlithohub.benchmark.metrics.mrc_loss import curvilinear_mrc_loss
 from openlithohub.benchmark.metrics.pvband import compute_pvband
@@ -10,6 +10,7 @@ from openlithohub.benchmark.metrics.stochastic import compute_stochastic_robustn
 
 __all__ = [
     "compute_epe",
+    "compute_wafer_epe",
     "compute_hotspot_detection",
     "compute_pvband",
     "curvilinear_mrc_loss",

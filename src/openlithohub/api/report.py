@@ -23,6 +23,9 @@ class Report:
     epe_mean_nm: float
     epe_max_nm: float
     epe_std_nm: float
+    epe_wafer_mean_nm: float
+    epe_wafer_max_nm: float
+    epe_wafer_std_nm: float
     pvband_mean_nm: float
     pvband_max_nm: float
 
@@ -40,6 +43,7 @@ class Report:
     halo_px: int
 
     raw_epe: EPEResult
+    raw_wafer_epe: EPEResult
     raw_drc: DRCResult
     raw_mrc: MRCResult
     raw_pvband: dict[str, float]
