@@ -40,6 +40,11 @@
       show_root_heading: true
       members_order: source
 
+::: openlithohub.workflow.process_window
+    options:
+      show_root_heading: true
+      members_order: source
+
 ::: openlithohub.workflow.eda_bridge
     options:
       show_root_heading: true

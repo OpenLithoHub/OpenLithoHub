@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **SRAF non-printing penalty** (`openlithohub.benchmark.metrics.sraf_print_penalty`) —
+  differentiable squared-ReLU loss that punishes SRAF-region aerial
+  intensity rising above a configurable `print_threshold - margin`.
+  Drop-in for any `torch.optim` ILT loop; complements the post-hoc
+  `compliance.mrc` check by catching the failure mode while gradients
+  still flow.
+- **Process-window-aware OPC workflow** (`openlithohub.workflow.process_window`) —
+  `ProcessWindowCorner` dataclass, `DEFAULT_PW_CORNERS` (5-corner
+  dose × focus sweep), `pw_aerial_images`, and `pw_fidelity_loss`
+  (weighted-MSE across corners). `LevelSetILTModel.predict()` gains
+  opt-in `process_window: bool = False` and `pw_corners` kwargs so
+  callers can co-optimise against the corner sweep instead of the
+  nominal point. Metadata records `process_window` and
+  `pw_corner_count`. Defaults stay nominal — no API break.
+- **Auto-calibration notebook** (`notebooks/auto_calibration.ipynb`) —
+  end-to-end demo of inverting measured-vs-simulated CD error onto
+  resist-threshold and Gaussian-σ parameters using `torch.optim.Adam`.
+  Runs on CPU in <30 s; pre-fit MAE 1.999 px → post-fit MAE ~0 px on
+  the synthetic gauge table.
+- **Sharded CI test job** — `.github/workflows/ci.yml` splits the
+  pytest run into 5 directory shards (`models`, `workflow`,
+  `benchmark`, `data-utils`, `other`) × 3 Python versions = 15
+  parallel jobs, each running `pytest -n auto` (workflow shard runs
+  serially to avoid spawn-context nesting). Wall-clock dropped from
+  30+ min monolithic to ~9 min sharded.
 - **`openlithohub serve` HTTP micro-service** (`openlithohub.server`) —
   FastAPI app exposing `GET /v1/health`, `GET /v1/models`, and
   `POST /v1/optimize` so fab-side schedulers (Slurm, LSF) and legacy

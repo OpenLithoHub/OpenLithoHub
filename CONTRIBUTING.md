@@ -61,12 +61,20 @@ src/openlithohub/
 # Run all tests
 pytest
 
+# Faster: run in parallel with all cores (pytest-xdist is in [dev] extras)
+pytest -n auto
+
 # Run with coverage
 pytest --cov=openlithohub --cov-report=html
 
 # Run a specific test file
 pytest tests/test_models/test_interface.py
 ```
+
+> **Note**: CI shards the suite into 5 directory groups × 3 Python versions
+> for ~9 min wall-clock. The `tests/test_workflow` shard runs serially because
+> `tests/test_workflow/test_parallel.py` already spawns its own subprocess
+> pool — nesting it under xdist deadlocks on Linux runners.
 
 ## Code Quality
 
