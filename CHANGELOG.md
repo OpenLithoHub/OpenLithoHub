@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Differentiable curvilinear MRC loss** (`openlithohub.benchmark.metrics.curvilinear_mrc_loss`) —
+  three-term penalty (min-CD via soft morphological opening, min-spacing
+  on the inverted mask, min-curvature via boundary-band gradient
+  magnitude) that drops into ILT / level-set / Neural-ILT training loops.
+  PDK-first contract: pass `pdk="asap7"` / `pdk="freepdk45"` / a
+  `PdkRules`, or supply explicit `min_width_nm` / `min_spacing_nm` /
+  `pixel_size_nm`; per-rule kwargs win over the preset. Mirrors the
+  binary verdict in `compliance.mrc.check_mrc` so loss and verdict agree
+  on what a violation is. Closes #8.
 - **SRAF non-printing penalty** (`openlithohub.benchmark.metrics.sraf_print_penalty`) —
   differentiable squared-ReLU loss that punishes SRAF-region aerial
   intensity rising above a configurable `print_threshold - margin`.

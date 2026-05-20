@@ -26,7 +26,7 @@
 OpenLithoHub provides a unified evaluation and workflow framework for computational lithography research. It bridges the gap between academic tensor-based optimization and industrial mask manufacturing by offering:
 
 - **Unified dataset access** — single interface to LithoBench, LithoSim, GAN-OPC, ICCAD'16 hotspot, ASAP7, FreePDK45 + NanGate OCL, and ORFS-routed RISC-V layouts
-- **Standardized metrics** — EPE, PV Band, shot count, EUV stochastic robustness, hotspot detection (recall / precision / F1)
+- **Standardized metrics** — EPE, PV Band, shot count, EUV stochastic robustness, hotspot detection (recall / precision / F1), plus differentiable training-time losses (SRAF non-printing penalty, curvilinear MRC)
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
 - **OASIS workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear)
 - **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface

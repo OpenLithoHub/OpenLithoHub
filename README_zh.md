@@ -28,7 +28,7 @@
 OpenLithoHub 为计算光刻研究提供统一的评测与工作流框架，打通从学术 Tensor 优化到工业掩膜制造的完整链路：
 
 - **统一数据接入** — 通过单一接口访问 LithoBench、LithoSim、GAN-OPC、ICCAD'16 hotspot、ASAP7、FreePDK45 + NanGate OCL，以及 ORFS 布线后的 RISC-V 版图
-- **标准化评估指标** — EPE、PV Band、Shot Count、EUV 随机鲁棒性、Hotspot 检测（recall / precision / F1）
+- **标准化评估指标** — EPE、PV Band、Shot Count、EUV 随机鲁棒性、Hotspot 检测（recall / precision / F1），以及可直接接入训练循环的可微损失（SRAF 非打印惩罚、曲线 MRC 损失）
 - **制造合规检查** — MRC/DRC 规则检查作为一票否决门槛
 - **OASIS 工作流** — 从 Tensor 到 fab-ready 掩膜的端到端管线（Manhattan 与 Curvilinear）
 - **模型无关评测** — 任何 OPC/ILT 模型只需实现最小接口即可接入评测套件

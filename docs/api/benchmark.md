@@ -32,6 +32,11 @@
       show_root_heading: true
       members_order: source
 
+::: openlithohub.benchmark.metrics.mrc_loss
+    options:
+      show_root_heading: true
+      members_order: source
+
 ## Compliance
 
 ::: openlithohub.benchmark.compliance.mrc
