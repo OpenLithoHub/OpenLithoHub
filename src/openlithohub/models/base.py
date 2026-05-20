@@ -31,6 +31,16 @@ class LithographyModel(ABC):
 
     NAME: ClassVar[str]
     SUPPORTS_CURVILINEAR: ClassVar[bool] = False
+    RECEPTIVE_FIELD_PX: ClassVar[int] = 0
+    """Half-width of the model's receptive field in pixels.
+
+    Tile inference adds at least this many pixels of halo on every side
+    so the model sees real layout context, not zero-padding, at tile
+    boundaries. Models with a static convolutional receptive field
+    should set this on the subclass; iterative optimizers that consume
+    their entire input (e.g. level-set ILT) can leave it 0 — their halo
+    comes from the optical interaction radius of the process node.
+    """
 
     @property
     def name(self) -> str:
@@ -41,6 +51,11 @@ class LithographyModel(ABC):
     def supports_curvilinear(self) -> bool:
         """Whether this model produces curvilinear (non-Manhattan) output."""
         return type(self).SUPPORTS_CURVILINEAR
+
+    @property
+    def receptive_field_px(self) -> int:
+        """Per-instance accessor for the class-level ``RECEPTIVE_FIELD_PX``."""
+        return type(self).RECEPTIVE_FIELD_PX
 
     @abstractmethod
     def predict(self, design: torch.Tensor, **kwargs: Any) -> PredictionResult:

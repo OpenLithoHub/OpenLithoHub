@@ -283,6 +283,7 @@ class RuleBasedOPCModel(LithographyModel):
 
     NAME = "rule-based-opc"
     SUPPORTS_CURVILINEAR = False
+    RECEPTIVE_FIELD_PX = 16
 
     def __init__(
         self,

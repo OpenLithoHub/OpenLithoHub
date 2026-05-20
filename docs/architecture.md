@@ -110,7 +110,13 @@ The workflow layer converts tensor masks to fab-ready OASIS files:
 
 1. **Layout parsing** (`parse_layout`) — read `.oas` / `.gds` into tensors
 2. **Tiling** (`tile_layout`, `stitch_tiles`) — split large layouts into
-   manageable tiles with configurable overlap and stitch them back.
+   manageable tiles with configurable overlap (the **halo**) and stitch
+   them back with a ramp-blended overlap. The default halo is computed
+   per-run by `workflow.halo.compute_halo_px` from
+   `max(ProcessNodeConfig.optical_radius_nm / pixel_nm, model.RECEPTIVE_FIELD_PX)`,
+   rounded up to a multiple of 8 — physically motivated rather than a
+   single hard-coded constant (RFC 0005). `--halo N` and `--overlap N`
+   override the auto value.
    `optimize run --num-gpus N` (`N>1`) shards the tile loop across `N`
    spawn-context worker processes via `workflow.parallel.parallel_tile_inference`;
    the parent process owns the canonical tile geometry, workers each

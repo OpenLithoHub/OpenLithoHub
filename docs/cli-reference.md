@@ -83,7 +83,8 @@ openlithohub optimize run [OPTIONS]
 | `--node`, `-n` | TEXT | Target process node. | `3nm-euv` |
 | `--drc-check` | FLAG | Run DRC/MRC checks after optimization. | off |
 | `--tile-size` | INT | Tile size for distributed processing (pixels). | `2048` |
-| `--overlap` | INT | Tile overlap for seamless stitching (pixels). | `128` |
+| `--halo` | TEXT | Tile halo: `auto` (default) computes `max(OIR_px, model_RF_px)` from `--node` and `--model`, or pass an integer. Mutually exclusive with `--overlap`. See [Halo and Tiling](halo-and-tiling.md). | `auto` |
+| `--overlap` | INT | **Legacy.** Tile overlap in pixels. Kept for back-compat with pre-RFC-0005 scripts. Prefer `--halo`. | none |
 | `--pixel-nm` | FLOAT | Pixel size in nanometers. | `1.0` |
 | `--num-gpus` | INT | Worker processes for tile inference. `1` = sequential (default). `>1` spawns one worker per GPU and shards tiles round-robin. | `1` |
 

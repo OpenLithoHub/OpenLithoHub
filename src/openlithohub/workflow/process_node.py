@@ -23,6 +23,13 @@ class ProcessNodeConfig:
     min_spacing_nm: float
     resist_threshold: float = 0.5
     defocus_budget_nm: float = 20.0
+    optical_radius_nm: float = 1500.0
+    """Optical interaction radius — how far light at a tile boundary
+    'sees' through the imaging kernel. Used by ``workflow.halo`` to size
+    tile halos so the forward model is fed real layout context, not
+    zero-padded boundaries. Conservative default of 1.5 µm matches DUV
+    rule-of-thumb (~10 × λ / (2 × NA)); EUV nodes can run much tighter.
+    """
 
     @property
     def sigma_px(self) -> float:
@@ -48,6 +55,7 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
         min_feature_nm=12.0,
         min_spacing_nm=12.0,
         defocus_budget_nm=25.0,
+        optical_radius_nm=250.0,
     ),
     "3nm-euv": ProcessNodeConfig(
         name="3nm-euv",
@@ -59,6 +67,7 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
         min_feature_nm=14.0,
         min_spacing_nm=14.0,
         defocus_budget_nm=30.0,
+        optical_radius_nm=250.0,
     ),
     "5nm-euv": ProcessNodeConfig(
         name="5nm-euv",
@@ -70,6 +79,7 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
         min_feature_nm=20.0,
         min_spacing_nm=20.0,
         defocus_budget_nm=40.0,
+        optical_radius_nm=400.0,
     ),
     "7nm": ProcessNodeConfig(
         name="7nm",
@@ -81,6 +91,7 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
         min_feature_nm=28.0,
         min_spacing_nm=28.0,
         defocus_budget_nm=50.0,
+        optical_radius_nm=400.0,
     ),
     "28nm": ProcessNodeConfig(
         name="28nm",
@@ -92,6 +103,7 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
         min_feature_nm=28.0,
         min_spacing_nm=28.0,
         defocus_budget_nm=60.0,
+        optical_radius_nm=1500.0,
     ),
     "45nm": ProcessNodeConfig(
         name="45nm",
@@ -103,6 +115,7 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
         min_feature_nm=40.0,
         min_spacing_nm=40.0,
         defocus_budget_nm=80.0,
+        optical_radius_nm=1500.0,
     ),
 }
 

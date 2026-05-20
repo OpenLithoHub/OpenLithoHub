@@ -42,6 +42,7 @@ class LevelSetILTModel(LithographyModel):
 
     NAME = "levelset-ilt"
     SUPPORTS_CURVILINEAR = True
+    RECEPTIVE_FIELD_PX = 0
 
     def __init__(
         self,

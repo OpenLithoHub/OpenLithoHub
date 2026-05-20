@@ -10,6 +10,16 @@
       show_root_heading: true
       members_order: source
 
+::: openlithohub.workflow.halo
+    options:
+      show_root_heading: true
+      members_order: source
+
+::: openlithohub.workflow.parallel
+    options:
+      show_root_heading: true
+      members_order: source
+
 ::: openlithohub.workflow.contour.manhattan
     options:
       show_root_heading: true

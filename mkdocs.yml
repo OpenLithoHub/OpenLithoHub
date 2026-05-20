@@ -44,6 +44,7 @@ nav:
   - For AI Engineers: lithography-for-ai-engineers.md
   - Benchmarks: benchmarks.md
   - CLI Reference: cli-reference.md
+  - Halo and Tiling: halo-and-tiling.md
   - API Reference:
     - Data Adapters: api/data.md
     - Benchmark Metrics: api/benchmark.md
@@ -61,6 +62,7 @@ nav:
     - "0002 — Layout Tokens": rfcs/0002-layout-tokens.md
     - "0003 — MRC Rule-Deck Schema": rfcs/0003-mrc-rule-deck-schema.md
     - "0004 — Multi-GPU Tile Pipeline": rfcs/0004-multi-gpu-tile-pipeline.md
+    - "0005 — Process-Node-Aware Tile Halo Sizing": rfcs/0005-process-node-halo-sizing.md
   - Contributing: contributing.md
 
 markdown_extensions:

@@ -23,6 +23,7 @@ class NeuralILTModel(LithographyModel):
 
     NAME = "neural-ilt"
     SUPPORTS_CURVILINEAR = True
+    RECEPTIVE_FIELD_PX = 64
 
     def __init__(
         self,

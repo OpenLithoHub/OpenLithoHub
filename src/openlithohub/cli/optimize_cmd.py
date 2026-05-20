@@ -26,8 +26,23 @@ def run(
     tile_size: int = typer.Option(
         2048, "--tile-size", help="Tile size for distributed processing (pixels)."
     ),
-    overlap: int = typer.Option(
-        128, "--overlap", help="Tile overlap for seamless stitching (pixels)."
+    overlap: int | None = typer.Option(
+        None,
+        "--overlap",
+        help=(
+            "Tile overlap (halo) in pixels. Mutually exclusive with --halo. "
+            "Prefer --halo unless you need a fixed pixel count for back-compat "
+            "with pre-RFC-0005 scripts."
+        ),
+    ),
+    halo: str = typer.Option(
+        "auto",
+        "--halo",
+        help=(
+            "Tile halo size: 'auto' (default) computes max(optical_radius, "
+            "model_receptive_field) from the process node and model, or pass "
+            "an integer pixel count. Mutually exclusive with --overlap."
+        ),
     ),
     pixel_nm: float = typer.Option(1.0, "--pixel-nm", help="Pixel size in nanometers."),
     device: str = typer.Option(
@@ -89,6 +104,7 @@ def run(
     from openlithohub.workflow.process_node import PROCESS_NODES
 
     # Auto-configure from process node
+    node_config = None
     if node in PROCESS_NODES:
         from openlithohub.workflow.process_node import get_node
 
@@ -118,6 +134,20 @@ def run(
 
     litho_model = registry.get(model, **requested_kwargs)
 
+    try:
+        effective_overlap = _resolve_halo(
+            halo=halo,
+            overlap=overlap,
+            node_config=node_config,
+            litho_model=litho_model,
+            pixel_nm=pixel_nm,
+            tile_size=tile_size,
+            console=console,
+        )
+    except (ValueError, typer.BadParameter) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(2) from None
+
     step = _StepCounter()
 
     console.print(f"[bold]Step {step.next()}:[/bold] Parsing layout...")
@@ -132,8 +162,8 @@ def run(
     console.print(f"[bold]Step {step.next()}:[/bold] Tiling layout...")
     from openlithohub.workflow.tiling import Tile, stitch_tiles, tile_layout
 
-    tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=overlap)
-    console.print(f"  Generated {len(tiles)} tiles ({tile_size}px, overlap={overlap})")
+    tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=effective_overlap)
+    console.print(f"  Generated {len(tiles)} tiles ({tile_size}px, overlap={effective_overlap})")
 
     console.print(f"[bold]Step {step.next()}:[/bold] Running optimization...")
     tile_results: list[tuple[Tile, torch.Tensor]] = []
@@ -243,6 +273,69 @@ def _build_model_kwargs(pretrained: bool, sha256: str | None) -> dict[str, Any]:
     if sha256 is not None:
         kwargs["url_sha256"] = sha256
     return kwargs
+
+
+def _resolve_halo(
+    *,
+    halo: str,
+    overlap: int | None,
+    node_config: Any,
+    litho_model: Any,
+    pixel_nm: float,
+    tile_size: int,
+    console: Console,
+) -> int:
+    """Resolve --halo / --overlap into a single tile-overlap pixel count.
+
+    Rules:
+      - --halo and --overlap are mutually exclusive when both are
+        explicit. Detect explicitness via "halo != 'auto'" and
+        "overlap is not None".
+      - --halo "auto": compute from process node OIR + model RF.
+      - --halo N: integer pixel count.
+      - --overlap N: legacy fixed pixel count, kept for back-compat.
+      - Otherwise: auto.
+    """
+    from openlithohub.workflow.halo import compute_halo_px, describe_halo
+
+    halo_explicit = halo != "auto"
+    overlap_explicit = overlap is not None
+
+    if halo_explicit and overlap_explicit:
+        raise typer.BadParameter(
+            "--halo and --overlap are mutually exclusive. "
+            "Prefer --halo (auto or integer); --overlap is kept only for "
+            "scripts that pre-date RFC 0005."
+        )
+
+    if overlap_explicit:
+        console.print(f"  Halo: {overlap} px (from --overlap)")
+        return int(overlap)
+
+    if halo_explicit:
+        try:
+            halo_px = int(halo)
+        except ValueError as exc:
+            raise typer.BadParameter(
+                f"--halo must be 'auto' or a non-negative integer; got {halo!r}"
+            ) from exc
+        if halo_px < 0:
+            raise typer.BadParameter(f"--halo must be >= 0; got {halo_px}")
+        if halo_px >= tile_size:
+            raise typer.BadParameter(
+                f"--halo {halo_px} >= --tile-size {tile_size}; halo must be smaller than the tile."
+            )
+        console.print(f"  Halo: {halo_px} px (≈{halo_px * pixel_nm:.0f} nm) — explicit --halo")
+        return halo_px
+
+    halo_px = compute_halo_px(
+        node=node_config,
+        model=litho_model,
+        pixel_nm=pixel_nm,
+        tile_size=tile_size,
+    )
+    console.print(f"  Halo: {describe_halo(halo_px, node_config, litho_model, pixel_nm)}")
+    return halo_px
 
 
 def _load_layout_as_tensor(

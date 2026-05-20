@@ -16,6 +16,7 @@ class DummyModel(LithographyModel):
 
     NAME = "dummy-identity"
     SUPPORTS_CURVILINEAR = False
+    RECEPTIVE_FIELD_PX = 0
 
     def predict(self, design: torch.Tensor, **kwargs: Any) -> PredictionResult:
         return PredictionResult(mask=design.clone())
@@ -32,6 +33,7 @@ class FailingDummyModel(LithographyModel):
 
     NAME = "dummy-failing"
     SUPPORTS_CURVILINEAR = False
+    RECEPTIVE_FIELD_PX = 0
 
     def predict(self, design: torch.Tensor, **kwargs: Any) -> PredictionResult:
         raise RuntimeError("dummy-failing: deliberate predict failure")
