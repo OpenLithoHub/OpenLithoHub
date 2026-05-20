@@ -47,7 +47,7 @@ Commercial licenses are tailored per organization and use case and are
 suitable for vendors and manufacturers that need additional assurances
 beyond what the open-source license provides.
 
-Contact: **openlithohub@163.com**
+Contact: **support@openlithohub.com**
 
 ## Sustainability Model
 

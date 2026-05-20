@@ -3,7 +3,7 @@
 ## Reporting a Vulnerability
 
 Please report security vulnerabilities **privately** by emailing
-**openlithohub@163.com**.
+**support@openlithohub.com**.
 
 Do not open public GitHub issues, discussions, or pull requests for
 security matters until a fix has been coordinated.

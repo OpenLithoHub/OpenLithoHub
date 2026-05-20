@@ -105,4 +105,4 @@ Include the following information in the PR description:
 - **Designated Employees (GitHub usernames):**
 - **Postal address (for legal notice):**
 
-For questions about this CLA, contact: openlithohub@163.com
+For questions about this CLA, contact: support@openlithohub.com
