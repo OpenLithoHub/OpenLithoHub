@@ -249,6 +249,8 @@ The `notebooks/quickstart.ipynb` tutorial runs end-to-end on Colab's stock
 runtime — install, generate a layout, score it, and produce a paper-ready
 figure in three minutes.
 
+> Notebook last cold-run-verified against PyPI `0.1.0a2` on 2026-05-21.
+
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/OpenLithoHub/OpenLithoHub/blob/main/notebooks/quickstart.ipynb)
 
 For plugging your own model into the harness, use the BYOM tutorial — it

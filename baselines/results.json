@@ -9,8 +9,8 @@
       "epe_std_nm": 0.0,
       "mrc_passed": 0.0,
       "mrc_violation_rate": 0.63330078125,
-      "pvband_max_nm": 3.625,
-      "pvband_mean_nm": 2.1404576301574707
+      "pvband_max_nm": 7.25,
+      "pvband_mean_nm": 4.280915260314941
     },
     "notes": ""
   },
@@ -24,8 +24,8 @@
       "epe_std_nm": 0.5126763582229614,
       "mrc_passed": 0.0,
       "mrc_violation_rate": 0.651885986328125,
-      "pvband_max_nm": 4.625,
-      "pvband_mean_nm": 2.487058639526367
+      "pvband_max_nm": 9.25,
+      "pvband_mean_nm": 4.941854476928711
     },
     "notes": ""
   },
@@ -35,27 +35,27 @@
     "num_samples": 8,
     "metrics": {
       "epe_max_nm": 0.25,
-      "epe_mean_nm": 0.03592289611697197,
-      "epe_std_nm": 0.07789523899555206,
+      "epe_mean_nm": 0.040286146104335785,
+      "epe_std_nm": 0.0865565836429596,
       "mrc_passed": 0.0,
       "mrc_violation_rate": 0.63330078125,
-      "pvband_max_nm": 3.75,
-      "pvband_mean_nm": 2.1281049251556396
+      "pvband_max_nm": 7.5,
+      "pvband_mean_nm": 4.25424861907959
     },
     "notes": ""
   },
   {
-    "model": "neural-ilt",
+    "model": "openilt",
     "dataset": "synthetic-8",
     "num_samples": 8,
     "metrics": {
-      "epe_max_nm": 24.637481689453125,
-      "epe_mean_nm": 15.073568344116211,
-      "epe_std_nm": 4.823751926422119,
-      "mrc_passed": 1.0,
-      "mrc_violation_rate": 0.0,
-      "pvband_max_nm": 7.0,
-      "pvband_mean_nm": 2.4970414638519287
+      "epe_max_nm": 0.0,
+      "epe_mean_nm": 0.0,
+      "epe_std_nm": 0.0,
+      "mrc_passed": 0.0,
+      "mrc_violation_rate": 0.63330078125,
+      "pvband_max_nm": 7.25,
+      "pvband_mean_nm": 4.280915260314941
     },
     "notes": ""
   }
