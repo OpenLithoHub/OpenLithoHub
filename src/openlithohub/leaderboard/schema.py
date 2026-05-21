@@ -103,6 +103,18 @@ class BenchmarkResult(BaseModel):
     shot_count: int | None = Field(None, ge=0)
     stochastic_robustness: float | None = Field(None, ge=0, le=1)
 
+    # Number of samples behind the aggregated metrics. Recorded so future
+    # migrations can detect (and if needed re-normalize) entries written
+    # under different aggregation conventions — see schema v3 migration.
+    num_samples: int | None = Field(None, ge=0)
+
+    # Per-metric counts of samples whose value was non-finite (``nan`` /
+    # ``inf``) and was therefore excluded from the aggregate. Surfaces
+    # eval-time dataset noise on the leaderboard so a quietly-broken run
+    # doesn't sit next to a clean one with no indication. Keys match the
+    # aggregated metric names (e.g. ``epe_wafer_mean_nm``).
+    dropped_nonfinite: dict[str, int] | None = Field(default=None)
+
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     submission_id: str | None = Field(
         None, max_length=64, description="Auto-assigned submission ID (read-only)."

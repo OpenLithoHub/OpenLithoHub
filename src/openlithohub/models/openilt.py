@@ -37,6 +37,7 @@ References (no source code copied):
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -130,6 +131,10 @@ class OpenILTModel(LithographyModel):
         self._cached_grid: int | None = None
         self._cached_defocus_nm: float | None = None
         self._cached_hopkins_params: HopkinsParams | None = None
+        # Guards the kernel cache so concurrent ``predict()`` callers (e.g. a
+        # FastAPI handler under load) cannot race on the check-then-rebuild
+        # path and leave the cache in a half-populated state.
+        self._cache_lock = threading.Lock()
 
     def _ensure_hopkins_kernels(
         self,
@@ -141,39 +146,43 @@ class OpenILTModel(LithographyModel):
         # Cache validity is keyed on the full (grid, device, defocus,
         # params) tuple — caller-supplied ``hopkins_params`` overrides
         # never mutate ``self._hopkins_params`` and a one-off override
-        # cannot poison subsequent calls that use the default.
-        if (
-            self._cached_kernels_nom is None
-            or self._cached_weights_nom is None
-            or self._cached_kernels_def is None
-            or self._cached_weights_def is None
-            or self._cached_grid != grid_size
-            or self._cached_defocus_nm != defocus_nm
-            or self._cached_kernels_nom.device != device
-            or self._cached_hopkins_params != hopkins_params
-        ):
-            kernels_nom, weights_nom = compute_socs_kernels(hopkins_params, grid_size, device)
-            from dataclasses import replace
+        # cannot poison subsequent calls that use the default. The lock
+        # serializes the check-then-rebuild so two concurrent callers
+        # cannot both observe a stale-or-empty cache and race on the
+        # write.
+        with self._cache_lock:
+            if (
+                self._cached_kernels_nom is None
+                or self._cached_weights_nom is None
+                or self._cached_kernels_def is None
+                or self._cached_weights_def is None
+                or self._cached_grid != grid_size
+                or self._cached_defocus_nm != defocus_nm
+                or self._cached_kernels_nom.device != device
+                or self._cached_hopkins_params != hopkins_params
+            ):
+                kernels_nom, weights_nom = compute_socs_kernels(hopkins_params, grid_size, device)
+                from dataclasses import replace
 
-            def_params = replace(hopkins_params, defocus_nm=defocus_nm)
-            kernels_def, weights_def = compute_socs_kernels(def_params, grid_size, device)
-            self._cached_kernels_nom = kernels_nom
-            self._cached_weights_nom = weights_nom
-            self._cached_kernels_def = kernels_def
-            self._cached_weights_def = weights_def
-            self._cached_grid = grid_size
-            self._cached_defocus_nm = defocus_nm
-            self._cached_hopkins_params = hopkins_params
-        assert self._cached_kernels_nom is not None
-        assert self._cached_weights_nom is not None
-        assert self._cached_kernels_def is not None
-        assert self._cached_weights_def is not None
-        return (
-            self._cached_kernels_nom,
-            self._cached_weights_nom,
-            self._cached_kernels_def,
-            self._cached_weights_def,
-        )
+                def_params = replace(hopkins_params, defocus_nm=defocus_nm)
+                kernels_def, weights_def = compute_socs_kernels(def_params, grid_size, device)
+                self._cached_kernels_nom = kernels_nom
+                self._cached_weights_nom = weights_nom
+                self._cached_kernels_def = kernels_def
+                self._cached_weights_def = weights_def
+                self._cached_grid = grid_size
+                self._cached_defocus_nm = defocus_nm
+                self._cached_hopkins_params = hopkins_params
+            assert self._cached_kernels_nom is not None
+            assert self._cached_weights_nom is not None
+            assert self._cached_kernels_def is not None
+            assert self._cached_weights_def is not None
+            return (
+                self._cached_kernels_nom,
+                self._cached_weights_nom,
+                self._cached_kernels_def,
+                self._cached_weights_def,
+            )
 
     def _aerial(
         self,

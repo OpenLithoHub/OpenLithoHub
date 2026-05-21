@@ -27,15 +27,28 @@ def main(submissions_root: Path, output: Path) -> int:
         return 1
 
     out: list[tuple[str, dict[str, object]]] = []
+    failures: list[tuple[Path, str]] = []
+    # Validate every file before deciding to fail. A submitter pushing a
+    # batch PR with N broken submissions used to fix-and-rebase N times
+    # (workflow exited on the first error); collecting all errors lets
+    # them rev once. Output is only written when every file validated.
     for p in subs:
-        data = yaml.safe_load(p.read_text())
         try:
+            data = yaml.safe_load(p.read_text())
             result = BenchmarkResult.model_validate(data)
         except Exception as e:  # noqa: BLE001 — surface as workflow error
             print(f"::error file={p}::Schema validation failed: {e}")
-            return 1
+            failures.append((p, str(e)))
+            continue
         out.append((str(p), result.model_dump(mode="json")))
         print(f"OK: {p} -> {result.model_name} ({result.dataset}, {result.process_node.value})")
+
+    if failures:
+        print(
+            f"::error::{len(failures)} of {len(subs)} submission file(s) failed validation; "
+            "see annotations above."
+        )
+        return 1
 
     output.write_text(json.dumps(out, indent=2, default=str))
     return 0

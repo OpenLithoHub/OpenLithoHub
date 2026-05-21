@@ -46,6 +46,14 @@ def _extract_edges(binary: torch.Tensor) -> torch.Tensor:
     yields meaningful edges instead of the noisy gradient of a continuous
     field.
 
+    Border asymmetry vs DRC: this routine zeros out the 1-pixel image
+    border (Sobel with zero-padding produces phantom edges wherever
+    foreground touches the frame). The DRC checks (``_check_notch``,
+    ``_check_spacing``) do NOT apply this border strip — a feature whose
+    edge sits on the frame is reported as a DRC violation but ignored by
+    EPE. Tile callers who care about exact frame-edge accounting should
+    pad before calling.
+
     Returns a boolean tensor marking edge pixel locations.
     """
     inp = (binary > 0.5).float().unsqueeze(0).unsqueeze(0)

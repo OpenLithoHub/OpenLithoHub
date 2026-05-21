@@ -86,6 +86,15 @@ def submit(
         None, "--pvband-mean", help="Mean PV band width in nm."
     ),
     pvband_max: float | None = typer.Option(None, "--pvband-max", help="Max PV band width in nm."),
+    num_samples: int | None = typer.Option(
+        None,
+        "--num-samples",
+        help=(
+            "Number of samples in the eval run. Recorded so future schema "
+            "migrations can re-normalize aggregated metrics if the "
+            "aggregation convention changes."
+        ),
+    ),
     paper_url: str | None = typer.Option(None, "--paper-url", help="Paper URL."),
     code_url: str | None = typer.Option(None, "--code-url", help="Code/repo URL."),
     notes: str | None = typer.Option(None, "--notes", help="Additional notes."),
@@ -124,6 +133,8 @@ def submit(
             data["pvband_mean_nm"] = pvband_mean
         if pvband_max is not None:
             data["pvband_max_nm"] = pvband_max
+        if num_samples is not None:
+            data["num_samples"] = num_samples
         if paper_url:
             data["paper_url"] = paper_url
         if code_url:

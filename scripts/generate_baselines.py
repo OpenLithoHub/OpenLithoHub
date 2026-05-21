@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -335,7 +336,12 @@ def main() -> int:
     )
     parser.add_argument("--synthetic", action="store_true", help="Force synthetic mode.")
     parser.add_argument("--limit", type=int, default=8)
-    parser.add_argument("--pixel-nm", type=float, default=1.0)
+    # Default is left as None so we can tell whether the user supplied a
+    # value vs picked up the fallback. In synthetic mode we have to pin
+    # pixel_nm to 8.0 (see comment near the override below); a user who
+    # explicitly passed ``--pixel-nm`` deserves a warning rather than
+    # having their flag silently dropped.
+    parser.add_argument("--pixel-nm", type=float, default=None)
     parser.add_argument(
         "--models",
         nargs="+",
@@ -409,11 +415,19 @@ def main() -> int:
         # the simulator collapses every feature into a sub-resolution blur
         # and wafer-level metrics return inf / a constant. Mirrors the
         # tests/test_benchmark/test_metrics.py convention.
+        if args.pixel_nm is not None and args.pixel_nm != 8.0:
+            print(
+                f"WARNING: --pixel-nm={args.pixel_nm} is ignored in synthetic mode; "
+                "the synthetic 64×64 patterns are pinned to 8 nm/px to keep ArF "
+                "diffraction resolvable. Pass a real --data-root to honor the flag.",
+                file=sys.stderr,
+            )
         pixel_nm = 8.0
     else:
-        samples = load_dataset_samples(args.data_root, args.pixel_nm, args.limit)
+        # Non-synthetic mode: fall back to 1 nm/px when the flag is absent.
+        pixel_nm = args.pixel_nm if args.pixel_nm is not None else 1.0
+        samples = load_dataset_samples(args.data_root, pixel_nm, args.limit)
         dataset_label = f"lithobench-{len(samples)}"
-        pixel_nm = args.pixel_nm
 
     args.output.mkdir(parents=True, exist_ok=True)
 
