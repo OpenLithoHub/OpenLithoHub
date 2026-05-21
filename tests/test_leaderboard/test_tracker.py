@@ -42,15 +42,21 @@ def test_submit_and_retrieve(tmp_store: LeaderboardStore, sample_result: Benchma
     assert results[0].epe_mean_nm == 2.0
 
 
-def test_multiple_submissions_sorted_by_epe(tmp_store: LeaderboardStore) -> None:
-    for epe, name in [(5.0, "bad"), (1.0, "best"), (3.0, "mid")]:
+def test_multiple_submissions_sorted_by_l2_error(tmp_store: LeaderboardStore) -> None:
+    """Leaderboard ranks by ``l2_error_pixels`` (Neural-ILT printability),
+    not mask-level EPE — the old ``epe_mean_nm`` key let an Identity model
+    score 0 and tie the table for first place. See
+    ``leaderboard/tracker.py::_ranking_key``.
+    """
+    for l2, name in [(50.0, "bad"), (10.0, "best"), (30.0, "mid")]:
         r = BenchmarkResult(
             model_name=name,
             dataset="lithobench",
             process_node=ProcessNode.N7,
             mask_topology=MaskTopology.MANHATTAN,
-            epe_mean_nm=epe,
-            epe_max_nm=epe * 2,
+            epe_mean_nm=2.0,
+            epe_max_nm=4.0,
+            l2_error_pixels=l2,
         )
         tmp_store.submit(r)
 
@@ -103,7 +109,7 @@ def test_leaderboard_file_is_valid_json(
     data = json.loads(tmp_store.path.read_text())
     assert "entries" in data
     assert len(data["entries"]) == 1
-    assert data["schema_version"] == 1
+    assert data["schema_version"] == 2
 
 
 def test_legacy_unversioned_file_still_loads(

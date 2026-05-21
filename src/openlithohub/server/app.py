@@ -27,6 +27,12 @@ logger = logging.getLogger(__name__)
 
 _MODEL_CACHE: dict[tuple[str, frozenset[tuple[str, Any]]], Any] = {}
 
+# Hard cap on multipart upload size for /v1/optimize. Mirrors the 2 GB ceiling
+# enforced by ``ModelHub._download_url`` for incoming weights — uniform
+# attacker-controlled-bytes contract across the surface. Without a cap, a
+# single ``await UploadFile.read()`` on a multi-GB body OOM-kills the worker.
+_MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
+
 
 def _get_or_load_model(name: str, kwargs: dict[str, Any]) -> Any:
     """Return a cached LithographyModel or instantiate + setup a new one."""
@@ -155,8 +161,24 @@ def create_app() -> FastAPI:
             input_path = tmp_path / f"input{suffix}"
             output_path = tmp_path / "optimized.oas"
 
-            content = await layout.read()
-            input_path.write_bytes(content)
+            # Stream the upload to disk in chunks rather than slurping the
+            # whole body into memory; abort once we cross the cap so a
+            # malicious multi-GB POST cannot OOM the worker before the
+            # request handler ever runs.
+            bytes_read = 0
+            chunk_size = 1024 * 1024
+            with input_path.open("wb") as out_f:
+                while True:
+                    chunk = await layout.read(chunk_size)
+                    if not chunk:
+                        break
+                    bytes_read += len(chunk)
+                    if bytes_read > _MAX_UPLOAD_BYTES:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=(f"layout upload exceeds {_MAX_UPLOAD_BYTES} bytes"),
+                        )
+                    out_f.write(chunk)
 
             try:
                 summary = _run_optimize(

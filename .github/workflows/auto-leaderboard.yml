@@ -1,10 +1,11 @@
 name: Auto-Leaderboard
 
 # Validate community leaderboard submissions and open a follow-up PR that
-# updates data/leaderboard.json. We use pull_request_target so the workflow
-# can write back, but we **only** check out the base ref — never the PR
-# author's code — and the only PR-supplied input that ever leaves the
-# sandbox is the submission YAML, which is parsed against a strict schema.
+# updates leaderboard/leaderboard.json. We use pull_request_target so the
+# workflow can write back, but we **only** check out the base ref — never
+# the PR author's code — and the only PR-supplied input that ever leaves
+# the sandbox is the submission YAML, which is parsed against a strict
+# schema.
 
 on:
   pull_request_target:

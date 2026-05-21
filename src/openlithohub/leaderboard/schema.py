@@ -54,7 +54,10 @@ class BenchmarkResult(BaseModel):
         ..., min_length=1, max_length=120, description="Name of the evaluated model"
     )
     dataset: str = Field(
-        ..., min_length=1, max_length=120, description="Dataset used (lithobench/lithosim)"
+        ...,
+        min_length=1,
+        max_length=120,
+        description=("Dataset used (lithobench / lithosim / asap7 / freepdk45 / orfs)."),
     )
     process_node: ProcessNode
     mask_topology: MaskTopology
@@ -63,8 +66,36 @@ class BenchmarkResult(BaseModel):
         description="Leaderboard track (open or a specific hackathon round).",
     )
 
-    epe_mean_nm: float = Field(..., ge=0, description="Mean EPE in nanometers")
-    epe_max_nm: float = Field(..., ge=0)
+    # Mask-level EPE — kept as a sanity baseline. NOT canonical: an Identity
+    # model scores 0 here by construction. The leaderboard ranks on
+    # ``l2_error_pixels`` (Neural-ILT contract), with ``pvband_mean_nm`` as
+    # the secondary key. See ``benchmark/metrics/l2_error.py``.
+    epe_mean_nm: float = Field(
+        ..., ge=0, description="Mean mask-level EPE in nm (sanity, not the ranking key)."
+    )
+    epe_max_nm: float = Field(..., ge=0, description="Max mask-level EPE in nm.")
+
+    # Wafer-level metrics — printability after forward simulation. These are
+    # the physically meaningful figures and feed the leaderboard ranking.
+    epe_wafer_mean_nm: float | None = Field(
+        None, ge=0, description="Mean wafer-level EPE in nm (post forward-sim)."
+    )
+    epe_wafer_max_nm: float | None = Field(
+        None, ge=0, description="Max wafer-level EPE in nm (post forward-sim)."
+    )
+    l2_error_pixels: float | None = Field(
+        None,
+        ge=0,
+        description=(
+            "Neural-ILT canonical printability scalar: |wafer - target| summed "
+            "over pixels (technically L1; named per the Neural-ILT paper). "
+            "Primary leaderboard ranking key."
+        ),
+    )
+    l2_error_nm2: float | None = Field(
+        None, ge=0, description="``l2_error_pixels`` converted to nm² area."
+    )
+
     pvband_mean_nm: float | None = Field(None, ge=0, description="Mean PV band width (nm)")
     pvband_max_nm: float | None = Field(None, ge=0, description="Max PV band width (nm)")
     mrc_violation_rate: float | None = Field(None, ge=0, le=1)

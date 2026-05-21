@@ -12,6 +12,14 @@ resist threshold, then sum the absolute pixel-wise error against the
 target *layout* (not against the input mask). The result is in pixel
 units; multiply by ``pixel_size_nm**2`` for an area in nm² if needed.
 
+Naming note: the published paper calls this "L2 error", but the closed-form
+above is the L1 norm of ``(wafer - target)`` (sum of absolute differences).
+The ``l2_error_pixels`` field name is preserved for cross-paper comparability;
+do not "fix" it to L1 without coordinating against the upstream tables.
+For a binary wafer/target the two norms are equal anyway — ``|x|`` and
+``x²`` agree on ``{0,1}`` — so the underlying scalar is the same number
+either way.
+
 Like :func:`openlithohub.benchmark.metrics.epe.compute_wafer_epe`, this
 metric requires the forward simulator in the loop. The
 :func:`compute_epe` mask-level metric scores 0 for an Identity model;

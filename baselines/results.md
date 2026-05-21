@@ -15,13 +15,18 @@ Reproduce with:
 checkpoint before publishing it, pass
 `--neural-ilt-weights <path/to/model.pt>`.
 
-| Model | Samples | EPE mean (nm) | EPE max (nm) | PVB mean (nm) | MRC pass |
-|---|---|---|---|---|---|
-| `dummy-identity` | 8 | 0.000 | 0.000 | 4.281 | 0% |
-| `rule-based-opc` | 8 | 0.530 | 1.414 | 4.942 | 0% |
-| `levelset-ilt` | 8 | 0.040 | 0.250 | 4.254 | 0% |
-| `openilt` | 8 | 0.000 | 0.000 | 4.281 | 0% |
-| `neural-ilt` | 8 | 0.000 | 0.000 | 4.281 | 0% |
+Wafer-level scores (`epe_wafer_*`, `l2_error_pixels`) come from a
+single shared HopkinsSimulator so every model is graded against the
+same wavelength / NA / threshold — these are the leaderboard scalars
+(mask-EPE ties Identity ≈ OpenILT ≈ Neural-ILT at 0).
+
+| Model | Samples | EPE mean (nm) | Wafer EPE (nm) | L2 (px) | PVB (nm) | MRC pass |
+|---|---|---|---|---|---|---|
+| `dummy-identity` | 8 | 0.000 | 4.529 | 299.9 | 18.340 | 88% |
+| `rule-based-opc` | 8 | 4.242 | 7.786 | 356.4 | 16.000 | 88% |
+| `levelset-ilt` | 8 | 0.322 | 4.482 | 294.9 | 18.516 | 75% |
+| `openilt` | 8 | 0.000 | 4.529 | 299.9 | 18.340 | 88% |
+| `neural-ilt` | 8 | 0.000 | 4.529 | 299.9 | 18.340 | 88% |
 <!-- AUTO-GENERATED: synthetic-baselines END -->
 ## ASAP7 standard cells (issue #4 Phase 1)
 

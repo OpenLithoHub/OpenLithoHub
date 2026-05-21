@@ -163,6 +163,14 @@ def run(
 
     litho_model.setup()
 
+    # Build a single forward simulator from the resolved node config and
+    # share it across `compute_wafer_epe` / `compute_l2_error` for every
+    # sample. Without this both metrics each instantiate their own default
+    # ``HopkinsSimulator()`` (wavelength=193, pixel=1.0, …) and the two
+    # "wafer" numbers can disagree because each used a different forward
+    # model — neither matching the configured node.
+    forward_sim = _build_forward_simulator(node, pixel_nm)
+
     try:
         try:
             adapter = _load_dataset(dataset, data_root, pixel_nm, accept_license, tile_nm)
@@ -184,10 +192,16 @@ def run(
         # masks would skew the leaderboard number.
         mrc_violation_counts: list[int] = []
         mrc_total_pixels: list[int] = []
+        # Pixel count per sample, used to area-weight extensive scalars
+        # (e.g. ``l2_error_pixels`` scales linearly with mask area, so an
+        # unweighted mean over heterogeneously-sized samples is biased).
+        sample_pixel_counts: list[int] = []
         perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
         for i in range(n_samples):
             sample = adapter[i]
             result = litho_model.predict(sample.design, **perf_kwargs)
+            h_px, w_px = result.mask.shape[-2:]
+            sample_pixel_counts.append(int(h_px) * int(w_px))
 
             sample_metrics: dict[str, float] = {}
 
@@ -204,7 +218,12 @@ def run(
                 # target. This is the physically meaningful figure — an
                 # Identity model scores 0 on the mask-level EPE above but
                 # nonzero here because diffraction rounds corners.
-                wafer_epe = compute_wafer_epe(result.mask, sample.mask, pixel_size_nm=pixel_nm)
+                wafer_epe = compute_wafer_epe(
+                    result.mask,
+                    sample.mask,
+                    pixel_size_nm=pixel_nm,
+                    simulator=forward_sim,
+                )
                 sample_metrics["epe_wafer_mean_nm"] = wafer_epe["epe_mean_nm"]
                 sample_metrics["epe_wafer_max_nm"] = wafer_epe["epe_max_nm"]
                 sample_metrics["epe_wafer_std_nm"] = wafer_epe["epe_std_nm"]
@@ -212,7 +231,12 @@ def run(
                 # L2 wafer error per the Neural-ILT eval contract: forward-sim
                 # then sum |wafer - target|. This is the canonical academic
                 # printability scalar paired with PV-band.
-                l2 = compute_l2_error(result.mask, sample.mask, pixel_size_nm=pixel_nm)
+                l2 = compute_l2_error(
+                    result.mask,
+                    sample.mask,
+                    pixel_size_nm=pixel_nm,
+                    simulator=forward_sim,
+                )
                 sample_metrics["l2_error_pixels"] = l2["l2_error_pixels"]
                 sample_metrics["l2_error_nm2"] = l2["l2_error_nm2"]
 
@@ -254,7 +278,7 @@ def run(
         console.print("[yellow]Warning:[/yellow] No metrics computed.")
         raise typer.Exit(1)
 
-    aggregated = _aggregate_metrics(all_metrics)
+    aggregated = _aggregate_metrics(all_metrics, sample_pixel_counts)
     aggregated["model"] = model
     aggregated["dataset"] = dataset
     aggregated["node"] = node
@@ -289,6 +313,13 @@ def run(
                 mask_topology=MaskTopology(topology),
                 epe_mean_nm=aggregated.get("epe_mean_nm", 0.0),
                 epe_max_nm=aggregated.get("epe_max_nm", 0.0),
+                # Wafer-level fields drive the leaderboard ranking; submit
+                # them whenever the eval produced them so identity-style
+                # baselines cannot top the table on mask-EPE = 0 alone.
+                epe_wafer_mean_nm=aggregated.get("epe_wafer_mean_nm"),
+                epe_wafer_max_nm=aggregated.get("epe_wafer_max_nm"),
+                l2_error_pixels=aggregated.get("l2_error_pixels"),
+                l2_error_nm2=aggregated.get("l2_error_nm2"),
                 pvband_mean_nm=aggregated.get("pvband_mean_nm"),
                 pvband_max_nm=aggregated.get("pvband_max_nm"),
                 mrc_violation_rate=aggregated.get("mrc_violation_rate"),
@@ -367,18 +398,44 @@ def _load_dataset(
     )
 
 
-def _aggregate_metrics(metrics_list: list[dict[str, float]]) -> dict[str, Any]:
-    """Average per-sample metrics into a single aggregate dict.
+def _aggregate_metrics(
+    metrics_list: list[dict[str, float]],
+    sample_pixel_counts: list[int] | None = None,
+) -> dict[str, Any]:
+    """Aggregate per-sample metrics into a single dict.
+
+    Aggregation strategy depends on whether the underlying scalar is
+    *intensive* (independent of mask size — e.g. mean EPE in nm, PV-band
+    mean) or *extensive* (scales with mask area — e.g. ``l2_error_pixels``).
+
+    Intensive metrics are averaged with equal per-sample weights but using
+    each sample's pixel count as a soft weight, so a 4096×4096 production
+    tile contributes ~4000× as much to the aggregate as a 64×64 toy tile.
+    Extensive metrics are summed across samples instead — averaging would
+    silently divide a quantity that already integrates over the mask.
 
     Non-finite values (``nan`` / ``inf``) are dropped before averaging so a
-    single degenerate tile cannot poison the leaderboard aggregate. Affected
-    metrics: ``compute_epe`` returns ``inf`` when one polarity of an edge set
-    is empty and ``nan`` for ``epe_std_nm`` over a single matched edge. When
+    single degenerate tile cannot poison the aggregate. Affected metrics:
+    ``compute_epe`` returns ``inf`` when one polarity of an edge set is
+    empty and ``nan`` for ``epe_std_nm`` over a single matched edge. When
     any value was dropped for a key, ``<key>_dropped_nonfinite`` is added so
     callers can see the input quality.
     """
     if not metrics_list:
         return {}
+
+    # Extensive scalars (additive over mask area). Everything else is
+    # treated as intensive (per-pixel/per-edge mean-style number).
+    extensive_keys = {"l2_error_pixels", "l2_error_nm2"}
+
+    if sample_pixel_counts is None or len(sample_pixel_counts) != len(metrics_list):
+        # Fallback: equal weights when the caller did not record per-sample
+        # sizes (older code path / tests). Still correct for a homogeneously
+        # sized batch — the previous default — but logs the gap so it is
+        # visible when reviewing outputs.
+        weights = [1] * len(metrics_list)
+    else:
+        weights = list(sample_pixel_counts)
 
     all_keys: set[str] = set()
     for m in metrics_list:
@@ -386,14 +443,54 @@ def _aggregate_metrics(metrics_list: list[dict[str, float]]) -> dict[str, Any]:
 
     aggregated: dict[str, Any] = {}
     for key in sorted(all_keys):
-        raw = [m[key] for m in metrics_list if key in m]
-        finite = [v for v in raw if isinstance(v, int | float) and math.isfinite(v)]
-        if finite:
-            aggregated[key] = float(torch.tensor(finite).mean().item())
-        dropped = len(raw) - len(finite)
+        raw_pairs = [(m[key], w) for m, w in zip(metrics_list, weights, strict=True) if key in m]
+        finite_pairs = [
+            (v, w) for v, w in raw_pairs if isinstance(v, int | float) and math.isfinite(v)
+        ]
+        if finite_pairs:
+            if key in extensive_keys:
+                aggregated[key] = float(sum(v for v, _ in finite_pairs))
+            else:
+                total_w = sum(w for _, w in finite_pairs)
+                if total_w > 0:
+                    aggregated[key] = float(sum(v * w for v, w in finite_pairs) / total_w)
+                else:
+                    aggregated[key] = float(
+                        torch.tensor([v for v, _ in finite_pairs]).mean().item()
+                    )
+        dropped = len(raw_pairs) - len(finite_pairs)
         if dropped > 0:
             aggregated[f"{key}_dropped_nonfinite"] = dropped
     return aggregated
+
+
+def _build_forward_simulator(node: str, pixel_nm: float) -> Any:
+    """Build a single ``HopkinsSimulator`` from the resolved node config.
+
+    Both ``compute_wafer_epe`` and ``compute_l2_error`` accept an optional
+    ``simulator=`` kwarg; passing the same configured instance to both
+    keeps wavelength / NA / pixel-size / threshold consistent across the
+    two "wafer" metrics for any given run. Falls back to library defaults
+    if the node is not in the preset table or the simulators package is
+    unavailable.
+    """
+    try:
+        from openlithohub.simulators.base import SimulatorConfig
+        from openlithohub.simulators.hopkins_sim import HopkinsSimulator
+        from openlithohub.workflow.process_node import PROCESS_NODES, get_node
+    except ImportError:
+        return None
+
+    if node in PROCESS_NODES:
+        nc = get_node(node)
+        cfg = SimulatorConfig(
+            wavelength_nm=nc.wavelength_nm,
+            na=nc.numerical_aperture,
+            pixel_size_nm=pixel_nm,
+            threshold=nc.resist_threshold,
+        )
+        return HopkinsSimulator(cfg)
+    return HopkinsSimulator(SimulatorConfig(pixel_size_nm=pixel_nm))
 
 
 def _build_perf_kwargs(device: str, dtype: str, compile_forward: bool) -> dict[str, Any]:

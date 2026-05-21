@@ -9,4 +9,4 @@ matplotlib>=3.7
 Pillow>=10.0
 pydantic>=2.0
 scipy>=1.10
-openlithohub @ git+https://github.com/OpenLithoHub/OpenLithoHub.git@144e950c0cb039a4902d4ffc0a4aa09fd7609c17
+openlithohub @ git+https://github.com/OpenLithoHub/OpenLithoHub.git@main
