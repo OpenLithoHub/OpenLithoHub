@@ -123,6 +123,7 @@ In-tree models:
 | `dummy-failing` | 0 | Test fixture |
 | `rule-based-opc` | 16 | SE radius for jog smoothing |
 | `levelset-ilt` | 0 | Iterative, full-tile gradient |
+| `openilt` | 0 | Iterative, full-tile gradient (SimpleILT) |
 | `neural-ilt` | 64 | 4-level UNet, 3×3 convs, 3 maxpools |
 
 ### 3 · Centralise the math in `workflow/halo.py`

@@ -25,10 +25,10 @@
 
 OpenLithoHub provides a unified evaluation and workflow framework for computational lithography research. It bridges the gap between academic tensor-based optimization and industrial mask manufacturing by offering:
 
-- **Unified dataset access** — single interface to LithoBench, LithoSim, GAN-OPC, ICCAD'16 hotspot, ASAP7, FreePDK45 + NanGate OCL, and ORFS-routed RISC-V layouts
-- **Standardized metrics** — EPE, PV Band, shot count, EUV stochastic robustness, hotspot detection (recall / precision / F1), plus differentiable training-time losses (SRAF non-printing penalty, curvilinear MRC)
+- **Unified dataset access** — single interface to LithoBench, LithoSim, GAN-OPC, ICCAD'16 hotspot, ASAP7, FreePDK45 + NanGate OCL, and ORFS-routed RISC-V layouts; OASIS / GDSII / DEF / LEF ingestion via `workflow.parse_layout`
+- **Standardized metrics** — EPE (mask-vs-mask or wafer-level via forward sim), L2 wafer error (Neural-ILT canonical), PV Band, shot count, EUV stochastic robustness + imec-style per-class defect rates, hotspot detection (recall / precision / F1), plus differentiable training-time losses (SRAF non-printing penalty, curvilinear MRC)
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
-- **OASIS workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear)
+- **OASIS / GDSII workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear); ICCAD'13 contest gauge IO + Calibre `.gg` / CSV gauge parsers; ONNX / TorchScript export with onnxruntime CI smoke test
 - **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface
 - **JIT-accelerated forward model** — Hopkins/SOCS forward is wrapped with `torch.compile` by default, for free kernel-fusion speedups on PyTorch 2.x (use `--no-compile` to disable)
 
@@ -265,9 +265,9 @@ suite, and formatting a leaderboard submission.
 |-------|--------|-------------|
 | **API façade** | `openlithohub.api` | OO entry points (`Mask`, `LitheEngine`, `Report`) re-exported at the package root |
 | **Data** | `openlithohub.data` | Unified adapters for LithoBench (.npy), LithoSim (HuggingFace), GAN-OPC (paired PNGs), ICCAD'16 hotspot (OASIS via klayout) |
-| **Benchmark** | `openlithohub.benchmark` | EPE, PV Band, shot count, stochastic robustness, hotspot detection, MRC/DRC compliance |
+| **Benchmark** | `openlithohub.benchmark` | EPE (mask & wafer-sim), L2 wafer error, PV Band, shot count, stochastic robustness + per-class defect rates, hotspot detection, MRC/DRC compliance |
 | **Models** | `openlithohub.models` | Abstract `LithographyModel` interface + decorator-based registry |
-| **Workflow** | `openlithohub.workflow` | Layout parsing, tiling, contour extraction (manhattan/curvilinear), OASIS export |
+| **Workflow** | `openlithohub.workflow` | Layout parsing (OASIS / GDSII / DEF / LEF), tiling, contour extraction (manhattan/curvilinear), OASIS / GDSII export, OpenAccess layer-purpose helper |
 | **CLI** | `openlithohub.cli` | `eval`, `optimize`, `leaderboard`, `simulate`, `synth`, `hackathon`, `export` command groups via Typer |
 
 ---
@@ -313,6 +313,7 @@ methodology, the Hopkins forward model, and reproduction instructions.
 | `dummy-identity` | 0.000 | 0.000 | 2.140 | 0% |
 | `rule-based-opc` (analytic OPC bias) | 0.530 | 1.414 | 2.487 | 0% |
 | `levelset-ilt` (Gaussian PSF, 200 iters) | 0.036 | 0.250 | 2.128 | 0% |
+| `openilt` (L2 + PVBand, SimpleILT formulation) | 0.000 | 0.000 | 4.281 | 0% |
 | `neural-ilt` (untrained U-Net) | 15.074 | 24.637 | 2.497 | 100% |
 
 See [`baselines/results.md`](baselines/results.md) for per-pattern breakdowns.

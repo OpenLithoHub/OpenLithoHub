@@ -9,6 +9,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`openilt` baseline model** (`openlithohub.models.openilt`) — clean-room
+  PyTorch reimplementation of the OpenILT SimpleILT formulation
+  (MIT-licensed upstream pinned at commit
+  [`dabb97c`](https://github.com/OpenOPC/OpenILT/commit/dabb97c6ca3dfd159362e48273c436444c77353b)).
+  Optimises the MOSAIC L2 + PVBand objective (Gao et al., DAC 2014) with
+  SGD across a 3-corner dose/defocus sweep, distinct from `levelset-ilt`'s
+  single-corner Adam loop. Reuses the existing Gaussian / Hopkins forward
+  models. Closes #17.
+- **L2 wafer-error metric** (`openlithohub.benchmark.metrics.l2_error`) —
+  Neural-ILT canonical printability metric: `compute_l2_error()` returns
+  `L2ErrorResult` with `l2_error_pixels` and `l2_error_nm2` between the
+  forward-simulated wafer image and the target. Complements EPE for
+  callers training against the same loss the upstream Neural-ILT paper
+  reports.
+- **Wafer-level EPE via forward physical simulation** —
+  `compute_epe(..., simulate=True)` passes the predicted mask through the
+  Hopkins/Gaussian forward model before extracting contours, producing
+  the contest-canonical "wafer EPE" rather than the previous mask-vs-mask
+  contour distance. Wired through `openlithohub eval run`.
+- **GDSII export** (`openlithohub.workflow.export_gds`) — companion to
+  `export_oasis`. GDSII is the academic/contest lingua franca (ICCAD,
+  SPIE benchmarks). Manhattan masks dump as rectangles; curvilinear
+  masks vectorise to polygons via klayout (GDSII has no native curve
+  primitive).
+- **ICCAD'13 gauge file IO** (`openlithohub.workflow.gauges`) — round-trip
+  reader/writer for the contest gauge format alongside the existing
+  Calibre `.gg` and CSV parsers, so contest-style `(x, y, angle, target)`
+  EPE-evaluation tables drop into the gauge pipeline directly.
+- **ONNX-runtime CI smoke test** — extends the existing `openlithohub
+  export` ONNX path with a CI smoke test that loads the exported model
+  via `onnxruntime` and verifies a single forward pass agrees with the
+  PyTorch reference, catching dynamo/onnxscript regressions before they
+  reach users.
+- **DEF/LEF layout ingestion** — `openlithohub.workflow.parse_layout`
+  now accepts `.def` and `.lef` inputs in addition to OASIS/GDSII.
+  Pass `lef_files=[...]` to feed cell abstracts when reading a DEF file.
+  Closes the gap from RTL-to-GDSII flows (Innovus / ICC2 / OpenROAD)
+  that emit DEF as their canonical interchange format.
+- **OpenAccess layer-purpose helper** (`openlithohub.workflow.layer_purpose`) —
+  canonical purpose-name → integer map mirroring the OpenAccess (Si2)
+  default registry plus a permissive `classify_purpose()` alias resolver.
+  Lets downstream tooling branch on `(layer, datatype, purpose_name)`
+  whether the input came from Cadence (oaPurpose) or OASIS (datatype).
+- **Croissant dataset metadata** — dataset adapters expose
+  `croissant_name` / `croissant_description` / `croissant_license_url` /
+  `croissant_url` / `croissant_citation` properties so OpenLithoHub
+  datasets can emit
+  [Croissant](https://github.com/mlcommons/croissant) JSON-LD for
+  ML-data discoverability.
+- **Anamorphic demag flags for High-NA EUV** — `ProcessNode` gains
+  `demag_scan` / `demag_slit` (both default to 4.0) and an
+  `is_anamorphic` property. ASML's High-NA EXE:5000 class (NA=0.55) is
+  8× along scan, 4× along slit; recording demag here unblocks downstream
+  anamorphic imaging and reticle-area accounting.
+- **imec-style stochastic defect classification**
+  (`openlithohub.benchmark.metrics.compute_stochastic_defect_classes`,
+  `StochasticDefectRates`) — per-class failure rates in failures/cm²
+  for the four canonical EUV stochastic-defect classes (microbridge,
+  break, missing contact, merging contact), following the imec
+  defectivity-rate convention. Complements the existing aggregate
+  `compute_stochastic_robustness`. Includes a shared `_NominalState`
+  cache and per-component bridge/break detection for accurate counting
+  on tiles with multiple disconnected line segments.
 - **Object-oriented API façade** (`openlithohub.api`) — `Mask`,
   `LitheEngine`, and `Report` re-exported at the package root
   (`from openlithohub import Mask, LitheEngine`). Thin wrapper over the
@@ -111,6 +174,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Stochastic defect counting + NaN-safe aggregation** — fixed
+  net-component-count formula in `compute_stochastic_robustness` so
+  trials that simultaneously bridge some lines and break others
+  contribute to both bridge and break probabilities. Aggregations in
+  `eval run` are now NaN-safe; perimeter computation is border-safe so
+  tiles touching the image edge no longer skew per-cm² rates.
+- **`OASIS.MBW` → `OASIS.MASK` (SEMI P39)** — corrected naming in
+  `workflow/export.py` and `workflow/layer_purpose.py` after community
+  feedback that "MBW" is colloquial; SEMI P39 is the canonical name for
+  the OASIS mask-data extension. Behaviour unchanged.
+- **Contact email unified** — all CLA / SECURITY / DATA-LICENSES /
+  COMMERCIAL-USE / community routing now points at
+  `support@openlithohub.com`, with `conduct@openlithohub.com` reserved
+  exclusively for Code-of-Conduct reports.
 - **DRC notch detection** — `compliance.drc._find_notch_violations` now
   rejects background components that touch the image border (those are
   open exterior, not enclosed notches), eliminating false positives at

@@ -8,6 +8,7 @@ default model configuration shipped with OpenLithoHub.
 | `dummy-identity` | 8 | 0.000 | 0.000 | 2.140 | 0% |
 | `rule-based-opc` | 8 | 0.530 | 1.414 | 2.487 | 0% |
 | `levelset-ilt` | 8 | 0.036 | 0.250 | 2.128 | 0% |
+| `openilt` | 8 | 0.000 | 0.000 | 4.281 | 0% |
 | `neural-ilt` | 8 | 15.074 | 24.637 | 2.497 | 100% |
 
 ## ASAP7 standard cells (issue #4 Phase 1)

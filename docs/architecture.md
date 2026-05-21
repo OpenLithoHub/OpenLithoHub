@@ -72,9 +72,11 @@ expose annotations through `metadata`.
 | Metric | Function | Description |
 |--------|----------|-------------|
 | EPE | `compute_epe()` | Edge Placement Error between predicted and target contours |
+| L2 wafer error | `compute_l2_error()` | Neural-ILT canonical pixel-area error between simulated wafer image and target |
 | PV Band | `compute_pvband()` | Process variation band width across dose/focus window |
 | Shot Count | `estimate_shot_count()` | Mask write time proxy for MBMW/VSB writers |
 | Stochastic | `compute_stochastic_robustness()` | Monte Carlo photon noise bridge/break probability |
+| Stochastic defect classes | `compute_stochastic_defect_classes()` | imec-style per-class failure rates (microbridge / break / missing / merging contact) in failures/cm² |
 | Hotspot Detection | `compute_hotspot_detection()` | Distance-tolerant point matching → recall / precision / F1 |
 
 ### Compliance

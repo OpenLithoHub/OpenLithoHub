@@ -28,7 +28,7 @@ python scripts/generate_baselines.py \
   --data-root /path/to/lithobench --limit 16 --output baselines/lithobench/
 ```
 
-Pass `--models dummy-identity rule-based-opc levelset-ilt neural-ilt` to
+Pass `--models dummy-identity rule-based-opc levelset-ilt openilt neural-ilt` to
 evaluate any subset of the registered baselines. Models that fail to
 register (e.g. `neural-ilt` when its optional weights are missing) are
 skipped gracefully.
@@ -47,6 +47,13 @@ skipped gracefully.
   default Gaussian PSF forward model. Numbers reflect that default; pass
   `forward_model="hopkins"` in user code to try the partial-coherent
   Hopkins model added in the same release.
+- `openilt` is the OpenILT-style SimpleILT baseline (clean-room PyTorch
+  reimplementation, MIT-licensed upstream). Optimises the MOSAIC
+  L2 + PVBand objective with SGD across a 3-corner dose/defocus sweep,
+  vs. `levelset-ilt`'s single-corner fidelity. The higher PV-band on
+  the synthetic-8 set reflects the broader corner span — `levelset-ilt`
+  optimises only at nominal, so it lands a tighter nominal mask but
+  isn't directly comparable on PV-band.
 - `neural-ilt` uses an untrained U-Net by default. The numbers shown are
   intentionally the "no-weights" baseline; they will improve substantially
   once `from_pretrained()` weights are available.

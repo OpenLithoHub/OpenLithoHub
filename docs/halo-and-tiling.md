@@ -61,6 +61,7 @@ Built-in model receptive fields:
 | `dummy-identity` | 0 |
 | `rule-based-opc` | 16 |
 | `levelset-ilt` | 0 |
+| `openilt` | 0 |
 | `neural-ilt` | 64 |
 
 ## Overrides

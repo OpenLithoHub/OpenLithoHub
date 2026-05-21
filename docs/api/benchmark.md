@@ -7,6 +7,11 @@
       show_root_heading: true
       members_order: source
 
+::: openlithohub.benchmark.metrics.l2_error
+    options:
+      show_root_heading: true
+      members_order: source
+
 ::: openlithohub.benchmark.metrics.pvband
     options:
       show_root_heading: true
@@ -18,6 +23,16 @@
       members_order: source
 
 ::: openlithohub.benchmark.metrics.stochastic
+    options:
+      show_root_heading: true
+      members_order: source
+
+::: openlithohub.benchmark.metrics.monte_carlo
+    options:
+      show_root_heading: true
+      members_order: source
+
+::: openlithohub.benchmark.metrics.euv_3d
     options:
       show_root_heading: true
       members_order: source

@@ -27,10 +27,10 @@
 
 OpenLithoHub 为计算光刻研究提供统一的评测与工作流框架，打通从学术 Tensor 优化到工业掩膜制造的完整链路：
 
-- **统一数据接入** — 通过单一接口访问 LithoBench、LithoSim、GAN-OPC、ICCAD'16 hotspot、ASAP7、FreePDK45 + NanGate OCL，以及 ORFS 布线后的 RISC-V 版图
-- **标准化评估指标** — EPE、PV Band、Shot Count、EUV 随机鲁棒性、Hotspot 检测（recall / precision / F1），以及可直接接入训练循环的可微损失（SRAF 非打印惩罚、曲线 MRC 损失）
+- **统一数据接入** — 通过单一接口访问 LithoBench、LithoSim、GAN-OPC、ICCAD'16 hotspot、ASAP7、FreePDK45 + NanGate OCL，以及 ORFS 布线后的 RISC-V 版图；`workflow.parse_layout` 支持 OASIS / GDSII / DEF / LEF 输入
+- **标准化评估指标** — EPE（掩膜对掩膜或经前向仿真的 wafer 级）、L2 wafer error（Neural-ILT 标准）、PV Band、Shot Count、EUV 随机鲁棒性 + imec 风格的逐类缺陷率、Hotspot 检测（recall / precision / F1），以及可直接接入训练循环的可微损失（SRAF 非打印惩罚、曲线 MRC 损失）
 - **制造合规检查** — MRC/DRC 规则检查作为一票否决门槛
-- **OASIS 工作流** — 从 Tensor 到 fab-ready 掩膜的端到端管线（Manhattan 与 Curvilinear）
+- **OASIS / GDSII 工作流** — 从 Tensor 到 fab-ready 掩膜的端到端管线（Manhattan 与 Curvilinear）；ICCAD'13 contest gauge IO + Calibre `.gg` / CSV gauge 解析；ONNX / TorchScript 导出，CI 中含 onnxruntime 冒烟测试
 - **模型无关评测** — 任何 OPC/ILT 模型只需实现最小接口即可接入评测套件
 - **JIT 加速前向模型** — Hopkins/SOCS 前向模型默认用 `torch.compile` 包装，在 PyTorch 2.x 上免费获得 kernel-fusion 加速（如需关闭可使用 `--no-compile`）
 
@@ -263,9 +263,9 @@ emit_bridge_bundle(
 |----|------|------|
 | **API 门面** | `openlithohub.api` | 面向对象的入口（`Mask`、`LitheEngine`、`Report`），同时在包根重新导出 |
 | **数据层** | `openlithohub.data` | 统一适配 LithoBench (.npy)、LithoSim (HuggingFace)、GAN-OPC (paired PNG)、ICCAD'16 hotspot (klayout 读 OASIS) |
-| **评测层** | `openlithohub.benchmark` | EPE、PV Band、Shot Count、随机鲁棒性、Hotspot 检测、MRC/DRC 合规检查 |
+| **评测层** | `openlithohub.benchmark` | EPE（掩膜级与 wafer-sim 级）、L2 wafer error、PV Band、Shot Count、随机鲁棒性 + 逐类缺陷率、Hotspot 检测、MRC/DRC 合规检查 |
 | **模型层** | `openlithohub.models` | 抽象 `LithographyModel` 接口 + 装饰器注册机制 |
-| **工作流层** | `openlithohub.workflow` | 版图解析、切片、轮廓提取（Manhattan / Curvilinear）、OASIS 导出 |
+| **工作流层** | `openlithohub.workflow` | 版图解析（OASIS / GDSII / DEF / LEF）、切片、轮廓提取（Manhattan / Curvilinear）、OASIS / GDSII 导出、OpenAccess layer-purpose 工具 |
 | **CLI** | `openlithohub.cli` | `eval`、`optimize`、`leaderboard`、`simulate`、`synth`、`hackathon`、`export` 命令组（基于 Typer） |
 
 ---
@@ -310,6 +310,7 @@ contacts、dense lines）上的参考成绩，由 `scripts/generate_baselines.py
 | `dummy-identity` | 0.000 | 0.000 | 2.140 | 0% |
 | `rule-based-opc`（解析式 OPC bias） | 0.530 | 1.414 | 2.487 | 0% |
 | `levelset-ilt`（Gaussian PSF，200 次迭代） | 0.036 | 0.250 | 2.128 | 0% |
+| `openilt`（L2 + PVBand，SimpleILT 公式） | 0.000 | 0.000 | 4.281 | 0% |
 | `neural-ilt`（未训练的 U-Net） | 15.074 | 24.637 | 2.497 | 100% |
 
 每个模式的细分结果见 [`baselines/results.md`](baselines/results.md)。
