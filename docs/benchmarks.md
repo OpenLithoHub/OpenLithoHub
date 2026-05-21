@@ -16,48 +16,54 @@ L, cross, contacts, dense lines). The synthetic suite is dataset-free and
 runs in seconds, which is why it is the published reference. Real-dataset
 numbers can be regenerated locally with `--data-root <path>`.
 
-| Model | Samples | EPE mean (nm) | EPE max (nm) | PVB mean (nm) | MRC pass |
-|---|---|---|---|---|---|
-| `dummy-identity` | 8 | 0.000 | 0.000 | 4.281 | 0% |
-| `rule-based-opc` | 8 | 0.530 | 1.414 | 4.942 | 0% |
-| `levelset-ilt` (Gaussian PSF) | 8 | 0.040 | 0.250 | 4.254 | 0% |
-| `openilt` (L2 + PVBand) | 8 | 0.000 | 0.000 | 4.281 | 0% |
-| `neural-ilt` (v0.1 seed weights) | 8 | 0.000 | 0.000 | 4.281 | 0% |
+| Model | Samples | EPE mean (nm) | Wafer EPE (nm) | L2 (px) | PVB (nm) | MRC pass |
+|---|---|---|---|---|---|---|
+| `dummy-identity` | 8 | 0.000 | 4.529 | 299.9 | 18.340 | 88% |
+| `rule-based-opc` | 8 | 4.242 | 7.786 | 356.4 | 16.000 | 88% |
+| `levelset-ilt` (Gaussian PSF) | 8 | 0.322 | 4.482 | 294.9 | 18.516 | 75% |
+| `openilt` (L2 + PVBand) | 8 | 0.000 | 4.529 | 299.9 | 18.340 | 88% |
+| `neural-ilt` (v0.1 seed weights) | 8 | 0.000 | 4.529 | 299.9 | 18.340 | 88% |
 
 Things worth knowing about these numbers:
 
-- **`dummy-identity`** copies the design straight through. Its EPE is zero
-  by construction on a synthetic suite where `design == target_mask`. It
-  exists as a smoke test of the metric pipeline, not as a real model.
-- **`rule-based-opc`** applies analytic per-edge bias OPC. It is the
-  cheapest non-trivial baseline and a fair starting point when comparing
-  AI methods.
+- The synthetic patterns are now graded at **8 nm/px** so the 64×64 canvas
+  covers a 512 nm window — large enough that 193 nm ArF diffraction
+  actually resolves edges. At 1 nm/px (the previous default) every
+  feature collapsed sub-resolution and wafer-level metrics were degenerate.
+- **`dummy-identity`** copies the design straight through. Its mask-EPE is
+  zero by construction (design == target), but its wafer-EPE and L2 are
+  nonzero because Hopkins diffraction rounds Manhattan corners — that is
+  the whole point of OPC. Identity exists as a *floor*, not a competitor.
+- **`rule-based-opc`** applies analytic per-edge bias OPC. The bias
+  *increases* mask-EPE (the printed mask intentionally differs from the
+  target) and L2 — on this synthetic suite it is over-corrected. Useful
+  as a non-trivial baseline below the ILT methods.
 - **`levelset-ilt`** runs 200 iterations of gradient-descent ILT under the
-  default Gaussian PSF forward model (`sigma_px=2.0`). The MRC failure
-  count reflects the small synthetic patterns being narrower than the
-  default `min_width_nm=40`; this is expected on a 64-pixel-wide canvas
-  and not an indictment of the optimizer. Run with a real LithoBench
-  layout or relaxed MRC thresholds for production-grade numbers.
+  default Gaussian PSF forward model (`sigma_px=2.0`). It is the *only*
+  model that beats Identity on wafer L2 (294.9 vs 299.9) on this suite;
+  the lower MRC pass rate reflects narrow features that fall under the
+  default `min_width_nm=40` rather than an optimizer regression. Run
+  against a real LithoBench layout or relaxed MRC thresholds for
+  production-grade numbers.
 - **`openilt`** is the
   [OpenILT](https://github.com/OpenOPC/OpenILT)-style baseline (clean-room
   PyTorch reimplementation of the SimpleILT formulation, MIT-licensed
   upstream pinned at commit
   [`dabb97c`](https://github.com/OpenOPC/OpenILT/commit/dabb97c6ca3dfd159362e48273c436444c77353b)).
   Optimizes the MOSAIC L2 + PVBand objective with SGD across a 3-corner
-  dose/defocus sweep. The higher PVB-mean vs. `levelset-ilt` reflects
-  the broader corner span this model is solving against — `levelset-ilt`
-  optimises only at nominal, so it lands a tighter nominal mask but
-  isn't directly comparable on PV-band. Citation: Gao et al., "MOSAIC",
-  DAC 2014.
+  dose/defocus sweep. On the synthetic 64×64 suite SGD converges to
+  ≈Identity (its internal forward model already prints the target
+  cleanly so no improvement is found); it diverges from Identity once
+  fed real production layouts where corner rounding and end-shortening
+  are non-trivial. Citation: Gao et al., "MOSAIC", DAC 2014.
 - **`neural-ilt`** is a U-Net mask predictor. Public seed weights for
   v0.1 are released on HuggingFace as
   [`openlithohub/neural-ilt-v0.1`](https://huggingface.co/openlithohub/neural-ilt-v0.1) —
   `NeuralILTModel(pretrained=True)` and
   `scripts/generate_baselines.py --pretrained` (default) both pull
-  them. The numbers above are produced with these published weights.
-  v0.1 was trained on synthetic dummy layouts, so it learns the
-  identity-with-rounding regime visible in the table, not real OPC
-  corrections; a v1.0 LithoBench-trained release is planned. With
+  them. v0.1 was trained on synthetic dummy layouts, so on this suite
+  it lands at the same numbers as Identity / OpenILT; a v1.0
+  LithoBench-trained release is planned and will diverge. With
   `--no-pretrained` the model falls back to a randomly-initialised
   U-Net, which is what the older "no-weights" numbers reflected.
 

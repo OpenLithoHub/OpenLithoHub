@@ -7,10 +7,14 @@
       "epe_max_nm": 0.0,
       "epe_mean_nm": 0.0,
       "epe_std_nm": 0.0,
-      "mrc_passed": 0.0,
-      "mrc_violation_rate": 0.63330078125,
-      "pvband_max_nm": 7.25,
-      "pvband_mean_nm": 4.280915260314941
+      "epe_wafer_max_nm": 18.285715103149414,
+      "epe_wafer_mean_nm": 4.529306888580322,
+      "l2_error_nm2": 19192.0,
+      "l2_error_pixels": 299.875,
+      "mrc_passed": 0.875,
+      "mrc_violation_rate": 0.064453125,
+      "pvband_max_nm": 22.0,
+      "pvband_mean_nm": 18.34029769897461
     },
     "notes": ""
   },
@@ -19,13 +23,17 @@
     "dataset": "synthetic-8",
     "num_samples": 8,
     "metrics": {
-      "epe_max_nm": 1.4142135381698608,
-      "epe_mean_nm": 0.5302219390869141,
-      "epe_std_nm": 0.5126763582229614,
-      "mrc_passed": 0.0,
-      "mrc_violation_rate": 0.651885986328125,
-      "pvband_max_nm": 9.25,
-      "pvband_mean_nm": 4.941854476928711
+      "epe_max_nm": 11.313708305358887,
+      "epe_mean_nm": 4.2417755126953125,
+      "epe_std_nm": 4.101410865783691,
+      "epe_wafer_max_nm": 21.714284896850586,
+      "epe_wafer_mean_nm": 7.786356449127197,
+      "l2_error_nm2": 22808.0,
+      "l2_error_pixels": 356.375,
+      "mrc_passed": 0.875,
+      "mrc_violation_rate": 0.0152587890625,
+      "pvband_max_nm": 16.0,
+      "pvband_mean_nm": 16.0
     },
     "notes": ""
   },
@@ -34,13 +42,17 @@
     "dataset": "synthetic-8",
     "num_samples": 8,
     "metrics": {
-      "epe_max_nm": 0.25,
-      "epe_mean_nm": 0.040286146104335785,
-      "epe_std_nm": 0.0865565836429596,
-      "mrc_passed": 0.0,
-      "mrc_violation_rate": 0.63330078125,
-      "pvband_max_nm": 7.5,
-      "pvband_mean_nm": 4.25424861907959
+      "epe_max_nm": 2.0,
+      "epe_mean_nm": 0.3222891688346863,
+      "epe_std_nm": 0.6924526691436768,
+      "epe_wafer_max_nm": 18.285715103149414,
+      "epe_wafer_mean_nm": 4.482284069061279,
+      "l2_error_nm2": 18872.0,
+      "l2_error_pixels": 294.875,
+      "mrc_passed": 0.75,
+      "mrc_violation_rate": 0.0655517578125,
+      "pvband_max_nm": 26.0,
+      "pvband_mean_nm": 18.515945434570312
     },
     "notes": ""
   },
@@ -52,10 +64,14 @@
       "epe_max_nm": 0.0,
       "epe_mean_nm": 0.0,
       "epe_std_nm": 0.0,
-      "mrc_passed": 0.0,
-      "mrc_violation_rate": 0.63330078125,
-      "pvband_max_nm": 7.25,
-      "pvband_mean_nm": 4.280915260314941
+      "epe_wafer_max_nm": 18.285715103149414,
+      "epe_wafer_mean_nm": 4.529306888580322,
+      "l2_error_nm2": 19192.0,
+      "l2_error_pixels": 299.875,
+      "mrc_passed": 0.875,
+      "mrc_violation_rate": 0.064453125,
+      "pvband_max_nm": 22.0,
+      "pvband_mean_nm": 18.34029769897461
     },
     "notes": ""
   },
@@ -67,10 +83,14 @@
       "epe_max_nm": 0.0,
       "epe_mean_nm": 0.0,
       "epe_std_nm": 0.0,
-      "mrc_passed": 0.0,
-      "mrc_violation_rate": 0.63330078125,
-      "pvband_max_nm": 7.25,
-      "pvband_mean_nm": 4.280915260314941
+      "epe_wafer_max_nm": 18.285715103149414,
+      "epe_wafer_mean_nm": 4.529306888580322,
+      "l2_error_nm2": 19192.0,
+      "l2_error_pixels": 299.875,
+      "mrc_passed": 0.875,
+      "mrc_violation_rate": 0.064453125,
+      "pvband_max_nm": 22.0,
+      "pvband_mean_nm": 18.34029769897461
     },
     "notes": ""
   }

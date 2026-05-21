@@ -142,3 +142,33 @@ def test_violation_table_truncates(violations, expected):
         assert expected in out
     else:
         assert out == ""
+
+
+def test_violation_table_heterogeneous_columns_use_union():
+    """DRC rules emit different keys per violation (width has actual_nm,
+    area has actual_nm2). The renderer must show columns from every row,
+    not just the first — otherwise mixing a width row first hides the
+    area-row metrics and vice versa.
+    """
+    from openlithohub.jupyter._html import violation_table
+
+    violations = [
+        {
+            "x_nm": 1.0,
+            "y_nm": 2.0,
+            "threshold_nm": 40.0,
+            "actual_nm": 30.0,
+            "required_nm": 40.0,
+        },
+        {
+            "x_nm": 5.0,
+            "y_nm": 6.0,
+            "threshold_nm": 40.0,
+            "actual_nm2": 900.0,
+            "required_nm2": 1600.0,
+        },
+    ]
+    out = violation_table(violations)
+    for col in ("actual_nm", "required_nm", "actual_nm2", "required_nm2", "threshold_nm"):
+        assert col in out, f"missing column {col}"
+    assert "—" in out

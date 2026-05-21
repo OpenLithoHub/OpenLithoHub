@@ -115,10 +115,32 @@ def kv_table(rows: list[tuple[str, str]]) -> str:
 
 
 def violation_table(violations: list[dict[str, Any]], *, max_rows: int = 5) -> str:
-    """Render a violation list as a compact HTML table; truncates after max_rows."""
+    """Render a violation list as a compact HTML table; truncates after max_rows.
+
+    Columns are the union of keys across all violations (heterogeneous shapes
+    from mixed rule types — e.g. DRC width vs area — render as ``—`` instead
+    of disappearing because ``violations[0]`` happened to be a width row).
+    Known columns are emitted in a stable order; unknown keys are appended.
+    """
     if not violations:
         return ""
-    columns = list(violations[0].keys())
+    preferred_order = (
+        "rule",
+        "type",
+        "type_code",
+        "x_nm",
+        "y_nm",
+        "actual_nm",
+        "required_nm",
+        "actual_nm2",
+        "required_nm2",
+        "threshold_nm",
+    )
+    seen: set[str] = set()
+    for v in violations:
+        seen.update(v.keys())
+    columns = [c for c in preferred_order if c in seen]
+    columns.extend(sorted(c for c in seen if c not in preferred_order))
     head = "".join(
         f'<th style="text-align:left;padding:2px 8px;border-bottom:1px solid #ccc;">'
         f"{html.escape(str(c))}</th>"
@@ -128,7 +150,7 @@ def violation_table(violations: list[dict[str, Any]], *, max_rows: int = 5) -> s
     for v in violations[:max_rows]:
         cells = "".join(
             f'<td style="padding:2px 8px;font-family:monospace;">'
-            f"{html.escape(_fmt_cell(v.get(c)))}</td>"
+            f"{html.escape(_fmt_cell(v[c]) if c in v else '—')}</td>"
             for c in columns
         )
         body_rows.append(f"<tr>{cells}</tr>")

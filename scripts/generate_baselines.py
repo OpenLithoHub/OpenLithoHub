@@ -35,7 +35,8 @@ import openlithohub.models.neural_ilt  # noqa: F401
 import openlithohub.models.openilt  # noqa: F401
 import openlithohub.models.rule_based_opc  # noqa: F401
 from openlithohub.benchmark.compliance.mrc import check_mrc
-from openlithohub.benchmark.metrics.epe import compute_epe
+from openlithohub.benchmark.metrics.epe import compute_epe, compute_wafer_epe
+from openlithohub.benchmark.metrics.l2_error import compute_l2_error
 from openlithohub.benchmark.metrics.pvband import compute_pvband
 from openlithohub.data.base import LithoSample
 from openlithohub.models.registry import registry
@@ -140,9 +141,11 @@ def evaluate_model(
     *,
     run_pvband: bool,
     run_mrc: bool,
+    run_wafer: bool,
     min_width_nm: float,
     min_spacing_nm: float,
     model_kwargs: dict[str, Any] | None = None,
+    simulator: Any | None = None,
 ) -> BaselineRecord | None:
     try:
         model = registry.get(model_name, **(model_kwargs or {}))
@@ -175,6 +178,23 @@ def evaluate_model(
         if run_pvband:
             with contextlib.suppress(Exception):
                 row.update(compute_pvband(result.mask, pixel_size_nm=pixel_nm))
+        # Wafer-level metrics: simulate then score against the layout target.
+        # These are what the leaderboard ranks on (Neural-ILT contract); a
+        # mask-EPE-only scorecard ties Identity / OpenILT / Neural-ILT at 0.
+        if run_wafer and sample.mask is not None:
+            with contextlib.suppress(Exception):
+                wafer_epe = compute_wafer_epe(
+                    result.mask, sample.mask, pixel_size_nm=pixel_nm, simulator=simulator
+                )
+                wafer_epe.pop("valid", None)
+                row["epe_wafer_mean_nm"] = float(wafer_epe["epe_mean_nm"])
+                row["epe_wafer_max_nm"] = float(wafer_epe["epe_max_nm"])
+            with contextlib.suppress(Exception):
+                l2 = compute_l2_error(
+                    result.mask, sample.mask, pixel_size_nm=pixel_nm, simulator=simulator
+                )
+                row["l2_error_pixels"] = float(l2["l2_error_pixels"])
+                row["l2_error_nm2"] = float(l2["l2_error_nm2"])
         if run_mrc:
             with contextlib.suppress(Exception):
                 mrc = check_mrc(
@@ -200,7 +220,11 @@ def evaluate_model(
     for key in sorted(keys):
         if key.startswith("_"):
             continue
-        vals = [r[key] for r in per_sample if key in r]
+        # Drop non-finite per-sample contributions (e.g. wafer-EPE returns inf
+        # when one edge set is empty — too-sparse synthetic patterns at 8 nm/px
+        # land here). Keeping them in the mean would erase legitimate signal
+        # from the rows that did simulate a usable contour.
+        vals = [r[key] for r in per_sample if key in r and torch.isfinite(torch.tensor(r[key]))]
         if vals:
             aggregated[key] = float(torch.tensor(vals).mean().item())
 
@@ -257,18 +281,25 @@ def render_markdown(records: list[BaselineRecord], dataset_label: str) -> str:
         "checkpoint before publishing it, pass",
         "`--neural-ilt-weights <path/to/model.pt>`.",
         "",
-        "| Model | Samples | EPE mean (nm) | EPE max (nm) | PVB mean (nm) | MRC pass |",
-        "|---|---|---|---|---|---|",
+        "Wafer-level scores (`epe_wafer_*`, `l2_error_pixels`) come from a",
+        "single shared HopkinsSimulator so every model is graded against the",
+        "same wavelength / NA / threshold — these are the leaderboard scalars",
+        "(mask-EPE ties Identity ≈ OpenILT ≈ Neural-ILT at 0).",
+        "",
+        "| Model | Samples | EPE mean (nm) | Wafer EPE (nm) | L2 (px) | PVB (nm) | MRC pass |",
+        "|---|---|---|---|---|---|---|",
     ]
     for rec in records:
         m = rec.metrics
         epe_mean = f"{m['epe_mean_nm']:.3f}" if "epe_mean_nm" in m else "—"
-        epe_max = f"{m['epe_max_nm']:.3f}" if "epe_max_nm" in m else "—"
+        wafer_epe = f"{m['epe_wafer_mean_nm']:.3f}" if "epe_wafer_mean_nm" in m else "—"
+        l2 = f"{m['l2_error_pixels']:.1f}" if "l2_error_pixels" in m else "—"
         pvb = f"{m['pvband_mean_nm']:.3f}" if "pvband_mean_nm" in m else "—"
         mrc = "{:.0%}".format(m["mrc_passed"]) if "mrc_passed" in m else "—"
         notes = f" ({rec.notes})" if rec.notes else ""
         lines.append(
-            f"| `{rec.model}`{notes} | {rec.num_samples} | {epe_mean} | {epe_max} | {pvb} | {mrc} |"
+            f"| `{rec.model}`{notes} | {rec.num_samples} | {epe_mean} "
+            f"| {wafer_epe} | {l2} | {pvb} | {mrc} |"
         )
     lines.append("")
     return "\n".join(lines)
@@ -326,6 +357,15 @@ def main() -> int:
     )
     parser.add_argument("--no-pvband", action="store_true")
     parser.add_argument("--no-mrc", action="store_true")
+    parser.add_argument(
+        "--no-wafer",
+        action="store_true",
+        help=(
+            "Skip wafer-level metrics (epe_wafer_*, l2_error_*). These require a "
+            "forward simulator and dominate runtime; disable for the fastest "
+            "smoke-test of the script itself."
+        ),
+    )
     parser.add_argument("--min-width-nm", type=float, default=40.0)
     parser.add_argument("--min-spacing-nm", type=float, default=40.0)
     parser.add_argument(
@@ -345,13 +385,29 @@ def main() -> int:
         patterns = build_synthetic_patterns(grid=64)[: args.limit]
         samples = patterns_to_samples(patterns)
         dataset_label = f"synthetic-{len(samples)}"
-        pixel_nm = 1.0
+        # 8 nm/px so a 64×64 grid covers a 512 nm window — large enough that
+        # 193 nm ArF diffraction actually resolves edges. At pixel_size_nm=1
+        # the simulator collapses every feature into a sub-resolution blur
+        # and wafer-level metrics return inf / a constant. Mirrors the
+        # tests/test_benchmark/test_metrics.py convention.
+        pixel_nm = 8.0
     else:
         samples = load_dataset_samples(args.data_root, args.pixel_nm, args.limit)
         dataset_label = f"lithobench-{len(samples)}"
         pixel_nm = args.pixel_nm
 
     args.output.mkdir(parents=True, exist_ok=True)
+
+    # Build a single shared simulator so every model is graded against the
+    # same wavelength / NA / threshold (the leaderboard wafer-L2 pipeline
+    # does the same thing — a per-model fresh simulator would let dose
+    # drift between rows).
+    simulator = None
+    if not args.no_wafer:
+        from openlithohub.simulators.base import SimulatorConfig
+        from openlithohub.simulators.hopkins_sim import HopkinsSimulator
+
+        simulator = HopkinsSimulator(SimulatorConfig(pixel_size_nm=pixel_nm))
 
     records: list[BaselineRecord] = []
     for model_name in args.models:
@@ -367,9 +423,11 @@ def main() -> int:
             pixel_nm=pixel_nm,
             run_pvband=not args.no_pvband,
             run_mrc=not args.no_mrc,
+            run_wafer=not args.no_wafer,
             min_width_nm=args.min_width_nm,
             min_spacing_nm=args.min_spacing_nm,
             model_kwargs=model_kwargs,
+            simulator=simulator,
         )
         if rec is None:
             print(f"  ! {model_name} not registered, skipping")
