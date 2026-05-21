@@ -265,7 +265,8 @@ def get_leaderboard(
         store: Optional explicit store (for testing). Uses default if None.
 
     Returns:
-        Sorted list of BenchmarkResult entries (by EPE ascending).
+        Sorted list of BenchmarkResult entries (by L2 ascending, then
+        PV-band mean, then wafer-EPE mean — see ``_ranking_key``).
     """
     s = store or _get_store()
     return s.query(dataset=dataset, process_node=process_node)

@@ -173,8 +173,12 @@ def evaluate_model(
         row: dict[str, float] = {}
         if sample.mask is not None:
             epe = compute_epe(result.mask, sample.mask, pixel_size_nm=pixel_nm)
-            epe.pop("valid", None)
-            row.update(epe)
+            # ``compute_epe`` returns a ``valid`` flag describing edge-set
+            # health — copy only the numeric fields so we don't try to
+            # average a bool with the L2 / EPE scalars.
+            for k in ("epe_mean_nm", "epe_max_nm", "epe_std_nm"):
+                if k in epe:
+                    row[k] = float(epe[k])
         if run_pvband:
             with contextlib.suppress(Exception):
                 row.update(compute_pvband(result.mask, pixel_size_nm=pixel_nm))
@@ -186,7 +190,6 @@ def evaluate_model(
                 wafer_epe = compute_wafer_epe(
                     result.mask, sample.mask, pixel_size_nm=pixel_nm, simulator=simulator
                 )
-                wafer_epe.pop("valid", None)
                 row["epe_wafer_mean_nm"] = float(wafer_epe["epe_mean_nm"])
                 row["epe_wafer_max_nm"] = float(wafer_epe["epe_max_nm"])
             with contextlib.suppress(Exception):
@@ -216,14 +219,30 @@ def evaluate_model(
     keys: set[str] = set()
     for r in per_sample:
         keys.update(r.keys())
+
+    # Wafer-level metrics share a sample row (one forward simulation feeds
+    # both EPE and L2). When a row has a non-finite wafer-EPE — common for
+    # synthetic patterns at 8 nm/px where one polarity of the edge set is
+    # empty after diffraction blur — its L2 is also unreliable, so drop the
+    # entire wafer block from that row instead of dropping wafer-EPE alone
+    # while keeping its L2. Otherwise the two columns get computed over
+    # different sample subsets and the published baselines stop being
+    # comparable across rows.
+    wafer_keys = {"epe_wafer_mean_nm", "epe_wafer_max_nm", "l2_error_pixels", "l2_error_nm2"}
+    for r in per_sample:
+        if any(
+            k in r and not torch.isfinite(torch.tensor(r[k])) for k in wafer_keys & set(r.keys())
+        ):
+            for k in wafer_keys:
+                r.pop(k, None)
+
     aggregated: dict[str, float] = {}
     for key in sorted(keys):
         if key.startswith("_"):
             continue
-        # Drop non-finite per-sample contributions (e.g. wafer-EPE returns inf
-        # when one edge set is empty — too-sparse synthetic patterns at 8 nm/px
-        # land here). Keeping them in the mean would erase legitimate signal
-        # from the rows that did simulate a usable contour.
+        # Drop non-finite per-sample contributions (e.g. mask-level EPE
+        # returns inf when one polarity is empty). Wafer fields were
+        # already gated above as a coherent row group.
         vals = [r[key] for r in per_sample if key in r and torch.isfinite(torch.tensor(r[key]))]
         if vals:
             aggregated[key] = float(torch.tensor(vals).mean().item())

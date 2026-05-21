@@ -38,7 +38,7 @@ def view(
                 f"[yellow]No leaderboard entries match[/yellow] "
                 f"(dataset={dataset!r}, node={node!r}). Drop filters to see all entries."
             )
-            raise typer.Exit(1)
+            raise typer.Exit(0)
         console.print("[yellow]No leaderboard entries found.[/yellow]")
         raise typer.Exit(0)
 
@@ -63,8 +63,25 @@ def submit(
     dataset: str | None = typer.Option(None, "--dataset", "-d", help="Dataset name."),
     node: str | None = typer.Option(None, "--node", "-n", help="Process node (e.g. 7nm, 3nm-euv)."),
     topology: str | None = typer.Option(None, "--topology", "-t", help="manhattan or curvilinear."),
-    epe_mean: float | None = typer.Option(None, "--epe-mean", help="Mean EPE in nm."),
-    epe_max: float | None = typer.Option(None, "--epe-max", help="Max EPE in nm."),
+    epe_mean: float | None = typer.Option(None, "--epe-mean", help="Mean mask-level EPE in nm."),
+    epe_max: float | None = typer.Option(None, "--epe-max", help="Max mask-level EPE in nm."),
+    epe_wafer_mean: float | None = typer.Option(
+        None, "--epe-wafer-mean", help="Mean wafer-level EPE in nm (post-forward-sim)."
+    ),
+    epe_wafer_max: float | None = typer.Option(
+        None, "--epe-wafer-max", help="Max wafer-level EPE in nm (post-forward-sim)."
+    ),
+    l2_error_pixels: float | None = typer.Option(
+        None,
+        "--l2-error-pixels",
+        help=(
+            "Mean per-sample wafer L2 in pixel units — the canonical leaderboard "
+            "ranking key. Required to rank above legacy entries."
+        ),
+    ),
+    l2_error_nm2: float | None = typer.Option(
+        None, "--l2-error-nm2", help="Mean per-sample wafer L2 in nm² units."
+    ),
     pvband_mean: float | None = typer.Option(
         None, "--pvband-mean", help="Mean PV band width in nm."
     ),
@@ -95,6 +112,14 @@ def submit(
             "epe_mean_nm": epe_mean,
             "epe_max_nm": epe_max,
         }
+        if epe_wafer_mean is not None:
+            data["epe_wafer_mean_nm"] = epe_wafer_mean
+        if epe_wafer_max is not None:
+            data["epe_wafer_max_nm"] = epe_wafer_max
+        if l2_error_pixels is not None:
+            data["l2_error_pixels"] = l2_error_pixels
+        if l2_error_nm2 is not None:
+            data["l2_error_nm2"] = l2_error_nm2
         if pvband_mean is not None:
             data["pvband_mean_nm"] = pvband_mean
         if pvband_max is not None:
@@ -121,10 +146,20 @@ def submit(
             console.print(f"  [red]{loc}[/red]: {err['msg']}")
         raise typer.Exit(1) from None
 
+    if result.l2_error_pixels is None:
+        console.print(
+            "[yellow]Warning:[/yellow] No --l2-error-pixels supplied. The "
+            "leaderboard ranks by L2; entries without it sort to the bottom. "
+            "Use `openlithohub eval --submit` or pass --file to include "
+            "wafer-level fields."
+        )
+
     store = LeaderboardStore(store_path) if store_path else None
     submission_id = submit_result(result, store=store)
     console.print(f"[green]Submitted![/green] ID: {submission_id}")
     console.print(f"  Model: {result.model_name}")
+    if result.l2_error_pixels is not None:
+        console.print(f"  L2 (px): {result.l2_error_pixels:.1f}")
     console.print(f"  EPE mean: {result.epe_mean_nm:.2f} nm")
 
 

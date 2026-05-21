@@ -129,13 +129,19 @@ class OpenILTModel(LithographyModel):
         self._cached_weights_def: torch.Tensor | None = None
         self._cached_grid: int | None = None
         self._cached_defocus_nm: float | None = None
+        self._cached_hopkins_params: HopkinsParams | None = None
 
     def _ensure_hopkins_kernels(
         self,
         grid_size: int,
         device: torch.device,
         defocus_nm: float,
+        hopkins_params: HopkinsParams,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        # Cache validity is keyed on the full (grid, device, defocus,
+        # params) tuple — caller-supplied ``hopkins_params`` overrides
+        # never mutate ``self._hopkins_params`` and a one-off override
+        # cannot poison subsequent calls that use the default.
         if (
             self._cached_kernels_nom is None
             or self._cached_weights_nom is None
@@ -144,12 +150,12 @@ class OpenILTModel(LithographyModel):
             or self._cached_grid != grid_size
             or self._cached_defocus_nm != defocus_nm
             or self._cached_kernels_nom.device != device
+            or self._cached_hopkins_params != hopkins_params
         ):
-            nom_params = self._hopkins_params
-            kernels_nom, weights_nom = compute_socs_kernels(nom_params, grid_size, device)
+            kernels_nom, weights_nom = compute_socs_kernels(hopkins_params, grid_size, device)
             from dataclasses import replace
 
-            def_params = replace(self._hopkins_params, defocus_nm=defocus_nm)
+            def_params = replace(hopkins_params, defocus_nm=defocus_nm)
             kernels_def, weights_def = compute_socs_kernels(def_params, grid_size, device)
             self._cached_kernels_nom = kernels_nom
             self._cached_weights_nom = weights_nom
@@ -157,6 +163,7 @@ class OpenILTModel(LithographyModel):
             self._cached_weights_def = weights_def
             self._cached_grid = grid_size
             self._cached_defocus_nm = defocus_nm
+            self._cached_hopkins_params = hopkins_params
         assert self._cached_kernels_nom is not None
         assert self._cached_weights_nom is not None
         assert self._cached_kernels_def is not None
@@ -213,21 +220,13 @@ class OpenILTModel(LithographyModel):
         kernels_def: torch.Tensor | None = None
         weights_def: torch.Tensor | None = None
         if forward_model == "hopkins":
-            if hopkins_params != self._hopkins_params:
-                self._hopkins_params = hopkins_params
-                self._cached_kernels_nom = None
-                self._cached_weights_nom = None
-                self._cached_kernels_def = None
-                self._cached_weights_def = None
-                self._cached_grid = None
-                self._cached_defocus_nm = None
             (
                 kernels_nom,
                 weights_nom,
                 kernels_def,
                 weights_def,
             ) = self._ensure_hopkins_kernels(
-                target.shape[0], target.device, corners.edge_defocus_nm
+                target.shape[0], target.device, corners.edge_defocus_nm, hopkins_params
             )
 
         # PixelInit: mask_logit starts at 2*target - 1 (per OpenILT README).
