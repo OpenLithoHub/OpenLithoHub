@@ -64,6 +64,7 @@ nav:
     - "0003 — MRC Rule-Deck Schema": rfcs/0003-mrc-rule-deck-schema.md
     - "0004 — Multi-GPU Tile Pipeline": rfcs/0004-multi-gpu-tile-pipeline.md
     - "0005 — Process-Node-Aware Tile Halo Sizing": rfcs/0005-process-node-halo-sizing.md
+    - "0006 — MCP (Model Context Protocol) Bridge": rfcs/0006-mcp-bridge.md
   - Contributing: contributing.md
 
 markdown_extensions:
