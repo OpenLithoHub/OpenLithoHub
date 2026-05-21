@@ -11,10 +11,54 @@ from openlithohub._utils.morphology import binary_dilation, connected_components
 from openlithohub._utils.tensor_ops import ensure_2d
 
 
-def _count_connected_components(binary: torch.Tensor) -> int:
-    """Count 8-connected components of a binary tensor."""
-    _, n = connected_components(binary, connectivity=8)
-    return n
+@dataclass(frozen=True)
+class _NominalState:
+    """Cached nominal-image quantities shared by stochastic metrics.
+
+    Both ``compute_stochastic_robustness`` and ``compute_stochastic_defect_classes``
+    need the same aerial image, resist threshold, FG/BG labels, and Poisson
+    rate map for one input mask. Computing them once and passing the result
+    avoids ~2× redundant FFTs and connected-component passes when the
+    metric pack runs both functions on the same mask.
+    """
+
+    binary: torch.Tensor
+    aerial_nominal: torch.Tensor
+    resist_nominal: torch.Tensor
+    fg_labels: torch.Tensor
+    bg_labels: torch.Tensor
+    lambda_map: torch.Tensor
+    pixel_area_nm2: float
+    dose_scale: float
+
+
+def _nominal_state(
+    mask: torch.Tensor,
+    dose_photons_per_nm2: float,
+    pixel_size_nm: float,
+    sigma_px: float = 2.0,
+) -> _NominalState:
+    """Compute the per-mask nominal quantities reused across stochastic trials."""
+    m = ensure_2d(mask)
+    binary = (m > 0.5).float()
+    aerial_nominal = simulate_aerial_image(binary, sigma_px=sigma_px, dose=1.0)
+    resist_nominal = apply_resist_threshold(aerial_nominal, threshold=0.5)
+    fg_labels, _ = connected_components(resist_nominal, connectivity=8)
+    nominal_bg = 1.0 - resist_nominal
+    bg_labels, _ = connected_components(nominal_bg, connectivity=8)
+    pixel_area_nm2 = pixel_size_nm * pixel_size_nm
+    dose_scale = dose_photons_per_nm2 * pixel_area_nm2
+    lambda_map = aerial_nominal.clamp(min=0.0) * dose_scale
+    return _NominalState(
+        binary=binary,
+        aerial_nominal=aerial_nominal,
+        resist_nominal=resist_nominal,
+        fg_labels=fg_labels,
+        bg_labels=bg_labels,
+        lambda_map=lambda_map,
+        pixel_area_nm2=pixel_area_nm2,
+        dose_scale=dose_scale,
+    )
 
 
 def compute_stochastic_robustness(
@@ -29,17 +73,13 @@ def compute_stochastic_robustness(
     Simulates stochastic resist exposure via Poisson photon noise to quantify
     probability of micro-bridging and line breaks.
     """
-    m = ensure_2d(mask)
-    binary = (m > 0.5).float()
+    state = _nominal_state(mask, dose_photons_per_nm2, pixel_size_nm)
+    resist_nominal = state.resist_nominal
+    fg_labels = state.fg_labels
 
-    sigma_px = 2.0
-    aerial_nominal = simulate_aerial_image(binary, sigma_px=sigma_px, dose=1.0)
-    resist_nominal = apply_resist_threshold(aerial_nominal, threshold=0.5)
-
-    nominal_fg_components = _count_connected_components(resist_nominal)
-
-    pixel_area_nm2 = pixel_size_nm * pixel_size_nm
-    lambda_map = aerial_nominal.clamp(min=0.0) * dose_photons_per_nm2 * pixel_area_nm2
+    nominal_fg_label_set: set[int] = {
+        int(v) for v in torch.unique(fg_labels[fg_labels >= 0]).tolist()
+    }
 
     generator = torch.Generator(device=mask.device)
     if seed is not None:
@@ -53,15 +93,41 @@ def compute_stochastic_robustness(
     nominal_edges = (nominal_edge_dist > 0) & (nominal_edge_dist <= 1.5)
 
     for _ in range(num_trials):
-        photons = torch.poisson(lambda_map, generator=generator)
-        noisy_intensity = photons / max(dose_photons_per_nm2 * pixel_area_nm2, 1e-12)
+        photons = torch.poisson(state.lambda_map, generator=generator)
+        noisy_intensity = photons / max(state.dose_scale, 1e-12)
         noisy_resist = apply_resist_threshold(noisy_intensity, threshold=0.5)
 
-        noisy_fg_components = _count_connected_components(noisy_resist)
+        # Per-component matching: a trial may simultaneously merge some
+        # nominal lines and break others. The previous net-component-count
+        # heuristic made these events cancel; tracking them independently
+        # lets each trial contribute to both bridge and break probability.
+        noisy_fg_labels, _ = connected_components(noisy_resist, connectivity=8)
 
-        if noisy_fg_components < nominal_fg_components:
+        bridge_in_trial = False
+        if nominal_fg_label_set:
+            unique_noisy = torch.unique(noisy_fg_labels[noisy_fg_labels >= 0]).tolist()
+            for noisy_lbl in unique_noisy:
+                noisy_component = noisy_fg_labels == int(noisy_lbl)
+                overlapping_nominal = torch.unique(fg_labels[noisy_component])
+                overlapping_nominal = overlapping_nominal[overlapping_nominal >= 0]
+                if int(overlapping_nominal.numel()) >= 2:
+                    bridge_in_trial = True
+                    break
+
+        break_in_trial = False
+        for nominal_lbl in nominal_fg_label_set:
+            component_mask = fg_labels == nominal_lbl
+            sub = (noisy_resist > 0.5) & component_mask
+            if not bool(sub.any()):
+                continue
+            _, n_pieces = connected_components(sub.float(), connectivity=8)
+            if n_pieces >= 2:
+                break_in_trial = True
+                break
+
+        if bridge_in_trial:
             bridge_count += 1
-        if noisy_fg_components > nominal_fg_components:
+        if break_in_trial:
             break_count += 1
 
         # Fraction of nominal edge-band pixels whose binary state flipped under
@@ -248,16 +314,10 @@ def compute_stochastic_defect_classes(
     Returns:
         StochasticDefectRates with per-class and total failure rates.
     """
-    m = ensure_2d(mask)
-    binary = (m > 0.5).float()
-
-    sigma_px = 2.0
-    aerial_nominal = simulate_aerial_image(binary, sigma_px=sigma_px, dose=1.0)
-    resist_nominal = apply_resist_threshold(aerial_nominal, threshold=0.5)
-
-    nominal_fg_labels, _ = connected_components(resist_nominal, connectivity=8)
-    nominal_bg = 1.0 - resist_nominal
-    nominal_bg_labels, _ = connected_components(nominal_bg, connectivity=8)
+    state = _nominal_state(mask, dose_photons_per_nm2, pixel_size_nm)
+    resist_nominal = state.resist_nominal
+    nominal_fg_labels = state.fg_labels
+    nominal_bg_labels = state.bg_labels
 
     nominal_contacts, nominal_lines = _classify_components(
         nominal_fg_labels,
@@ -279,9 +339,6 @@ def compute_stochastic_defect_classes(
             continue
         nominal_bg_holes.add(int(lbl))
 
-    pixel_area_nm2 = pixel_size_nm * pixel_size_nm
-    lambda_map = aerial_nominal.clamp(min=0.0) * dose_photons_per_nm2 * pixel_area_nm2
-
     generator = torch.Generator(device=mask.device)
     if seed is not None:
         generator.manual_seed(seed)
@@ -292,8 +349,8 @@ def compute_stochastic_defect_classes(
     merged_contacts = 0
 
     for _ in range(num_trials):
-        photons = torch.poisson(lambda_map, generator=generator)
-        noisy_intensity = photons / max(dose_photons_per_nm2 * pixel_area_nm2, 1e-12)
+        photons = torch.poisson(state.lambda_map, generator=generator)
+        noisy_intensity = photons / max(state.dose_scale, 1e-12)
         noisy_resist = apply_resist_threshold(noisy_intensity, threshold=0.5)
 
         mb, bl, mc, mr = _trial_defect_classes(
@@ -310,7 +367,7 @@ def compute_stochastic_defect_classes(
         missing_contacts += mc
         merged_contacts += mr
 
-    image_area_nm2 = float(h * w * pixel_area_nm2)
+    image_area_nm2 = float(h * w * state.pixel_area_nm2)
     image_area_cm2 = image_area_nm2 * 1e-14
     norm_per_cm2 = 1.0 / max(num_trials * image_area_cm2, 1e-30)
 

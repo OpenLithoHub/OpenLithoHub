@@ -106,7 +106,7 @@ def connected_components(mask: torch.Tensor, connectivity: int = 8) -> tuple[tor
         mask: Binary tensor (H, W) with values in {0, 1}.
         connectivity: 4 (von Neumann) or 8 (Moore). Default 8 matches the
             erosion-based components in `mrc._connected_component_areas` and
-            in `stochastic._count_connected_components`. The 4-connectivity
+            the FG/BG labelling in `stochastic._nominal_state`. The 4-connectivity
             kernel rules out diagonal merges, which matches `drc._check_min_area`'s
             historical behaviour.
 

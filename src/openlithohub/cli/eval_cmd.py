@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
+import torch
 import typer
 from rich.console import Console
 
@@ -374,10 +376,6 @@ def _aggregate_metrics(metrics_list: list[dict[str, float]]) -> dict[str, Any]:
     any value was dropped for a key, ``<key>_dropped_nonfinite`` is added so
     callers can see the input quality.
     """
-    import math
-
-    import torch
-
     if not metrics_list:
         return {}
 
@@ -404,8 +402,6 @@ def _build_perf_kwargs(device: str, dtype: str, compile_forward: bool) -> dict[s
     via their **kwargs catch-all; models that drive the Hopkins forward
     (LevelSetILTModel, AIModelOPC) read them as listed in their docstrings.
     """
-    import torch
-
     dtype_map = {"fp32": torch.float32, "bf16": torch.bfloat16}
     if dtype not in dtype_map:
         raise typer.BadParameter(f"--dtype must be 'fp32' or 'bf16'; got {dtype!r}")
