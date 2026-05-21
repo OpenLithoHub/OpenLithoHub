@@ -30,6 +30,24 @@ class ProcessNodeConfig:
     zero-padded boundaries. Conservative default of 1.5 µm matches DUV
     rule-of-thumb (~10 × λ / (2 × NA)); EUV nodes can run much tighter.
     """
+    demag_scan: float = 4.0
+    demag_slit: float = 4.0
+    """Reticle-to-wafer demagnification ratios along the scan and slit axes.
+
+    Standard low-NA EUV (NA=0.33) and DUV scanners are isotropic 4×, so
+    both default to 4.0. High-NA EUV (NA=0.55, ASML EXE:5000 class) is
+    *anamorphic*: 8× along the scan axis and 4× along the slit axis,
+    halving the field on-wafer to ~26 × 16.5 mm. The Hopkins forward
+    currently assumes an isotropic mask grid and ignores these flags;
+    they are recorded here so downstream tooling (anamorphic imaging,
+    half-field stitching, mask-side pixel sizing) can branch on
+    ``demag_scan != demag_slit``. See the High-NA tracking issue.
+    """
+
+    @property
+    def is_anamorphic(self) -> bool:
+        """Whether the projection optics are anamorphic (High-NA EUV)."""
+        return self.demag_scan != self.demag_slit
 
     @property
     def sigma_px(self) -> float:
@@ -56,6 +74,8 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
         min_spacing_nm=12.0,
         defocus_budget_nm=25.0,
         optical_radius_nm=250.0,
+        demag_scan=8.0,
+        demag_slit=4.0,
     ),
     "3nm-euv": ProcessNodeConfig(
         name="3nm-euv",
@@ -68,6 +88,8 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
         min_spacing_nm=14.0,
         defocus_budget_nm=30.0,
         optical_radius_nm=250.0,
+        demag_scan=8.0,
+        demag_slit=4.0,
     ),
     "5nm-euv": ProcessNodeConfig(
         name="5nm-euv",

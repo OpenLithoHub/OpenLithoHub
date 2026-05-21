@@ -75,3 +75,37 @@ class TestListNodes:
         assert "3nm-euv" in nodes
         assert "45nm" in nodes
         assert "7nm" in nodes
+
+
+class TestAnamorphicDemag:
+    """High-NA EUV (NA=0.55) is anamorphic 8x scan / 4x slit; lower-NA is 4x/4x."""
+
+    def test_high_na_nodes_are_anamorphic(self) -> None:
+        for name in ("2nm-euv", "3nm-euv"):
+            node = PROCESS_NODES[name]
+            assert node.numerical_aperture == 0.55
+            assert node.demag_scan == 8.0
+            assert node.demag_slit == 4.0
+            assert node.is_anamorphic
+
+    def test_low_na_nodes_are_isotropic(self) -> None:
+        for name in ("5nm-euv", "7nm", "28nm", "45nm"):
+            node = PROCESS_NODES[name]
+            assert node.demag_scan == 4.0
+            assert node.demag_slit == 4.0
+            assert not node.is_anamorphic
+
+    def test_demag_default_is_isotropic_4x(self) -> None:
+        node = ProcessNodeConfig(
+            name="test",
+            wavelength_nm=193.0,
+            numerical_aperture=1.35,
+            sigma_inner=0.5,
+            sigma_outer=0.8,
+            pixel_size_nm=1.0,
+            min_feature_nm=40.0,
+            min_spacing_nm=40.0,
+        )
+        assert node.demag_scan == 4.0
+        assert node.demag_slit == 4.0
+        assert not node.is_anamorphic
