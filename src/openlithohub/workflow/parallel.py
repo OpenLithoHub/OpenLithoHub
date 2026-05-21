@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import multiprocessing as mp
+import queue as queue_mod
 import traceback
 from collections.abc import Callable
 from typing import Any
@@ -76,7 +77,7 @@ def parallel_tile_inference(
         while len(results) < expected:
             try:
                 item = queue.get(timeout=_DEFAULT_TIMEOUT_SECONDS)
-            except Exception:
+            except queue_mod.Empty:
                 if any(not p.is_alive() for p in processes) and queue.empty():
                     dead = [p for p in processes if not p.is_alive() and p.exitcode != 0]
                     if dead:

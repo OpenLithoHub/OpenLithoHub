@@ -365,7 +365,17 @@ def _load_dataset(
 
 
 def _aggregate_metrics(metrics_list: list[dict[str, float]]) -> dict[str, Any]:
-    """Average per-sample metrics into a single aggregate dict."""
+    """Average per-sample metrics into a single aggregate dict.
+
+    Non-finite values (``nan`` / ``inf``) are dropped before averaging so a
+    single degenerate tile cannot poison the leaderboard aggregate. Affected
+    metrics: ``compute_epe`` returns ``inf`` when one polarity of an edge set
+    is empty and ``nan`` for ``epe_std_nm`` over a single matched edge. When
+    any value was dropped for a key, ``<key>_dropped_nonfinite`` is added so
+    callers can see the input quality.
+    """
+    import math
+
     import torch
 
     if not metrics_list:
@@ -377,9 +387,13 @@ def _aggregate_metrics(metrics_list: list[dict[str, float]]) -> dict[str, Any]:
 
     aggregated: dict[str, Any] = {}
     for key in sorted(all_keys):
-        vals = [m[key] for m in metrics_list if key in m]
-        if vals:
-            aggregated[key] = float(torch.tensor(vals).mean().item())
+        raw = [m[key] for m in metrics_list if key in m]
+        finite = [v for v in raw if isinstance(v, int | float) and math.isfinite(v)]
+        if finite:
+            aggregated[key] = float(torch.tensor(finite).mean().item())
+        dropped = len(raw) - len(finite)
+        if dropped > 0:
+            aggregated[f"{key}_dropped_nonfinite"] = dropped
     return aggregated
 
 

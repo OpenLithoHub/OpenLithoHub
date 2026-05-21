@@ -296,7 +296,7 @@ class TestStochasticRobustness:
         result = compute_stochastic_robustness(mask, num_trials=5, seed=42)
         assert "bridge_probability" in result
         assert "break_probability" in result
-        assert "ler_mean_nm" in result
+        assert "edge_flip_rate" in result
         assert "robustness_score" in result
 
     def test_deterministic_with_seed(self):
@@ -321,7 +321,7 @@ class TestStochasticRobustness:
         assert 0.0 <= result["robustness_score"] <= 1.0
         assert 0.0 <= result["bridge_probability"] <= 1.0
         assert 0.0 <= result["break_probability"] <= 1.0
-        assert result["ler_mean_nm"] >= 0.0
+        assert result["edge_flip_rate"] >= 0.0
 
     def test_bridging_layout_reports_bridge(self):
         # Two 4-px-wide bars with a 3-px gap. After sigma=2 blur the gap
@@ -362,7 +362,7 @@ class TestStochasticRobustness:
         )
         assert result["bridge_probability"] == pytest.approx(0.0)
         assert result["break_probability"] == pytest.approx(0.3)
-        assert result["ler_mean_nm"] == pytest.approx(0.2216666679829359, abs=1e-9)
+        assert result["edge_flip_rate"] == pytest.approx(0.2216666679829359, abs=1e-9)
         assert result["robustness_score"] == pytest.approx(0.85)
 
 

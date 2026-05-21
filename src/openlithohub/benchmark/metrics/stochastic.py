@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import torch
 
 from openlithohub._utils.forward_model import apply_resist_threshold, simulate_aerial_image
-from openlithohub._utils.morphology import connected_components, distance_transform
+from openlithohub._utils.morphology import binary_dilation, connected_components, distance_transform
 from openlithohub._utils.tensor_ops import ensure_2d
 
 
@@ -47,7 +47,7 @@ def compute_stochastic_robustness(
 
     bridge_count = 0
     break_count = 0
-    ler_values: list[float] = []
+    edge_flip_values: list[float] = []
 
     nominal_edge_dist = distance_transform(resist_nominal)
     nominal_edges = (nominal_edge_dist > 0) & (nominal_edge_dist <= 1.5)
@@ -64,20 +64,26 @@ def compute_stochastic_robustness(
         if noisy_fg_components > nominal_fg_components:
             break_count += 1
 
+        # Fraction of nominal edge-band pixels whose binary state flipped under
+        # photon noise. This is dimensionless (0–1), NOT a line-edge roughness
+        # in nm — true LER would require sub-pixel chord-displacement along
+        # each contour normal. Reported separately so users don't conflate it
+        # with published EUV LER numbers (~1–5 nm).
         diff = (noisy_resist - resist_nominal).abs()
         if nominal_edges.any():
-            edge_displacement = diff[nominal_edges].mean().item() * pixel_size_nm
-            ler_values.append(edge_displacement)
+            edge_flip_values.append(diff[nominal_edges].mean().item())
 
     bridge_probability = bridge_count / max(num_trials, 1)
     break_probability = break_count / max(num_trials, 1)
-    ler_mean_nm = sum(ler_values) / max(len(ler_values), 1) if ler_values else 0.0
+    edge_flip_rate = (
+        sum(edge_flip_values) / max(len(edge_flip_values), 1) if edge_flip_values else 0.0
+    )
     robustness_score = max(0.0, 1.0 - (bridge_probability + break_probability) / 2.0)
 
     return {
         "bridge_probability": bridge_probability,
         "break_probability": break_probability,
-        "ler_mean_nm": ler_mean_nm,
+        "edge_flip_rate": edge_flip_rate,
         "robustness_score": robustness_score,
     }
 
@@ -144,6 +150,7 @@ def _trial_defect_classes(
     nominal_fg_labels: torch.Tensor,
     nominal_bg_labels: torch.Tensor,
     nominal_contacts: set[int],
+    nominal_lines: set[int],
     nominal_bg_holes: set[int],
 ) -> tuple[int, int, int, int]:
     """Count microbridge / broken-line / missing-contact / merged-contact in one trial.
@@ -171,9 +178,7 @@ def _trial_defect_classes(
         if not bool((component_mask & noisy_fg).any()):
             missing_contact += 1
 
-    fg_label_ids = torch.unique(nominal_fg_labels[nominal_fg_labels >= 0]).tolist()
-    line_labels = [int(lbl) for lbl in fg_label_ids if int(lbl) not in nominal_contacts]
-    for lbl in line_labels:
+    for lbl in nominal_lines:
         component_mask = nominal_fg_labels == lbl
         sub = noisy_fg & component_mask
         if not bool(sub.any()):
@@ -182,15 +187,23 @@ def _trial_defect_classes(
         if n_pieces >= 2:
             broken_line += 1
 
-    if line_labels:
+    if nominal_lines:
         nominal_lines_mask = torch.zeros_like(nominal_fg)
-        for lbl in line_labels:
+        for lbl in nominal_lines:
             nominal_lines_mask = nominal_lines_mask | (nominal_fg_labels == lbl)
+        # Only count bridge components that actually touch a nominal line —
+        # photon-noise blobs in the far field are not microbridges. Label the
+        # extra-foreground region, then keep components whose support overlaps
+        # the dilated nominal-lines mask (1-pixel tolerance for adjacency).
         bridges_only = noisy_fg & ~nominal_fg
-        if bool((bridges_only & _dilate_bool(nominal_lines_mask)).any()):
-            _, n_added = connected_components(bridges_only.float(), connectivity=8)
-            if n_added > 0:
-                microbridge += n_added
+        if bool(bridges_only.any()):
+            line_neighbourhood = binary_dilation(nominal_lines_mask.float(), radius=1) > 0.5
+            bridge_labels, _n_bridge = connected_components(bridges_only.float(), connectivity=8)
+            unique_bridge_labels = torch.unique(bridge_labels[bridge_labels >= 0]).tolist()
+            for blbl in unique_bridge_labels:
+                comp = bridge_labels == blbl
+                if bool((comp & line_neighbourhood).any()):
+                    microbridge += 1
 
     for hole_lbl in nominal_bg_holes:
         hole_mask = nominal_bg_labels == hole_lbl
@@ -198,15 +211,6 @@ def _trial_defect_classes(
             merged_contact += 1
 
     return microbridge, broken_line, missing_contact, merged_contact
-
-
-def _dilate_bool(mask: torch.Tensor) -> torch.Tensor:
-    """1-pixel 8-connectivity dilation of a boolean mask."""
-    if not bool(mask.any()):
-        return mask
-    f = mask.float().unsqueeze(0).unsqueeze(0)
-    out = torch.nn.functional.max_pool2d(f, kernel_size=3, stride=1, padding=1)
-    return out.squeeze(0).squeeze(0) > 0.5
 
 
 def compute_stochastic_defect_classes(
@@ -255,7 +259,7 @@ def compute_stochastic_defect_classes(
     nominal_bg = 1.0 - resist_nominal
     nominal_bg_labels, _ = connected_components(nominal_bg, connectivity=8)
 
-    nominal_contacts, _ = _classify_components(
+    nominal_contacts, nominal_lines = _classify_components(
         nominal_fg_labels,
         num_components=int(torch.unique(nominal_fg_labels[nominal_fg_labels >= 0]).numel()),
         contact_aspect_max=contact_aspect_max,
@@ -298,6 +302,7 @@ def compute_stochastic_defect_classes(
             nominal_fg_labels=nominal_fg_labels,
             nominal_bg_labels=nominal_bg_labels,
             nominal_contacts=nominal_contacts,
+            nominal_lines=nominal_lines,
             nominal_bg_holes=nominal_bg_holes,
         )
         microbridges += mb

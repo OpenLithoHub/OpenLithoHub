@@ -78,16 +78,20 @@ def _estimate_vsb(
     pixel_size_nm: float,
 ) -> dict[str, int | float]:
     """VSB estimation: approximate rectangle decomposition via complexity heuristic."""
-    # Estimate perimeter (boundary pixel count)
     h, w = binary.shape
-    # Shift-based boundary detection
     b = binary > 0.5
-    boundary = (
-        (b != torch.roll(b, 1, 0))
-        | (b != torch.roll(b, -1, 0))
-        | (b != torch.roll(b, 1, 1))
-        | (b != torch.roll(b, -1, 1))
-    ) & b
+    # Boundary detection compares each foreground pixel against its 4 neighbours
+    # under zero-padding (pixels outside the canvas are treated as background).
+    # `torch.roll` wraps circularly, which would mark border-touching shapes as
+    # bordered on the opposite edge as well — inflating perimeter for cropped
+    # tiles, which is the common case.
+    zero_row = torch.zeros((1, w), dtype=b.dtype, device=b.device)
+    zero_col = torch.zeros((h, 1), dtype=b.dtype, device=b.device)
+    up = torch.cat([b[1:, :], zero_row], dim=0)
+    down = torch.cat([zero_row, b[:-1, :]], dim=0)
+    left = torch.cat([b[:, 1:], zero_col], dim=1)
+    right = torch.cat([zero_col, b[:, :-1]], dim=1)
+    boundary = ((b != up) | (b != down) | (b != left) | (b != right)) & b
     perimeter_pixels = int(boundary.sum().item())
 
     # Complexity ratio: higher perimeter/area means more shots needed
