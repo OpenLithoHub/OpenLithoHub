@@ -312,11 +312,11 @@ methodology, the Hopkins forward model, and reproduction instructions.
 
 | Model | EPE mean (nm) | EPE max (nm) | PVB mean (nm) | MRC pass |
 |---|---|---|---|---|
-| `dummy-identity` | 0.000 | 0.000 | 2.140 | 0% |
-| `rule-based-opc` (analytic OPC bias) | 0.530 | 1.414 | 2.487 | 0% |
-| `levelset-ilt` (Gaussian PSF, 200 iters) | 0.036 | 0.250 | 2.128 | 0% |
+| `dummy-identity` | 0.000 | 0.000 | 4.281 | 0% |
+| `rule-based-opc` (analytic OPC bias) | 0.530 | 1.414 | 4.942 | 0% |
+| `levelset-ilt` (Gaussian PSF, 200 iters) | 0.040 | 0.250 | 4.254 | 0% |
 | `openilt` (L2 + PVBand, SimpleILT formulation) | 0.000 | 0.000 | 4.281 | 0% |
-| `neural-ilt` (untrained U-Net) | 15.074 | 24.637 | 2.497 | 100% |
+| `neural-ilt` (v0.1 seed weights) | 0.000 | 0.000 | 4.281 | 0% |
 
 See [`baselines/results.md`](baselines/results.md) for per-pattern breakdowns.
 

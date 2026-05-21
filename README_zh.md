@@ -307,11 +307,11 @@ contacts、dense lines）上的参考成绩，由 `scripts/generate_baselines.py
 
 | 模型 | EPE 平均 (nm) | EPE 最大 (nm) | PVB 平均 (nm) | MRC 通过率 |
 |---|---|---|---|---|
-| `dummy-identity` | 0.000 | 0.000 | 2.140 | 0% |
-| `rule-based-opc`（解析式 OPC bias） | 0.530 | 1.414 | 2.487 | 0% |
-| `levelset-ilt`（Gaussian PSF，200 次迭代） | 0.036 | 0.250 | 2.128 | 0% |
+| `dummy-identity` | 0.000 | 0.000 | 4.281 | 0% |
+| `rule-based-opc`（解析式 OPC bias） | 0.530 | 1.414 | 4.942 | 0% |
+| `levelset-ilt`（Gaussian PSF，200 次迭代） | 0.040 | 0.250 | 4.254 | 0% |
 | `openilt`（L2 + PVBand，SimpleILT 公式） | 0.000 | 0.000 | 4.281 | 0% |
-| `neural-ilt`（未训练的 U-Net） | 15.074 | 24.637 | 2.497 | 100% |
+| `neural-ilt`（v0.1 公开权重） | 0.000 | 0.000 | 4.281 | 0% |
 
 每个模式的细分结果见 [`baselines/results.md`](baselines/results.md)。
 

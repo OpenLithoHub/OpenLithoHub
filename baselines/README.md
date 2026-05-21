@@ -54,6 +54,12 @@ skipped gracefully.
   the synthetic-8 set reflects the broader corner span — `levelset-ilt`
   optimises only at nominal, so it lands a tighter nominal mask but
   isn't directly comparable on PV-band.
-- `neural-ilt` uses an untrained U-Net by default. The numbers shown are
-  intentionally the "no-weights" baseline; they will improve substantially
-  once `from_pretrained()` weights are available.
+- `neural-ilt` is the U-Net mask predictor. Public v0.1 seed weights
+  are available at [`openlithohub/neural-ilt-v0.1`](https://huggingface.co/openlithohub/neural-ilt-v0.1)
+  on HuggingFace; `NeuralILTModel(pretrained=True)` and
+  `scripts/generate_baselines.py --pretrained` (default) load them.
+  v0.1 was trained on synthetic dummy layouts, so the numbers above
+  reflect identity-with-rounding behaviour rather than real OPC
+  corrections — a v1.0 LithoBench-trained release is planned. With
+  `--no-pretrained` the model falls back to a randomly-initialised
+  U-Net.

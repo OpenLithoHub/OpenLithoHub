@@ -10,10 +10,12 @@ One-off and reference scripts that live outside the installable package.
 
 ## Training the Neural-ILT baseline
 
-`scripts/train_neural_ilt.py` is a deliberately small reference trainer.
-It is the script the project uses to produce the weights served at
-`openlithohub/neural-ilt-v1` on HuggingFace; copy and adapt for your own
-runs.
+`scripts/train_neural_ilt.py` is a deliberately small reference trainer
+suitable for your own data and configs. The published v0.1 seed weights
+served at [`openlithohub/neural-ilt-v0.1`](https://huggingface.co/openlithohub/neural-ilt-v0.1)
+were produced by `scripts/train_neural_ilt_seed.py`, which pins every
+hyperparameter so the checkpoint is reproducible bit-for-bit (modulo
+PyTorch minor-version drift).
 
 ### Smoke test (no real training)
 
@@ -57,10 +59,10 @@ loss history.
 huggingface-cli upload <user>/<repo> checkpoints/neural_ilt.pt
 ```
 
-Then point `NeuralILTModel(pretrained=True)` at your repo. The repo path
-is currently hardcoded at `openlithohub/neural-ilt-v1` in
-`src/openlithohub/models/neural_ilt.py`; making it configurable is a
-welcome follow-up PR.
+Then point `NeuralILTModel` at your repo via the `repo_id` constructor
+argument — for example `NeuralILTModel(pretrained=True, repo_id="<you>/<repo>")`.
+The default is `openlithohub/neural-ilt-v0.1`, which carries the
+published v0.1 seed weights.
 
 ### Caveats
 
