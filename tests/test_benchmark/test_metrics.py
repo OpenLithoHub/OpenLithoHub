@@ -3,6 +3,10 @@
 import pytest
 import torch
 
+from openlithohub.benchmark.metrics import (
+    StochasticDefectRates,
+    compute_stochastic_defect_classes,
+)
 from openlithohub.benchmark.metrics.epe import compute_epe, compute_wafer_epe
 from openlithohub.benchmark.metrics.hotspot import compute_hotspot_detection
 from openlithohub.benchmark.metrics.pvband import compute_pvband
@@ -360,6 +364,61 @@ class TestStochasticRobustness:
         assert result["break_probability"] == pytest.approx(0.3)
         assert result["ler_mean_nm"] == pytest.approx(0.2216666679829359, abs=1e-9)
         assert result["robustness_score"] == pytest.approx(0.85)
+
+
+class TestStochasticDefectClasses:
+    def test_returns_dataclass(self):
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        rates = compute_stochastic_defect_classes(mask, num_trials=5, seed=42)
+        assert isinstance(rates, StochasticDefectRates)
+        assert rates.num_trials == 5
+        assert rates.image_area_cm2 > 0.0
+
+    def test_all_rates_non_negative(self):
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        rates = compute_stochastic_defect_classes(mask, num_trials=10, seed=42)
+        assert rates.microbridge_per_cm2 >= 0
+        assert rates.broken_line_per_cm2 >= 0
+        assert rates.missing_contact_per_cm2 >= 0
+        assert rates.merged_contact_per_cm2 >= 0
+        assert rates.total_per_cm2 == pytest.approx(
+            rates.microbridge_per_cm2
+            + rates.broken_line_per_cm2
+            + rates.missing_contact_per_cm2
+            + rates.merged_contact_per_cm2
+        )
+
+    def test_deterministic_with_seed(self):
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        r1 = compute_stochastic_defect_classes(mask, num_trials=10, seed=123)
+        r2 = compute_stochastic_defect_classes(mask, num_trials=10, seed=123)
+        assert r1.total_per_cm2 == pytest.approx(r2.total_per_cm2)
+        assert r1.microbridge_per_cm2 == pytest.approx(r2.microbridge_per_cm2)
+
+    def test_per_cm2_scales_with_pixel_size(self):
+        # Pixel size affects both Poisson lambda (per-pixel area) and the
+        # per-cm^2 normalisation, so we only assert the normalisation is
+        # finite and positive — exact rate scaling is not invariant.
+        mask = torch.zeros(32, 32)
+        mask[8:24, 8:24] = 1.0
+        rates = compute_stochastic_defect_classes(mask, num_trials=4, pixel_size_nm=2.0, seed=7)
+        assert rates.image_area_cm2 == pytest.approx((32 * 2.0) ** 2 * 1e-14)
+
+    def test_isolated_contact_classified_correctly(self):
+        # A small square (4x4) on a 32x32 canvas → contact-like (small + square).
+        mask = torch.zeros(32, 32)
+        mask[14:18, 14:18] = 1.0
+        rates = compute_stochastic_defect_classes(
+            mask, num_trials=4, dose_photons_per_nm2=1.0, seed=999
+        )
+        # Low dose → photon noise can wipe the small contact in some trials.
+        # We only assert no broken-line or microbridge fires (no line-like
+        # nominal component exists).
+        assert rates.broken_line_per_cm2 == 0.0
+        assert rates.microbridge_per_cm2 == 0.0
 
 
 class TestHotspotDetection:

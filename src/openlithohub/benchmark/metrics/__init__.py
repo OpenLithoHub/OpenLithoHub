@@ -7,7 +7,11 @@ from openlithohub.benchmark.metrics.mrc_loss import curvilinear_mrc_loss
 from openlithohub.benchmark.metrics.pvband import compute_pvband
 from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
 from openlithohub.benchmark.metrics.sraf import sraf_print_penalty
-from openlithohub.benchmark.metrics.stochastic import compute_stochastic_robustness
+from openlithohub.benchmark.metrics.stochastic import (
+    StochasticDefectRates,
+    compute_stochastic_defect_classes,
+    compute_stochastic_robustness,
+)
 
 __all__ = [
     "compute_epe",
@@ -17,6 +21,8 @@ __all__ = [
     "compute_pvband",
     "curvilinear_mrc_loss",
     "estimate_shot_count",
+    "StochasticDefectRates",
+    "compute_stochastic_defect_classes",
     "compute_stochastic_robustness",
     "sraf_print_penalty",
 ]

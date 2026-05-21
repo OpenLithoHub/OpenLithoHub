@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import torch
 
 from openlithohub._utils.forward_model import apply_resist_threshold, simulate_aerial_image
@@ -78,3 +80,243 @@ def compute_stochastic_robustness(
         "ler_mean_nm": ler_mean_nm,
         "robustness_score": robustness_score,
     }
+
+
+@dataclass(frozen=True)
+class StochasticDefectRates:
+    """Per-class stochastic defect rates in failures per cm^2.
+
+    The four classes follow the imec EUV stochastic-defectivity convention
+    (microbridge / broken line / missing contact / merged contact). Per-cm^2
+    rates are the industry reporting unit and let users compare against
+    published defectivity floors regardless of mask tile size.
+    """
+
+    microbridge_per_cm2: float
+    broken_line_per_cm2: float
+    missing_contact_per_cm2: float
+    merged_contact_per_cm2: float
+    total_per_cm2: float
+    num_trials: int
+    image_area_cm2: float
+
+
+def _classify_components(
+    labels: torch.Tensor,
+    num_components: int,
+    contact_aspect_max: float,
+    contact_area_max: int,
+) -> tuple[set[int], set[int]]:
+    """Split component labels into contact-like and line-like sets.
+
+    A component is "contact-like" if its area is small AND its bounding-box
+    aspect ratio is close to 1; otherwise it is "line-like". Picking these
+    cuts via area+aspect rather than label semantics keeps the classifier
+    self-contained — callers do not have to tag components in advance.
+    """
+    contacts: set[int] = set()
+    lines: set[int] = set()
+    if num_components == 0:
+        return contacts, lines
+
+    fg_labels = labels[labels >= 0]
+    unique = torch.unique(fg_labels).tolist()
+    for lbl in unique:
+        ys, xs = torch.where(labels == lbl)
+        area = int(ys.numel())
+        if area == 0:
+            continue
+        h_ext = int(ys.max().item() - ys.min().item() + 1)
+        w_ext = int(xs.max().item() - xs.min().item() + 1)
+        long_side = max(h_ext, w_ext)
+        short_side = max(1, min(h_ext, w_ext))
+        aspect = long_side / short_side
+        if area <= contact_area_max and aspect <= contact_aspect_max:
+            contacts.add(int(lbl))
+        else:
+            lines.add(int(lbl))
+    return contacts, lines
+
+
+def _trial_defect_classes(
+    nominal_resist: torch.Tensor,
+    noisy_resist: torch.Tensor,
+    nominal_fg_labels: torch.Tensor,
+    nominal_bg_labels: torch.Tensor,
+    nominal_contacts: set[int],
+    nominal_bg_holes: set[int],
+) -> tuple[int, int, int, int]:
+    """Count microbridge / broken-line / missing-contact / merged-contact in one trial.
+
+    - Microbridge: a *line-like* nominal foreground component fuses with another
+      foreground component in the noisy image (drop in FG component count caused
+      by line-shaped components that share their label region in the noisy image).
+    - Broken line: a *line-like* nominal foreground component splits into two or
+      more pieces in the noisy image (extra FG components inside its support).
+    - Missing contact: a *contact-like* nominal foreground component disappears
+      entirely from the noisy resist.
+    - Merged contact: two distinct nominal background holes (the spaces between
+      contact pads) coalesce in the noisy image.
+    """
+    microbridge = 0
+    broken_line = 0
+    missing_contact = 0
+    merged_contact = 0
+
+    nominal_fg = nominal_resist > 0.5
+    noisy_fg = noisy_resist > 0.5
+
+    for lbl in nominal_contacts:
+        component_mask = nominal_fg_labels == lbl
+        if not bool((component_mask & noisy_fg).any()):
+            missing_contact += 1
+
+    fg_label_ids = torch.unique(nominal_fg_labels[nominal_fg_labels >= 0]).tolist()
+    line_labels = [int(lbl) for lbl in fg_label_ids if int(lbl) not in nominal_contacts]
+    for lbl in line_labels:
+        component_mask = nominal_fg_labels == lbl
+        sub = noisy_fg & component_mask
+        if not bool(sub.any()):
+            continue
+        _, n_pieces = connected_components(sub.float(), connectivity=8)
+        if n_pieces >= 2:
+            broken_line += 1
+
+    if line_labels:
+        nominal_lines_mask = torch.zeros_like(nominal_fg)
+        for lbl in line_labels:
+            nominal_lines_mask = nominal_lines_mask | (nominal_fg_labels == lbl)
+        bridges_only = noisy_fg & ~nominal_fg
+        if bool((bridges_only & _dilate_bool(nominal_lines_mask)).any()):
+            _, n_added = connected_components(bridges_only.float(), connectivity=8)
+            if n_added > 0:
+                microbridge += n_added
+
+    for hole_lbl in nominal_bg_holes:
+        hole_mask = nominal_bg_labels == hole_lbl
+        if not bool((hole_mask & ~noisy_fg).any()):
+            merged_contact += 1
+
+    return microbridge, broken_line, missing_contact, merged_contact
+
+
+def _dilate_bool(mask: torch.Tensor) -> torch.Tensor:
+    """1-pixel 8-connectivity dilation of a boolean mask."""
+    if not bool(mask.any()):
+        return mask
+    f = mask.float().unsqueeze(0).unsqueeze(0)
+    out = torch.nn.functional.max_pool2d(f, kernel_size=3, stride=1, padding=1)
+    return out.squeeze(0).squeeze(0) > 0.5
+
+
+def compute_stochastic_defect_classes(
+    mask: torch.Tensor,
+    num_trials: int = 100,
+    dose_photons_per_nm2: float = 30.0,
+    pixel_size_nm: float = 1.0,
+    seed: int | None = None,
+    contact_aspect_max: float = 1.5,
+    contact_area_max: int = 64,
+) -> StochasticDefectRates:
+    """Per-class EUV stochastic defect rates in failures/cm^2.
+
+    Extends :func:`compute_stochastic_robustness` (which returns aggregate
+    bridge/break probabilities) with the four imec-style defect classes
+    reported by the EUV stochastic-defectivity literature: microbridges,
+    broken lines, missing contacts, and merged contacts. Output is
+    normalised to failures per cm^2 so results are comparable across
+    different mask tile sizes.
+
+    Args:
+        mask: Real-valued mask tensor (H, W) or 4D, values in [0, 1].
+        num_trials: Number of Poisson trials. More trials → tighter rate
+            estimates; 100 is a reasonable benchmarking default.
+        dose_photons_per_nm2: Exposure dose in photons / nm^2 at the wafer.
+            Scales the Poisson rate map.
+        pixel_size_nm: Mask pixel size in nm; used both for the Poisson
+            rate scaling and for converting failure counts to per-cm^2.
+        seed: Optional RNG seed.
+        contact_aspect_max: Maximum bounding-box long/short ratio for a
+            component to count as contact-like. Lines are everything else.
+        contact_area_max: Maximum pixel area for a component to count as
+            contact-like. Tune for the contact size on your process node.
+
+    Returns:
+        StochasticDefectRates with per-class and total failure rates.
+    """
+    m = ensure_2d(mask)
+    binary = (m > 0.5).float()
+
+    sigma_px = 2.0
+    aerial_nominal = simulate_aerial_image(binary, sigma_px=sigma_px, dose=1.0)
+    resist_nominal = apply_resist_threshold(aerial_nominal, threshold=0.5)
+
+    nominal_fg_labels, _ = connected_components(resist_nominal, connectivity=8)
+    nominal_bg = 1.0 - resist_nominal
+    nominal_bg_labels, _ = connected_components(nominal_bg, connectivity=8)
+
+    nominal_contacts, _ = _classify_components(
+        nominal_fg_labels,
+        num_components=int(torch.unique(nominal_fg_labels[nominal_fg_labels >= 0]).numel()),
+        contact_aspect_max=contact_aspect_max,
+        contact_area_max=contact_area_max,
+    )
+    bg_hole_labels = torch.unique(nominal_bg_labels[nominal_bg_labels >= 0]).tolist()
+    h, w = resist_nominal.shape
+    nominal_bg_holes: set[int] = set()
+    for lbl in bg_hole_labels:
+        ys, xs = torch.where(nominal_bg_labels == lbl)
+        if ys.numel() == 0:
+            continue
+        touches_border = bool(
+            (ys == 0).any() or (ys == h - 1).any() or (xs == 0).any() or (xs == w - 1).any()
+        )
+        if touches_border:
+            continue
+        nominal_bg_holes.add(int(lbl))
+
+    pixel_area_nm2 = pixel_size_nm * pixel_size_nm
+    lambda_map = aerial_nominal.clamp(min=0.0) * dose_photons_per_nm2 * pixel_area_nm2
+
+    generator = torch.Generator(device=mask.device)
+    if seed is not None:
+        generator.manual_seed(seed)
+
+    microbridges = 0
+    broken_lines = 0
+    missing_contacts = 0
+    merged_contacts = 0
+
+    for _ in range(num_trials):
+        photons = torch.poisson(lambda_map, generator=generator)
+        noisy_intensity = photons / max(dose_photons_per_nm2 * pixel_area_nm2, 1e-12)
+        noisy_resist = apply_resist_threshold(noisy_intensity, threshold=0.5)
+
+        mb, bl, mc, mr = _trial_defect_classes(
+            nominal_resist=resist_nominal,
+            noisy_resist=noisy_resist,
+            nominal_fg_labels=nominal_fg_labels,
+            nominal_bg_labels=nominal_bg_labels,
+            nominal_contacts=nominal_contacts,
+            nominal_bg_holes=nominal_bg_holes,
+        )
+        microbridges += mb
+        broken_lines += bl
+        missing_contacts += mc
+        merged_contacts += mr
+
+    image_area_nm2 = float(h * w * pixel_area_nm2)
+    image_area_cm2 = image_area_nm2 * 1e-14
+    norm_per_cm2 = 1.0 / max(num_trials * image_area_cm2, 1e-30)
+
+    rates = StochasticDefectRates(
+        microbridge_per_cm2=microbridges * norm_per_cm2,
+        broken_line_per_cm2=broken_lines * norm_per_cm2,
+        missing_contact_per_cm2=missing_contacts * norm_per_cm2,
+        merged_contact_per_cm2=merged_contacts * norm_per_cm2,
+        total_per_cm2=(microbridges + broken_lines + missing_contacts + merged_contacts)
+        * norm_per_cm2,
+        num_trials=num_trials,
+        image_area_cm2=image_area_cm2,
+    )
+    return rates
