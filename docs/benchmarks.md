@@ -18,11 +18,11 @@ numbers can be regenerated locally with `--data-root <path>`.
 
 | Model | Samples | EPE mean (nm) | EPE max (nm) | PVB mean (nm) | MRC pass |
 |---|---|---|---|---|---|
-| `dummy-identity` | 8 | 0.000 | 0.000 | 2.140 | 0% |
-| `rule-based-opc` | 8 | 0.530 | 1.414 | 2.487 | 0% |
-| `levelset-ilt` (Gaussian PSF) | 8 | 0.036 | 0.250 | 2.128 | 0% |
+| `dummy-identity` | 8 | 0.000 | 0.000 | 4.281 | 0% |
+| `rule-based-opc` | 8 | 0.530 | 1.414 | 4.942 | 0% |
+| `levelset-ilt` (Gaussian PSF) | 8 | 0.040 | 0.250 | 4.254 | 0% |
 | `openilt` (L2 + PVBand) | 8 | 0.000 | 0.000 | 4.281 | 0% |
-| `neural-ilt` (untrained U-Net) | 8 | 15.074 | 24.637 | 2.497 | 100% |
+| `neural-ilt` (v0.1 seed weights) | 8 | 0.000 | 0.000 | 4.281 | 0% |
 
 Things worth knowing about these numbers:
 
@@ -49,10 +49,17 @@ Things worth knowing about these numbers:
   optimises only at nominal, so it lands a tighter nominal mask but
   isn't directly comparable on PV-band. Citation: Gao et al., "MOSAIC",
   DAC 2014.
-- **`neural-ilt`** uses a randomly-initialized U-Net unless you load
-  pretrained weights via the model hub. The EPE shown here is the
-  honest "no-weights" baseline. It will improve substantially after
-  training; we report it as-is rather than hide it.
+- **`neural-ilt`** is a U-Net mask predictor. Public seed weights for
+  v0.1 are released on HuggingFace as
+  [`openlithohub/neural-ilt-v0.1`](https://huggingface.co/openlithohub/neural-ilt-v0.1) —
+  `NeuralILTModel(pretrained=True)` and
+  `scripts/generate_baselines.py --pretrained` (default) both pull
+  them. The numbers above are produced with these published weights.
+  v0.1 was trained on synthetic dummy layouts, so it learns the
+  identity-with-rounding regime visible in the table, not real OPC
+  corrections; a v1.0 LithoBench-trained release is planned. With
+  `--no-pretrained` the model falls back to a randomly-initialised
+  U-Net, which is what the older "no-weights" numbers reflected.
 
 ## Reproducing on real data
 
