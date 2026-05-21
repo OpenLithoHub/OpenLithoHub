@@ -132,6 +132,7 @@ ignore = ["B008", "B027", "A002"]
 "src/openlithohub/models/layout_mae.py" = ["S101"]
 "src/openlithohub/models/levelset_ilt.py" = ["S101"]
 "src/openlithohub/models/neural_ilt.py" = ["S101"]
+"src/openlithohub/models/openilt.py" = ["S101"]
 "src/openlithohub/synth/rule_based.py" = ["S311"]
 "src/openlithohub/vis/heatmaps.py" = ["S101"]
 

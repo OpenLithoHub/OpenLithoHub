@@ -112,6 +112,7 @@ def run(
     import openlithohub.models.examples.dummy_model  # noqa: F401 — register built-in models
     import openlithohub.models.levelset_ilt  # noqa: F401
     import openlithohub.models.neural_ilt  # noqa: F401
+    import openlithohub.models.openilt  # noqa: F401
     import openlithohub.models.rule_based_opc  # noqa: F401
     from openlithohub.benchmark.compliance.drc import check_drc
     from openlithohub.benchmark.compliance.mrc import check_mrc
