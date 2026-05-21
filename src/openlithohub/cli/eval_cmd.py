@@ -192,9 +192,9 @@ def run(
         # masks would skew the leaderboard number.
         mrc_violation_counts: list[int] = []
         mrc_total_pixels: list[int] = []
-        # Pixel count per sample, used to area-weight extensive scalars
-        # (e.g. ``l2_error_pixels`` scales linearly with mask area, so an
-        # unweighted mean over heterogeneously-sized samples is biased).
+        # Pixel count per sample, used to area-weight the aggregate so a
+        # 4096×4096 production tile dominates a 64×64 toy tile rather than
+        # being equally averaged with it.
         sample_pixel_counts: list[int] = []
         perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
         for i in range(n_samples):
@@ -404,15 +404,15 @@ def _aggregate_metrics(
 ) -> dict[str, Any]:
     """Aggregate per-sample metrics into a single dict.
 
-    Aggregation strategy depends on whether the underlying scalar is
-    *intensive* (independent of mask size — e.g. mean EPE in nm, PV-band
-    mean) or *extensive* (scales with mask area — e.g. ``l2_error_pixels``).
-
-    Intensive metrics are averaged with equal per-sample weights but using
-    each sample's pixel count as a soft weight, so a 4096×4096 production
-    tile contributes ~4000× as much to the aggregate as a 64×64 toy tile.
-    Extensive metrics are summed across samples instead — averaging would
-    silently divide a quantity that already integrates over the mask.
+    All metrics are averaged with each sample's pixel count as a soft
+    weight, so a 4096×4096 production tile contributes ~4000× as much to
+    the aggregate as a 64×64 toy tile. ``l2_error_pixels`` already
+    integrates over the mask in the per-sample metric, so cross-sample
+    *summation* would double-integrate and produce a number that scales
+    linearly with sample count — making leaderboard submissions from a
+    user-supplied dataset incomparable with the published baselines (which
+    average) and with each other (a longer eval run would always rank
+    worse). Mean across samples keeps the scalar comparable.
 
     Non-finite values (``nan`` / ``inf``) are dropped before averaging so a
     single degenerate tile cannot poison the aggregate. Affected metrics:
@@ -424,15 +424,7 @@ def _aggregate_metrics(
     if not metrics_list:
         return {}
 
-    # Extensive scalars (additive over mask area). Everything else is
-    # treated as intensive (per-pixel/per-edge mean-style number).
-    extensive_keys = {"l2_error_pixels", "l2_error_nm2"}
-
     if sample_pixel_counts is None or len(sample_pixel_counts) != len(metrics_list):
-        # Fallback: equal weights when the caller did not record per-sample
-        # sizes (older code path / tests). Still correct for a homogeneously
-        # sized batch — the previous default — but logs the gap so it is
-        # visible when reviewing outputs.
         weights = [1] * len(metrics_list)
     else:
         weights = list(sample_pixel_counts)
@@ -448,16 +440,11 @@ def _aggregate_metrics(
             (v, w) for v, w in raw_pairs if isinstance(v, int | float) and math.isfinite(v)
         ]
         if finite_pairs:
-            if key in extensive_keys:
-                aggregated[key] = float(sum(v for v, _ in finite_pairs))
+            total_w = sum(w for _, w in finite_pairs)
+            if total_w > 0:
+                aggregated[key] = float(sum(v * w for v, w in finite_pairs) / total_w)
             else:
-                total_w = sum(w for _, w in finite_pairs)
-                if total_w > 0:
-                    aggregated[key] = float(sum(v * w for v, w in finite_pairs) / total_w)
-                else:
-                    aggregated[key] = float(
-                        torch.tensor([v for v, _ in finite_pairs]).mean().item()
-                    )
+                aggregated[key] = float(torch.tensor([v for v, _ in finite_pairs]).mean().item())
         dropped = len(raw_pairs) - len(finite_pairs)
         if dropped > 0:
             aggregated[f"{key}_dropped_nonfinite"] = dropped
