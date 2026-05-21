@@ -252,10 +252,10 @@ def render_markdown(records: list[BaselineRecord], dataset_label: str) -> str:
         ".venv/bin/python scripts/generate_baselines.py",
         "```",
         "",
-        "`neural-ilt` is omitted from the default set: it requires pretrained",
-        "weights that are not yet published. Once a public weight release",
-        "lands on HuggingFace, run `--models ... neural-ilt --pretrained` to",
-        "populate that row.",
+        "`neural-ilt` downloads its v0.1 seed weights from HuggingFace",
+        "(`openlithohub/neural-ilt-v0.1`). To iterate on a freshly-trained",
+        "checkpoint before publishing it, pass",
+        "`--neural-ilt-weights <path/to/model.pt>`.",
         "",
         "| Model | Samples | EPE mean (nm) | EPE max (nm) | PVB mean (nm) | MRC pass |",
         "|---|---|---|---|---|---|",
@@ -294,21 +294,34 @@ def main() -> int:
             "rule-based-opc",
             "levelset-ilt",
             "openilt",
+            "neural-ilt",
         ],
-        help=(
-            "Model names to evaluate (must be registered). neural-ilt is "
-            "intentionally omitted from the default set: it requires "
-            "pretrained weights that are not yet published on HuggingFace. "
-            "Pass `--models ... neural-ilt --pretrained` once the HF release "
-            "lands."
-        ),
+        help="Model names to evaluate (must be registered).",
     )
     parser.add_argument(
         "--pretrained",
         action="store_true",
+        default=True,
         help=(
             "Pass pretrained=True to models that accept it (e.g. neural-ilt). "
-            "Required to get meaningful EPE numbers from neural-ilt."
+            "Defaults to True so the published baselines reproduce out of the box; "
+            "pass --no-pretrained to override."
+        ),
+    )
+    parser.add_argument(
+        "--no-pretrained",
+        dest="pretrained",
+        action="store_false",
+        help="Disable --pretrained (forces neural-ilt to use random weights).",
+    )
+    parser.add_argument(
+        "--neural-ilt-weights",
+        type=Path,
+        default=None,
+        help=(
+            "Local path to a neural-ilt checkpoint (state_dict). Overrides "
+            "--pretrained for neural-ilt only — useful when iterating on a "
+            "fresh training run before publishing to HuggingFace."
         ),
     )
     parser.add_argument("--no-pvband", action="store_true")
@@ -345,6 +358,9 @@ def main() -> int:
         model_kwargs: dict[str, Any] = {}
         if args.pretrained:
             model_kwargs["pretrained"] = True
+        if model_name == "neural-ilt" and args.neural_ilt_weights is not None:
+            model_kwargs["weights"] = str(args.neural_ilt_weights)
+            model_kwargs.pop("pretrained", None)
         rec = evaluate_model(
             model_name,
             samples,

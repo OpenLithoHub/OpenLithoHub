@@ -10,10 +10,10 @@ Reproduce with:
 .venv/bin/python scripts/generate_baselines.py
 ```
 
-`neural-ilt` is omitted from the default set: it requires pretrained
-weights that are not yet published. Once a public weight release
-lands on HuggingFace, run `--models ... neural-ilt --pretrained` to
-populate that row.
+`neural-ilt` downloads its v0.1 seed weights from HuggingFace
+(`openlithohub/neural-ilt-v0.1`). To iterate on a freshly-trained
+checkpoint before publishing it, pass
+`--neural-ilt-weights <path/to/model.pt>`.
 
 | Model | Samples | EPE mean (nm) | EPE max (nm) | PVB mean (nm) | MRC pass |
 |---|---|---|---|---|---|
@@ -21,6 +21,7 @@ populate that row.
 | `rule-based-opc` | 8 | 0.530 | 1.414 | 4.942 | 0% |
 | `levelset-ilt` | 8 | 0.040 | 0.250 | 4.254 | 0% |
 | `openilt` | 8 | 0.000 | 0.000 | 4.281 | 0% |
+| `neural-ilt` | 8 | 0.000 | 0.000 | 4.281 | 0% |
 <!-- AUTO-GENERATED: synthetic-baselines END -->
 ## ASAP7 standard cells (issue #4 Phase 1)
 

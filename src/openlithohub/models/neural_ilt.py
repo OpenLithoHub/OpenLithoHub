@@ -30,7 +30,7 @@ class NeuralILTModel(LithographyModel):
         weights: str | Path | None = None,
         pretrained: bool = False,
         device: str = "cpu",
-        repo_id: str = "openlithohub/neural-ilt-v1",
+        repo_id: str = "openlithohub/neural-ilt-v0.1",
         repo_filename: str = "model.pt",
         url_sha256: str | None = None,
     ) -> None:
