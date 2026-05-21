@@ -19,7 +19,10 @@ def export_oasis(
     """Export an optimized mask tensor to OASIS format.
 
     For manhattan mode, extracts rectilinear contours and writes via KLayout.
-    For curvilinear mode, fits B-splines and writes OASIS.MBW format.
+    For curvilinear mode, fits B-splines and writes a curvilinear OASIS file
+    (sampled polygons on a designated layer; see ``contour.curvilinear``).
+    Native SEMI P39 (OASIS.MASK) curve primitives and SEMI P44 multi-beam
+    mask-writer input are tracked separately and not yet emitted here.
     """
     if mode not in ("manhattan", "curvilinear"):
         raise ValueError(f"mode must be 'manhattan' or 'curvilinear', got '{mode}'")

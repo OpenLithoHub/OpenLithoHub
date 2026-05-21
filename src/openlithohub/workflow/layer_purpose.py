@@ -1,4 +1,4 @@
-"""Layer-purpose-pair (LPP) helpers — SEMI P39 + OpenAccess (Si2) compatible.
+"""Layer-purpose-pair (LPP) helpers — OpenAccess (Si2) + OASIS-compatible.
 
 Industry layouts identify a polygon by **two** integers: the layer (the
 mask layer it lives on, e.g. M1) and a *purpose* (what role the polygon
@@ -6,12 +6,11 @@ plays on that layer — a drawn shape, a pin, a routing blockage, a
 boundary marker, ...). Tools encode the purpose differently:
 
 * **GDSII / OASIS** — second integer is the *datatype*. Convention is
-  per-foundry; ``0`` is universally "drawing".
+  per-foundry; ``0`` is universally "drawing". SEMI P39 (OASIS.MASK)
+  inherits the same ``(layer, datatype)`` pair from OASIS itself.
 * **OpenAccess (Si2)** — second integer is a registered *oaPurpose*
   (defined in ``oaLayer.h``). The set is small and stable, with names
   like ``drawing``, ``pin``, ``blockage``, ``net``, ``boundary``.
-* **SEMI P39** — formalises the layer/purpose pair concept (LPP) for
-  EDA-tool interchange. Names align with OpenAccess.
 
 This module provides:
 

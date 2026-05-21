@@ -1,4 +1,4 @@
-"""Tests for the OpenAccess / SEMI P39 layer-purpose-pair helpers."""
+"""Tests for the OpenAccess (Si2) / OASIS layer-purpose-pair helpers."""
 
 from __future__ import annotations
 
