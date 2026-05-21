@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +26,13 @@ from fastapi.responses import JSONResponse, Response
 
 logger = logging.getLogger(__name__)
 
-_MODEL_CACHE: dict[tuple[str, frozenset[tuple[str, Any]]], Any] = {}
+# LRU-bounded model cache. Keyed on ``(name, frozenset(kwargs.items()))`` so
+# a ``pretrained=True`` variant does not collide with the bare model.
+# Bounded so a long-running worker that sees many distinct kwarg
+# combinations does not leak GPU memory; the least-recently-used entry is
+# torn down when the cap is hit.
+_MODEL_CACHE_CAP = 8
+_MODEL_CACHE: OrderedDict[tuple[str, frozenset[tuple[str, Any]]], Any] = OrderedDict()
 
 # Hard cap on multipart upload size for /v1/optimize. Mirrors the 2 GB ceiling
 # enforced by ``ModelHub._download_url`` for incoming weights — uniform
@@ -41,11 +48,19 @@ def _get_or_load_model(name: str, kwargs: dict[str, Any]) -> Any:
     register_builtin_models()
     key = (name, frozenset(kwargs.items()))
     if key in _MODEL_CACHE:
+        _MODEL_CACHE.move_to_end(key)
         return _MODEL_CACHE[key]
 
     model = registry.get(name, **kwargs)
     model.setup()
     _MODEL_CACHE[key] = model
+    while len(_MODEL_CACHE) > _MODEL_CACHE_CAP:
+        evicted_key, evicted = _MODEL_CACHE.popitem(last=False)
+        try:
+            evicted.teardown()
+        except Exception:  # noqa: BLE001 — teardown failure shouldn't block eviction
+            logger.exception("teardown failed while evicting %r", evicted_key)
+        logger.info("evicted model %r from cache (capacity=%d)", evicted_key, _MODEL_CACHE_CAP)
     logger.info("loaded model %r (kwargs=%s) into resident cache", name, kwargs)
     return model
 

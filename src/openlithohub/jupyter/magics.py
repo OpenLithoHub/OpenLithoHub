@@ -50,4 +50,4 @@ class OpenLithoHubMagics(Magics):
     @line_magic
     def litho_eval(self, line: str) -> None:
         """Shorthand for %openlithohub eval ..."""
-        self.openlithohub(f"eval {line}")
+        self.openlithohub(f"eval {line}")  # type: ignore[call-arg]
