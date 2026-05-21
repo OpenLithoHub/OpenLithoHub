@@ -36,7 +36,13 @@ _ID_NAME_PREFIX_LEN = 20
 # Bump when the on-disk shape changes (new required fields, renamed fields,
 # changed enum values). Files without this key are treated as v1 (legacy).
 # Add a migration in `_migrate_entries` when bumping.
-LEADERBOARD_SCHEMA_VERSION = 1
+#
+# v2 (2026-05): added wafer-level fields (``epe_wafer_*``, ``l2_error_*``) to
+# ``BenchmarkResult``; ranking key moved from ``epe_mean_nm`` (mask-level,
+# Identity scores 0) to ``l2_error_pixels`` with ``pvband_mean_nm`` as the
+# secondary key. Older v1 entries still load — the new fields are optional
+# and entries without them sort to the bottom of the table.
+LEADERBOARD_SCHEMA_VERSION = 2
 
 
 @contextlib.contextmanager
@@ -172,8 +178,26 @@ class LeaderboardStore:
             if process_node and r.process_node.value != process_node:
                 continue
             results.append(r)
-        results.sort(key=lambda r: r.epe_mean_nm)
+        # Rank by the canonical Neural-ILT printability scalar
+        # (``l2_error_pixels``), then PV-band mean as a tiebreaker.
+        # Entries written before v2 (no wafer fields) sort to the bottom.
+        # ``epe_mean_nm`` is mask-level — kept on the entry for sanity but
+        # NEVER used as the primary key, because Identity models score 0.
+        results.sort(key=_ranking_key)
         return results
+
+
+def _ranking_key(r: BenchmarkResult) -> tuple[float, float, float]:
+    """Sort key: (l2_error_pixels, pvband_mean_nm, epe_wafer_mean_nm).
+
+    Missing values become ``+inf`` so legacy entries (or partial submissions)
+    rank below complete ones rather than appearing at the top by accident.
+    """
+    inf = float("inf")
+    l2 = r.l2_error_pixels if r.l2_error_pixels is not None else inf
+    pvb = r.pvband_mean_nm if r.pvband_mean_nm is not None else inf
+    epe_w = r.epe_wafer_mean_nm if r.epe_wafer_mean_nm is not None else inf
+    return (l2, pvb, epe_w)
 
 
 def _generate_id(model_name: str) -> str:
@@ -184,9 +208,11 @@ def _generate_id(model_name: str) -> str:
 def _migrate_entries(entries: list[dict[str, Any]], *, from_version: int) -> list[dict[str, Any]]:
     """Migrate leaderboard entries from an older schema version.
 
-    Currently a no-op: only schema v1 exists. When bumping
-    LEADERBOARD_SCHEMA_VERSION, add a stepwise migration here so older
-    on-disk files keep loading.
+    v0 (legacy bare list) → v1: a no-op; the only difference was the
+    surrounding envelope. v1 → v2 added optional wafer-level fields
+    (``epe_wafer_*``, ``l2_error_*``); the new fields default to ``None``,
+    so the migration leaves entries untouched and Pydantic fills the
+    missing keys with ``None`` at validate time.
     """
     if from_version > LEADERBOARD_SCHEMA_VERSION:
         raise ValueError(

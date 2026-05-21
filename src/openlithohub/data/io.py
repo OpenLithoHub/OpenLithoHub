@@ -109,8 +109,15 @@ def load_layout(
     shapes_iter = top_cell.begin_shapes_rec(selected_layer_idx)
 
     def _project(point: Any) -> tuple[int, int]:
+        # GDSII / OASIS use mathematical (y-up) coordinates; PIL's drawing
+        # surface uses image (y-down) coordinates. Flip y so the rasterized
+        # tensor has the same orientation as the layout viewer — without
+        # this, every export round-trip (load → optimize → export) returns
+        # a vertically mirrored result, and visualizations overlaid against
+        # a coordinate grid disagree with the source GDS.
         px = int((point.x - bbox.left) * pixels_per_dbu)
-        py = int((point.y - bbox.bottom) * pixels_per_dbu)
+        py_math = int((point.y - bbox.bottom) * pixels_per_dbu)
+        py = (h_px - 1) - py_math
         return (max(0, min(px, w_px - 1)), max(0, min(py, h_px - 1)))
 
     while not shapes_iter.at_end():

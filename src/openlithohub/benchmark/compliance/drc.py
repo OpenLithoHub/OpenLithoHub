@@ -162,6 +162,13 @@ def _check_min_area(
     cy_cpu = (sum_y / counts).tolist()
     cx_cpu = (sum_x / counts).tolist()
 
+    # Express the area threshold as an equivalent edge length in nm so
+    # every violation dict (width, spacing, area, notch) carries a
+    # ``threshold_nm`` key. Renderers (``violation_table``,
+    # MCP exports) can then iterate uniformly without
+    # branching on the rule code.
+    threshold_nm_equiv = math.sqrt(min_area_nm2)
+
     violations: list[dict[str, float]] = []
     for i in range(n_comp):
         if len(violations) >= 50:
@@ -175,6 +182,7 @@ def _check_min_area(
                 "type": 2.0,
                 "x_nm": cx_cpu[i] * pixel_size_nm,
                 "y_nm": cy_cpu[i] * pixel_size_nm,
+                "threshold_nm": threshold_nm_equiv,
                 "actual_nm2": area_px * pixel_area_nm2,
                 "required_nm2": min_area_nm2,
             }

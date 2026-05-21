@@ -159,8 +159,11 @@ def _print_table(console: Console, results: list[BenchmarkResult]) -> None:
     table.add_column("Model", style="bold", no_wrap=True, overflow="fold")
     table.add_column("Dataset", no_wrap=True, overflow="fold")
     table.add_column("Node")
-    table.add_column("EPE Mean (nm)", justify="right")
-    table.add_column("EPE Max (nm)", justify="right")
+    # L2 (Neural-ILT printability) is the primary ranking key. EPE columns
+    # are kept for sanity comparison against historical mask-level numbers.
+    table.add_column("L2 (px)", justify="right")
+    table.add_column("EPE Wafer (nm)", justify="right")
+    table.add_column("EPE Mask (nm)", justify="right")
     table.add_column("PV Band Mean (nm)", justify="right")
     table.add_column("PV Band Max (nm)", justify="right")
     table.add_column("DRC", justify="center")
@@ -178,8 +181,9 @@ def _print_table(console: Console, results: list[BenchmarkResult]) -> None:
             r.model_name,
             r.dataset,
             r.process_node.value,
+            f"{r.l2_error_pixels:.0f}" if r.l2_error_pixels is not None else "-",
+            f"{r.epe_wafer_mean_nm:.2f}" if r.epe_wafer_mean_nm is not None else "-",
             f"{r.epe_mean_nm:.2f}",
-            f"{r.epe_max_nm:.2f}",
             f"{r.pvband_mean_nm:.2f}" if r.pvband_mean_nm is not None else "-",
             f"{r.pvband_max_nm:.2f}" if r.pvband_max_nm is not None else "-",
             "pass" if r.drc_pass else ("fail" if r.drc_pass is False else "-"),
@@ -191,15 +195,19 @@ def _print_table(console: Console, results: list[BenchmarkResult]) -> None:
 
 def _format_markdown(results: list[BenchmarkResult]) -> str:
     header = (
-        "| # | Model | Dataset | Node | EPE Mean (nm) | EPE Max (nm) "
-        "| PV Band Mean (nm) | PV Band Max (nm) | DRC | Paper | Code |"
+        "| # | Model | Dataset | Node | L2 (px) | EPE Wafer (nm) "
+        "| EPE Mask (nm) | PV Band Mean (nm) | PV Band Max (nm) "
+        "| DRC | Paper | Code |"
     )
     lines = [
         header,
-        "|---|-------|---------|------|---------------|--------------|"
-        "-------------------|------------------|-----|-------|------|",
+        "|---|-------|---------|------|---------|----------------|"
+        "---------------|-------------------|------------------|"
+        "-----|-------|------|",
     ]
     for i, r in enumerate(results, 1):
+        l2 = f"{r.l2_error_pixels:.0f}" if r.l2_error_pixels is not None else "-"
+        epe_w = f"{r.epe_wafer_mean_nm:.2f}" if r.epe_wafer_mean_nm is not None else "-"
         pvm = f"{r.pvband_mean_nm:.2f}" if r.pvband_mean_nm is not None else "-"
         pvx = f"{r.pvband_max_nm:.2f}" if r.pvband_max_nm is not None else "-"
         drc = "pass" if r.drc_pass else ("fail" if r.drc_pass is False else "-")
@@ -207,6 +215,7 @@ def _format_markdown(results: list[BenchmarkResult]) -> str:
         code = f"[link]({r.code_url})" if r.code_url else "-"
         lines.append(
             f"| {i} | {r.model_name} | {r.dataset} | {r.process_node.value} | "
-            f"{r.epe_mean_nm:.2f} | {r.epe_max_nm:.2f} | {pvm} | {pvx} | {drc} | {paper} | {code} |"
+            f"{l2} | {epe_w} | {r.epe_mean_nm:.2f} | {pvm} | {pvx} | "
+            f"{drc} | {paper} | {code} |"
         )
     return "\n".join(lines)
