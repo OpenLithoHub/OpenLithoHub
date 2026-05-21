@@ -21,6 +21,7 @@ numbers can be regenerated locally with `--data-root <path>`.
 | `dummy-identity` | 8 | 0.000 | 0.000 | 2.140 | 0% |
 | `rule-based-opc` | 8 | 0.530 | 1.414 | 2.487 | 0% |
 | `levelset-ilt` (Gaussian PSF) | 8 | 0.036 | 0.250 | 2.128 | 0% |
+| `openilt` (L2 + PVBand) | 8 | 0.000 | 0.000 | 4.281 | 0% |
 | `neural-ilt` (untrained U-Net) | 8 | 15.074 | 24.637 | 2.497 | 100% |
 
 Things worth knowing about these numbers:
@@ -37,6 +38,17 @@ Things worth knowing about these numbers:
   default `min_width_nm=40`; this is expected on a 64-pixel-wide canvas
   and not an indictment of the optimizer. Run with a real LithoBench
   layout or relaxed MRC thresholds for production-grade numbers.
+- **`openilt`** is the
+  [OpenILT](https://github.com/OpenOPC/OpenILT)-style baseline (clean-room
+  PyTorch reimplementation of the SimpleILT formulation, MIT-licensed
+  upstream pinned at commit
+  [`dabb97c`](https://github.com/OpenOPC/OpenILT/commit/dabb97c6ca3dfd159362e48273c436444c77353b)).
+  Optimizes the MOSAIC L2 + PVBand objective with SGD across a 3-corner
+  dose/defocus sweep. The higher PVB-mean vs. `levelset-ilt` reflects
+  the broader corner span this model is solving against — `levelset-ilt`
+  optimises only at nominal, so it lands a tighter nominal mask but
+  isn't directly comparable on PV-band. Citation: Gao et al., "MOSAIC",
+  DAC 2014.
 - **`neural-ilt`** uses a randomly-initialized U-Net unless you load
   pretrained weights via the model hub. The EPE shown here is the
   honest "no-weights" baseline. It will improve substantially after

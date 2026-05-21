@@ -84,6 +84,7 @@ def run(
         "openlithohub.models.examples.dummy_model",
         "openlithohub.models.levelset_ilt",
         "openlithohub.models.neural_ilt",
+        "openlithohub.models.openilt",
         "openlithohub.models.rule_based_opc",
     ):
         importlib.import_module(mod)

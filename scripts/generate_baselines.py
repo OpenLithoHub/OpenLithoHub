@@ -32,6 +32,7 @@ import torch
 import openlithohub.models.examples.dummy_model  # noqa: F401
 import openlithohub.models.levelset_ilt  # noqa: F401
 import openlithohub.models.neural_ilt  # noqa: F401
+import openlithohub.models.openilt  # noqa: F401
 import openlithohub.models.rule_based_opc  # noqa: F401
 from openlithohub.benchmark.compliance.mrc import check_mrc
 from openlithohub.benchmark.metrics.epe import compute_epe
