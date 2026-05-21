@@ -117,7 +117,12 @@ def _forward(mask_continuous: torch.Tensor, cfg: SeedConfig) -> torch.Tensor:
     return simulate_aerial_image(mask_continuous, sigma_px=cfg.sigma_px)
 
 
-def _step(model: UNet, batch: tuple[torch.Tensor, torch.Tensor], cfg: SeedConfig, device: torch.device) -> torch.Tensor:
+def _step(
+    model: UNet,
+    batch: tuple[torch.Tensor, torch.Tensor],
+    cfg: SeedConfig,
+    device: torch.device,
+) -> torch.Tensor:
     design, target_mask = batch
     design = design.to(device).unsqueeze(1)
     target_mask = target_mask.to(device).unsqueeze(1)
@@ -199,4 +204,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
