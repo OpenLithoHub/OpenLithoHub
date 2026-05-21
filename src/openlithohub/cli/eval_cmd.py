@@ -305,6 +305,15 @@ def run(
         from openlithohub.leaderboard.schema import BenchmarkResult, MaskTopology, ProcessNode
         from openlithohub.leaderboard.tracker import submit_result as lb_submit
 
+        # Pull dropped-sample counts (added by ``_aggregate_metrics``) into a
+        # single dict so the leaderboard records eval-time noise alongside
+        # the aggregated values themselves — see ``BenchmarkResult``.
+        dropped = {
+            k.removesuffix("_dropped_nonfinite"): int(v)
+            for k, v in aggregated.items()
+            if k.endswith("_dropped_nonfinite")
+        }
+
         try:
             result_entry = BenchmarkResult(
                 model_name=model,
@@ -324,6 +333,8 @@ def run(
                 pvband_max_nm=aggregated.get("pvband_max_nm"),
                 mrc_violation_rate=aggregated.get("mrc_violation_rate"),
                 drc_pass=aggregated.get("drc_passed_all"),
+                num_samples=n_samples,
+                dropped_nonfinite=dropped or None,
                 paper_url=paper_url,
                 code_url=code_url,
             )

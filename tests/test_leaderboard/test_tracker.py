@@ -109,7 +109,7 @@ def test_leaderboard_file_is_valid_json(
     data = json.loads(tmp_store.path.read_text())
     assert "entries" in data
     assert len(data["entries"]) == 1
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == 3
 
 
 def test_legacy_unversioned_file_still_loads(
@@ -133,6 +133,55 @@ def test_future_schema_version_rejected(
     tmp_store.path.write_text(json.dumps({"schema_version": 999, "entries": []}))
     with pytest.raises(ValueError, match="newer schema"):
         tmp_store.query()
+
+
+def test_v2_l2_error_nulled_on_load_without_num_samples(tmp_store: LeaderboardStore) -> None:
+    """v2-and-older entries had l2_error_pixels as a cross-sample SUM with no
+    num_samples recorded. The v3 migration cannot reliably divide back into a
+    mean, so it nulls out the field rather than corrupting the ranking with
+    apples-to-oranges scalars."""
+    legacy_entry = {
+        "model_name": "legacy-summed",
+        "dataset": "lithobench",
+        "process_node": "7nm",
+        "mask_topology": "curvilinear",
+        "epe_mean_nm": 1.5,
+        "epe_max_nm": 3.0,
+        "l2_error_pixels": 12345.0,
+        "l2_error_nm2": 67890.0,
+        "submission_id": "legacy-deadbeef",
+    }
+    tmp_store.path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_store.path.write_text(json.dumps({"schema_version": 2, "entries": [legacy_entry]}))
+
+    results = tmp_store.query()
+    assert len(results) == 1
+    assert results[0].l2_error_pixels is None
+    assert results[0].l2_error_nm2 is None
+
+
+def test_v3_l2_error_preserved_when_num_samples_present(tmp_store: LeaderboardStore) -> None:
+    """v3 entries record num_samples alongside the (mean) l2_error_pixels;
+    those entries must round-trip through load unchanged."""
+    entry = {
+        "model_name": "modern",
+        "dataset": "lithobench",
+        "process_node": "7nm",
+        "mask_topology": "curvilinear",
+        "epe_mean_nm": 1.5,
+        "epe_max_nm": 3.0,
+        "l2_error_pixels": 299.875,
+        "l2_error_nm2": 19192.0,
+        "num_samples": 8,
+        "submission_id": "modern-cafebabe",
+    }
+    tmp_store.path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_store.path.write_text(json.dumps({"schema_version": 3, "entries": [entry]}))
+
+    results = tmp_store.query()
+    assert len(results) == 1
+    assert results[0].l2_error_pixels == 299.875
+    assert results[0].num_samples == 8
 
 
 def test_module_level_functions(tmp_path: Path, sample_result: BenchmarkResult) -> None:

@@ -9,6 +9,10 @@ name: Auto-Leaderboard
 
 on:
   pull_request_target:
+    # ``synchronize`` re-runs validation from scratch against the new
+    # head SHA — safe because the only PR-author input we ever read is
+    # the submission YAML (allow-listed by the regex in the fetch step
+    # below) and validated by the strict ``BenchmarkResult`` schema.
     types: [opened, reopened, synchronize, labeled]
     paths:
       - "submissions/**.yaml"

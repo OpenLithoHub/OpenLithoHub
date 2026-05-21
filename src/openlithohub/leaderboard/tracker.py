@@ -42,7 +42,15 @@ _ID_NAME_PREFIX_LEN = 20
 # Identity scores 0) to ``l2_error_pixels`` with ``pvband_mean_nm`` as the
 # secondary key. Older v1 entries still load — the new fields are optional
 # and entries without them sort to the bottom of the table.
-LEADERBOARD_SCHEMA_VERSION = 2
+#
+# v3 (2026-05): the ``l2_error_pixels`` aggregator changed from cross-sample
+# *sum* to cross-sample *mean*, and ``num_samples`` was added to
+# ``BenchmarkResult``. v<=2 entries have no recorded ``num_samples`` so the
+# old summed value cannot be reliably normalized; on load the migration
+# nulls out ``l2_error_pixels`` / ``l2_error_nm2`` for those entries so they
+# sort to the bottom rather than corrupting the ranking with apples-to-
+# oranges scalars.
+LEADERBOARD_SCHEMA_VERSION = 3
 
 
 @contextlib.contextmanager
@@ -213,6 +221,15 @@ def _migrate_entries(entries: list[dict[str, Any]], *, from_version: int) -> lis
     (``epe_wafer_*``, ``l2_error_*``); the new fields default to ``None``,
     so the migration leaves entries untouched and Pydantic fills the
     missing keys with ``None`` at validate time.
+
+    v2 → v3: the per-run ``l2_error_pixels`` aggregator changed from
+    cross-sample sum to cross-sample mean. v<=2 entries have no
+    ``num_samples`` recorded, so the old summed scalar cannot be divided
+    back into a comparable mean. The migration nulls out
+    ``l2_error_pixels`` / ``l2_error_nm2`` on those entries — the
+    ``_ranking_key`` already sends ``None``-valued L2 to the bottom, so
+    legacy entries fall out of the top of the table rather than dragging
+    the ranking into apples-vs-oranges territory.
     """
     if from_version > LEADERBOARD_SCHEMA_VERSION:
         raise ValueError(
@@ -220,6 +237,11 @@ def _migrate_entries(entries: list[dict[str, Any]], *, from_version: int) -> lis
             f"(v{from_version} > v{LEADERBOARD_SCHEMA_VERSION}). "
             "Upgrade openlithohub or move the file aside."
         )
+    if from_version <= 2:
+        for entry in entries:
+            if entry.get("l2_error_pixels") is not None and entry.get("num_samples") is None:
+                entry["l2_error_pixels"] = None
+                entry["l2_error_nm2"] = None
     return entries
 
 

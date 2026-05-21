@@ -200,6 +200,15 @@ def _check_notch(
     does not touch the image boundary (i.e. it is enclosed by features).
     Through-channels and the open exterior background are excluded —
     those are the domain of ``_check_spacing`` and not relevant here.
+
+    Border asymmetry vs EPE: this routine evaluates pixels right up to
+    the image frame (only excluding bg components that *touch* the border
+    as "open exterior"). The EPE metric (``_extract_edges``) zeros its
+    1-pixel image border to suppress Sobel phantom edges, so a feature
+    whose edge sits on the frame can produce a DRC violation while being
+    invisible to EPE. The two metrics are intentionally not symmetric:
+    DRC cares about manufacturability of every printed pixel; EPE cares
+    about edge-placement of detectable contours.
     """
     radius = int(math.floor(min_notch_nm / (2.0 * pixel_size_nm)))
     if radius < 1:
