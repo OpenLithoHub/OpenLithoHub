@@ -286,7 +286,7 @@ class OpenILTModel(LithographyModel):
             pvb = functional.mse_loss(resist_max, target) + functional.mse_loss(resist_min, target)
             loss = l2_nom + pvb_weight * pvb
 
-            loss.backward()
+            loss.backward()  # type: ignore[no-untyped-call]
             optimizer.step()
 
             loss_val = loss.item()
