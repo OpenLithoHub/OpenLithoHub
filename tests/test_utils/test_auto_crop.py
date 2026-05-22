@@ -24,6 +24,28 @@ class TestScoreComplexity:
         score = score_complexity(mask, window_px=16)
         assert score[90, 90].item() > score[16, 16].item()
 
+    def test_edge_pixels_not_deflated_by_zero_padding(self) -> None:
+        """Issue #32: boxcar conv used to zero-pad, deflating scores
+        within ``window_px // 2`` of the edge — biasing
+        ``find_most_complex_window`` toward the centre when the layout
+        barely exceeds ``window_size``. Replicate padding fixes that.
+        Compare the score's edge/centre ratio against the bound that
+        zero-padding would have produced."""
+        mask = torch.zeros(128, 128)
+        # Identical patches: one against the top edge, one in the middle.
+        for dy in range(0, 12, 4):
+            mask[dy : dy + 2, 8:120] = 1.0
+        for dy in range(60, 72, 4):
+            mask[dy : dy + 2, 8:120] = 1.0
+        score = score_complexity(mask, window_px=8)
+        # With zero padding the edge would see ~5/9 of the interior signal;
+        # replicate padding raises it well past that floor.
+        edge = score[1, 64].item()
+        center = score[64, 64].item()
+        assert edge > 0.65 * center, (
+            f"edge/centre = {edge / center:.2f} — zero-pad ceiling was ~0.55"
+        )
+
 
 class TestFindMostComplexWindow:
     def test_small_mask_returns_full_extent(self) -> None:

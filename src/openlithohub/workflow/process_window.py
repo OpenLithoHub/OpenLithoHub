@@ -14,6 +14,34 @@ integration site.
 The corner enumeration mirrors the four-corner scheme used by
 ``benchmark.metrics.pvband.compute_pvband`` so that what we *optimise* and what
 we *measure* live in the same world.
+
+Physical caveats (issue #27)
+----------------------------
+
+The corner sweep here is a fast inner-loop diagnostic, not rigorous PW
+simulation:
+
+* **Defocus is modelled by widening the Gaussian PSF only.** A real
+  defocused pupil loses contrast (the MTF dips and re-rings — the
+  textbook Bossung curves) — the energy is *redistributed* into the
+  pupil's nulls, not merely smeared by a wider real-space kernel. A
+  Gaussian preserves total energy, so this proxy under-estimates
+  defocus-induced contrast loss; PW corners that are dim in reality
+  look only blurry here. For headline PW numbers, drive the Hopkins
+  path with measured-source / Zernike-pupil I/O (see ``optics.py``)
+  rather than this proxy.
+* **Dose enters as a multiplicative scale on the aerial image.** That
+  is correct *if* the resist threshold is dose-pinned (the intensity
+  the resist clears at scales linearly with dose). The
+  ``HopkinsSimulator`` does this internally (issue #52), but this fast
+  path uses a *fixed* threshold passed by the caller — so a ±5% dose
+  corner cleanly shifts the resist contour rather than being silently
+  cancelled. Pair it with ``threshold=0.225`` (LithoBench-canonical)
+  for headline alignment with the Hopkins benchmark numbers.
+
+If you require physically-rigorous defocus, use a Hopkins SOCS forward
+sim with a defocus Zernike (Z4) and treat this module as the
+training-loop proxy.
 """
 
 from __future__ import annotations
@@ -80,6 +108,13 @@ def pw_fidelity_loss(
     With ``corners=(ProcessWindowCorner(dose=1.0, sigma_px=σ, weight=1.0),)``
     this reduces to the existing nominal-only loss, which is how the call-site
     in ``LevelSetILTModel`` keeps backward compatibility.
+
+    .. note::
+       Threshold default is 0.5 (legacy API — changing it would silently
+       shift every training trajectory built on this module). Pass
+       ``threshold=0.225`` to align with the LithoBench / Yang2023
+       resist-clearing convention used by ``compute_l2_error`` /
+       ``compute_wafer_epe``.
     """
     if len(corners) == 0:
         raise ValueError("pw_fidelity_loss requires at least one corner")

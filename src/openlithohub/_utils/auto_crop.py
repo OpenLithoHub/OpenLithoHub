@@ -26,6 +26,14 @@ def score_complexity(mask: torch.Tensor, *, window_px: int) -> torch.Tensor:
     """Per-pixel complexity score via boxcar mean of edges + foreground.
 
     Output is the same shape as ``mask``. Higher = denser / busier.
+
+    Boundary handling: replicate padding (issue #32). The previous
+    implementation zero-padded the boxcar conv, which deflated the
+    score within ``window_px // 2`` of every mask edge — biasing
+    ``find_most_complex_window`` toward the centre on layouts that
+    barely exceed ``window_size`` (since the score's interior search
+    window then overlaps the deflated edge band). Replicate padding
+    keeps boundary scores unbiased without leaking phantom signal in.
     """
     fg = (mask > 0.5).float()
     edges = _edge_map(fg)
@@ -36,7 +44,9 @@ def score_complexity(mask: torch.Tensor, *, window_px: int) -> torch.Tensor:
     # Force an odd kernel so conv2d output matches the input shape exactly.
     k = window_px if window_px % 2 == 1 else window_px + 1
     kernel = torch.ones((1, 1, k, k), dtype=sig4d.dtype, device=sig4d.device)
-    boxcar = functional.conv2d(sig4d, kernel, padding=k // 2) / float(k * k)
+    pad = k // 2
+    sig_padded = functional.pad(sig4d, (pad, pad, pad, pad), mode="replicate")
+    boxcar = functional.conv2d(sig_padded, kernel) / float(k * k)
     return boxcar.squeeze(0).squeeze(0)
 
 
