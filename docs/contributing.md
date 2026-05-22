@@ -70,6 +70,11 @@ tests/
 - Include tests for new functionality
 - Update documentation if adding public APIs
 
+For design proposals (anything that adds an RFC under `docs/rfcs/` or
+otherwise commits to a non-trivial interface), follow the two-stage
+[RFC lifecycle](rfcs/lifecycle.md): open a discussion issue first, then
+submit the PR that lands the markdown file.
+
 ## Reporting Issues
 
 Please use [GitHub Issues](https://github.com/OpenLithoHub/OpenLithoHub/issues) with:
