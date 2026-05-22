@@ -20,7 +20,9 @@ benchmark stack (LithoSample.metadata exposes nm units consistently).
 
 from __future__ import annotations
 
+import numpy as np
 import torch
+from scipy.optimize import linear_sum_assignment
 
 
 def compute_hotspot_detection(
@@ -30,11 +32,10 @@ def compute_hotspot_detection(
 ) -> dict[str, float]:
     """Score a hotspot predictor against a ground-truth point list.
 
-    A predicted point is a true positive iff at least one *unmatched* GT
-    point lies within ``match_radius_nm`` of it. Matching is greedy in
-    predicted-point order; this is standard for hotspot detection
-    benchmarks where the predictor's confidence ranking is not part of
-    the contest scoring.
+    A predicted point is a true positive iff it can be paired with a GT
+    point within ``match_radius_nm``, under a *maximum-cardinality
+    minimum-cost* assignment (Hungarian algorithm) — independent of the
+    order ``predicted_points`` arrives in.
 
     Args:
         predicted_points: ``(N, 2)`` tensor of predicted hotspot
@@ -108,20 +109,18 @@ def compute_hotspot_detection(
     gt = ground_truth_points.float()
     dists = torch.cdist(pred, gt)  # (N, M)
 
-    matched_gt = torch.zeros(n_gt, dtype=torch.bool, device=gt.device)
-    num_tp = 0
     radius = float(match_radius_nm)
-    for i in range(n_pred):
-        candidate_mask = (dists[i] <= radius) & (~matched_gt)
-        if not candidate_mask.any():
-            continue
-        # Closest unmatched GT inside the disk wins this prediction.
-        candidate_dists = torch.where(
-            candidate_mask, dists[i], torch.full_like(dists[i], float("inf"))
-        )
-        j = int(candidate_dists.argmin().item())
-        matched_gt[j] = True
-        num_tp += 1
+    # Mark out-of-disk pairs with a large finite cost so the Hungarian
+    # solver still runs on rectangular matrices (it requires a square cost
+    # internally, but linear_sum_assignment handles non-square fine; only
+    # finite costs matter). We post-filter those infeasible pairings.
+    cost = dists.detach().cpu().numpy().astype(np.float64)
+    big = radius + 1.0  # any value strictly greater than radius
+    cost_for_solver = np.where(cost <= radius, cost, big)
+    pred_idx, gt_idx = linear_sum_assignment(cost_for_solver)
+    # A pair counts only if the *original* distance was inside the disk.
+    valid = cost[pred_idx, gt_idx] <= radius
+    num_tp = int(valid.sum())
 
     num_fp = n_pred - num_tp
     num_fn = n_gt - num_tp

@@ -97,9 +97,12 @@ def test_epe_and_weighted_rms(tmp_path: Path) -> None:
         "x,y,tangent,target_cd,measured_cd,weight\n0,0,0,32.0,33.0,1.0\n1,1,0,32.0,30.0,3.0\n"
     )
     gt = parse_gauge(p)
-    assert gt.epe() == (1.0, -2.0)
-    # sqrt((1*1 + 3*4) / 4) = sqrt(13/4)
-    assert math.isclose(gt.weighted_rms_epe(), math.sqrt(13 / 4))
+    # CD error = measured - target (counts both edges).
+    assert gt.cd_error() == (1.0, -2.0)
+    # Single-edge EPE = half the CD error (matches compute_epe units).
+    assert gt.epe() == (0.5, -1.0)
+    # weighted RMS uses single-edge EPE: sqrt((1*0.25 + 3*1) / 4)
+    assert math.isclose(gt.weighted_rms_epe(), math.sqrt((0.25 + 3.0) / 4))
 
 
 def test_epe_raises_when_unmeasured(tmp_path: Path) -> None:

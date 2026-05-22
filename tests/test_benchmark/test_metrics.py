@@ -142,11 +142,33 @@ def test_epe_full_foreground_no_phantom_border():
     result = compute_epe(full, full, pixel_size_nm=1.0)
     assert result["epe_mean_nm"] == 0.0
     assert result["epe_max_nm"] == 0.0
+
+
+def test_epe_symmetric_catches_under_print():
+    """Predicted mask is missing a feature target has → EPE must be > 0.
+
+    The asymmetric (predicted→target only) form returns 0 here because
+    predicted's edge set is empty for the missing region, so there's
+    nothing to measure. Symmetric EPE catches this by also measuring
+    target→predicted.
+    """
+    target = torch.zeros(64, 64)
+    target[10:20, 10:20] = 1.0  # one square
+    target[30:40, 30:40] = 1.0  # second square
+
+    predicted = torch.zeros(64, 64)
+    predicted[10:20, 10:20] = 1.0  # only the first square
+
+    result = compute_epe(predicted, target, pixel_size_nm=1.0)
+    assert result["valid"] is True
+    # The missing 10×10 square contributes target→predicted distances
+    # ≳ 10 pixels; mean must be well above zero.
+    assert result["epe_mean_nm"] > 1.0
+    assert result["epe_max_nm"] > 10.0
     assert result["valid"] is True
 
 
 def test_epe_single_edge_pixel_yields_nan_std(monkeypatch):
-    import math
 
     from openlithohub.benchmark.metrics import epe as epe_mod
 
@@ -165,8 +187,9 @@ def test_epe_single_edge_pixel_yields_nan_std(monkeypatch):
     result = epe_mod.compute_epe(a, b, pixel_size_nm=1.0)
     assert result["valid"] is True
     assert result["epe_mean_nm"] == 0.0
-    # Std over a single sample is undefined, not zero.
-    assert math.isnan(result["epe_std_nm"])
+    # Symmetric EPE: pred→target (1) + target→pred (1) = 2 measurements,
+    # both at distance 0, so std is well-defined and equals 0.
+    assert result["epe_std_nm"] == 0.0
 
 
 class TestShotCount:

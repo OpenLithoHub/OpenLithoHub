@@ -56,7 +56,14 @@ def simulate_resist(
         aerial_image: Aerial image intensity (H, W), values in [0, 1].
         acid_diffusion_length_nm: Acid diffusion length in nanometers.
         pixel_size_nm: Physical pixel size for unit conversion.
-        threshold: Development threshold for binary output.
+        threshold: Development threshold *applied to the post-quencher acid
+            field*. The quencher is subtracted before thresholding, so an
+            aerial intensity of ``threshold + quencher_concentration`` is
+            the dose where development just kicks in. This is the standard
+            CAR convention (more quencher → more acid needed) — not a
+            normalized intensity threshold. To keep a fixed effective dose
+            cutoff regardless of quencher, set
+            ``threshold = nominal_threshold - quencher_concentration``.
         quencher_concentration: Base quencher level subtracted from acid.
 
     Returns:

@@ -89,9 +89,12 @@ def compute_epe(
 ) -> EPEResult:
     """Compute Edge Placement Error between predicted and target contours.
 
-    Extracts edges from both binary masks via Sobel operators, then computes
-    the minimum Euclidean distance from each predicted edge pixel to the
-    nearest target edge pixel.
+    Symmetric edge-distance: for every edge pixel in *both* sets we compute
+    the minimum distance to the *other* set, then aggregate over the
+    union. The asymmetric form (predicted→target only) reports zero error
+    for "missing entirely" failure modes — if predicted has no edges where
+    target has a feature, predicted's edge set is empty and the loop has
+    nothing to penalize. The symmetric form catches under-printing.
 
     Args:
         predicted: Binary mask of predicted pattern (H, W), values in {0, 1}.
@@ -128,26 +131,9 @@ def compute_epe(
         # spread, matching the single-edge-pixel convention below.
         return {"epe_mean_nm": inf, "epe_max_nm": inf, "epe_std_nm": float("nan"), "valid": False}
 
-    # Compute pairwise distances in chunks along BOTH axes to keep peak
-    # memory at chunk_size^2 floats regardless of edge count. With a single
-    # axis chunked, large target patterns still blow the memory budget.
-    chunk_size = 4096
-    min_dists = []
-    for i in range(0, pred_pts.shape[0], chunk_size):
-        pred_chunk = pred_pts[i : i + chunk_size]
-        running = torch.full(
-            (pred_chunk.shape[0],),
-            float("inf"),
-            device=pred_chunk.device,
-            dtype=pred_chunk.dtype,
-        )
-        for j in range(0, tgt_pts.shape[0], chunk_size):
-            tgt_chunk = tgt_pts[j : j + chunk_size]
-            dists = torch.cdist(pred_chunk, tgt_chunk)
-            running = torch.minimum(running, dists.min(dim=1).values)
-        min_dists.append(running)
-
-    min_distances = torch.cat(min_dists) * pixel_size_nm
+    pred_to_tgt = _min_pairwise_distances(pred_pts, tgt_pts)
+    tgt_to_pred = _min_pairwise_distances(tgt_pts, pred_pts)
+    min_distances = torch.cat([pred_to_tgt, tgt_to_pred]) * pixel_size_nm
 
     return {
         "epe_mean_nm": float(min_distances.mean().item()),
@@ -160,6 +146,31 @@ def compute_epe(
         ),
         "valid": True,
     }
+
+
+def _min_pairwise_distances(source: torch.Tensor, reference: torch.Tensor) -> torch.Tensor:
+    """For each row in ``source``, distance to the nearest row in ``reference``.
+
+    Both arguments are non-empty (N, 2) float tensors. Chunks along both
+    axes to keep peak memory at ``chunk_size**2`` floats regardless of
+    edge count.
+    """
+    chunk_size = 4096
+    out: list[torch.Tensor] = []
+    for i in range(0, source.shape[0], chunk_size):
+        src_chunk = source[i : i + chunk_size]
+        running = torch.full(
+            (src_chunk.shape[0],),
+            float("inf"),
+            device=src_chunk.device,
+            dtype=src_chunk.dtype,
+        )
+        for j in range(0, reference.shape[0], chunk_size):
+            ref_chunk = reference[j : j + chunk_size]
+            dists = torch.cdist(src_chunk, ref_chunk)
+            running = torch.minimum(running, dists.min(dim=1).values)
+        out.append(running)
+    return torch.cat(out)
 
 
 def compute_wafer_epe(

@@ -117,7 +117,7 @@ def apply_resist_threshold(
     aerial_image: torch.Tensor,
     threshold: float = 0.5,
 ) -> torch.Tensor:
-    """Apply resist threshold to produce binary resist pattern.
+    """Apply a hard resist threshold to produce a binary resist pattern.
 
     The 0.5 default is a generic mid-intensity cutoff for ad-hoc use; the
     canonical ICCAD16 / LithoBench cutoff is 0.225 (see
@@ -130,5 +130,14 @@ def apply_resist_threshold(
     CTR parameters are foundry-confidential and cannot ship in an
     open-source repo; benchmark-relative comparison is unaffected, but
     absolute wafer prediction is not in scope.
+
+    Returns a hard 0/1 tensor — gradients do **not** flow back through
+    this function. The README's "end-to-end differentiable" claim refers
+    to the ILT optimizer path, which uses
+    :func:`openlithohub._utils.resist_model.differentiable_threshold`
+    (a temperature-controlled sigmoid). Use that helper for any
+    gradient-bearing forward; reserve this hard threshold for
+    measurement / scoring code (PVB envelopes, stochastic comparisons,
+    leaderboard pass/fail).
     """
     return (aerial_image >= threshold).float()

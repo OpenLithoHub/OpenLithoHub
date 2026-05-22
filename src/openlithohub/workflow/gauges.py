@@ -92,20 +92,45 @@ class GaugeTable:
     def __len__(self) -> int:
         return len(self.points)
 
-    def epe(self) -> tuple[float, ...]:
-        """Edge-placement error (measured - target) per point.
+    def cd_error(self) -> tuple[float, ...]:
+        """``measured_cd - target_cd`` per point, in nm.
+
+        This is the *CD-bias* (a.k.a. CD error), **not** single-edge EPE —
+        it counts both edges of the line moving away from target. Use
+        :meth:`epe` for the per-edge value that matches
+        :func:`openlithohub.benchmark.metrics.epe.compute_epe`.
 
         Raises ValueError if any point has no measurement.
         """
         out: list[float] = []
         for p in self.points:
             if p.measured_cd is None:
-                raise ValueError(f"Cannot compute EPE: gauge at ({p.x}, {p.y}) has no measured_cd.")
+                raise ValueError(
+                    f"Cannot compute CD error: gauge at ({p.x}, {p.y}) has no measured_cd."
+                )
             out.append(p.measured_cd - p.target_cd)
         return tuple(out)
 
+    def epe(self) -> tuple[float, ...]:
+        """Single-edge EPE per point, in nm.
+
+        Equal to half of :meth:`cd_error` — CD error counts both edges of
+        the printed line drifting from target, while EPE in the
+        OpenLithoHub metrics package (``compute_epe``) is per-edge. Halving
+        keeps the two definitions on the same scale so they aggregate
+        cleanly in the leaderboard.
+
+        Raises ValueError if any point has no measurement.
+        """
+        return tuple(0.5 * e for e in self.cd_error())
+
     def weighted_rms_epe(self) -> float:
-        """sqrt( sum(w * epe^2) / sum(w) ) — the canonical OPC scoring metric."""
+        """sqrt( sum(w * epe^2) / sum(w) ) — the canonical OPC scoring metric.
+
+        Uses single-edge EPE (per :meth:`epe`), so the value is half of
+        what an all-CD-error formulation would report. Matches the per-edge
+        units of :func:`openlithohub.benchmark.metrics.epe.compute_epe`.
+        """
         epes = self.epe()
         wsum = sum(p.weight for p in self.points)
         if wsum == 0.0:
