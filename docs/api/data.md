@@ -42,6 +42,11 @@
       show_root_heading: true
       members_order: source
 
+::: openlithohub.data.freepdk45_sram
+    options:
+      show_root_heading: true
+      members_order: source
+
 ::: openlithohub.data.orfs
     options:
       show_root_heading: true
