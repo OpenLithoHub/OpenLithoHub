@@ -103,3 +103,44 @@ def test_optimize_unknown_model_returns_404(client: TestClient, tmp_path) -> Non
         )
 
     assert response.status_code == 404
+
+
+def test_get_or_load_model_returns_per_key_lock() -> None:
+    """Issue #37 regression: cached model and its serialisation lock must
+    be returned together so concurrent requests can serialise predict()."""
+    import threading
+
+    from openlithohub.server.app import _MODEL_CACHE, _MODEL_LOCKS, _get_or_load_model
+
+    _MODEL_CACHE.clear()
+    _MODEL_LOCKS.clear()
+    model_a, lock_a = _get_or_load_model("dummy-identity", {})
+    model_b, lock_b = _get_or_load_model("dummy-identity", {})
+    assert model_a is model_b
+    assert lock_a is lock_b
+    assert isinstance(lock_a, type(threading.Lock()))
+
+
+def test_get_or_load_model_concurrent_requests_load_once() -> None:
+    """Two threads asking for the same model must share one instance —
+    no double-load, no race that produces two distinct models."""
+    import threading
+
+    from openlithohub.server.app import _MODEL_CACHE, _MODEL_LOCKS, _get_or_load_model
+
+    _MODEL_CACHE.clear()
+    _MODEL_LOCKS.clear()
+    results: list[tuple[object, object]] = []
+    barrier = threading.Barrier(4)
+
+    def worker() -> None:
+        barrier.wait()
+        results.append(_get_or_load_model("dummy-identity", {}))
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len({id(m) for m, _ in results}) == 1
+    assert len({id(lock) for _, lock in results}) == 1

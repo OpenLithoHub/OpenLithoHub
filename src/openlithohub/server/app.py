@@ -10,12 +10,25 @@ Models are loaded lazily on first request and cached in-process; repeat
 requests against the same model skip weight loading entirely. The cache
 is keyed by ``(name, frozenset(kwargs.items()))`` so a `pretrained=True`
 variant does not collide with the bare model.
+
+Concurrency
+-----------
+The endpoint is ``async def`` but the underlying optimization is pure
+CPU/GPU work, so we dispatch it to a worker thread via
+``asyncio.to_thread`` to keep the event loop responsive (issue #36).
+The model cache is guarded by ``_CACHE_LOCK`` so two concurrent
+load-on-miss requests for the same key cannot both build the model and
+race to evict each other (issue #37). Per-model ``predict()`` is
+serialised behind a per-instance ``threading.Lock`` so two requests
+hitting the same cached model cannot stomp on its mutable state.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import tempfile
+import threading
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
@@ -33,6 +46,15 @@ logger = logging.getLogger(__name__)
 # torn down when the cap is hit.
 _MODEL_CACHE_CAP = 8
 _MODEL_CACHE: OrderedDict[tuple[str, frozenset[tuple[str, Any]]], Any] = OrderedDict()
+# Guards _MODEL_CACHE itself (lookup / insert / eviction). Held only across
+# pure dict ops; the actual model load happens *outside* the lock so a slow
+# weight download does not stall unrelated requests.
+_CACHE_LOCK = threading.Lock()
+# Per-model serialisation lock. Models cache mutable state (kernel tensors,
+# optimizer momentum, RNG cursors); concurrent predict() on the same
+# instance would interleave reads and writes. Stored in a sidecar dict
+# keyed identically to _MODEL_CACHE.
+_MODEL_LOCKS: dict[tuple[str, frozenset[tuple[str, Any]]], threading.Lock] = {}
 
 # Hard cap on multipart upload size for /v1/optimize. Mirrors the 2 GB ceiling
 # enforced by ``ModelHub._download_url`` for incoming weights — uniform
@@ -41,28 +63,56 @@ _MODEL_CACHE: OrderedDict[tuple[str, frozenset[tuple[str, Any]]], Any] = Ordered
 _MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
 
-def _get_or_load_model(name: str, kwargs: dict[str, Any]) -> Any:
-    """Return a cached LithographyModel or instantiate + setup a new one."""
+def _get_or_load_model(name: str, kwargs: dict[str, Any]) -> tuple[Any, threading.Lock]:
+    """Return a cached LithographyModel + its predict-serialisation lock.
+
+    Two concurrent requests for the same (name, kwargs) pair must not both
+    build the model — the second would either double-load weights or race
+    to evict the first. We resolve that by holding ``_CACHE_LOCK`` across
+    the lookup *and* the insertion of a placeholder lock; the heavy
+    ``model.setup()`` happens outside the cache lock under that per-key
+    lock so unrelated requests stay unblocked.
+    """
     from openlithohub.models.registry import register_builtin_models, registry
 
     register_builtin_models()
     key = (name, frozenset(kwargs.items()))
-    if key in _MODEL_CACHE:
-        _MODEL_CACHE.move_to_end(key)
-        return _MODEL_CACHE[key]
 
-    model = registry.get(name, **kwargs)
-    model.setup()
-    _MODEL_CACHE[key] = model
-    while len(_MODEL_CACHE) > _MODEL_CACHE_CAP:
-        evicted_key, evicted = _MODEL_CACHE.popitem(last=False)
-        try:
-            evicted.teardown()
-        except Exception:  # noqa: BLE001 — teardown failure shouldn't block eviction
-            logger.exception("teardown failed while evicting %r", evicted_key)
-        logger.info("evicted model %r from cache (capacity=%d)", evicted_key, _MODEL_CACHE_CAP)
-    logger.info("loaded model %r (kwargs=%s) into resident cache", name, kwargs)
-    return model
+    with _CACHE_LOCK:
+        if key in _MODEL_CACHE:
+            _MODEL_CACHE.move_to_end(key)
+            return _MODEL_CACHE[key], _MODEL_LOCKS[key]
+        # Reserve a per-key lock so a second concurrent caller for the same
+        # key blocks on it instead of double-loading.
+        per_key_lock = _MODEL_LOCKS.setdefault(key, threading.Lock())
+
+    with per_key_lock:
+        # Re-check under the per-key lock — another caller may have loaded
+        # while we were waiting.
+        with _CACHE_LOCK:
+            if key in _MODEL_CACHE:
+                _MODEL_CACHE.move_to_end(key)
+                return _MODEL_CACHE[key], per_key_lock
+
+        model = registry.get(name, **kwargs)
+        model.setup()
+
+        with _CACHE_LOCK:
+            _MODEL_CACHE[key] = model
+            while len(_MODEL_CACHE) > _MODEL_CACHE_CAP:
+                evicted_key, evicted = _MODEL_CACHE.popitem(last=False)
+                _MODEL_LOCKS.pop(evicted_key, None)
+                try:
+                    evicted.teardown()
+                except Exception:  # noqa: BLE001 — teardown failure shouldn't block eviction
+                    logger.exception("teardown failed while evicting %r", evicted_key)
+                logger.info(
+                    "evicted model %r from cache (capacity=%d)",
+                    evicted_key,
+                    _MODEL_CACHE_CAP,
+                )
+        logger.info("loaded model %r (kwargs=%s) into resident cache", name, kwargs)
+        return model, per_key_lock
 
 
 def _run_optimize(
@@ -90,7 +140,7 @@ def _run_optimize(
         pixel_nm = node_config.pixel_size_nm
 
     model_kwargs: dict[str, Any] = {"pretrained": True} if pretrained else {}
-    model = _get_or_load_model(model_name, model_kwargs)
+    model, model_lock = _get_or_load_model(model_name, model_kwargs)
 
     layout_tensor = load_layout(input_path, pixel_nm, layer=layer)
     halo_px = compute_halo_px(
@@ -102,9 +152,13 @@ def _run_optimize(
 
     tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=halo_px)
     tile_results = []
-    for tile in tiles:
-        result = model.predict(tile.tensor)
-        tile_results.append((tile, result.mask))
+    # Hold the per-model lock across all tiles for one request so a
+    # concurrent request cannot interleave its predict() calls with ours
+    # and corrupt the model's per-tile state (caches, RNG cursors, etc.).
+    with model_lock:
+        for tile in tiles:
+            result = model.predict(tile.tensor)
+            tile_results.append((tile, result.mask))
 
     h, w = layout_tensor.shape
     optimized = stitch_tiles(tile_results, (h, w))
@@ -202,7 +256,14 @@ def create_app() -> FastAPI:
                     out_f.write(chunk)
 
             try:
-                summary = _run_optimize(
+                # CPU/GPU-bound work — run in a thread so the event loop
+                # stays responsive to other requests and to the health
+                # endpoint (issue #36). FastAPI's default "async def"
+                # endpoint runs the body on the event-loop thread, which
+                # would otherwise stall every other in-flight request for
+                # seconds-to-minutes per optimization.
+                summary = await asyncio.to_thread(
+                    _run_optimize,
                     input_path=input_path,
                     output_path=output_path,
                     model_name=model,
