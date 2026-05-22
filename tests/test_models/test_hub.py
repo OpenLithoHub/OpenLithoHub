@@ -260,3 +260,70 @@ class TestDownloadUrlHostHeader:
         hub._download_url("https://example.com?x=1", target, digest)
 
         assert recorder.last["target"] == "/?x=1"
+
+
+class TestHFHubChecksumVerification:
+    """Issue #20: download_weights used to ignore the sha256= argument on
+    the HF Hub branch, so a publisher push at the configured revision (or
+    the mutable default 'main') could change the bytes silently. The
+    README's 'SHA-256 verification' claim was false on the most-used path.
+    These tests pin that the verification now happens on the HF path too."""
+
+    def _make_fake_hf_path(self, tmp_path: Path, body: bytes) -> Path:
+        target = tmp_path / "fake_hf_cache" / "model.pt"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(body)
+        return target
+
+    def test_hf_hub_sha256_match_returns_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        body = b"fake-weights-bytes"
+        digest = hashlib.sha256(body).hexdigest()
+        fake = self._make_fake_hf_path(tmp_path, body)
+
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        monkeypatch.setattr(hub, "_download_hf_hub", lambda *a, **kw: fake)
+        out = hub.download_weights(
+            "owner/repo", filename="model.pt", revision="abc123", sha256=digest
+        )
+        assert out == fake
+
+    def test_hf_hub_sha256_mismatch_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        body = b"fake-weights-bytes"
+        wrong_digest = hashlib.sha256(b"different-bytes").hexdigest()
+        fake = self._make_fake_hf_path(tmp_path, body)
+
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        monkeypatch.setattr(hub, "_download_hf_hub", lambda *a, **kw: fake)
+        with pytest.raises(hub_module.ChecksumMismatchError, match="SHA256 mismatch"):
+            hub.download_weights(
+                "owner/repo", filename="model.pt", revision="abc123", sha256=wrong_digest
+            )
+
+    def test_hf_hub_warns_on_mutable_revision_without_sha256(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        body = b"fake-weights-bytes"
+        fake = self._make_fake_hf_path(tmp_path, body)
+
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        monkeypatch.setattr(hub, "_download_hf_hub", lambda *a, **kw: fake)
+        with pytest.warns(UserWarning, match="mutable revision"):
+            hub.download_weights("owner/repo", filename="model.pt", revision="main")
+
+    def test_hf_hub_no_warning_with_pinned_revision(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        body = b"fake-weights-bytes"
+        fake = self._make_fake_hf_path(tmp_path, body)
+
+        hub = ModelHub(cache_dir=tmp_path / "models")
+        monkeypatch.setattr(hub, "_download_hf_hub", lambda *a, **kw: fake)
+        import warnings as warnings_mod
+
+        with warnings_mod.catch_warnings():
+            warnings_mod.simplefilter("error")
+            hub.download_weights("owner/repo", filename="model.pt", revision="abc123def456")

@@ -14,6 +14,7 @@ import ipaddress
 import socket
 import ssl
 import urllib.parse
+import warnings
 from pathlib import Path
 
 _DEFAULT_CACHE_DIR = Path.home() / ".openlithohub" / "models"
@@ -181,10 +182,18 @@ class ModelHub:
         Args:
             model_id: A HuggingFace repo ID (``owner/repo``) or an HTTPS URL.
             filename: File name within the repo (HF Hub only).
-            revision: Git revision (HF Hub only).
-            sha256: Required for direct HTTPS downloads. Hex digest of the
-                expected file contents. The Hub path uses HuggingFace's own
-                hash verification and ignores this argument.
+            revision: Git revision (HF Hub only). Pinning to a commit hash
+                (40-hex) makes the download exactly reproducible — the
+                default ``"main"`` is mutable and a publisher push can
+                change the bytes you receive.
+            sha256: Hex digest of the expected file contents. **Verified
+                on both paths** — direct HTTPS downloads and HF Hub
+                downloads. Issue #20: previously the HF Hub branch
+                silently ignored this argument, so a malicious or
+                accidentally-mutated repo at the configured revision
+                would have produced bytes whose hash did not match what
+                the caller pinned. ``None`` skips verification (HF
+                Hub-only — the URL branch still requires it).
         """
         if model_id.startswith("http://") or model_id.startswith("https://"):
             cache_segment = "url--" + hashlib.sha256(model_id.encode("utf-8")).hexdigest()[:32]
@@ -208,12 +217,35 @@ class ModelHub:
             return self._download_url(model_id, cached_path, sha256)
 
         try:
-            return self._download_hf_hub(model_id, filename, revision)
+            hf_path = self._download_hf_hub(model_id, filename, revision)
         except ImportError:
             raise ImportError(
                 f"Cannot download model '{model_id}': huggingface_hub not installed. "
                 "Install with: pip install openlithohub[models]"
             ) from None
+        if sha256 is not None:
+            actual = self.get_checksum(hf_path)
+            if actual != sha256.lower():
+                raise ChecksumMismatchError(
+                    f"SHA256 mismatch for HF Hub file {model_id}/{filename} "
+                    f"@ {revision}: expected {sha256.lower()}, got {actual}. "
+                    f"The file at this revision differs from the digest you "
+                    f"pinned — refuse to load."
+                )
+        elif revision in {"main", "master"} or revision is None:
+            # Mutable revision + no sha256 = the bytes you receive today
+            # may differ from the bytes you receive tomorrow. Warn so
+            # downstream reproducibility claims aren't silently false.
+            warnings.warn(
+                f"download_weights({model_id!r}, revision={revision!r}) "
+                f"with no sha256= and a mutable revision: the publisher "
+                f"can change the bytes at any time. Pass either a "
+                f"40-hex commit hash as `revision=` or a `sha256=` "
+                f"digest for reproducibility.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return hf_path
 
     def _download_hf_hub(self, repo_id: str, filename: str, revision: str) -> Path:
         """Download from HuggingFace Hub."""
