@@ -107,3 +107,52 @@ metal1 layer 20/0, `pixel_nm=4.0`. EPE columns omitted (no reference
 OPC mask). DRC/MRC checks were disabled for this baseline because
 they treat the entire routed-block tile as a mask candidate; tile-aware
 DRC/MRC is its own follow-up.
+
+## ICCAD16-N7M2EUV testcase1 (paper-grade hotspot benchmark)
+
+First baseline against `Yang2016_ICCAD16Bench` testcase1 — a 1.9 µm × 1.5 µm
+EUV design with 18 hotspot annotations and 120 clip sites
+(`data/iccad16/testcase1.oas` + `test1.csv`). Rasterised at `pixel_nm=4.0`
+(475×375 px) — 1 nm/px would push the SOCS forward sim into a multi-hour
+window that adds no metric resolution at 7nm node settings. Reproduce with:
+
+```
+.venv/bin/openlithohub eval run \
+  --model <model-name> --dataset iccad16 \
+  --data-root data/iccad16 \
+  --node 7nm --pixel-nm 4.0 \
+  --output out/baselines/iccad16/<model-name>.json
+```
+
+| Model | Samples | PVB mean (nm) | PVB max (nm) | MRC pass | MRC viol rate | DRC pass |
+|---|---|---|---|---|---|---|
+| `dummy-identity` | 1 | 14.82 | 64.0 | ❌ | 15.93% | ❌ |
+| `rule-based-opc` | 1 | 12.39 | 32.0 | ❌ | 14.89% | ❌ |
+| `levelset-ilt` | 1 | 10.49 | 32.0 | ❌ | 0.97% | ❌ |
+| `openilt` | 1 | 14.82 | 64.0 | ❌ | 15.93% | ❌ |
+| `neural-ilt` | 1 | 0.00 | 0.0 | ✅ | 0% | ✅ |
+
+Things worth knowing about these numbers:
+
+- **EPE columns omitted.** ICCAD16 ships hotspot-annotated layouts but
+  no reference OPC mask (`LithoSample.mask is None`). EPE / L2 require a
+  ground-truth mask; the leaderboard scoring pipeline can still grade
+  PVB and DRC/MRC, which is what this table reports.
+- **`neural-ilt` numbers are degenerate.** The v0.1 weights were trained
+  on synthetic 64-pixel tiles. Running on a 475×375 ICCAD16 raster
+  produces a near-blank mask, which trivially passes all rule checks
+  with zero PV-band — this is *not* a competitive number, it is the
+  out-of-distribution failure mode. Treat it as a smoke test of the
+  pipeline, not as a published score. A retrained `neural-ilt-v0.2`
+  against `Yang2016_ICCAD16Bench` would change this.
+- **`openilt` matches `dummy-identity` exactly.** OpenILT's SimpleILT
+  formulation finds no improvement when its internal forward model
+  already prints the target cleanly, falling back to identity; this is
+  the same behaviour reported on the synthetic-8 suite above.
+- **`levelset-ilt`** is the only baseline that improves PVB *and* MRC
+  violation rate vs. identity — the same ranking as the synthetic-8
+  suite, validating that the pipeline behaves coherently on real data.
+- **MRC at 7nm is brutal.** The default `min_width_nm=20` (7nm node) is
+  applied to a layout that includes hotspot patterns deliberately
+  designed to violate width / spacing rules — `dummy-identity` failing
+  MRC is expected for a hotspot benchmark.

@@ -136,11 +136,16 @@ for the equivalent local commands.
 
 ## Hotspot detection — ICCAD 2016 Problem C
 
-The ICCAD'16 EUV hotspot benchmark is wired in via
-`openlithohub.data.Iccad16Dataset` (klayout-based OASIS rasterizer) and
-the point-matching metric `compute_hotspot_detection`. Together they
-support a separate baseline track from the mask-optimization numbers
-above — the data has no reference mask, so EPE / PVB / MRC do not apply.
+The ICCAD'16 EUV hotspot benchmark (`Yang2016_ICCAD16Bench`) is wired in
+via `openlithohub.data.Iccad16Dataset` (klayout-based OASIS rasterizer)
+and the point-matching metric `compute_hotspot_detection`. Together
+they support a separate baseline track from the mask-optimization
+numbers above. The dataset ships **no reference OPC mask**, so the
+EPE / L2 metrics that require a ground-truth mask do not apply — but
+PVB and DRC/MRC, which only need a model-generated mask, are
+well-defined and reported in the
+[mask-optimization sub-section](#mask-optimization-track-on-iccad16-testcase1)
+below.
 
 ### Dataset
 
@@ -203,6 +208,56 @@ Things worth knowing:
 A real ML predictor (CNN, ViT, etc.) plugs into the same script by
 adding a function to the `PREDICTORS` dict that consumes a
 `LithoSample` and returns an `(N, 2)` tensor of nm-coordinates.
+
+### Mask-optimization track on ICCAD16 testcase1
+
+The same `Iccad16Dataset` adapter also feeds the mask-optimization
+metric stack via `openlithohub eval run --dataset iccad16 …`. Rasterized
+at `pixel_nm=4.0` (475×375 px — 1 nm/px would multiply runtime ~16× without
+adding metric resolution at 7nm node settings), the canonical published
+testcase1 produces:
+
+| Model | Samples | PVB mean (nm) | PVB max (nm) | MRC pass | MRC viol rate | DRC pass |
+|---|---|---|---|---|---|---|
+| `dummy-identity` | 1 | 14.82 | 64.0 | ❌ | 15.93% | ❌ |
+| `rule-based-opc` | 1 | 12.39 | 32.0 | ❌ | 14.89% | ❌ |
+| `levelset-ilt` | 1 | 10.49 | 32.0 | ❌ | 0.97% | ❌ |
+| `openilt` | 1 | 14.82 | 64.0 | ❌ | 15.93% | ❌ |
+| `neural-ilt` | 1 | 0.00 | 0.0 | ✅ | 0% | ✅ |
+
+Reproduce with:
+
+```bash
+.venv/bin/openlithohub eval run \
+  --model levelset-ilt --dataset iccad16 \
+  --data-root data/iccad16 \
+  --node 7nm --pixel-nm 4.0
+```
+
+Things worth knowing:
+
+- **EPE / L2 not reported.** Both require a reference OPC mask;
+  ICCAD16 ships hotspot-annotated layouts only, so
+  `LithoSample.mask is None`. PVB / DRC / MRC require *only* a
+  model-generated mask and are well-defined.
+- **`neural-ilt` numbers are degenerate.** The v0.1 weights were
+  trained on synthetic 64-pixel tiles. Running on a 475×375 ICCAD16
+  raster produces a near-blank mask which trivially passes everything
+  with zero PV-band — this is the out-of-distribution failure mode,
+  *not* a competitive score. Treat it as a smoke test of the
+  pipeline, not as a published number. A retrained
+  `neural-ilt-v0.2` against `Yang2016_ICCAD16Bench` would change this.
+- **`openilt` matches `dummy-identity` exactly.** OpenILT's SimpleILT
+  formulation finds no improvement when its internal forward model
+  already prints the target cleanly, falling back to identity (same
+  behaviour as the synthetic-8 suite).
+- **`levelset-ilt` is the only baseline that improves PVB *and* MRC**
+  vs. identity — the same ranking as the synthetic-8 suite,
+  validating that the pipeline behaves coherently on real data.
+- **MRC at 7nm is brutal.** `min_width_nm=20` is the default for the
+  7nm node, applied to a layout that includes hotspot patterns
+  deliberately designed to violate width / spacing rules —
+  `dummy-identity` failing MRC is *expected* for a hotspot benchmark.
 
 ## GAN-OPC paired-mask dataset
 

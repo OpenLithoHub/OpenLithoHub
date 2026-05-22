@@ -14,22 +14,39 @@ from openlithohub.models.registry import registry
 
 @registry.register
 class NeuralILTModel(LithographyModel):
-    """Neural ILT model using a U-Net architecture for mask prediction.
+    """U-Net mask predictor (Neural-ILT-style — see audit caveats below).
 
-    Predicts an optimized mask directly from the design layout in a single
+    Predicts an optimised mask directly from the design layout in a single
     forward pass. Much faster than iterative methods at inference time,
     but requires pretrained weights for good results.
 
-    Architecture lineage: ``Jiang2020_NeuralILT`` (ICCAD'20, paywalled).
-    Open-access substitute is [Yang2023_LithoBench, §4.3] (NeurIPS 2023),
-    which describes the same architecture and training
-    schedule. OpenLithoHub's v0.1 baseline diverges from the paper in two
-    ways: encoder/decoder channel widths are halved (32→64→128→256 vs
-    paper's 64→128→256→512), and the differentiable ILT correction layer
-    is not packaged inside the adapter — eval-time forward simulation
-    lives in the leaderboard scoring pipeline. See
-    ``docs/audits/neural-ilt-architecture.md`` for the full audit and
-    re-audit triggers.
+    **What this adapter is not.** This is *not* a paper-faithful
+    re-implementation of ``Jiang2020_NeuralILT`` (ICCAD'20). It is a
+    U-Net mask predictor whose architecture is *inspired by* that paper.
+    The headline contribution of Jiang2020 — the differentiable ILT
+    correction layer that lets the L2/PVB loss flow back through a
+    forward simulator at training time — is **not implemented here**.
+    Eval-time forward simulation lives in the leaderboard scoring
+    pipeline (see ``benchmark/metrics/l2_error.py``, which already
+    accepts ``simulator=``); training-time loss-through-simulator is a
+    separate piece of code that is not in this adapter and has no
+    open issue or RFC pinned to it.
+
+    **Lineage references** (cite for *architecture inspiration*, not for
+    *expected metric*):
+    - ``Jiang2020_NeuralILT`` (ICCAD'20, paywalled) — original paper.
+    - ``Yang2023_LithoBench`` §4.3 (NeurIPS 2023, open access) —
+      restates the architecture and training schedule.
+
+    **Architecture divergences vs. Jiang2020:**
+    - Backbone: 3-level U-Net (3 down / 3 up), paper uses 4 levels.
+    - Channel widths: 32→64→128→256 (paper: 64→128→256→512).
+    - Loss / training: not part of this adapter.
+
+    See ``docs/audits/neural-ilt-architecture.md`` for the full audit,
+    the 2026-05-23 decision record (option (b): downgrade naming
+    instead of implementing the correction layer), and re-audit
+    triggers.
     """
 
     NAME = "neural-ilt"

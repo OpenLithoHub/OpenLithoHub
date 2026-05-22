@@ -31,8 +31,8 @@ Compared the OpenLithoHub implementation against:
 
 | Item | OpenLithoHub | Matches paper? |
 |------|---------------|---------------|
-| Backbone | 4-level U-Net (encoder + decoder + skip) | **Yes.** |
-| Encoder channels | 32 → 64 → 128 → 256 | **No** — half the paper's widths. |
+| Backbone | **3-level** U-Net: 3 down-samples, 3 up-samples (`_unet.UNet` in `src/openlithohub/models/_unet.py`). An earlier version of this audit incorrectly described it as "4-level"; corrected on 2026-05-23 during the GAN-OPC audit (`docs/audits/gan-opc-architecture.md` finding #1). | **No** — paper is 4-level (Fig. 4), we have 3 levels. Receptive field is 8× downsampling, not 16×. |
+| Encoder channels | 32 → 64 → 128 → 256 | **No** — narrower than the paper at every level. |
 | Decoder channels | Mirror of encoder | **Yes** (relative to OpenLithoHub's encoder). |
 | Activation | ReLU | **Yes.** |
 | Normalisation | BatchNorm after each conv | Paper uses BN per Fig. 4 caption. **Yes.** |
@@ -42,13 +42,25 @@ Compared the OpenLithoHub implementation against:
 
 ## Findings
 
-1. **Channel widths are halved.** This is an intentional inference-budget choice — the deployed weights (`openlithohub/neural-ilt-v0.1`) were trained at this size to fit on commodity GPUs with `RECEPTIVE_FIELD_PX = 64` tile inputs. Not a bug. Documented here so users comparing to Jiang2020's reported metrics know the OpenLithoHub baseline is a smaller model. If we publish a paper-faithful re-training, it should land as `neural-ilt-v0.2` (full widths) to keep the v0.1 weights reproducible.
+1. **Channel widths are halved AND backbone depth is one short.** The paper's 4-level U-Net (16× downsampling) is implemented here as a 3-level U-Net (8× downsampling). This compounds the channel-width gap. The deployed weights (`openlithohub/neural-ilt-v0.1`) were trained at this size for inference budget, but the global-structure capture is genuinely weaker than the paper architecture — not just "smaller, slower-to-train". A paper-faithful re-training should land as `neural-ilt-v0.2` with both the full widths and the missing 4th level, and keep v0.1 weights reproducible against the current shallower net.
 
 2. **ILT correction layer is missing.** The paper's headline contribution is end-to-end training through a differentiable simulator. OpenLithoHub's `NeuralILTModel` only provides the U-Net half. This is a **functional gap** — users who want the paper's training behaviour cannot get it from this adapter alone. The leaderboard's forward-sim gate (`tracker.py::_require_forward_simulation`) compensates at *eval* time but not at training time.
 
    Tracking issue: open follow-up RFC ("Neural-ILT correction-layer training adapter") if there is demand for paper-faithful re-training inside OpenLithoHub.
 
 3. **Output sigmoid is applied at the caller.** Our `_unet.UNet.forward()` returns logits; `predict()` and the export wrapper apply `sigmoid`. The paper diagram shows sigmoid inside the network. Functionally equivalent, but worth noting for anyone diffing the `state_dict` keys.
+
+## Decision (2026-05-23) — option (b): downgrade naming, do not implement correction layer
+
+After auditing the GAN-OPC adapter and discovering that both adapters share the same `_unet.UNet` (now correctly identified as 3-level), we picked option (b) from this audit's prior phrasing:
+
+> Tracking issue: open follow-up RFC ("Neural-ILT correction-layer training adapter") if there is demand for paper-faithful re-training inside OpenLithoHub.
+
+Concretely:
+- The class docstring of `NeuralILTModel` (`src/openlithohub/models/neural_ilt.py`) was rewritten on 2026-05-23 to lead with "U-Net mask predictor (Neural-ILT-style)", explicitly state that the differentiable ILT correction layer is **not implemented here**, and mark the `Jiang2020_NeuralILT` citation as *architecture lineage*, not *implementation reference*.
+- The registry name `neural-ilt` is **kept** to avoid a breaking change for downstream users; the rename happens only in the docstring and in user-facing prose.
+- Implementing the correction layer (option (a)) is deferred indefinitely. It is a real research project (differentiable wrapper around `HopkinsSimulator`, gradient correctness tests, paper-faithful re-training, new HF Hub release at `openlithohub/neural-ilt-v0.2`). If/when demand materialises, a new RFC under `docs/rfcs/` should drive it.
+- Reference: `out/plans/external-resource-utilization.md` task #7.
 
 ## Implications for users
 

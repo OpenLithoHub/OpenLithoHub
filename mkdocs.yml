@@ -51,6 +51,10 @@ nav:
   - Citation Map: citations.md
   - Audits:
     - "Neural-ILT Architecture": audits/neural-ilt-architecture.md
+    - "GAN-OPC Architecture": audits/gan-opc-architecture.md
+    - "OpenILT Architecture": audits/openilt-architecture.md
+    - "LevelSet-ILT Architecture": audits/levelset-ilt-architecture.md
+    - "Layout-MAE Architecture": audits/layout-mae-architecture.md
   - Notes:
     - "ASAP7 cell-name format": notes/asap7-cell-naming.md
     - "OpenRAM → FreePDK45": notes/openram-freepdk45.md

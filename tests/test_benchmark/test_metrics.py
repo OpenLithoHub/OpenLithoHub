@@ -344,6 +344,26 @@ class TestPVBand:
         r_high = compute_pvband(mask, dose_variation=0.20, defocus_range_nm=40.0)
         assert r_high["pvband_mean_nm"] > r_low["pvband_mean_nm"]
 
+    def test_simulator_path_returns_finite_band(self):
+        # SOCS-faithful path: pass a HopkinsSimulator and confirm the
+        # corner sweep produces a finite, non-negative band on a square
+        # with diffraction-resolvable features. Ties the metric to the
+        # same kernels compute_l2_error / compute_wafer_epe use.
+        from openlithohub.simulators.base import SimulatorConfig
+        from openlithohub.simulators.hopkins_sim import HopkinsSimulator
+
+        mask = torch.zeros(64, 64)
+        mask[16:48, 16:48] = 1.0
+        sim = HopkinsSimulator(SimulatorConfig(pixel_size_nm=8.0, extra={"num_kernels": 6}))
+        result = compute_pvband(
+            mask,
+            defocus_range_nm=20.0,
+            pixel_size_nm=8.0,
+            simulator=sim,
+        )
+        assert result["pvband_mean_nm"] >= 0.0
+        assert result["pvband_max_nm"] >= result["pvband_mean_nm"]
+
 
 class TestStochasticRobustness:
     def test_returns_expected_keys(self):

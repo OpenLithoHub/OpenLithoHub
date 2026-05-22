@@ -79,7 +79,7 @@
   title     = {Accelerating Mask Optimization through Multi-resolution Lithographic Simulation},
   booktitle = {Proceedings of the 33rd International Conference on Computer-Aided Design (ICCAD)},
   year      = {2014},
-  note      = {Multi-resolution forward-simulation strategy that the halo / tiling pipeline (RFC 0005) draws on.}
+  note      = {Multi-resolution coarse-to-fine forward-simulation strategy. \textbf{Not currently implemented in OpenLithoHub} — the halo / tiling pipeline (RFC 0005, \texttt{workflow/halo.py}) uses a single-resolution physical optical-interaction-radius formula, not Yu2014's coarse-then-refine SOCS. Kept here as a candidate technique for a future v0.x performance pass; verified 2026-05-23 against the actual code.}
 }
 
 @misc{MLCommons2024_Croissant,

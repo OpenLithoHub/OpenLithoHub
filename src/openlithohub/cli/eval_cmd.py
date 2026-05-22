@@ -20,7 +20,7 @@ def run(
         "lithobench",
         "--dataset",
         "-d",
-        help="Dataset to evaluate on (lithobench/lithosim/asap7/freepdk45/orfs).",
+        help="Dataset to evaluate on (lithobench/lithosim/asap7/freepdk45/orfs/iccad16).",
     ),
     data_root: Path = typer.Option(
         ..., "--data-root", "-r", help="Path to dataset root directory."
@@ -369,6 +369,7 @@ def _load_dataset(
     from openlithohub.data import (
         Asap7Dataset,
         FreePdk45Dataset,
+        Iccad16Dataset,
         LithoBenchDataset,
         LithoSimDataset,
         OrfsArtifactDataset,
@@ -378,6 +379,8 @@ def _load_dataset(
         return LithoBenchDataset(root=data_root, pixel_nm=pixel_nm)
     if dataset == "lithosim":
         return LithoSimDataset(cache_dir=str(data_root), pixel_nm=pixel_nm)
+    if dataset == "iccad16":
+        return Iccad16Dataset(root=data_root, pixel_nm=pixel_nm)
     if dataset == "asap7":
         if not accept_license:
             from openlithohub.data.asap7 import ASAP7_LICENSE, ASAP7_LICENSE_URL
@@ -420,7 +423,8 @@ def _load_dataset(
             raise FileNotFoundError(f"No .gds found under {data_root}")
         return OrfsArtifactDataset(gds_path=gds, pixel_nm=pixel_nm, tile_nm=tile_nm)
     raise ValueError(
-        f"Unknown dataset '{dataset}'. Choose from: lithobench, lithosim, asap7, freepdk45, orfs"
+        f"Unknown dataset '{dataset}'. Choose from: "
+        "lithobench, lithosim, asap7, freepdk45, orfs, iccad16"
     )
 
 
