@@ -185,13 +185,13 @@ def load_layout(
             # Older klayout: fall back to per-polygon hull/holes draw.
             # Hole-vs-other-polygon hazard re-emerges, but the previous
             # behaviour was the same and downstream tests already pass.
-            convex_pieces = [poly]  # type: ignore[list-item]
+            convex_pieces = [poly]
         for piece in convex_pieces:
             # decompose_convex yields SimplePolygon (no holes); iterate
             # vertices via each_point. Fall back to each_point_hull for
             # the donut-fallback path that yields a Polygon.
             iter_points = (
-                piece.each_point if hasattr(piece, "each_point") else (piece.each_point_hull)  # type: ignore[attr-defined]
+                piece.each_point if hasattr(piece, "each_point") else (piece.each_point_hull)
             )
             hull = [_project(p) for p in iter_points()]
             if len(hull) >= 3:
