@@ -281,6 +281,18 @@ class TestTileLayout:
         assert t.origin_x == 0
         assert t.origin_y == 0
 
+    def test_layout_smaller_than_tile_emits_one_tile(self):
+        # Issue #13: with overlap < layout < tile_size, the sliding window
+        # used to step `tile_size - overlap` and emit redundant zero-padded
+        # tiles for each step it took before exiting the layout — wasted
+        # forward-model work for zero coverage gain.
+        layout = torch.ones(2000, 2000)
+        tiles = tile_layout(layout, tile_size=2048, overlap=128)
+        assert len(tiles) == 1
+        # Single tile should still cover full layout
+        assert tiles[0].width == 2000
+        assert tiles[0].height == 2000
+
     def test_tile_data_correctness(self):
         layout = torch.zeros(128, 128)
         layout[0:64, 0:64] = 1.0

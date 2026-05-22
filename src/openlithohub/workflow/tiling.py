@@ -57,10 +57,17 @@ def tile_layout(
     tiles: list[Tile] = []
     seen_origins: set[tuple[int, int]] = set()
 
+    # Layout smaller than tile_size in an axis ⇒ a single tile in that axis
+    # is sufficient. Without this guard, the sliding window still emits one
+    # tile per `step` along the axis, all zero-padded duplicates of the
+    # entire layout, multiplying forward-model work for no coverage gain.
+    h_iter_cap = 1 if h < tile_size else h
+    w_iter_cap = 1 if w < tile_size else w
+
     y = 0
-    while y < h:
+    while y < h_iter_cap:
         x = 0
-        while x < w:
+        while x < w_iter_cap:
             y_end = min(y + tile_size, h)
             x_end = min(x + tile_size, w)
             actual_h = y_end - y
