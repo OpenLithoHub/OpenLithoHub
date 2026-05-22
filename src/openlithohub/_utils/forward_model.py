@@ -15,7 +15,6 @@ not switch to ``F.conv2d``'s default zero-pad as a "simplification".
 from __future__ import annotations
 
 import math
-import warnings
 
 import torch
 import torch.nn.functional as functional
@@ -89,24 +88,21 @@ def _circular_pad_clamped(inp: torch.Tensor, padding: int) -> torch.Tensor:
         step_w = min(remaining_w, cur_w - 1) if remaining_w > 0 else 0
         if step_h == 0 and step_w == 0:
             # Image is 1 px wide/tall in some axis — circular pad cannot extend
-            # it (PyTorch refuses pad sizes >= dim). Fall back to replicate so
-            # the unit-test path still runs, but warn so production callers are
-            # not silently downgraded from circular padding (the Hopkins forward
-            # model's contract — see module docstring).
-            step_h = remaining_h if cur_h == 1 else 0
-            step_w = remaining_w if cur_w == 1 else 0
-            warnings.warn(
-                "_circular_pad_clamped: input has a 1-pixel-wide axis; falling "
-                "back to replicate padding. This violates the module's circular-"
-                "padding contract and will introduce edge artifacts on a real "
-                "layout. See forward_model.py module docstring.",
-                RuntimeWarning,
-                stacklevel=2,
+            # it (PyTorch refuses pad sizes >= dim). The previous behaviour was
+            # to fall back to replicate padding with a RuntimeWarning, but
+            # `warnings` defaults to "default" filtering (once-per-location) so
+            # downstream metrics could pick up replicate-padded edge fringes
+            # silently after the first call. Raise instead — every production
+            # caller (pvband / stochastic / openilt / levelset_ilt /
+            # process_window) feeds layouts orders of magnitude larger than
+            # 1 px, so this only triggers on misconfigured inputs that should
+            # surface loudly. Issue #10.
+            raise ValueError(
+                f"_circular_pad_clamped: input shape {tuple(out.shape)} has a "
+                "1-pixel-wide axis; circular padding requires every spatial "
+                "dim >= 2. Resize the input or pad it to >=2 px before calling "
+                "the forward model. See forward_model.py module docstring."
             )
-            out = functional.pad(out, (step_w, step_w, step_h, step_h), mode="replicate")
-            remaining_h -= step_h
-            remaining_w -= step_w
-            continue
         out = functional.pad(out, (step_w, step_w, step_h, step_h), mode="circular")
         remaining_h -= step_h
         remaining_w -= step_w

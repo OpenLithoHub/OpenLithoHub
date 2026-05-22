@@ -1,9 +1,11 @@
 """Tests for openlithohub._utils.forward_model."""
 
+import pytest
 import torch
 
 from openlithohub._utils.forward_model import (
     _build_gaussian_kernel,
+    _circular_pad_clamped,
     apply_resist_threshold,
     simulate_aerial_image,
 )
@@ -87,3 +89,26 @@ class TestApplyResistThreshold:
         resist = apply_resist_threshold(aerial, threshold=0.5)
         expected = torch.tensor([[0.0, 1.0], [0.0, 1.0]])
         assert torch.equal(resist, expected)
+
+
+class TestCircularPadClamped:
+    """Issue #10: 1-px-wide axis used to silently fall back to replicate
+    padding via a `warnings.warn`, but Python's default warning filter is
+    once-per-location, so subsequent metric calls picked up replicate-pad
+    edge fringes silently. The contract is now strict: raise instead of
+    fall back so misconfigured inputs surface loudly."""
+
+    def test_circular_pad_works_on_normal_input(self) -> None:
+        inp = torch.rand(1, 1, 8, 8)
+        out = _circular_pad_clamped(inp, padding=2)
+        assert out.shape == (1, 1, 12, 12)
+
+    def test_one_pixel_axis_raises(self) -> None:
+        inp = torch.rand(1, 1, 1, 8)
+        with pytest.raises(ValueError, match="1-pixel-wide axis"):
+            _circular_pad_clamped(inp, padding=2)
+
+    def test_one_pixel_both_axes_raises(self) -> None:
+        inp = torch.rand(1, 1, 1, 1)
+        with pytest.raises(ValueError, match="1-pixel-wide axis"):
+            _circular_pad_clamped(inp, padding=1)
