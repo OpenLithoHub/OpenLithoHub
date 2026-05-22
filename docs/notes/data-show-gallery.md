@@ -97,9 +97,40 @@ Default cells (`CANONICAL_CELLS` in `openlithohub.data.freepdk45_sram`):
 |---|---|
 | Eyeball a single cell to debug an adapter | `data show --cell` |
 | Populate a slide deck with cell rasterizations | `data show --all` |
+| Pretrain a foundation model — produce sharded archives | `data export` |
 | Run a benchmark and produce a `BenchmarkResult` | `eval run --dataset <X> --pdk <Y>` |
 | Inspect what cells an adapter exposes | `data list <X>` |
 
 The `data` subcommand is intentionally narrow — it's a research-flow
 helper, not the eval path. For benchmark numbers and leaderboard
 submissions use `eval run`.
+
+## Sharded export for pretraining (`data export`)
+
+For foundation-model workflows the per-cell PNG view is too small.
+`openlithohub data export` writes the same adapter content out as
+sharded WebDataset (`.tar`) or Parquet archives — the formats the ML
+community uses to feed pretraining dataloaders without paying one
+`stat` per sample.
+
+```bash
+# WebDataset shards (PyTorch IterableDataset / streaming)
+openlithohub data export asap7 \
+    --output ./asap7-shards/ \
+    --format webdataset \
+    --shards 4 \
+    --data-root /path/to/asap7 \
+    --accept-license
+
+# Parquet shards (HuggingFace datasets / polars / duckdb)
+openlithohub data export freepdk45-sram \
+    --output ./fp45-shards/ \
+    --format parquet \
+    --shard-size 500MB
+```
+
+Per-record fields (both formats): `key` (stable `<tag>-<index>`),
+`design` (`.npy` bytes), `mask` (nullable `.npy` bytes), `meta`
+(JSON). A sibling `croissant.json` carries dataset-level license /
+citation. Sample `i` always lands in shard `i % N`, so re-runs are
+byte-identical — see issue #12 for the design rationale.

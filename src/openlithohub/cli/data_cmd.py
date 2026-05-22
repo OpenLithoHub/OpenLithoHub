@@ -313,3 +313,124 @@ def show_cmd(
     arr = sample.design.detach().cpu().numpy()
     _save_png(arr, out_path)
     typer.echo(_format_sample_line(cell, arr, sample.metadata, out_path))
+
+
+@data_app.command("export")
+def export_cmd(
+    dataset: str = typer.Argument(
+        ..., help="Dataset id: 'asap7' or 'freepdk45-sram'.", callback=_validate_dataset
+    ),
+    output_dir: Path = typer.Option(
+        ...,
+        "--output",
+        "-o",
+        help="Directory to write shards into. Created if missing.",
+    ),
+    fmt: str = typer.Option(
+        "webdataset",
+        "--format",
+        "-f",
+        help="Shard format: 'webdataset' (.tar) or 'parquet'.",
+    ),
+    shards: int = typer.Option(
+        None,
+        "--shards",
+        help="Number of shards to write. Mutually exclusive with --shard-size.",
+    ),
+    shard_size: str = typer.Option(
+        None,
+        "--shard-size",
+        help=(
+            "Target size per shard, e.g. '1GB', '500MB'. Derives shard count "
+            "from a probe of the first sample. Mutually exclusive with --shards."
+        ),
+    ),
+    dataset_tag: str = typer.Option(
+        None,
+        "--tag",
+        help="Per-record key prefix. Defaults to the adapter's croissant_name lowercased.",
+    ),
+    compression: str = typer.Option(
+        "snappy",
+        "--compression",
+        help="Parquet compression codec (parquet only): snappy, gzip, zstd, none.",
+    ),
+    data_root: Path = typer.Option(
+        None,
+        "--data-root",
+        "-r",
+        help="Path to a local ASAP7 clone (required for --dataset asap7).",
+    ),
+    accept_license: bool = typer.Option(
+        False,
+        "--accept-license",
+        help="Required for --dataset asap7. Acknowledges BSD-3-Clause attribution.",
+    ),
+    design_layer: str = typer.Option(
+        None,
+        "--design-layer",
+        help="GDS layer to rasterize, formatted as 'LAYER/DATATYPE' (e.g. '10/0').",
+    ),
+    pixel_nm: float = typer.Option(
+        1.0, "--pixel-nm", help="Raster pixel size in nm. Defaults to 1.0."
+    ),
+) -> None:
+    """Export an adapter's canonical cells as WebDataset (.tar) or Parquet shards.
+
+    Produces ``shard-NNNNN.{tar,parquet}`` plus a sibling ``croissant.json``
+    with dataset-level metadata. Shard layout is deterministic: sample ``i``
+    lands in shard ``i % N``, so re-runs reproduce the same output.
+
+    For foundation-model pretraining: prefer ``webdataset`` for streaming
+    pipelines (PyTorch ``IterableDataset``), ``parquet`` for table-shaped
+    workflows (HF ``datasets.load_dataset``, polars, duckdb).
+    """
+    from openlithohub.data.exporters import (
+        ParquetExporter,
+        WebdatasetExporter,
+        parse_size,
+    )
+
+    if fmt not in ("webdataset", "parquet"):
+        raise typer.BadParameter(f"--format must be 'webdataset' or 'parquet', got {fmt!r}")
+    if shards is not None and shard_size is not None:
+        raise typer.BadParameter("--shards and --shard-size are mutually exclusive")
+
+    shard_size_bytes = parse_size(shard_size) if shard_size else None
+
+    layer_spec = _parse_design_layer(design_layer) if design_layer else None
+    cells = _canonical_cells(dataset)
+    adapter = _build_adapter(
+        dataset,
+        cells=cells,
+        layer_spec=layer_spec,
+        pixel_nm=pixel_nm,
+        data_root=data_root,
+        accept_license=accept_license,
+    )
+
+    if fmt == "webdataset":
+        exporter: WebdatasetExporter | ParquetExporter = WebdatasetExporter(
+            adapter,
+            output_dir,
+            dataset_tag=dataset_tag,
+            shards=shards,
+            shard_size_bytes=shard_size_bytes,
+        )
+    else:
+        exporter = ParquetExporter(
+            adapter,
+            output_dir,
+            dataset_tag=dataset_tag,
+            shards=shards,
+            shard_size_bytes=shard_size_bytes,
+            compression=compression,
+        )
+
+    paths = exporter.export()
+    for p in paths:
+        typer.echo(str(p))
+    typer.echo(
+        f"# wrote {len(paths)} shard(s) of {len(adapter)} sample(s) to {output_dir}",
+        err=True,
+    )

@@ -369,3 +369,93 @@ class TestDataShowAll:
         )
         assert result.exit_code != 0
         assert "--cell" in result.output or "--all" in result.output
+
+
+# ---------- data export ----------
+
+
+class TestDataExport:
+    def test_export_asap7_webdataset(self, asap7_root, tmp_path):
+        out_dir = tmp_path / "shards-wds"
+        result = runner.invoke(
+            app,
+            [
+                "data",
+                "export",
+                "asap7",
+                "--output",
+                str(out_dir),
+                "--format",
+                "webdataset",
+                "--data-root",
+                str(asap7_root),
+                "--accept-license",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        shards = list(out_dir.glob("shard-*.tar"))
+        assert len(shards) == 1
+        assert (out_dir / "croissant.json").exists()
+
+    def test_export_asap7_parquet_with_shards(self, asap7_root, tmp_path):
+        pytest.importorskip("pyarrow")
+        out_dir = tmp_path / "shards-pq"
+        result = runner.invoke(
+            app,
+            [
+                "data",
+                "export",
+                "asap7",
+                "--output",
+                str(out_dir),
+                "--format",
+                "parquet",
+                "--shards",
+                "2",
+                "--data-root",
+                str(asap7_root),
+                "--accept-license",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(list(out_dir.glob("shard-*.parquet"))) == 2
+
+    def test_export_rejects_unknown_format(self, asap7_root, tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "data",
+                "export",
+                "asap7",
+                "--output",
+                str(tmp_path / "out"),
+                "--format",
+                "csv",
+                "--data-root",
+                str(asap7_root),
+                "--accept-license",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "format" in result.output.lower()
+
+    def test_export_rejects_shards_and_shard_size_together(self, asap7_root, tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "data",
+                "export",
+                "asap7",
+                "--output",
+                str(tmp_path / "out"),
+                "--shards",
+                "2",
+                "--shard-size",
+                "1MB",
+                "--data-root",
+                str(asap7_root),
+                "--accept-license",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "mutually exclusive" in result.output
