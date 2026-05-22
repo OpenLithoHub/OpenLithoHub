@@ -140,20 +140,20 @@ def rasterize_cell_layer(
 ) -> tuple[np.ndarray, tuple[float, float]]:
     """Rasterize one (layer, datatype) of a klayout cell into a {0,1} array.
 
-    Decomposes each polygon into trapezoids via klayout's
-    ``Polygon.decompose_trapezoids`` and fills each trapezoid's pixel
-    footprint. For Manhattan polygons every trapezoid is an axis-aligned
-    rectangle, so the fill is exact even for L-shapes — a plain bbox fill
-    would over-fill the concave corner.
+    Polygons are rasterized through ``PIL.ImageDraw.polygon`` after
+    transforming their hull/holes to pixel coordinates. This is faithful
+    for arbitrary (Manhattan and non-Manhattan) shapes — earlier code
+    decomposed into trapezoids and filled their bboxes, which over-filled
+    angled trapezoids and only happened to be exact because ASAP7 is
+    Manhattan-only. Sibling PDK adapters reuse this helper, so the fix
+    has to handle non-axis-aligned geometry too.
 
     Returns ``(array, origin_nm)`` where ``origin_nm`` is the cell bbox
     lower-left corner in nm, suitable for storing in
     ``LithoSample.metadata['origin_nm']``.
-
-    This helper is shared with future PDK adapters (FreePDK45 in Phase 2);
-    keep it generic — no ASAP7-specific assumptions.
     """
     import klayout.db as kdb
+    from PIL import Image, ImageDraw
 
     layer_index = layout.find_layer(*layer_spec)
     bbox = cell.bbox()
@@ -164,39 +164,52 @@ def rasterize_cell_layer(
     if layer_index is None:
         return np.zeros((h, w), dtype=np.float32), origin
 
-    arr = np.zeros((h, w), dtype=np.float32)
     ox_nm, oy_nm = origin
 
-    def _fill_box(b: Any) -> None:
-        x0 = b.left * dbu_nm - ox_nm
-        y0 = b.bottom * dbu_nm - oy_nm
-        x1 = b.right * dbu_nm - ox_nm
-        y1 = b.top * dbu_nm - oy_nm
-        i0 = max(0, int(np.floor(x0 / pixel_nm)))
-        j0 = max(0, int(np.floor(y0 / pixel_nm)))
-        i1 = min(w, int(np.ceil(x1 / pixel_nm)))
-        j1 = min(h, int(np.ceil(y1 / pixel_nm)))
-        if i1 > i0 and j1 > j0:
-            arr[j0:j1, i0:i1] = 1.0
+    def _to_px(point: Any) -> tuple[int, int]:
+        # Preserve the historical y-up (math) orientation of the returned
+        # array: arr[j, i] indexes increasing j as increasing y_nm. Round
+        # rather than truncate so sub-pixel-aligned vertices snap to the
+        # nearest pixel.
+        x_nm = point.x * dbu_nm - ox_nm
+        y_nm = point.y * dbu_nm - oy_nm
+        px = int(round(x_nm / pixel_nm))
+        py = int(round(y_nm / pixel_nm))
+        return (max(0, min(px, w - 1)), max(0, min(py, h - 1)))
 
+    canvas = Image.new("L", (w, h), 0)
+    drawer = ImageDraw.Draw(canvas)
+
+    # Build a Region so per-polygon hole semantics survive a multi-shape
+    # cell with overlapping geometry — same contract as data.io.load_layout.
+    region = kdb.Region()
     for shape_obj in cell.shapes(layer_index).each():
         if shape_obj.is_box():
-            _fill_box(shape_obj.box)
-            continue
-        if shape_obj.is_path():
-            poly = shape_obj.path.polygon()
+            region.insert(kdb.Polygon(shape_obj.box))
+        elif shape_obj.is_path():
+            region.insert(shape_obj.path.polygon())
         elif shape_obj.is_polygon():
-            poly = shape_obj.polygon
-        else:
-            continue
-        try:
-            trapezoids = list(poly.decompose_trapezoids(kdb.Polygon.TD_simple))
-        except AttributeError:
-            _fill_box(poly.bbox())
-            continue
-        for tz in trapezoids:
-            _fill_box(tz.bbox())
+            region.insert(shape_obj.polygon)
+    region.merge()
 
+    for poly in region.each():
+        # Decompose into convex (hole-free) pieces so a polygon-with-hole
+        # cannot erase a separate polygon nested inside its hole — the
+        # global-canvas hazard fixed in data.io.load_layout.
+        try:
+            convex_pieces = list(poly.decompose_convex(kdb.Polygon.PO_any))
+        except (AttributeError, TypeError):
+            convex_pieces = [poly]
+        for piece in convex_pieces:
+            iter_points = (
+                piece.each_point if hasattr(piece, "each_point") else (piece.each_point_hull)
+            )
+            hull = [_to_px(p) for p in iter_points()]
+            if len(hull) >= 3:
+                drawer.polygon(hull, fill=255)
+
+    # PIL writes top row first; flip so arr[0] is y_nm = origin (y-up).
+    arr = np.flipud(np.array(canvas, dtype=np.float32)) / 255.0
     return arr, origin
 
 

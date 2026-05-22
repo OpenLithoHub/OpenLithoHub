@@ -63,7 +63,15 @@ def trace_contour(binary: np.ndarray) -> list[np.ndarray]:
                 if cy == start_y and cx == start_x:
                     break
 
-            if len(points) >= 4:
+            # Keep contours of any length, including single-pixel features.
+            # Earlier versions required >= 4 points (closing the loop), which
+            # silently dropped 1-3-point contours from single-pixel and
+            # tiny-feature regions — those are exactly the geometries that
+            # MRC needs to flag (curvature undefined, area-violation small).
+            # Downstream consumers (curvilinear.fit_bspline,
+            # mrc._curvature_check) already gate on minimum loop length for
+            # their own algorithms.
+            if points:
                 contours.append(np.array(points, dtype=np.float64))
 
     return contours

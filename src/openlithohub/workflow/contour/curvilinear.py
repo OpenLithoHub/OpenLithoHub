@@ -9,6 +9,7 @@ a valid OASIS file that any vendor tool can read.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,11 +33,25 @@ def fit_bspline(
     contour_pixels: torch.Tensor,
     tolerance_nm: float = 0.5,
     pixel_size_nm: float = 1.0,
+    *,
+    warn_on_skip: bool = True,
 ) -> list[BSplineCurve]:
     """Fit B-spline curves to pixel-level contour data.
 
     If input is a 2D binary mask, extracts boundary contours first.
     If input is an (N, 2) tensor, treats it as a single ordered point loop.
+
+    Loops with fewer than 5 points (the minimum for a cubic periodic
+    spline) and loops where ``splprep`` fails to converge are skipped.
+    Both used to be silently dropped — small features (SRAFs, sharp
+    points) would disappear from the OASIS export with no signal. Now a
+    ``UserWarning`` is emitted per skipped loop unless
+    ``warn_on_skip=False``; callers that intentionally feed mixed-size
+    geometry can opt out.
+
+    The smoothing factor passed to ``splprep`` is ``tolerance_nm**2 *
+    n_points`` (matches scipy's "sum of squared residuals" semantics) so
+    long contours are not over-smoothed relative to short ones.
     """
     try:
         from scipy.interpolate import splprep
@@ -53,23 +68,55 @@ def fit_bspline(
         arr = (m > 0.5).detach().cpu().numpy().astype(np.int8)
         loops = trace_contour(arr)
 
-    smoothing = tolerance_nm / max(pixel_size_nm, 1e-6)
     curves: list[BSplineCurve] = []
 
-    for loop in loops:
-        if len(loop) < 5:
+    for idx, loop in enumerate(loops):
+        n = len(loop)
+        if n < 5:
+            if warn_on_skip:
+                warnings.warn(
+                    f"fit_bspline: loop {idx} has {n} points (< 5 needed for cubic "
+                    f"periodic spline); skipping. Small features may be lost.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             continue
 
+        # Drop a duplicated closing vertex: ``splprep(per=True)`` builds
+        # the periodic boundary itself; passing the closure point twice
+        # makes scipy see a zero-length segment and return a degenerate
+        # spline with seam oscillation.
+        if np.allclose(loop[0], loop[-1]):
+            loop = loop[:-1]
+            n = len(loop)
+            if n < 5:
+                if warn_on_skip:
+                    warnings.warn(
+                        f"fit_bspline: loop {idx} reduced to {n} points after "
+                        f"closure dedup; skipping.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                continue
+
         loop_scaled = loop * pixel_size_nm
+        smoothing = (tolerance_nm**2) * n
 
         try:
             tck, _ = splprep(
                 [loop_scaled[:, 1], loop_scaled[:, 0]],
-                s=smoothing * len(loop),
+                s=smoothing,
                 per=True,
                 k=3,
             )
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
+            if warn_on_skip:
+                warnings.warn(
+                    f"fit_bspline: splprep failed on loop {idx} (n={n}, "
+                    f"tolerance_nm={tolerance_nm}): {e}; skipping.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             continue
 
         ctrl_x = np.array(tck[1][0], dtype=np.float32)

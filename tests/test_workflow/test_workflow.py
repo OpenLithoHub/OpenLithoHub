@@ -61,6 +61,31 @@ class TestBSplineFitting:
         curves = fit_bspline(mask, tolerance_nm=1.0)
         assert curves == []
 
+    def test_warns_on_skipped_short_loop(self):
+        """A 3-pixel feature trace produces too few points for a cubic
+        periodic spline. Earlier behaviour silently dropped it; small
+        SRAFs vanished from the OASIS export with no signal. Verify a
+        ``UserWarning`` now fires so the caller can detect missing
+        geometry. Suppressing it via ``warn_on_skip=False`` should keep
+        the existing silent path available for callers that intentionally
+        feed mixed-size loops.
+        """
+        import pytest as _pytest
+
+        mask = torch.zeros(16, 16)
+        mask[2, 2] = 1.0  # single pixel → tiny loop
+        with _pytest.warns(UserWarning, match="(skipping|< 5)"):
+            curves = fit_bspline(mask, tolerance_nm=1.0)
+        assert curves == []
+
+        # Opt-out: no warning, still empty result.
+        import warnings as _w
+
+        with _w.catch_warnings():
+            _w.simplefilter("error")
+            curves2 = fit_bspline(mask, tolerance_nm=1.0, warn_on_skip=False)
+        assert curves2 == []
+
     def test_export_creates_file(self, tmp_path):
         pytest.importorskip("klayout.db")
         mask = torch.zeros(32, 32)

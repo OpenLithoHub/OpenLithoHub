@@ -152,7 +152,15 @@ def _pick_next_edge(
 
 
 def _simplify_collinear(vertices: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    """Remove vertices that lie on a straight line between their neighbors."""
+    """Remove vertices that lie on a straight line between their neighbors.
+
+    Uses a cross-product test (zero ↔ collinear, same-sign dot ↔ same
+    direction) so vertices stay collapsed even when the segments around
+    them have different step lengths. Tuple-equality on the direction
+    vector — the previous test — only worked for the all-unit-step case
+    that the rasterizer happens to produce; any future caller with mixed
+    step sizes would have left phantom vertices on straight runs.
+    """
     if len(vertices) <= 3:
         return vertices
 
@@ -169,8 +177,10 @@ def _simplify_collinear(vertices: list[tuple[float, float]]) -> list[tuple[float
         dx2 = nxt[0] - curr[0]
         dy2 = nxt[1] - curr[1]
 
-        # Keep vertex if direction changes
-        if (dx1, dy1) != (dx2, dy2):
+        cross = dx1 * dy2 - dy1 * dx2
+        dot = dx1 * dx2 + dy1 * dy2
+        # Keep vertex unless prev→curr and curr→nxt are colinear and same-direction.
+        if cross != 0.0 or dot <= 0.0:
             simplified.append(curr)
 
     return simplified if len(simplified) >= 3 else vertices

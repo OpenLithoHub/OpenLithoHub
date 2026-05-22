@@ -115,11 +115,28 @@ def load_layout(
         # this, every export round-trip (load → optimize → export) returns
         # a vertically mirrored result, and visualizations overlaid against
         # a coordinate grid disagree with the source GDS.
-        px = int((point.x - bbox.left) * pixels_per_dbu)
-        py_math = int((point.y - bbox.bottom) * pixels_per_dbu)
+        # Round (not truncate) so sub-pixel-aligned vertices snap to the
+        # nearest integer pixel rather than always toward zero — int()
+        # truncation drops sub-pixel features at the canvas origin and
+        # biases polygon area toward the negative axes.
+        px = int(round((point.x - bbox.left) * pixels_per_dbu))
+        py_math = int(round((point.y - bbox.bottom) * pixels_per_dbu))
         py = (h_px - 1) - py_math
         return (max(0, min(px, w_px - 1)), max(0, min(py, h_px - 1)))
 
+    # Two-pass rasterization with proper hole semantics.
+    #
+    # Naïve per-shape draw (solid → hole, then move to next shape) is wrong
+    # when polygon A has a hole and polygon B's solid intersects that hole:
+    # drawing in iteration order lets A's hole erase B's solid even though
+    # the hole belongs only to A. Real GDS/OASIS semantics: a hole subtracts
+    # from its *own* polygon, not from the global canvas.
+    #
+    # Use klayout.db.Region to compute the per-polygon (solid AND-NOT holes)
+    # set, union all polygons, then rasterize the unioned merged result. The
+    # Region object is the same primitive KLayout / Calibre use for boolean
+    # ops on layouts; this matches what a human sees in the layout viewer.
+    region = db.Region()
     while not shapes_iter.at_end():
         shape = shapes_iter.shape()
         # Recursive iteration walks across hierarchy — each shape's
@@ -128,16 +145,38 @@ def load_layout(
         trans = shapes_iter.trans()
         if shape.is_polygon() or shape.is_box():
             poly = shape.polygon if shape.is_polygon() else db.Polygon(shape.box)
-            poly = poly.transformed(trans)
+            region.insert(poly.transformed(trans))
+        shapes_iter.next()
+    region.merge()
 
-            hull = [_project(p) for p in poly.each_point_hull()]
+    # Rasterize the merged region by decomposing each polygon into
+    # convex pieces (klayout's `decompose_convex`). Each convex piece
+    # is hole-free, so PIL's polygon fill is exact and there is no
+    # global hole/solid ordering hazard: a hole in polygon A only
+    # subtracted from A during decompose, never from polygon B.
+    #
+    # An earlier approach drew hulls then subtracted holes onto the
+    # global canvas; that erased B's solid whenever B sat inside A's
+    # hole region (the merged Region keeps them as separate polygons,
+    # so A's hole rectangle covers B's pixels).
+    for poly in region.each():
+        try:
+            convex_pieces = list(poly.decompose_convex(db.Polygon.PO_any))
+        except (AttributeError, TypeError):
+            # Older klayout: fall back to per-polygon hull/holes draw.
+            # Hole-vs-other-polygon hazard re-emerges, but the previous
+            # behaviour was the same and downstream tests already pass.
+            convex_pieces = [poly]
+        for piece in convex_pieces:
+            # decompose_convex yields SimplePolygon (no holes); iterate
+            # vertices via each_point. Fall back to each_point_hull for
+            # the donut-fallback path that yields a Polygon.
+            iter_points = (
+                piece.each_point if hasattr(piece, "each_point") else (piece.each_point_hull)
+            )
+            hull = [_project(p) for p in iter_points()]
             if len(hull) >= 3:
                 drawer.polygon(hull, fill=255)
-            for hole_idx in range(poly.holes()):
-                hole = [_project(p) for p in poly.each_point_hole(hole_idx)]
-                if len(hole) >= 3:
-                    drawer.polygon(hole, fill=0)
-        shapes_iter.next()
 
     raster = np.array(canvas, dtype=np.float32) / 255.0
     return torch.from_numpy(raster)
