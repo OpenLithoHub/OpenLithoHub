@@ -54,6 +54,7 @@ nav:
   - Notes:
     - "ASAP7 cell-name format": notes/asap7-cell-naming.md
     - "OpenRAM → FreePDK45": notes/openram-freepdk45.md
+    - "Cell rasterization gallery": notes/data-show-gallery.md
   - API Reference:
     - "Object-oriented API": api/oo_api.md
     - Data Adapters: api/data.md

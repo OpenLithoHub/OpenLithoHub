@@ -252,3 +252,120 @@ class TestDataShow:
         )
         assert result.exit_code != 0
         assert "design-layer" in result.output.lower() or "bogus" in result.output
+
+
+# ---------- data show --all ----------
+
+
+class TestDataShowAll:
+    def test_all_asap7_renders_every_canonical_cell(self, asap7_root, tmp_path):
+        out_dir = tmp_path / "asap7-out"
+        result = runner.invoke(
+            app,
+            [
+                "data",
+                "show",
+                "asap7",
+                "--all",
+                "--data-root",
+                str(asap7_root),
+                "--accept-license",
+                "--out",
+                str(out_dir),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        for cell in ASAP7_CELLS:
+            assert (out_dir / f"{cell}.png").exists()
+        # summary line goes to stderr (merged into output)
+        assert f"{len(ASAP7_CELLS)} cells" in result.output
+
+    def test_all_freepdk45_sram_renders_every_canonical_cell(self, tmp_path, monkeypatch):
+        # Build a synthetic gds_lib with all 10 cells, monkeypatch the locator.
+        lib = tmp_path / "gds_lib"
+        sizes = {
+            "cell_1rw": (1800, 3000),
+            "cell_2rw": (2400, 3000),
+            "dff": (4000, 3000),
+            "sense_amp": (3000, 3000),
+            "write_driver": (3000, 3000),
+            "tri_gate": (2000, 3000),
+            "replica_cell_1rw": (1800, 3000),
+            "replica_cell_2rw": (2400, 3000),
+            "dummy_cell_1rw": (1800, 3000),
+            "dummy_cell_2rw": (2400, 3000),
+        }
+        for name, (w, h) in sizes.items():
+            _write_sram_cell_gds(lib / f"{name}.gds", name, w_dbu=w, h_dbu=h)
+
+        from openlithohub.data import freepdk45_sram
+
+        monkeypatch.setattr(freepdk45_sram, "_locate_openram_gds_lib", lambda: lib)
+
+        out_dir = tmp_path / "fp45-out"
+        result = runner.invoke(
+            app,
+            ["data", "show", "freepdk45-sram", "--all", "--out", str(out_dir)],
+        )
+        assert result.exit_code == 0, result.output
+        for cell in SRAM_CELLS:
+            assert (out_dir / f"{cell}.png").exists()
+        assert f"{len(SRAM_CELLS)} cells" in result.output
+
+    def test_all_default_out_dir(self, asap7_root, tmp_path, monkeypatch):
+        # No --out: directory defaults to '<dataset>-cells/' in cwd.
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(
+            app,
+            [
+                "data",
+                "show",
+                "asap7",
+                "--all",
+                "--data-root",
+                str(asap7_root),
+                "--accept-license",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        default_dir = tmp_path / "asap7-cells"
+        assert default_dir.is_dir()
+        for cell in ASAP7_CELLS:
+            assert (default_dir / f"{cell}.png").exists()
+
+    def test_all_and_cell_mutually_exclusive(self, asap7_root, tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "data",
+                "show",
+                "asap7",
+                "--all",
+                "--cell",
+                "INV",
+                "--data-root",
+                str(asap7_root),
+                "--accept-license",
+                "--out",
+                str(tmp_path / "out"),
+            ],
+        )
+        assert result.exit_code != 0
+        assert "mutually exclusive" in result.output
+
+    def test_no_cell_and_no_all_errors(self, asap7_root, tmp_path):
+        result = runner.invoke(
+            app,
+            [
+                "data",
+                "show",
+                "asap7",
+                "--data-root",
+                str(asap7_root),
+                "--accept-license",
+                "--out",
+                str(tmp_path / "out.png"),
+            ],
+        )
+        assert result.exit_code != 0
+        assert "--cell" in result.output or "--all" in result.output

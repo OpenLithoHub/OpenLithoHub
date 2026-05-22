@@ -9,9 +9,12 @@ helper, not the eval path. For benchmark runs use ``openlithohub eval run``.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import typer
+
+from openlithohub.data.base import DatasetAdapter
 
 data_app = typer.Typer(
     help="Inspect and render samples from bundled cell-library adapters.",
@@ -49,6 +52,78 @@ def _save_png(arr: np.ndarray, out_path: Path) -> None:
     img = np.flipud(arr)
     img8 = (np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8)
     Image.fromarray(img8, mode="L").save(out_path)
+
+
+def _build_adapter(
+    dataset: str,
+    *,
+    cells: tuple[str, ...],
+    layer_spec: tuple[int, int] | None,
+    pixel_nm: float,
+    data_root: Path | None,
+    accept_license: bool,
+) -> DatasetAdapter:
+    """Construct an ``Asap7Dataset`` or ``FreePdk45SramDataset`` for ``cells``.
+
+    Validation of the license gate / data-root requirements lives here so
+    ``show`` and ``show --all`` share the same error messages.
+    """
+    if dataset == "asap7":
+        from openlithohub.data.asap7 import (
+            ASAP7_LICENSE,
+            ASAP7_LICENSE_URL,
+            DEFAULT_DESIGN_LAYER,
+            Asap7Dataset,
+        )
+
+        if data_root is None:
+            raise typer.BadParameter("--data-root is required for --dataset asap7")
+        if not accept_license:
+            raise typer.BadParameter(
+                f"--dataset asap7 requires --accept-license: ASAP7 ships under "
+                f"{ASAP7_LICENSE}; see {ASAP7_LICENSE_URL}."
+            )
+        return Asap7Dataset(
+            root=data_root,
+            cells=cells,
+            design_layer=layer_spec or DEFAULT_DESIGN_LAYER,
+            pixel_nm=pixel_nm,
+        )
+
+    # freepdk45-sram
+    from openlithohub.data.freepdk45_sram import (
+        DEFAULT_DESIGN_LAYER as SRAM_DEFAULT_LAYER,
+    )
+    from openlithohub.data.freepdk45_sram import (
+        FreePdk45SramDataset,
+    )
+
+    return FreePdk45SramDataset(
+        cells=cells,
+        design_layer=layer_spec or SRAM_DEFAULT_LAYER,
+        pixel_nm=pixel_nm,
+    )
+
+
+def _canonical_cells(dataset: str) -> tuple[str, ...]:
+    if dataset == "asap7":
+        from openlithohub.data.asap7 import CANONICAL_CELLS
+
+        return CANONICAL_CELLS
+    from openlithohub.data.freepdk45_sram import CANONICAL_CELLS as SRAM_CELLS
+
+    return SRAM_CELLS
+
+
+def _format_sample_line(
+    cell_label: str, arr: np.ndarray, md: dict[str, Any], out_path: Path
+) -> str:
+    h, w = arr.shape
+    return (
+        f"cell={md.get('cell_name', cell_label)} shape={(h, w)} "
+        f"layer={md.get('design_layer')} pixel_nm={md.get('pixel_nm')} "
+        f"license={md.get('license')} -> {out_path}"
+    )
 
 
 @data_app.command("list")
@@ -103,14 +178,24 @@ def show_cmd(
         ..., help="Dataset id: 'asap7' or 'freepdk45-sram'.", callback=_validate_dataset
     ),
     cell: str = typer.Option(
-        ...,
+        None,
         "--cell",
         "-c",
         help=(
             "Cell name. For asap7 you can pass shorthand ('INV', 'NAND2', "
             "'DFFHQN') and the resolver expands to the canonical "
             "'<FUNC>x1_ASAP7_75t_R' string; override with --drive/--flavor/--track. "
-            "For freepdk45-sram pass the OpenRAM bundle stem (e.g. 'cell_1rw')."
+            "For freepdk45-sram pass the OpenRAM bundle stem (e.g. 'cell_1rw'). "
+            "Required unless --all is set."
+        ),
+    ),
+    all_cells: bool = typer.Option(
+        False,
+        "--all",
+        help=(
+            "Render every cell in the adapter's CANONICAL_CELLS list. "
+            "Mutually exclusive with --cell. With --all, --out is treated as "
+            "an output directory and defaults to './<dataset>-cells/'."
         ),
     ),
     out: Path = typer.Option(
@@ -118,8 +203,9 @@ def show_cmd(
         "--out",
         "-o",
         help=(
-            "Where to write the rasterized design layer as a grayscale PNG. "
-            "Defaults to '<cell>.png' in the current directory."
+            "Single cell: PNG path (default '<cell>.png' in cwd). "
+            "With --all: output directory (default '<dataset>-cells/' in cwd); "
+            "one '<cell>.png' is written per cell."
         ),
     ),
     data_root: Path = typer.Option(
@@ -157,58 +243,73 @@ def show_cmd(
         "75", "--track", help="ASAP7 track count for shorthand resolution: 75 or 6."
     ),
 ) -> None:
-    """Render a single cell's design layer to a PNG for visual inspection."""
-    from openlithohub.data.base import DatasetAdapter
+    """Render a cell's design layer to a PNG for visual inspection.
 
-    out_path = out if out is not None else Path(f"{cell}.png")
+    Default mode renders one cell. ``--all`` renders every entry in the
+    adapter's CANONICAL_CELLS into an output directory — useful for
+    populating documentation galleries or batch-inspecting an adapter
+    before a benchmark run.
+    """
+    if all_cells and cell is not None:
+        raise typer.BadParameter("--cell and --all are mutually exclusive")
+    if not all_cells and cell is None:
+        raise typer.BadParameter(
+            "--cell is required (or pass --all to render every canonical cell)"
+        )
+
     layer_spec = _parse_design_layer(design_layer) if design_layer else None
-    adapter: DatasetAdapter
+
+    if all_cells:
+        out_dir = out if out is not None else Path(f"{dataset}-cells")
+        cells = _canonical_cells(dataset)
+        adapter = _build_adapter(
+            dataset,
+            cells=cells,
+            layer_spec=layer_spec,
+            pixel_nm=pixel_nm,
+            data_root=data_root,
+            accept_license=accept_license,
+        )
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for i, requested in enumerate(cells):
+            sample = adapter[i]
+            arr = sample.design.detach().cpu().numpy()
+            md = sample.metadata
+            # Use the resolved canonical name for the filename when available
+            # (ASAP7 stores it; FreePDK45-SRAM cell_name == requested name).
+            stem = str(md.get("cell_name", requested))
+            png_path = out_dir / f"{stem}.png"
+            _save_png(arr, png_path)
+            typer.echo(_format_sample_line(requested, arr, md, png_path))
+        typer.echo(f"# {len(cells)} cells -> {out_dir}", err=True)
+        return
+
+    # Single-cell mode. ``cell`` is non-None: validated above.
+    out_path = out if out is not None else Path(f"{cell}.png")
 
     if dataset == "asap7":
-        from openlithohub.data.asap7 import (
-            ASAP7_LICENSE,
-            ASAP7_LICENSE_URL,
-            DEFAULT_DESIGN_LAYER,
-            Asap7Dataset,
-            resolve_cell_name,
-        )
+        from openlithohub.data.asap7 import resolve_cell_name
 
-        if data_root is None:
-            raise typer.BadParameter("--data-root is required for --dataset asap7")
-        if not accept_license:
-            raise typer.BadParameter(
-                f"--dataset asap7 requires --accept-license: ASAP7 ships under "
-                f"{ASAP7_LICENSE}; see {ASAP7_LICENSE_URL}."
-            )
         canonical = resolve_cell_name(cell, drive=drive, flavor=flavor, track=track)
-        adapter = Asap7Dataset(
-            root=data_root,
+        adapter = _build_adapter(
+            dataset,
             cells=(canonical,),
-            design_layer=layer_spec or DEFAULT_DESIGN_LAYER,
+            layer_spec=layer_spec,
             pixel_nm=pixel_nm,
+            data_root=data_root,
+            accept_license=accept_license,
         )
-    else:  # freepdk45-sram
-        from openlithohub.data.freepdk45_sram import (
-            DEFAULT_DESIGN_LAYER as SRAM_DEFAULT_LAYER,
-        )
-        from openlithohub.data.freepdk45_sram import (
-            FreePdk45SramDataset,
-        )
-
-        adapter = FreePdk45SramDataset(
+    else:
+        adapter = _build_adapter(
+            dataset,
             cells=(cell,),
-            design_layer=layer_spec or SRAM_DEFAULT_LAYER,
+            layer_spec=layer_spec,
             pixel_nm=pixel_nm,
+            data_root=data_root,
+            accept_license=accept_license,
         )
 
     sample = adapter[0]
     arr = sample.design.detach().cpu().numpy()
     _save_png(arr, out_path)
-
-    md = sample.metadata
-    h, w = arr.shape
-    typer.echo(
-        f"cell={md.get('cell_name', cell)} shape={(h, w)} "
-        f"layer={md.get('design_layer')} pixel_nm={md.get('pixel_nm')} "
-        f"license={md.get('license')} -> {out_path}"
-    )
+    typer.echo(_format_sample_line(cell, arr, sample.metadata, out_path))
