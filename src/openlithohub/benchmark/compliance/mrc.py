@@ -188,15 +188,38 @@ def _add_violations(
     threshold_nm: float,
     max_reports: int = 100,
 ) -> None:
-    """Add up to ``max_reports`` evenly spaced violation samples."""
+    """Add up to ``max_reports`` evenly spaced violation samples.
+
+    ``actual_nm`` reports the *local feature width* (or spacing) at each
+    sample, derived from the chessboard distance transform: the distance
+    map at a violation pixel equals half the local feature thickness, so
+    the feature width is ``dist * 2 * pixel_size_nm``. To make the
+    reported width robust against off-spine samples (a 10 nm line's edge
+    pixel sits 1 px from background and would otherwise report 2 nm), we
+    look up the *maximum* distance within each sample's local
+    chessboard neighbourhood (radius = half the violating-region
+    extent). For typical MRC violation rectangles this recovers the
+    spine value.
+    """
     total = int(len(ys))
     if total == 0:
         return
     indices = evenly_spaced_indices(total, max_reports)
+    h, w = dist_map.shape
+    # Walk the violation point list to a small max neighbourhood so the
+    # spine of even a thin feature is hit. The neighbourhood radius is
+    # bounded by the violating-region extent in pixel units (worst case:
+    # the half-width of the threshold rule).
+    nbhd_radius = max(1, int(math.ceil(threshold_nm / (2 * pixel_size_nm))))
     for idx in indices:
         y_px = int(ys[idx].item())
         x_px = int(xs[idx].item())
-        actual_nm = float(dist_map[y_px, x_px].item()) * 2.0 * pixel_size_nm
+        y0 = max(0, y_px - nbhd_radius)
+        y1 = min(h, y_px + nbhd_radius + 1)
+        x0 = max(0, x_px - nbhd_radius)
+        x1 = min(w, x_px + nbhd_radius + 1)
+        local_max = float(dist_map[y0:y1, x0:x1].max().item())
+        actual_nm = local_max * 2.0 * pixel_size_nm
         violations.append(
             {
                 "type_code": 0.0 if vtype == "width" else 1.0,

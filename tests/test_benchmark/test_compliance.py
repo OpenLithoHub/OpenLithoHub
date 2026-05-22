@@ -57,6 +57,18 @@ class TestMRCWidthCheck:
         result = check_mrc(mask, min_width_nm=40.0, min_spacing_nm=10.0, pixel_size_nm=2.0)
         assert result.passed is True
 
+    def test_actual_nm_reports_feature_width_not_pixel_distance(self):
+        # Issue #2: actual_nm in violation reports used to be the
+        # per-pixel distance × 2, so a 10 nm line could be reported as
+        # 2 nm at edge pixels and 10 nm at the spine. The reported
+        # width must match the feature it describes.
+        mask = torch.zeros(60, 60)
+        mask[10:50, 25:35] = 1.0  # 10-px (=10 nm) wide vertical line
+        result = check_mrc(mask, min_width_nm=40.0, min_spacing_nm=4.0, pixel_size_nm=1.0)
+        assert result.passed is False
+        widths = {round(v["actual_nm"], 1) for v in result.violations if v["type_code"] == 0.0}
+        assert widths == {10.0}, f"expected only 10 nm reports, got {widths}"
+
 
 class TestMRCSpacingCheck:
     def test_wide_spacing_passes(self):

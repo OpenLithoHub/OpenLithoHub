@@ -5,20 +5,24 @@ The standard academic OPC scoring contract, as established by
 by GAN-OPC / MOSAIC, is:
 
     wafer = lithosim(mask, dose=1.0, threshold=0.225)
-    L2    = (wafer - target).abs().sum()
+    score = (wafer - target).abs().sum()       # L1 / SAD pixel count
 
 i.e. forward-simulate the predicted mask through SOCS optics and the
-resist threshold, then sum the absolute pixel-wise error against the
+resist threshold, then count the pixel-wise differences against the
 target *layout* (not against the input mask). The result is in pixel
 units; multiply by ``pixel_size_nm**2`` for an area in nm² if needed.
 
-Naming note: the published paper calls this "L2 error", but the closed-form
-above is the L1 norm of ``(wafer - target)`` (sum of absolute differences).
-The ``l2_error_pixels`` field name is preserved for cross-paper comparability;
-do not "fix" it to L1 without coordinating against the upstream tables.
-For a binary wafer/target the two norms are equal anyway — ``|x|`` and
-``x²`` agree on ``{0,1}`` — so the underlying scalar is the same number
-either way.
+Naming note: the published Neural-ILT paper calls this scalar "L2
+error". On the binary ``{0, 1}`` wafer/target images the formula
+emits, the squared-L2 norm ``(w - t).square().sum()`` and the L1 norm
+``(w - t).abs().sum()`` produce the *same* integer (since
+``x ∈ {-1, 0, 1} ⇒ x² = |x|``), so reference implementations
+canonically use the L1 form for speed. They are *not* equal in general
+— if you ever supply a non-binary wafer (e.g. soft resist contours),
+the two diverge — but for the canonical contract they agree. The
+``l2_error_pixels`` field name is preserved for cross-paper
+comparability; do not "fix" it to L1 without coordinating against the
+upstream tables.
 
 Like :func:`openlithohub.benchmark.metrics.epe.compute_wafer_epe`, this
 metric requires the forward simulator in the loop. The
