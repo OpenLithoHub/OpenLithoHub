@@ -291,10 +291,22 @@ def download_ganopc(
         verify_sha256(volume, pin)
 
     archive_prefix = volumes[0].with_suffix("")  # strip ``.001`` etc.
+    dest_resolved = dest_root.resolve()
     with (
         multivolumefile.open(str(archive_prefix), mode="rb") as joined,
         py7zr.SevenZipFile(joined, mode="r") as archive,
     ):
+        # Path-traversal guard: refuse archive members that resolve outside
+        # ``dest_root``. SHA-256 pins above mitigate tampering for the known
+        # upstream artifact, but the guard is defence-in-depth so a future
+        # re-pin of a malicious archive cannot escape the destination.
+        # ``Path.is_relative_to`` avoids string-prefix confusion (a member
+        # resolving to ``/tmp/foobar`` would pass a startswith("/tmp/foo")
+        # check).
+        for name in archive.getnames():
+            member_path = (dest_root / name).resolve()
+            if not member_path.is_relative_to(dest_resolved):
+                raise RuntimeError(f"Refusing to extract path-traversal member: {name!r}")
         archive.extractall(path=dest_root)
 
     if not (extracted / "artitgt").is_dir() or not (extracted / "artimsk").is_dir():

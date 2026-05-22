@@ -64,15 +64,25 @@ def _format_table(metrics: dict[str, Any]) -> str:
 
     visible = {k: v for k, v in metrics.items() if not k.endswith(_DROPPED_SUFFIX)}
     key_width = max(len(k) for k in visible) if visible else 6
-    lines = ["┌" + "─" * (key_width + 2) + "┬" + "─" * 16 + "┐"]
-    lines.append("│ " + "Metric".ljust(key_width) + " │ " + "Value".ljust(14) + " │")
-    lines.append("├" + "─" * (key_width + 2) + "┼" + "─" * 16 + "┤")
 
-    for key, val in visible.items():
-        formatted = f"{val:.4f}" if isinstance(val, float) else str(val)
-        lines.append("│ " + key.ljust(key_width) + " │ " + formatted.ljust(14) + " │")
+    # Pre-format every value so the value column can be sized to fit the
+    # longest entry. The previous fixed-width 14 column silently broke box
+    # alignment whenever a value (e.g. a long ``l2_error_nm2`` integer or a
+    # model-name string) exceeded 14 chars — ``ljust`` does not truncate.
+    formatted_values = [
+        f"{val:.4f}" if isinstance(val, float) else str(val) for val in visible.values()
+    ]
+    val_width = max((len(s) for s in formatted_values), default=5)
+    val_width = max(val_width, len("Value"))
 
-    lines.append("└" + "─" * (key_width + 2) + "┴" + "─" * 16 + "┘")
+    lines = ["┌" + "─" * (key_width + 2) + "┬" + "─" * (val_width + 2) + "┐"]
+    lines.append("│ " + "Metric".ljust(key_width) + " │ " + "Value".ljust(val_width) + " │")
+    lines.append("├" + "─" * (key_width + 2) + "┼" + "─" * (val_width + 2) + "┤")
+
+    for key, formatted in zip(visible.keys(), formatted_values, strict=True):
+        lines.append("│ " + key.ljust(key_width) + " │ " + formatted.ljust(val_width) + " │")
+
+    lines.append("└" + "─" * (key_width + 2) + "┴" + "─" * (val_width + 2) + "┘")
     return _dropped_banner(metrics, style="table") + "\n".join(lines)
 
 

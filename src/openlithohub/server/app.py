@@ -58,8 +58,10 @@ _MODEL_LOCKS: dict[tuple[str, frozenset[tuple[str, Any]]], threading.Lock] = {}
 
 # Hard cap on multipart upload size for /v1/optimize. Mirrors the 2 GB ceiling
 # enforced by ``ModelHub._download_url`` for incoming weights — uniform
-# attacker-controlled-bytes contract across the surface. Without a cap, a
-# single ``await UploadFile.read()`` on a multi-GB body OOM-kills the worker.
+# attacker-controlled-bytes contract across the surface. The body is streamed
+# to disk in 1 MB chunks below; the cap aborts the stream once cumulative
+# bytes-read crosses the threshold so a multi-GB POST cannot fill the worker's
+# tmpfs (or, on systems where /tmp is a memory-backed mount, OOM the worker).
 _MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
 

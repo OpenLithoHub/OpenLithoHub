@@ -148,9 +148,18 @@ def rasterize_cell_layer(
     Manhattan-only. Sibling PDK adapters reuse this helper, so the fix
     has to handle non-axis-aligned geometry too.
 
+    Iterates the layer recursively (``begin_shapes_rec``) so geometry
+    referenced via cell instances (a stdcell that ``INSTANCE``s a shared
+    via array, for example) is included; the previous flat
+    ``cell.shapes(...).each()`` silently dropped instanced shapes.
+
     Returns ``(array, origin_nm)`` where ``origin_nm`` is the cell bbox
-    lower-left corner in nm, suitable for storing in
-    ``LithoSample.metadata['origin_nm']``.
+    lower-left corner in nm. The returned array follows the same
+    orientation convention as :func:`openlithohub.data.io.load_layout`:
+    image (y-down) coordinates with ``arr[0]`` at the top of the layout
+    viewer (largest y_nm). Earlier asap7 code stored y-up and then
+    ``flipud``-d, contradicting the canonical convention and producing
+    vertically mirrored masks vs. ``load_layout``-loaded layouts.
     """
     import klayout.db as kdb
     from PIL import Image, ImageDraw
@@ -164,32 +173,40 @@ def rasterize_cell_layer(
     if layer_index is None:
         return np.zeros((h, w), dtype=np.float32), origin
 
-    ox_nm, oy_nm = origin
-
-    def _to_px(point: Any) -> tuple[int, int]:
-        # Preserve the historical y-up (math) orientation of the returned
-        # array: arr[j, i] indexes increasing j as increasing y_nm. Round
-        # rather than truncate so sub-pixel-aligned vertices snap to the
-        # nearest pixel.
-        x_nm = point.x * dbu_nm - ox_nm
-        y_nm = point.y * dbu_nm - oy_nm
-        px = int(round(x_nm / pixel_nm))
-        py = int(round(y_nm / pixel_nm))
-        return (max(0, min(px, w - 1)), max(0, min(py, h - 1)))
-
     canvas = Image.new("L", (w, h), 0)
     drawer = ImageDraw.Draw(canvas)
 
-    # Build a Region so per-polygon hole semantics survive a multi-shape
-    # cell with overlapping geometry — same contract as data.io.load_layout.
+    def _to_px(point: Any) -> tuple[int, int]:
+        # GDSII uses mathematical y-up; PIL's image surface uses y-down.
+        # Convert at projection time and store the array in PIL's native
+        # orientation (no later flipud). ``arr[0]`` corresponds to the top
+        # of the layout viewer (largest y_nm) — same convention as
+        # ``data.io.load_layout``.
+        x_dbu = point.x - bbox.left
+        y_dbu = point.y - bbox.bottom
+        x_nm = x_dbu * dbu_nm
+        y_nm_math = y_dbu * dbu_nm
+        px = int(round(x_nm / pixel_nm))
+        py_math = int(round(y_nm_math / pixel_nm))
+        py = (h - 1) - py_math
+        return (max(0, min(px, w - 1)), max(0, min(py, h - 1)))
+
+    # Build a Region from the recursive shape iterator so per-polygon hole
+    # semantics survive a multi-shape cell with overlapping geometry, and
+    # instanced sub-cell geometry (which the previous flat iterator
+    # silently dropped) is included. Same contract as data.io.load_layout.
     region = kdb.Region()
-    for shape_obj in cell.shapes(layer_index).each():
-        if shape_obj.is_box():
-            region.insert(kdb.Polygon(shape_obj.box))
-        elif shape_obj.is_path():
-            region.insert(shape_obj.path.polygon())
-        elif shape_obj.is_polygon():
-            region.insert(shape_obj.polygon)
+    shapes_iter = cell.begin_shapes_rec(layer_index)
+    while not shapes_iter.at_end():
+        shape = shapes_iter.shape()
+        trans = shapes_iter.trans()
+        if shape.is_box():
+            region.insert(kdb.Polygon(shape.box).transformed(trans))
+        elif shape.is_path():
+            region.insert(shape.path.polygon().transformed(trans))
+        elif shape.is_polygon():
+            region.insert(shape.polygon.transformed(trans))
+        shapes_iter.next()
     region.merge()
 
     for poly in region.each():
@@ -208,8 +225,7 @@ def rasterize_cell_layer(
             if len(hull) >= 3:
                 drawer.polygon(hull, fill=255)
 
-    # PIL writes top row first; flip so arr[0] is y_nm = origin (y-up).
-    arr = np.flipud(np.array(canvas, dtype=np.float32)) / 255.0
+    arr = np.array(canvas, dtype=np.float32) / 255.0
     return arr, origin
 
 

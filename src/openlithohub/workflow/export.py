@@ -105,10 +105,17 @@ def _export_manhattan(mask: torch.Tensor, output_path: Path, pixel_size_nm: floa
     top = layout.create_cell("TOP")
     layer_idx = layout.layer(1, 0)
 
+    # KLayout DB units: layout.dbu is in microns. A DB integer coord i represents
+    # i * dbu microns = i * dbu * 1000 nm. Coordinates here are already in nm,
+    # so divide by (dbu * 1000) — equivalently by pixel_size_nm.
+    nm_per_dbu = layout.dbu * 1000.0
     for poly_vertices in polygons:
         if len(poly_vertices) < 3:
             continue
-        points = [db.Point(int(x / layout.dbu), int(y / layout.dbu)) for x, y in poly_vertices]
+        points = [
+            db.Point(int(round(x / nm_per_dbu)), int(round(y / nm_per_dbu)))
+            for x, y in poly_vertices
+        ]
         top.shapes(layer_idx).insert(db.Polygon(points))
 
     layout.write(str(output_path))

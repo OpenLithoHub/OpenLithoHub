@@ -53,6 +53,16 @@ def set_deterministic(*, strict: bool = False) -> None:
     for deterministic matmul). Strict mode raises at runtime when an op
     has no deterministic implementation; opt in only when you have
     verified the model's op set supports it.
+
+    Important: ``CUBLAS_WORKSPACE_CONFIG`` is read by cuBLAS at the
+    handle's first use. If CUDA has already been initialised before this
+    function is called (any tensor on a CUDA device, any cublas-backed
+    matmul), setting the env var here is a no-op and determinism is
+    silently lost. Call ``set_deterministic(strict=True)`` *before* any
+    CUDA work, or set ``CUBLAS_WORKSPACE_CONFIG=:4096:8`` in the shell
+    environment before launching Python. We log a warning when we detect
+    CUDA was already initialised so the silent failure becomes a visible
+    one.
     """
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
@@ -60,7 +70,19 @@ def set_deterministic(*, strict: bool = False) -> None:
     torch.backends.cuda.matmul.allow_tf32 = False
 
     if strict:
+        already_set = os.environ.get("CUBLAS_WORKSPACE_CONFIG")
         os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+        # CUBLAS_WORKSPACE_CONFIG is consumed at cuBLAS handle creation,
+        # which happens on first cuBLAS use. If CUDA has already been
+        # initialised the env var write above is too late to take effect.
+        if already_set is None and torch.cuda.is_available() and torch.cuda.is_initialized():
+            logger.warning(
+                "set_deterministic(strict=True) called after CUDA was "
+                "initialised; CUBLAS_WORKSPACE_CONFIG=:4096:8 was set but "
+                "cuBLAS will not pick it up. Re-launch with the env var "
+                "exported in the shell, or call set_deterministic before "
+                "any CUDA tensor is created."
+            )
         torch.use_deterministic_algorithms(True)
 
     logger.info(

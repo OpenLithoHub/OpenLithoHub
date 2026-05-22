@@ -281,6 +281,12 @@ def export_oasis_mbw(
     top = layout.create_cell(cell_name)
     layer_idx = layout.layer(layer, datatype)
 
+    # KLayout DB units: layout.dbu is in microns. A DB integer coord i represents
+    # i * dbu microns = i * dbu * 1000 nm. xs/ys here are already in nm
+    # (fit_bspline scaled control points by pixel_size_nm), so divide by
+    # (dbu * 1000) — equivalently by pixel_size_nm.
+    nm_per_dbu = layout.dbu * 1000.0
+
     n_filtered = 0
     n_vertices_before = 0
     n_vertices_after = 0
@@ -308,7 +314,7 @@ def export_oasis_mbw(
             ys_arr = ys_arr[keep_mask]
             n_vertices_after += len(xs_arr)
         points = [
-            db.Point(int(round(float(x) / layout.dbu)), int(round(float(y) / layout.dbu)))
+            db.Point(int(round(float(x) / nm_per_dbu)), int(round(float(y) / nm_per_dbu)))
             for x, y in zip(xs_arr, ys_arr, strict=False)
         ]
         if len(points) >= 3:

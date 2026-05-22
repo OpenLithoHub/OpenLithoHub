@@ -11,7 +11,27 @@ import torch
 
 @dataclass
 class PredictionResult:
-    """Result from a model prediction."""
+    """Result from a model prediction.
+
+    Output contract for ``mask``:
+
+    - **shape**: same as the input ``design`` (``(H, W)``, ``(C, H, W)``,
+      or ``(B, C, H, W)``).
+    - **dtype**: ``torch.float32``.
+    - **range**: values in ``[0, 1]``. Models that emit logits MUST apply
+      ``sigmoid`` (and any project-required binarization) before populating
+      this field.
+    - **binarization**: implementations should return *binarized* masks
+      (``mask > 0.5``) by default so downstream metrics (DRC/MRC, PV-band,
+      shot-count) see the same contract across baselines. Models that
+      benefit from emitting a soft mask for further processing should
+      document the deviation in their ``predict()`` docstring; the
+      default Neural-ILT and GAN-OPC adapters both binarize.
+
+    ``contour`` is optional and used for vector-mode visualization /
+    GDS export. ``metadata`` carries per-model side-channel info
+    (weights provenance, iteration count, ...).
+    """
 
     mask: torch.Tensor
     contour: torch.Tensor | None = None

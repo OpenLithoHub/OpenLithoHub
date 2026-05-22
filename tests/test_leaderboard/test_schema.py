@@ -79,10 +79,29 @@ def test_extra_fields_are_rejected():
 
 
 def test_url_must_be_http_or_https():
-    with pytest.raises(ValidationError, match="must start with http"):
+    with pytest.raises(ValidationError, match="http:// or https://"):
         BenchmarkResult.model_validate(_valid_payload(paper_url="javascript:alert(1)"))
-    with pytest.raises(ValidationError, match="must start with http"):
+    with pytest.raises(ValidationError, match="http:// or https://"):
         BenchmarkResult.model_validate(_valid_payload(code_url="file:///etc/passwd"))
+
+
+def test_url_rejects_credentials_and_whitespace():
+    with pytest.raises(ValidationError, match="user:password"):
+        BenchmarkResult.model_validate(
+            _valid_payload(paper_url="https://user:pass@evil.example.com/")
+        )
+    with pytest.raises(ValidationError, match="whitespace"):
+        BenchmarkResult.model_validate(_valid_payload(code_url="https://example.com/ foo"))
+    with pytest.raises(ValidationError, match="host"):
+        BenchmarkResult.model_validate(_valid_payload(paper_url="https://"))
+
+
+def test_submission_id_charset_enforced():
+    with pytest.raises(ValidationError, match="alphanumeric"):
+        BenchmarkResult.model_validate(_valid_payload(submission_id="../../../etc/passwd"))
+    # Allowed charset round-trips.
+    result = BenchmarkResult.model_validate(_valid_payload(submission_id="abc-123_DEF"))
+    assert result.submission_id == "abc-123_DEF"
 
 
 def test_string_length_bounded():

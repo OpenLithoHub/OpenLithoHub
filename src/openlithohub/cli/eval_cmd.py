@@ -432,17 +432,16 @@ def _aggregate_metrics(
 
     Two weighting regimes (issue #45):
 
-    - **Area-weighted** (default): for *integral* metrics whose per-sample
-      value already scales with image area — e.g. ``l2_error_pixels``,
-      ``l2_error_nm2``. A 4096×4096 production tile should contribute
-      ~4000× as much to the aggregate as a 64×64 toy tile.
+    - **Area-weighted** (default): for *integral per-pixel rate* metrics —
+      e.g. MRC violation rate aggregates as ``total_violations /
+      total_pixels``. Larger tiles contribute proportionally because the
+      per-image value is already a rate, not a sum.
 
     - **Unweighted (sample mean)**: for metrics that are *already*
-      sample-internal averages — e.g. EPE, PVB, CD-error. Multiplying
-      these by pixel count makes large images dominate the leaderboard
-      regardless of how good their mean was; the canonical leaderboard
-      number is "average EPE across the eval set", which is a
-      simple-mean over samples, not pixel-weighted.
+      sample-internal averages — e.g. EPE, PVB, CD-error — and for
+      *per-image totals* like ``l2_error_pixels`` / ``l2_error_nm2``.
+      Per-image totals scale linearly with area on their own; area-weighting
+      them again gives *quadratic* weight to large tiles.
 
     The ``_UNWEIGHTED_KEY_PREFIXES`` set marks which metrics are already
     per-sample means; everything else falls through to area weighting
@@ -500,7 +499,13 @@ def _aggregate_metrics(
 # again with pixel-area weights distorts the leaderboard so that large
 # tiles dominate regardless of their mean quality. Everything not in this
 # set falls through to area weighting (which is correct for integral
-# metrics like ``l2_error_pixels``).
+# metrics that are reported as per-pixel rates).
+#
+# ``l2_error_pixels`` / ``l2_error_nm2`` are integral sums over the image
+# whose value already scales linearly with area. Aggregating them with
+# area weights would multiply by area a second time and give *quadratic*
+# weighting to large tiles. Treat them as unit-weighted simple-mean of
+# per-image totals (linear in area, monotone in eval-set size).
 _UNWEIGHTED_KEY_PREFIXES: tuple[str, ...] = (
     "epe_",
     "epe_wafer_",
@@ -511,6 +516,8 @@ _UNWEIGHTED_KEY_PREFIXES: tuple[str, ...] = (
     "bridge_probability",
     "break_probability",
     "robustness_score",
+    "l2_error_pixels",
+    "l2_error_nm2",
 )
 
 

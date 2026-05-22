@@ -83,6 +83,7 @@ class SimulatorResult:
             rows.append((f"meta:{k}", str(v)))
 
         preview_tensor = self.resist if self.resist is not None else self.aerial
+        preview = preview_tensor
         if preview_tensor is not None:
             preview = preview_tensor.detach().cpu()
             if preview.numel() > 0:
@@ -90,7 +91,7 @@ class SimulatorResult:
                 if hi > lo:
                     preview = (preview - lo) / (hi - lo)
         img_html = png_b64_to_img_tag(
-            mask_thumbnail_png_b64(preview_tensor),
+            mask_thumbnail_png_b64(preview),
             alt=self.backend or "simulation",
         )
         body = (

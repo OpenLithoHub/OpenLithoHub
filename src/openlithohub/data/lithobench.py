@@ -258,12 +258,17 @@ class LithoBenchDataset(DatasetAdapter):
         member names — we add an explicit guard so a tampered upload (the
         SHA-256 is verified before this is called, but in case of future
         re-pinning) cannot escape ``dest``.
+
+        Uses ``Path.is_relative_to`` rather than string-prefix matching:
+        ``str(...).startswith(str(dest))`` is vulnerable to prefix
+        confusion (a member resolving to ``/tmp/foobar`` passes a
+        ``startswith("/tmp/foo")`` check).
         """
         dest_resolved = dest.resolve()
         with tarfile.open(tar_path, "r:*") as tar:
             for member in tar.getmembers():
                 member_path = (dest / member.name).resolve()
-                if not str(member_path).startswith(str(dest_resolved)):
+                if not member_path.is_relative_to(dest_resolved):
                     raise RuntimeError(
                         f"Refusing to extract path-traversal member: {member.name!r}"
                     )

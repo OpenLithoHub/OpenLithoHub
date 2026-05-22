@@ -128,6 +128,43 @@ class BenchmarkResult(BaseModel):
     def _validate_url(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        if not (v.startswith("https://") or v.startswith("http://")):
-            raise ValueError("URL must start with http:// or https://")
+        # Strict URL validation: parse and require https/http scheme, a
+        # non-empty network location, no embedded user:password, and no
+        # whitespace anywhere. The previous prefix-only check accepted
+        # malformed strings like "http://", "http:// foo", or
+        # "https://user:pass@evil/" — fine as text, but unusable as a
+        # link and a phishing vector when surfaced in the leaderboard UI.
+        from urllib.parse import urlparse
+
+        if any(ch.isspace() for ch in v):
+            raise ValueError("URL must not contain whitespace")
+        try:
+            parsed = urlparse(v)
+        except ValueError as exc:
+            raise ValueError(f"Invalid URL: {exc}") from exc
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("URL must use http:// or https:// scheme")
+        if not parsed.netloc:
+            raise ValueError("URL must include a host")
+        if "@" in parsed.netloc:
+            raise ValueError("URL must not include user:password credentials")
+        hostname = parsed.hostname
+        if hostname is None or "." not in hostname:
+            raise ValueError("URL hostname must contain at least one '.'")
+        return v
+
+    @field_validator("submission_id")
+    @classmethod
+    def _validate_submission_id(cls, v: str | None) -> str | None:
+        # Submission IDs are surfaced in URLs and filesystem paths; constrain
+        # to a safe charset (alnum + dash + underscore) so a hostile ID can't
+        # path-traverse out of the submissions/ directory or break URL routing.
+        if v is None:
+            return v
+        if not v:
+            raise ValueError("submission_id must not be empty")
+        if not all(c.isalnum() or c in "-_" for c in v):
+            raise ValueError(
+                "submission_id must contain only alphanumeric characters, dashes, and underscores"
+            )
         return v

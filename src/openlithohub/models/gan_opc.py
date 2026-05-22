@@ -72,6 +72,7 @@ class GanOpcModel(LithographyModel):
         self._repo_filename = repo_filename
         self._url_sha256 = url_sha256
         self._net: torch.nn.Module | None = None
+        self._weights_loaded: bool = False
 
     def setup(self) -> None:
         from openlithohub.models._unet import UNet
@@ -107,7 +108,12 @@ class GanOpcModel(LithographyModel):
                 "for a meaningful baseline.",
                 stacklevel=2,
             )
-            self._net.eval()
+
+        # Always switch to eval mode after setup. Otherwise BatchNorm uses
+        # per-batch statistics at inference, producing different outputs for
+        # the same mask depending on what else is in the batch.
+        self._net.eval()
+        self._weights_loaded = weights_loaded
 
     def predict(self, design: torch.Tensor, **kwargs: Any) -> PredictionResult:
         if self._net is None:
@@ -124,6 +130,12 @@ class GanOpcModel(LithographyModel):
             logits = self._net(x)
             mask = torch.sigmoid(logits)
 
+        # Binarize to match the LithographyModel.predict() contract: the
+        # downstream metric stack (DRC/MRC, PV-band, shot-count) operates
+        # on {0, 1} masks, and the Neural-ILT baseline binarizes too.
+        # Emitting a soft mask here would silently bias the leaderboard.
+        mask = (mask > 0.5).float()
+
         if design.ndim == 2:
             mask = mask.squeeze(0).squeeze(0)
         elif design.ndim == 3:
@@ -131,7 +143,7 @@ class GanOpcModel(LithographyModel):
 
         return PredictionResult(
             mask=mask.cpu(),
-            metadata={"model": self.NAME, "weights_loaded": True},
+            metadata={"model": self.NAME, "weights_loaded": self._weights_loaded},
         )
 
     def to_torch_module(self) -> torch.nn.Module:

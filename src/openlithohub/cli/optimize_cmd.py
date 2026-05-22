@@ -44,7 +44,16 @@ def run(
             "an integer pixel count. Mutually exclusive with --overlap."
         ),
     ),
-    pixel_nm: float = typer.Option(1.0, "--pixel-nm", help="Pixel size in nanometers."),
+    pixel_nm: float | None = typer.Option(
+        None,
+        "--pixel-nm",
+        help=(
+            "Pixel size in nanometers. When omitted, the value is taken from "
+            "the selected --node (e.g. 0.5 nm for 3nm-euv). Pass an explicit "
+            "value to override the node default; '1.0' is treated as a real "
+            "value, not a sentinel — same contract as POST /v1/optimize."
+        ),
+    ),
     threshold: float = typer.Option(
         0.225,
         "--threshold",
@@ -143,8 +152,10 @@ def run(
         from openlithohub.workflow.process_node import get_node
 
         node_config = get_node(node)
-        if pixel_nm == 1.0:
+        if pixel_nm is None:
             pixel_nm = node_config.pixel_size_nm
+    if pixel_nm is None:
+        pixel_nm = 1.0
 
     console.print("[bold]OpenLithoHub Mask Optimization[/bold]")
     console.print(f"  Input:  {input}")
@@ -350,6 +361,13 @@ def _resolve_halo(
 
     if overlap_explicit:
         assert overlap is not None  # narrowed by overlap_explicit
+        if overlap < 0:
+            raise typer.BadParameter(f"--overlap must be >= 0; got {overlap}")
+        if overlap >= tile_size:
+            raise typer.BadParameter(
+                f"--overlap {overlap} >= --tile-size {tile_size}; overlap must "
+                "be smaller than the tile."
+            )
         console.print(f"  Halo: {overlap} px (from --overlap)")
         return int(overlap)
 
