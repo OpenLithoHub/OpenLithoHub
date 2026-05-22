@@ -46,6 +46,7 @@ nav:
   - CLI Reference: cli-reference.md
   - Halo and Tiling: halo-and-tiling.md
   - Networking & Proxies: networking.md
+  - References: references.md
   - API Reference:
     - "Object-oriented API": api/oo_api.md
     - Data Adapters: api/data.md

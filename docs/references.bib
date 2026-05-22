@@ -1,0 +1,93 @@
+% OpenLithoHub — bibliography snapshot
+%
+% This file is the canonical citation source for the OpenLithoHub
+% codebase, docs, and submissions. Per playbook §5.2, we snapshot bibs
+% into the repository (rather than chase live arXiv/DOI fetches) so the
+% build is reproducible offline and the cited keys cannot drift under
+% upstream metadata edits.
+%
+% Adding an entry:
+%   1. Use the citation key style ``FirstAuthor<YEAR>_ShortTopic``
+%      (e.g. ``Yang2023_LithoBench``). Inline mentions in code/docstrings
+%      should match this key verbatim so grep finds both sides.
+%   2. Include arXiv ID and DOI when both exist; arXiv tends to be the
+%      stable URL, DOI the publisher-of-record.
+%   3. Append a ``note = {...}`` summarising why this paper is cited in
+%      OpenLithoHub — future maintainers should be able to audit without
+%      reading the paper.
+%
+% Last verified: 2026-05-22.
+
+@inproceedings{Yang2023_LithoBench,
+  author    = {Zheng, Su and Yang, Haoyu and Yu, Bei and Pan, David Z. and Wong, Martin D. F.},
+  title     = {{LithoBench}: Benchmarking {AI} Computational Lithography for Semiconductor Manufacturing},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2023},
+  eprint    = {2305.04345},
+  archivePrefix = {arXiv},
+  url       = {https://arxiv.org/abs/2305.04345},
+  note      = {Reference benchmark and SOCS (24-kernel) Hopkins parameters used by HopkinsSim; Table III defines academic OPC printability as L2 + PVB on the simulated wafer image, which we mirror in the leaderboard schema (forward-sim gate).}
+}
+
+@inproceedings{Jiang2020_NeuralILT,
+  author    = {Jiang, Bentian and Liu, Lixin and Yang, Haoyu and Pan, David Z. and Yu, Bei},
+  title     = {{Neural-ILT}: Migrating {ILT} to Neural Networks for Mask Printability and Complexity Co-optimization},
+  booktitle = {Proceedings of the 39th International Conference on Computer-Aided Design (ICCAD)},
+  year      = {2020},
+  doi       = {10.1145/3400302.3415649},
+  url       = {https://doi.org/10.1145/3400302.3415649},
+  note      = {U-Net architecture and L2/PVB loss formulation that the openlithohub.models.NeuralILTModel adapter targets. Architecture audit pending (task 3.3).}
+}
+
+@inproceedings{Yang2018_GANOPC,
+  author    = {Yang, Haoyu and Li, Shuhe and Ma, Yuzhe and Yu, Bei and Young, Evangeline F. Y.},
+  title     = {{GAN-OPC}: Mask Optimization with Lithography-guided Generative Adversarial Nets},
+  booktitle = {Proceedings of the 55th Annual Design Automation Conference (DAC)},
+  year      = {2018},
+  doi       = {10.1145/3195970.3196056},
+  url       = {https://doi.org/10.1145/3195970.3196056},
+  note      = {GAN-style OPC. The GanOpcDataset adapter ingests the public release.}
+}
+
+@inproceedings{Banerjee2013_ICCAD,
+  author    = {Banerjee, Shayak and Li, Zhuo and Nassif, Sani R.},
+  title     = {{ICCAD-2013 CAD} Contest in Mask Optimization and Benchmark Suite},
+  booktitle = {2013 IEEE/ACM International Conference on Computer-Aided Design (ICCAD)},
+  year      = {2013},
+  doi       = {10.1109/ICCAD.2013.6691174},
+  note      = {Original mask-optimization benchmark format that the ICCAD-16 dataset extends.}
+}
+
+@misc{Yang2016_ICCAD16Bench,
+  author    = {Yang, Haoyu and Lin, Yibo and Yu, Bei and Young, Evangeline F. Y.},
+  title     = {{ICCAD-2016} {N7M2EUV} Mask-Optimization Benchmark},
+  year      = {2016},
+  howpublished = {\url{https://github.com/phdyang007/ICCAD16-N7M2EUV}},
+  note      = {Four 7nm-node EUV designs used as the canonical hotspot/EPE benchmark; consumed by Iccad16Dataset. Repository pinned to commit recorded in docs/acquisition_log.md.}
+}
+
+@article{Cobb1995_FastSparse,
+  author    = {Cobb, Nicolas Bailey and Zakhor, Avideh},
+  title     = {Fast, Low-Complexity Mask Design},
+  journal   = {Optical/Laser Microlithography VIII (SPIE)},
+  volume    = {2440},
+  year      = {1995},
+  doi       = {10.1117/12.209288},
+  note      = {Original SOCS / sum-of-coherent-systems decomposition. The 24-kernel choice in HopkinsSim follows this construction with parameters from Yang2023_LithoBench.}
+}
+
+@inproceedings{Yu2014_AccelerationOPC,
+  author    = {Yu, Jhih-Rong and Pan, Peichen and Lin, Yibo and Yu, Bei},
+  title     = {Accelerating Mask Optimization through Multi-resolution Lithographic Simulation},
+  booktitle = {Proceedings of the 33rd International Conference on Computer-Aided Design (ICCAD)},
+  year      = {2014},
+  note      = {Multi-resolution forward-simulation strategy that the halo / tiling pipeline (RFC 0005) draws on.}
+}
+
+@misc{MLCommons2024_Croissant,
+  author    = {{MLCommons}},
+  title     = {Croissant: A Metadata Format for {ML}-Ready Datasets},
+  year      = {2024},
+  howpublished = {\url{http://mlcommons.org/croissant/}},
+  note      = {Metadata standard emitted by DatasetAdapter.to_croissant().}
+}
