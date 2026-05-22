@@ -169,6 +169,28 @@ class TestOrfsArtifactDataset:
         ds = OrfsArtifactDataset(gds_path=orfs_gds, pixel_nm=1.0, cell_name="mock_alu")
         assert len(ds) == 4
 
+    def test_riscv32i_mock_sram_design_name(self, tmp_path):
+        # Issue #4 Phase 3 promises a SRAM-instantiated RISC-V test design.
+        # ORFS already ships flow/designs/asap7/riscv32i-mock-sram/, and the
+        # adapter is generic over design name. This test pins that contract
+        # by feeding a synthetic GDS through with the SRAM design name and
+        # asserting metadata round-trips cleanly. Cell names use underscores
+        # because ORFS converts dashes when emitting top cells.
+        gds = _build_synthetic_orfs_gds(
+            tmp_path / "riscv32i_mock_sram.gds", cell_name="riscv32i_mock_sram"
+        )
+        ds = OrfsArtifactDataset(
+            gds_path=gds,
+            pixel_nm=1.0,
+            tile_nm=2000.0,
+            design_name="riscv32i-mock-sram",
+        )
+        assert len(ds) == 4
+        md = ds[0].metadata
+        assert md["design_name"] == "riscv32i-mock-sram"
+        assert md["cell_name"] == "riscv32i_mock_sram"
+        assert md["pdk"] == "asap7"
+
     def test_unknown_cell_raises(self, orfs_gds):
         ds = OrfsArtifactDataset(gds_path=orfs_gds, pixel_nm=1.0, cell_name="not_a_cell")
         with pytest.raises(KeyError, match="not found"):

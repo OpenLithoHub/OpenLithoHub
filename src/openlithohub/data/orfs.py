@@ -2,11 +2,19 @@
 
 OpenROAD-flow-scripts (ORFS) is the open-source RTL→GDSII flow. Its
 ``flow/designs/asap7/<name>/`` configurations produce real ASAP7-routed
-layouts (mock-alu, riscv32i, ibex, …) under
+layouts — including ``mock-alu``, ``riscv32i``, ``riscv32i-mock-sram``
+(the SRAM-instantiated variant covering Phase 3's SRAM-bitcell-tile
+goal), ``ibex``, ``swerv_wrapper``, and ``cva6`` — under
 ``flow/results/asap7/<name>/base/<name>.gds``.
 
 Phase 3 of issue #4 wires those artifacts into OpenLithoHub. The
-adapter rasterizes one design layer of the top cell, then cuts the
+adapter is fully generic over design name; the
+``build-asap7-mock-alu.yml`` workflow already accepts ``design`` as a
+``workflow_dispatch`` input, so producing a different design's GDS is
+``gh workflow run build-asap7-mock-alu.yml -f design=riscv32i-mock-sram``
+— no adapter or workflow code change needed.
+
+The adapter rasterizes one design layer of the top cell, then cuts the
 result into fixed-size tiles (2 µm or 5 µm by default — the windows
 AI-OPC inference is benchmarked on). One ``LithoSample`` per tile.
 
@@ -118,7 +126,8 @@ class OrfsArtifactDataset(DatasetAdapter):
             inference windows.
         drop_empty_tiles: Skip all-zero tiles. Default True.
         design_name: Optional human-readable design name for metadata
-            (e.g. "mock-alu", "riscv32i"). Defaults to ``gds_path.stem``.
+            (e.g. "mock-alu", "riscv32i", "riscv32i-mock-sram"). Defaults
+            to ``gds_path.stem``.
         orfs_revision: Optional ORFS git SHA recorded in metadata for
             reproducibility. Set this to the ``orfs_ref`` input of the
             ``build-asap7-mock-alu`` workflow that produced the GDS.
