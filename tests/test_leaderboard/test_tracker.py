@@ -25,6 +25,7 @@ def sample_result() -> BenchmarkResult:
         mask_topology=MaskTopology.MANHATTAN,
         epe_mean_nm=2.0,
         epe_max_nm=6.5,
+        l2_error_pixels=42.0,
     )
 
 
@@ -73,6 +74,7 @@ def test_filter_by_dataset(tmp_store: LeaderboardStore) -> None:
             mask_topology=MaskTopology.MANHATTAN,
             epe_mean_nm=2.0,
             epe_max_nm=5.0,
+            l2_error_pixels=10.0,
         )
         tmp_store.submit(r)
 
@@ -90,6 +92,7 @@ def test_filter_by_process_node(tmp_store: LeaderboardStore) -> None:
             mask_topology=MaskTopology.MANHATTAN,
             epe_mean_nm=2.0,
             epe_max_nm=5.0,
+            l2_error_pixels=10.0,
         )
         tmp_store.submit(r)
 
@@ -200,6 +203,24 @@ def test_submission_id_format(tmp_store: LeaderboardStore, sample_result: Benchm
     assert len(parts[1]) == 8
 
 
+def test_submission_without_l2_error_is_rejected(tmp_store: LeaderboardStore) -> None:
+    """Forward-sim gate: a submission missing l2_error_pixels (i.e. one that
+    skipped forward simulation) is refused at submit time. See
+    ``_require_forward_simulation``.
+    """
+    bare_mask_only = BenchmarkResult(
+        model_name="cheater",
+        dataset="lithobench",
+        process_node=ProcessNode.N7,
+        mask_topology=MaskTopology.MANHATTAN,
+        epe_mean_nm=0.0,
+        epe_max_nm=0.0,
+        # l2_error_pixels deliberately omitted — proves no forward-sim ran.
+    )
+    with pytest.raises(ValueError, match="l2_error_pixels is required"):
+        tmp_store.submit(bare_mask_only)
+
+
 def test_combined_filters(tmp_store: LeaderboardStore) -> None:
     entries = [
         ("a", "lithobench", ProcessNode.N7),
@@ -215,6 +236,7 @@ def test_combined_filters(tmp_store: LeaderboardStore) -> None:
             mask_topology=MaskTopology.MANHATTAN,
             epe_mean_nm=2.0,
             epe_max_nm=5.0,
+            l2_error_pixels=10.0,
         )
         tmp_store.submit(r)
 

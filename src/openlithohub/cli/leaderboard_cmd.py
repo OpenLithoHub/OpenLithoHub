@@ -159,11 +159,14 @@ def submit(
 
     if result.l2_error_pixels is None:
         console.print(
-            "[yellow]Warning:[/yellow] No --l2-error-pixels supplied. The "
-            "leaderboard ranks by L2; entries without it sort to the bottom. "
-            "Use `openlithohub eval --submit` or pass --file to include "
-            "wafer-level fields."
+            "[red]Error:[/red] --l2-error-pixels is required. The leaderboard "
+            "rejects submissions that bypass forward simulation, since an "
+            "Identity model trivially scores 0 on mask-level EPE. Run the "
+            "model through `openlithohub.simulators` (Hopkins backend is "
+            "bundled), then pass --l2-error-pixels, or use "
+            "`openlithohub eval --submit` / --file for a complete entry."
         )
+        raise typer.Exit(1)
 
     store = LeaderboardStore(store_path) if store_path else None
     submission_id = submit_result(result, store=store)

@@ -25,6 +25,7 @@ process_node: 7nm
 mask_topology: curvilinear
 epe_mean_nm: 1.5
 epe_max_nm: 3.0
+l2_error_pixels: 42.0
 """
 
 _BROKEN_YAML_BAD_NODE = """\
@@ -34,6 +35,7 @@ process_node: 9999nm
 mask_topology: curvilinear
 epe_mean_nm: 1.5
 epe_max_nm: 3.0
+l2_error_pixels: 42.0
 """
 
 _BROKEN_YAML_NEGATIVE_EPE = """\
@@ -43,6 +45,16 @@ process_node: 7nm
 mask_topology: curvilinear
 epe_mean_nm: -1.5
 epe_max_nm: 3.0
+l2_error_pixels: 42.0
+"""
+
+_BROKEN_YAML_MISSING_L2 = """\
+model_name: cheater
+dataset: lithobench
+process_node: 7nm
+mask_topology: curvilinear
+epe_mean_nm: 0.0
+epe_max_nm: 0.0
 """
 
 
@@ -83,3 +95,20 @@ def test_collects_all_errors_before_failing(
     assert "good.yaml" in captured
     # Validated output is NOT written when any file failed (atomic semantics).
     assert not (tmp_path / "_validated.json").exists()
+
+
+def test_missing_l2_error_is_rejected_by_ci(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Forward-sim gate at the CI surface: a YAML without ``l2_error_pixels``
+    must be rejected with a clear remediation message, mirroring
+    ``LeaderboardStore.submit``."""
+    sub_dir = tmp_path / "submissions" / "team-c"
+    sub_dir.mkdir(parents=True)
+    (sub_dir / "cheater.yaml").write_text(_BROKEN_YAML_MISSING_L2)
+
+    rc = _mod.main(tmp_path / "submissions", tmp_path / "_validated.json")
+    assert rc == 1
+    captured = capsys.readouterr().out
+    assert "l2_error_pixels is required" in captured
+    assert "openlithohub.simulators" in captured

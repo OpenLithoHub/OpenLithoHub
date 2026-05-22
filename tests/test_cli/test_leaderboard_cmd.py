@@ -41,6 +41,8 @@ def test_leaderboard_submit_inline() -> None:
                 "2.5",
                 "--epe-max",
                 "8.0",
+                "--l2-error-pixels",
+                "42.0",
                 "--paper-url",
                 "https://arxiv.org/abs/2024.12345",
                 "--store",
@@ -49,6 +51,36 @@ def test_leaderboard_submit_inline() -> None:
         )
         assert result.exit_code == 0
         assert "Submitted!" in result.output
+
+
+def test_leaderboard_submit_without_l2_is_rejected() -> None:
+    """Forward-sim gate at the CLI surface: --l2-error-pixels is required."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        store = Path(tmpdir) / "lb.json"
+        result = runner.invoke(
+            app,
+            [
+                "leaderboard",
+                "submit",
+                "--model",
+                "cheater",
+                "--dataset",
+                "lithobench",
+                "--node",
+                "7nm",
+                "--topology",
+                "manhattan",
+                "--epe-mean",
+                "0.0",
+                "--epe-max",
+                "0.0",
+                "--store",
+                str(store),
+            ],
+        )
+        assert result.exit_code == 1
+        assert "--l2-error-pixels is required" in result.output
+        assert "Identity model" in result.output
 
 
 def test_leaderboard_submit_from_file() -> None:
@@ -64,6 +96,7 @@ def test_leaderboard_submit_from_file() -> None:
                     "mask_topology": "curvilinear",
                     "epe_mean_nm": 1.1,
                     "epe_max_nm": 3.0,
+                    "l2_error_pixels": 42.0,
                 }
             )
         )
@@ -95,6 +128,8 @@ def test_leaderboard_view_after_submit() -> None:
                 "3.0",
                 "--epe-max",
                 "9.0",
+                "--l2-error-pixels",
+                "42.0",
                 "--store",
                 str(store),
             ],
@@ -124,6 +159,8 @@ def test_leaderboard_view_json_format() -> None:
                 "1.5",
                 "--epe-max",
                 "4.0",
+                "--l2-error-pixels",
+                "42.0",
                 "--store",
                 str(store),
             ],
@@ -156,6 +193,8 @@ def test_leaderboard_export() -> None:
                 "2.0",
                 "--epe-max",
                 "6.0",
+                "--l2-error-pixels",
+                "42.0",
                 "--store",
                 str(store),
             ],

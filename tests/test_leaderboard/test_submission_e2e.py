@@ -47,6 +47,7 @@ process_node: 7nm
 mask_topology: curvilinear
 epe_mean_nm: 1.5
 epe_max_nm: 4.2
+l2_error_pixels: 42.0
 paper_url: https://example.com/paper
 code_url: https://github.com/example/model
 """

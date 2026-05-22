@@ -50,6 +50,30 @@ class TestHopkinsSimulator:
         assert result.aerial.shape == (2, 1, 64, 64)
         assert result.metadata["differentiable"] is True
 
+    def test_canonical_aerial_image_regression(self) -> None:
+        """Pin the aerial intensity for the LithoBench-canonical optical config.
+
+        Per Yang2023_LithoBench (NeurIPS'23, arXiv:2305.04345) Table II /
+        §3.2, the reference forward-simulation pipeline uses ArF 193nm,
+        NA=1.35, sigma=0.7, 24 SOCS kernels, threshold=0.225. If any of
+        those defaults — or the underlying SOCS decomposition — drifts,
+        every published L2/PVB number computed against this backend
+        becomes wrong by a constant. This test catches that drift.
+
+        Reference values were captured on the v1 implementation; tolerances
+        are tight (~1e-4) because the kernel construction is deterministic.
+        """
+        sim = HopkinsSimulator(SimulatorConfig(pixel_size_nm=4.0))
+        result = sim.simulate(_make_mask())
+
+        assert result.metadata["num_kernels"] == 24
+        assert result.metadata["illumination"] == "circular"
+        # Reference stats for a 32x32 centered pad on a 64x64 grid.
+        assert result.aerial.mean().item() == pytest.approx(0.173868, abs=2e-4)
+        assert result.aerial.max().item() == pytest.approx(1.149142, abs=2e-4)
+        # Resist duty cycle at threshold=0.225, dose=1.0.
+        assert result.resist.sum().item() == pytest.approx(1000.0, abs=4.0)
+
 
 class TestHopkinsWithConfig:
     """Direct coverage for HopkinsSimulator.with_config kernel-reuse path.

@@ -163,6 +163,7 @@ class LeaderboardStore:
             raise
 
     def submit(self, result: BenchmarkResult) -> str:
+        _require_forward_simulation(result)
         with _file_lock(self._lock_path):
             entries = self._read_entries()
             submission_id = _generate_id(result.model_name)
@@ -206,6 +207,30 @@ def _ranking_key(r: BenchmarkResult) -> tuple[float, float, float]:
     pvb = r.pvband_mean_nm if r.pvband_mean_nm is not None else inf
     epe_w = r.epe_wafer_mean_nm if r.epe_wafer_mean_nm is not None else inf
     return (l2, pvb, epe_w)
+
+
+def _require_forward_simulation(result: BenchmarkResult) -> None:
+    """Reject new submissions that bypass forward simulation.
+
+    Enforced at submit time (not on the schema) so historical entries
+    migrated from earlier versions can still load and rank — see
+    ``_migrate_entries`` v2->v3, which intentionally nulls
+    ``l2_error_pixels`` on legacy rows. New submissions must report it.
+
+    Per memory note ``reference_neural_ilt_metrics.md`` and
+    Yang2023_LithoBench Table III, p.7: academic OPC printability is
+    L2 + PVB on the simulated wafer image; forward-sim before scoring is
+    mandatory. Without it, an Identity-mask model trivially scores 0 on
+    mask-EPE and cheats the leaderboard.
+    """
+    if result.l2_error_pixels is None:
+        raise ValueError(
+            "Submission rejected: l2_error_pixels is required. Every "
+            "leaderboard entry must report the L2 wafer error computed "
+            "against a forward-simulated aerial/resist image. Run the "
+            "model through `openlithohub.simulators` (Hopkins backend is "
+            "bundled and differentiable) before populating this field."
+        )
 
 
 def _generate_id(model_name: str) -> str:

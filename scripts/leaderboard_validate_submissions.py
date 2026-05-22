@@ -18,6 +18,7 @@ from pathlib import Path
 import yaml
 
 from openlithohub.leaderboard.schema import BenchmarkResult
+from openlithohub.leaderboard.tracker import _require_forward_simulation
 
 
 def main(submissions_root: Path, output: Path) -> int:
@@ -36,6 +37,9 @@ def main(submissions_root: Path, output: Path) -> int:
         try:
             data = yaml.safe_load(p.read_text())
             result = BenchmarkResult.model_validate(data)
+            # Forward-sim gate: reject mask-only submissions that would
+            # let an Identity model trivially score 0 on mask-level EPE.
+            _require_forward_simulation(result)
         except Exception as e:  # noqa: BLE001 — surface as workflow error
             print(f"::error file={p}::Schema validation failed: {e}")
             failures.append((p, str(e)))

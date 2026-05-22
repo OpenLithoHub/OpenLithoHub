@@ -19,7 +19,9 @@ class HopkinsSimulator(BaseSimulator):
 
     * ``illumination`` (``circular`` | ``annular`` | ``dipole`` |
       ``quasar``) — source shape, default ``circular``.
-    * ``num_kernels`` (int) — SOCS truncation order, default 24.
+    * ``num_kernels`` (int) — SOCS truncation order, default 24
+      (per Yang2023_LithoBench §3.2 / Table II — the reference SOCS
+      decomposition for ICCAD16 evaluation).
     * ``dipole_angle_deg``, ``pole_opening_deg`` — pole geometry for
       dipole/quasar.
     """

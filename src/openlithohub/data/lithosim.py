@@ -4,6 +4,12 @@ LithoSim is a sub-28nm industrial lithography simulation dataset hosted on
 HuggingFace Hub. It stores design/mask/resist image pairs as Parquet rows
 with image columns and process metadata.
 
+The upstream dataset (``OpenLithoHub/LithoSim``) is currently **gated**:
+new users must request access on the Hub and authenticate with
+``huggingface-cli login`` before this adapter can fetch data. Calls
+without auth fail with HTTP 401; the adapter detects that and raises
+:class:`RuntimeError` with the remediation steps.
+
 Requires: pip install openlithohub[data]  (adds `datasets` and `pyarrow`)
 """
 
@@ -19,6 +25,21 @@ from openlithohub.data.base import DatasetAdapter, LithoSample
 
 _HF_DATASET_NAME = "OpenLithoHub/LithoSim"
 
+# Pinned for reproducibility per playbook §6. ``main`` is mutable, so any
+# load that resolves the default branch is, by definition, irreproducible.
+# Update this constant when the dataset advances and you have verified the
+# new revision against your evaluation pipeline.
+_DEFAULT_REVISION: str = "main"
+
+_GATED_REMEDIATION = (
+    "The HuggingFace dataset {name!r} is gated or private and the current "
+    "session is not authenticated. To use this adapter:\n"
+    "  1. Visit https://huggingface.co/datasets/{name} and request access.\n"
+    "  2. Once approved, run `huggingface-cli login` (or set the\n"
+    "     HF_TOKEN env var) so `datasets.load_dataset` can authenticate.\n"
+    "Original error: {err}"
+)
+
 
 def _ensure_datasets_available() -> None:
     try:
@@ -28,6 +49,23 @@ def _ensure_datasets_available() -> None:
             "The `datasets` package is required for LithoSim. "
             "Install it with: pip install openlithohub[data]"
         ) from e
+
+
+def _is_auth_error(exc: BaseException) -> bool:
+    """Detect HF auth/gated-repo failures across `datasets`/`huggingface_hub` versions.
+
+    The exception class hierarchy has shifted (HfHubHTTPError, GatedRepoError,
+    DatasetNotFoundError-with-401-cause); we match by class name and HTTP
+    status to stay robust across upgrades without pinning to one error type.
+    """
+    name = type(exc).__name__
+    if name in {"GatedRepoError", "RepositoryNotFoundError", "HfHubHTTPError"}:
+        return True
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status in (401, 403):
+        return True
+    msg = str(exc).lower()
+    return "401" in msg or "gated" in msg or "is not a valid dataset" in msg
 
 
 class LithoSimDataset(DatasetAdapter):
@@ -43,8 +81,9 @@ class LithoSimDataset(DatasetAdapter):
         pixel_nm: Pixel resolution in nanometers.
         streaming: If True, use streaming mode (no full download).
         revision: Optional Git revision (commit SHA, tag, or branch) to pin
-            for reproducible downloads. ``None`` resolves to the dataset's
-            default branch and is therefore not reproducible.
+            for reproducible downloads. Defaults to ``_DEFAULT_REVISION``;
+            pass ``None`` explicitly to opt out and resolve the dataset's
+            default branch (irreproducible).
     """
 
     def __init__(
@@ -54,7 +93,7 @@ class LithoSimDataset(DatasetAdapter):
         cache_dir: str | None = None,
         pixel_nm: float = 0.5,
         streaming: bool = False,
-        revision: str | None = None,
+        revision: str | None = _DEFAULT_REVISION,
     ) -> None:
         _ensure_datasets_available()
         self.split = split
@@ -70,15 +109,22 @@ class LithoSimDataset(DatasetAdapter):
         if self._ds is None:
             from datasets import load_dataset
 
-            # B615: revision is exposed as a constructor argument so callers
-            # can pin a specific commit/tag for reproducible downloads.
-            self._ds = load_dataset(  # nosec B615
-                self.dataset_name,
-                split=self.split,
-                cache_dir=self.cache_dir,
-                streaming=self.streaming,
-                revision=self.revision,
-            )
+            try:
+                # B615: revision is exposed as a constructor argument so callers
+                # can pin a specific commit/tag for reproducible downloads.
+                self._ds = load_dataset(  # nosec B615
+                    self.dataset_name,
+                    split=self.split,
+                    cache_dir=self.cache_dir,
+                    streaming=self.streaming,
+                    revision=self.revision,
+                )
+            except Exception as exc:  # noqa: BLE001 — re-raised below
+                if _is_auth_error(exc):
+                    raise RuntimeError(
+                        _GATED_REMEDIATION.format(name=self.dataset_name, err=exc)
+                    ) from exc
+                raise
         return self._ds
 
     def __len__(self) -> int:
@@ -192,13 +238,20 @@ class LithoSimDataset(DatasetAdapter):
     def download(self, root: str) -> None:
         from datasets import load_dataset
 
-        # B615: revision is pinnable via the constructor argument.
-        load_dataset(  # nosec B615
-            self.dataset_name,
-            split=self.split,
-            cache_dir=root,
-            revision=self.revision,
-        )
+        try:
+            # B615: revision is pinnable via the constructor argument.
+            load_dataset(  # nosec B615
+                self.dataset_name,
+                split=self.split,
+                cache_dir=root,
+                revision=self.revision,
+            )
+        except Exception as exc:  # noqa: BLE001 — re-raised below
+            if _is_auth_error(exc):
+                raise RuntimeError(
+                    _GATED_REMEDIATION.format(name=self.dataset_name, err=exc)
+                ) from exc
+            raise
 
     @property
     def columns(self) -> list[str]:

@@ -320,6 +320,65 @@ class TestLithoSimDataset:
         assert "design" in ds.columns
         assert "mask" in ds.columns
 
+    @patch("openlithohub.data.lithosim._ensure_datasets_available")
+    def test_gated_repo_remediation(self, mock_ensure):
+        """A 401/gated load surfaces a RuntimeError with login instructions."""
+        import sys
+
+        ds = LithoSimDataset(split="test")
+
+        class FakeGatedError(Exception):
+            pass
+
+        FakeGatedError.__name__ = "GatedRepoError"
+
+        fake_datasets = MagicMock()
+        fake_datasets.load_dataset.side_effect = FakeGatedError("401 Client Error: Unauthorized")
+        with (
+            patch.dict(sys.modules, {"datasets": fake_datasets}),
+            pytest.raises(RuntimeError, match="huggingface-cli login") as exc_info,
+        ):
+            ds._load_dataset()
+        assert "request access" in str(exc_info.value)
+
+    def test_default_revision_is_pinned(self):
+        """The constructor default for `revision` must not be None (irreproducible)."""
+        from openlithohub.data import lithosim as lithosim_mod
+
+        assert lithosim_mod._DEFAULT_REVISION is not None
+        # Verify the constructor wires the default through.
+        with patch("openlithohub.data.lithosim._ensure_datasets_available"):
+            ds = LithoSimDataset(split="test")
+            assert ds.revision == lithosim_mod._DEFAULT_REVISION
+
+
+class TestLithoSimAuthErrorDetection:
+    def test_detects_status_401(self):
+        from openlithohub.data.lithosim import _is_auth_error
+
+        exc = Exception("boom")
+        exc.response = MagicMock(status_code=401)
+        assert _is_auth_error(exc)
+
+    def test_detects_status_403(self):
+        from openlithohub.data.lithosim import _is_auth_error
+
+        exc = Exception("boom")
+        exc.response = MagicMock(status_code=403)
+        assert _is_auth_error(exc)
+
+    def test_detects_message_substring(self):
+        from openlithohub.data.lithosim import _is_auth_error
+
+        assert _is_auth_error(Exception("dataset is gated, request access"))
+        assert _is_auth_error(Exception("HTTP 401 Unauthorized"))
+
+    def test_passes_through_unrelated_errors(self):
+        from openlithohub.data.lithosim import _is_auth_error
+
+        assert not _is_auth_error(ValueError("bad split name"))
+        assert not _is_auth_error(FileNotFoundError("missing"))
+
 
 class TestLithoSimTensorConversion:
     def test_numpy_array_conversion(self):

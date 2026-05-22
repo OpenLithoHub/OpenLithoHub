@@ -32,10 +32,27 @@ from typing import Any, Literal
 import numpy as np
 import torch
 
+from openlithohub._utils.integrity import KnownGoodHash
 from openlithohub.data.base import DatasetAdapter, LithoSample, natural_sort_key
 
 _FILENAME_RE = re.compile(r"^(?P<sample_id>.+?)_(?P<kind>design|mask|resist)\.npy$")
 _VALID_KINDS: frozenset[str] = frozenset({"design", "mask", "resist"})
+
+# Per playbook §6: every adapter that fetches bytes from a mutable URL
+# pins them via SHA-256. Keys are the canonical artifact filenames as
+# distributed upstream. Values were captured at acquisition time and
+# the source attribution lets future maintainers audit each pin.
+KNOWN_GOOD_SHA256: dict[str, KnownGoodHash] = {
+    "lithomodels.tar.gz": KnownGoodHash(
+        sha256="7fd9f08981caa99dd61a4dd2cd433efba6f7628b3142a3d2570f34364169d2b2",
+        size_bytes=3_012_669_629,
+        source="acquisition_log.md 2026-05-22 (gdrive 1N-VCv0gX49zzVWlwSs0yDqq2zKNQHKNB)",
+    ),
+    # ``lithodata.tar.gz`` (~14.7 GB) is rate-limited by Google Drive
+    # behind a 24h cool-down; pin to be added once a clean local copy
+    # exists. See ``acquisition_log.md`` row "LithoBench-data" for the
+    # in-flight resume.
+}
 
 Kind = Literal["design", "mask", "resist"]
 

@@ -38,6 +38,9 @@ class SimulatorConfig:
     pixel_size_nm: float = 1.0
     defocus_nm: float = 0.0
     dose: float = 1.0
+    # Per Yang2023_LithoBench §3.2 (NeurIPS 2023, arXiv:2305.04345),
+    # threshold = 0.225 is the canonical resist cutoff used to score
+    # ICCAD16 mask layouts on the simulated wafer image. Confidence A.
     threshold: float = 0.225
     extra: dict[str, Any] = field(default_factory=dict)
 
