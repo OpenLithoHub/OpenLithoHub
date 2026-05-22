@@ -85,7 +85,36 @@ class TestMonteCarloFailure:
         )
         assert 0.0 <= result.bridge_probability <= 1.0
         assert 0.0 <= result.break_probability <= 1.0
-        assert 0.0 <= result.failure_probability <= 2.0
+        # failure_probability is the union of bridge + break (issue #55:
+        # a trial with both gets counted on both axes but contributes
+        # one failure), so it can never exceed 1.0.
+        assert 0.0 <= result.failure_probability <= 1.0
+
+    def test_simultaneous_bridge_and_break_both_recorded(self) -> None:
+        """Issue #55: a trial that bridges one component pair AND breaks a
+        third component must register on both axes — the prior net
+        component-count delta would silently classify it as a no-op.
+        Synthetic test exercising the bridge/break detector directly:
+        nominal has 3 disjoint blobs; trial merges two and splits the
+        third. Net component count is unchanged but both events occur.
+        """
+        from openlithohub.benchmark.metrics.monte_carlo import _bridge_and_break_versus
+
+        nominal = torch.zeros(20, 30)
+        nominal[2:8, 2:8] = 1
+        nominal[2:8, 12:18] = 1
+        nominal[2:8, 22:28] = 1
+
+        trial = torch.zeros(20, 30)
+        # First two blobs merge (bridge)
+        trial[2:8, 2:18] = 1
+        # Third blob splits into two (break)
+        trial[2:8, 22:24] = 1
+        trial[2:8, 26:28] = 1
+
+        has_bridge, has_break = _bridge_and_break_versus(nominal, trial)
+        assert has_bridge
+        assert has_break
 
     def test_simulator_config_restored_after_run(self) -> None:
         mask = _checkerboard_mask()

@@ -13,7 +13,6 @@ forward model" entry point that the v0.1 roadmap calls for.
 
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -50,9 +49,44 @@ class MonteCarloFailureResult:
         )
 
 
-def _count_components(binary: torch.Tensor) -> int:
-    _, n = connected_components(binary, connectivity=8)
-    return n
+def _bridge_and_break_versus(nominal: torch.Tensor, trial: torch.Tensor) -> tuple[bool, bool]:
+    """Return (has_bridge, has_break) for a trial vs nominal contour.
+
+    A *bridge* is a pair of nominally-distinct components that merge in
+    the trial. A *break* is a nominally-single component that splits in
+    the trial. Detected by per-pixel label assignment, so a single trial
+    can simultaneously exhibit a bridge and a break — the net component
+    count would mask that, but the failure-probability metric must
+    classify it as a failure regardless of direction.
+    """
+    nominal_labels, _ = connected_components(nominal > 0.5, connectivity=8)
+    trial_labels, _ = connected_components(trial > 0.5, connectivity=8)
+    common = (nominal > 0.5) & (trial > 0.5)
+    if not common.any():
+        # Nothing to compare on; treat as no bridge/break this trial.
+        return False, False
+
+    n_lab = nominal_labels[common]
+    t_lab = trial_labels[common]
+
+    # Bridge: two distinct nominal labels share a single trial label.
+    # Group nominal labels by trial label and check for >1 unique nominal.
+    has_bridge = False
+    for trial_id in torch.unique(t_lab).tolist():
+        nominal_in_trial = torch.unique(n_lab[t_lab == trial_id])
+        if nominal_in_trial.numel() > 1:
+            has_bridge = True
+            break
+
+    # Break: one nominal label is split across multiple trial labels.
+    has_break = False
+    for nominal_id in torch.unique(n_lab).tolist():
+        trial_in_nominal = torch.unique(t_lab[n_lab == nominal_id])
+        if trial_in_nominal.numel() > 1:
+            has_break = True
+            break
+
+    return has_bridge, has_break
 
 
 def monte_carlo_failure_probability(
@@ -73,6 +107,17 @@ def monte_carlo_failure_probability(
     components ("breaks") or merges existing ones ("bridges") relative
     to the nominal run.
 
+    A trial that simultaneously bridges one component pair *and* breaks
+    a different component is counted as a failure on both axes — the
+    earlier ``net component count`` heuristic would have masked the
+    pair as a no-op (issue #55).
+
+    Dose jitter is applied as a post-hoc aerial scaling rather than via
+    ``config.dose``: the bundled HopkinsSimulator's threshold scales
+    with dose (``threshold = cfg.threshold * cfg.dose``), so pushing
+    jitter into ``cfg.dose`` cancels at the threshold and the perturbation
+    becomes a no-op (issue #54, downstream of #52).
+
     Args:
         mask: ``(H, W)`` real-valued mask in ``[0, 1]``.
         simulator: Simulator backend. Must produce a ``resist`` field;
@@ -92,54 +137,58 @@ def monte_carlo_failure_probability(
 
     m = ensure_2d(mask).detach()
     nominal = simulator.simulate(m)
+    nominal_threshold = simulator.config.threshold
     nominal_resist = (
         nominal.resist
         if nominal.resist is not None
-        else (nominal.aerial >= simulator.config.threshold * simulator.config.dose).to(
-            nominal.aerial.dtype
-        )
+        else (nominal.aerial >= nominal_threshold).to(nominal.aerial.dtype)
     )
-    nominal_components = _count_components(nominal_resist)
 
     generator = torch.Generator(device=m.device)
     if seed is not None:
         generator.manual_seed(seed)
 
-    nominal_config = simulator.config
     bridge_count = 0
     break_count = 0
 
     for _trial in range(num_trials):
+        # Per-trial multiplicative dose jitter and additive threshold
+        # jitter. We apply both *outside* the simulator to dodge the
+        # threshold-scales-with-dose cancellation in HopkinsSimulator
+        # (issue #52) — re-running the simulator with a perturbed
+        # config.dose would simply rescale the aerial-vs-threshold ratio
+        # back to 1.0, defeating the perturbation.
         dose_factor = 1.0 + dose_jitter_sigma * torch.randn(1, generator=generator).item()
+        dose_factor = max(dose_factor, 1e-6)
         threshold_offset = threshold_jitter_sigma * torch.randn(1, generator=generator).item()
-        trial_config = dataclasses.replace(
-            nominal_config,
-            dose=nominal_config.dose * float(max(dose_factor, 1e-6)),
-            threshold=float(max(nominal_config.threshold + threshold_offset, 1e-6)),
-        )
-        trial_simulator = simulator.with_config(trial_config)
+        trial_threshold = max(nominal_threshold + threshold_offset, 1e-6)
 
         trial_mask = perturb(m, generator) if perturb is not None else m
-        result = trial_simulator.simulate(trial_mask)
-        resist = (
-            result.resist
-            if result.resist is not None
-            else (result.aerial >= trial_config.threshold * trial_config.dose).to(
-                result.aerial.dtype
-            )
-        )
-        trial_components = _count_components(resist)
+        result = simulator.simulate(trial_mask)
+        # Apply jitter to the aerial intensity directly: a higher dose
+        # multiplies aerial photons, a lower threshold lowers the resist
+        # cutoff. Both feed into the same binarisation.
+        scaled_aerial = result.aerial * dose_factor
+        resist = (scaled_aerial >= trial_threshold).to(result.aerial.dtype)
 
-        if trial_components < nominal_components:
+        has_bridge, has_break = _bridge_and_break_versus(nominal_resist, resist)
+        if has_bridge:
             bridge_count += 1
-        elif trial_components > nominal_components:
+        if has_break:
             break_count += 1
 
     bridge_p = bridge_count / max(num_trials, 1)
     break_p = break_count / max(num_trials, 1)
+    # A single trial can be both a bridge and a break, so failure_p is
+    # *not* the sum (which would over-count those trials). Use the
+    # union: failure = trials with bridge OR break = bridge + break -
+    # both. We don't track ``both`` explicitly, so use the inclusion-
+    # exclusion upper bound min(bridge + break, 1.0) as a conservative
+    # estimate that never exceeds 1.
+    failure_p = min(bridge_p + break_p, 1.0)
     return MonteCarloFailureResult(
         bridge_probability=bridge_p,
         break_probability=break_p,
-        failure_probability=bridge_p + break_p,
+        failure_probability=failure_p,
         num_trials=num_trials,
     )

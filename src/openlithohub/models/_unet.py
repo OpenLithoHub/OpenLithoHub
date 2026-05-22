@@ -57,14 +57,19 @@ class _Up(nn.Module):
 
 
 class UNet(nn.Module):
-    """4-level U-Net for lithography mask prediction.
+    """Compact 3-downsample U-Net for lithography mask prediction.
 
-    Channel widths (32→64→128→256) are intentionally half of those in
-    ``Jiang2020_NeuralILT`` Fig. 4 — this is the v0.1 inference-budget
-    baseline, not a paper-faithful re-implementation. See
-    ``docs/audits/neural-ilt-architecture.md``.
+    Architecture: ``inc → down1 → down2 → down3 → up1 → up2 → up3 → outc``
+    — three down-samples and three up-samples, with a 256-channel
+    bottleneck. Channel widths (32 → 64 → 128 → 256) are intentionally
+    half of those in ``Jiang2020_NeuralILT`` Fig. 4, and we run one
+    fewer down-sample than the paper, so this is a v0.1 inference-budget
+    baseline, **not** a paper-faithful re-implementation. The Identity-
+    like baseline numbers reported by ``neural-ilt`` reflect that depth
+    cap. See ``docs/audits/neural-ilt-architecture.md`` for the full
+    audit and the path to a paper-faithful variant.
 
-    Input: (B, 1, H, W) design layout
+    Input:  (B, 1, H, W) design layout
     Output: (B, 1, H, W) mask logits
     """
 
