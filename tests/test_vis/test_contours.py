@@ -69,3 +69,29 @@ def test_plot_pv_band_runs(masks) -> None:
     outer = target  # degenerate but exercises the code path
     fig = plot_pv_band(target, inner, outer, style="spie")
     assert fig is not None
+
+
+def test_plot_contours_close_releases_figure(masks) -> None:
+    """Issue #39: batch callers must be able to opt into auto-close so
+    matplotlib's global figure registry doesn't leak across iterations."""
+    import matplotlib.pyplot as plt
+
+    target, predicted = masks
+    plt.close("all")
+    before = len(plt.get_fignums())
+    result = plot_contours(target, predicted, style="ieee", close=True)
+    after = len(plt.get_fignums())
+    assert result is None
+    assert after == before
+
+
+def test_plot_pv_band_close_releases_figure(masks) -> None:
+    import matplotlib.pyplot as plt
+
+    target, _ = masks
+    plt.close("all")
+    before = len(plt.get_fignums())
+    result = plot_pv_band(target, target, target, style="ieee", close=True)
+    after = len(plt.get_fignums())
+    assert result is None
+    assert after == before

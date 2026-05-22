@@ -28,6 +28,7 @@ def plot_contours(
     style: str = "ieee",
     save_path: str | Path | None = None,
     show_legend: bool = True,
+    close: bool = False,
 ) -> Any:
     """Render a target / predicted contour overlay with optional PV band.
 
@@ -45,9 +46,14 @@ def plot_contours(
         save_path: If given, ``fig.savefig`` is called (vector format inferred
             from extension; ``.pdf`` recommended for camera-ready).
         show_legend: Toggle legend rendering.
+        close: When True, the figure is closed via ``plt.close(fig)`` before
+            returning ``None``. Use this in batch loops that only call
+            ``save_path`` for I/O — without it, matplotlib retains every
+            figure in its global registry and the worker leaks memory until
+            the process exits.
 
     Returns:
-        The matplotlib ``Figure`` object.
+        The matplotlib ``Figure`` object, or ``None`` if ``close=True``.
     """
     tgt = ensure_2d(torch.as_tensor(_to_numpy(target)))
     pred = ensure_2d(torch.as_tensor(_to_numpy(predicted)))
@@ -125,6 +131,11 @@ def plot_contours(
             out.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(out)
 
+    if close:
+        import matplotlib.pyplot as plt
+
+        plt.close(fig)
+        return None
     return fig
 
 
@@ -137,11 +148,15 @@ def plot_pv_band(
     title: str | None = None,
     style: str = "ieee",
     save_path: str | Path | None = None,
+    close: bool = False,
 ) -> Any:
     """Render an inner / nominal / outer PV-band envelope figure.
 
     Shows the inner (intersection) and outer (union) resist contours bracketing
     the nominal contour — the standard lithography PV-band figure.
+
+    See :func:`plot_contours` for the ``close`` parameter — set it to True in
+    batch loops to avoid leaking matplotlib figures.
     """
     nom_arr = _to_numpy(nominal).astype(np.float32)
     inn_arr = _to_numpy(inner).astype(np.float32)
@@ -221,4 +236,9 @@ def plot_pv_band(
             out.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(out)
 
+    if close:
+        import matplotlib.pyplot as plt
+
+        plt.close(fig)
+        return None
     return fig
