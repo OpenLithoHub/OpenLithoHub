@@ -64,6 +64,32 @@ def test_export_rejects_unexportable_model(runner: CliRunner, tmp_path: Path) ->
     assert "does not support export" in result.output
 
 
+def test_export_torchscript_verify_round_trip(runner: CliRunner, tmp_path: Path) -> None:
+    """Issue #17: --verify drives non-zero inputs through both eager and
+    scripted modules and aborts on divergence. The neural-ilt path has
+    no data-dependent control flow, so verification should pass."""
+    out = tmp_path / "neural-ilt.pt"
+    result = runner.invoke(
+        app,
+        [
+            "export",
+            "run",
+            "--model",
+            "neural-ilt",
+            "--format",
+            "torchscript",
+            "--output",
+            str(out),
+            "--shape",
+            "32x32",
+            "--verify",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Verified round-trip" in result.output
+    assert out.exists()
+
+
 def test_export_rejects_bad_shape(runner: CliRunner, tmp_path: Path) -> None:
     out = tmp_path / "x.pt"
     result = runner.invoke(

@@ -332,3 +332,23 @@ class TestCurvilinearMRCResultShape:
         mask = _disk_mask(64, 32, 32, 15.0).unsqueeze(0).unsqueeze(0)
         result = check_curvilinear_mrc(mask)
         assert isinstance(result, CurvilinearMRCResult)
+
+
+class TestDRCvsMRCCountsNotComparable:
+    """Issue #23: DRC violation_count is len(violations) capped at
+    ~max_reports per rule; MRC violation_count is int(mask.sum()) over
+    violating pixels (unclipped, scales with feature area). Magnitude
+    comparisons across the two are meaningless even when both are
+    non-zero. Smoke test: contrived layout where the two diverge by
+    >2× — pins the contract that they are not interchangeable."""
+
+    def test_counts_have_different_units_so_diverge_strongly(self):
+        mask = torch.zeros(256, 256)
+        for col in range(0, 256, 4):
+            mask[:, col : col + 1] = 1.0  # 1-px lines well below min_width
+        mrc = check_mrc(mask, min_width_nm=10.0, min_spacing_nm=2.0, pixel_size_nm=1.0)
+        drc = check_drc(mask, pixel_size_nm=1.0)
+        assert not mrc.passed and not drc.passed
+        # MRC pixel-counted (huge), DRC component-counted (clipped) — magnitudes
+        # of these two scalars are not meaningfully comparable.
+        assert mrc.violation_count > drc.violation_count * 2

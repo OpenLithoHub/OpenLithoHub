@@ -67,6 +67,18 @@ def run(
         "--dynamic-batch/--static-batch",
         help="Mark the batch dimension as dynamic in the exported graph.",
     ),
+    verify: bool = typer.Option(
+        False,
+        "--verify/--no-verify",
+        help=(
+            "Compare exported-module output against the live PyTorch module on a "
+            "non-zero input and abort if they diverge. The default trace input is "
+            "all-zeros, which is a fixed point for many lithography models — "
+            "a trace can pass on zeros and still be wrong on real layouts when "
+            "the model has data-dependent control flow. Recommended before "
+            "shipping to a fab MDP cluster."
+        ),
+    ),
 ) -> None:
     """Export a model to a production-friendly artifact (ONNX / TorchScript)."""
     console = Console()
@@ -118,6 +130,8 @@ def run(
 
         if fmt == "torchscript":
             scripted = torch.jit.trace(module, dummy)  # type: ignore[no-untyped-call]
+            if verify:
+                _verify_round_trip(module, scripted, h_w, device, console)
             scripted.save(str(output))
             console.print(f"[green]Saved TorchScript module to {output}[/green]")
             return
@@ -139,6 +153,48 @@ def run(
             )
     finally:
         litho_model.teardown()
+
+
+def _verify_round_trip(
+    eager: torch.nn.Module,
+    scripted: torch.jit.ScriptModule,
+    h_w: tuple[int, int],
+    device: str,
+    console: Console,
+    rtol: float = 1e-4,
+    atol: float = 1e-5,
+) -> None:
+    """Compare scripted vs eager output on a non-zero random input.
+
+    Tracing with an all-zero dummy is a fixed point for any model whose
+    forward path is multiplicative (CNNs with bias=False) — a passing
+    trace on zeros says nothing about behaviour on real layouts. This
+    drives a couple of pseudo-random non-zero inputs through both
+    branches and aborts if they diverge beyond ``(rtol, atol)``.
+    """
+    eager_module = eager.eval()
+    scripted_module = scripted.eval()
+
+    # Two seeds so a one-off lucky agreement doesn't silently pass.
+    for seed in (0, 1):
+        gen = torch.Generator(device=device).manual_seed(seed)
+        x = torch.rand(1, 1, h_w[0], h_w[1], generator=gen, device=device)
+        with torch.no_grad():
+            y_eager = eager_module(x)
+            y_scripted = scripted_module(x)
+        if not torch.allclose(y_eager, y_scripted, rtol=rtol, atol=atol):
+            max_abs = float((y_eager - y_scripted).abs().max().item())
+            console.print(
+                f"[red]Verification failed:[/red] eager and TorchScript outputs "
+                f"diverge by max |Δ| = {max_abs:.3e} on seed {seed} "
+                f"(rtol={rtol}, atol={atol}). The traced graph likely contains "
+                f"data-dependent control flow that the all-zeros dummy did not exercise."
+            )
+            raise typer.Exit(4) from None
+    console.print(
+        f"[green]Verified round-trip:[/green] eager ≈ scripted on 2 random "
+        f"inputs (rtol={rtol}, atol={atol})."
+    )
 
 
 def _parse_shape(shape: str) -> tuple[int, int]:

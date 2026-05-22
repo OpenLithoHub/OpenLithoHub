@@ -24,7 +24,23 @@ class DRCRuleDeck:
 
 @dataclass
 class DRCResult:
-    """Result of a Design Rule Check."""
+    """Result of a Design Rule Check.
+
+    .. note::
+        ``violation_count`` is the **number of reported violations**,
+        i.e. ``len(violations)``. Each rule check caps how many
+        per-component reports it adds (typically ``max_reports`` = 50,
+        evenly sampled), so on a heavily-violating layout this number
+        is clipped, not the true total. Use ``rule_summary`` for the
+        per-rule reported counts and treat ``passed`` (any violation
+        at all) as the only sound binary signal.
+
+        DRC ``violation_count`` is **not directly comparable** to MRC
+        ``violation_count`` — the latter counts violating *pixels*, an
+        unclipped scalar that scales with feature area, while DRC
+        counts (clipped) connected components. ``passed`` / ``passed``
+        comparisons are well-defined; magnitude comparisons are not.
+    """
 
     passed: bool
     violation_count: int

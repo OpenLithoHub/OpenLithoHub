@@ -21,7 +21,28 @@ from openlithohub._utils.tensor_ops import ensure_2d
 
 @dataclass
 class MRCResult:
-    """Result of a Mask Rule Check."""
+    """Result of a Mask Rule Check.
+
+    .. note::
+        ``violation_count`` is the count of **violating pixels**, the
+        sum of per-pixel boolean masks for ``width`` and ``spacing``
+        rules. It is unclipped and scales with the feature area of the
+        layout — a 4096² mask with 1% violation density reports a
+        bigger number than a 256² one with the same fractional rate.
+        Use ``violation_rate`` (count / total pixels) for area-
+        independent comparison.
+
+        MRC ``violation_count`` is **not directly comparable** to DRC
+        ``violation_count`` — DRC counts connected components and is
+        clipped at the rule's ``max_reports`` cap, while MRC counts
+        pixels. ``passed`` / ``passed`` comparisons are well-defined;
+        magnitude comparisons are not.
+
+        ``violations`` is a per-violation sample list (capped at
+        ``max_reports``, evenly spaced) used for visualisation and
+        debug; do not derive counts from it — use ``violation_count``
+        directly.
+    """
 
     passed: bool
     violation_count: int
