@@ -352,11 +352,12 @@ class TestStochasticRobustness:
         # noise lifts it above 0.5 and merges the bars (fg components 2 -> 1).
         # Pre-fix the metric counted breaks via background components and
         # this case slipped through; the assertion guards that polarity.
+        # Calibrated for resist_threshold=0.5 (the legacy mid-grey cut).
         mask = torch.zeros(64, 64)
         mask[16:48, 24:28] = 1.0
         mask[16:48, 31:35] = 1.0
         result = compute_stochastic_robustness(
-            mask, num_trials=60, dose_photons_per_nm2=200.0, seed=7
+            mask, num_trials=60, dose_photons_per_nm2=200.0, seed=7, resist_threshold=0.5
         )
         assert result["bridge_probability"] > 0.5
         assert result["break_probability"] < 0.1
@@ -370,7 +371,7 @@ class TestStochasticRobustness:
         mask = torch.zeros(64, 64)
         mask[30:34, 8:56] = 1.0
         result = compute_stochastic_robustness(
-            mask, num_trials=60, dose_photons_per_nm2=2.0, seed=11
+            mask, num_trials=60, dose_photons_per_nm2=2.0, seed=11, resist_threshold=0.5
         )
         assert result["break_probability"] >= 0.5
         assert result["bridge_probability"] < 0.1
@@ -383,10 +384,12 @@ class TestStochasticRobustness:
         # the nominal component — earlier "break_probability=0.3" reflected
         # far-field photon blobs counted by the prior delta-of-component-count
         # heuristic; per-component matching correctly reports zero.
+        # Pinned at resist_threshold=0.5 (the legacy mid-grey cut) — the
+        # exact edge_flip_rate is calibration-specific.
         mask = torch.zeros(32, 32)
         mask[8:24, 8:24] = 1.0
         result = compute_stochastic_robustness(
-            mask, num_trials=20, dose_photons_per_nm2=30.0, seed=2026
+            mask, num_trials=20, dose_photons_per_nm2=30.0, seed=2026, resist_threshold=0.5
         )
         assert result["bridge_probability"] == pytest.approx(0.0)
         assert result["break_probability"] == pytest.approx(0.0)

@@ -45,6 +45,16 @@ def run(
         ),
     ),
     pixel_nm: float = typer.Option(1.0, "--pixel-nm", help="Pixel size in nanometers."),
+    threshold: float = typer.Option(
+        0.225,
+        "--threshold",
+        help=(
+            "Final mask binarisation threshold. Defaults to 0.225 to match the "
+            "LithoBench/Yang2023 evaluation calibration so the optimised "
+            "output is scored on the same threshold the benchmark assumes. "
+            "Pass --threshold 0.5 for the legacy mid-grey cut."
+        ),
+    ),
     device: str = typer.Option(
         "cpu", "--device", help="Torch device for the forward model (cpu, cuda, mps)."
     ),
@@ -201,7 +211,7 @@ def run(
     console.print(f"[bold]Step {step.next()}:[/bold] Stitching tiles...")
     h, w = layout_tensor.shape
     optimized = stitch_tiles(tile_results, (h, w))
-    optimized = (optimized > 0.5).float()
+    optimized = (optimized > threshold).float()
     console.print(f"  Stitched output: {optimized.shape[0]}x{optimized.shape[1]}")
 
     if drc_check:
