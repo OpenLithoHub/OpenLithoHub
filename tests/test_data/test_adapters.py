@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -214,8 +215,132 @@ class TestLithoBenchErrors:
         empty = tmp_path / "empty"
         empty.mkdir()
         ds = LithoBenchDataset(root=empty)
-        with pytest.raises(NotImplementedError):
-            ds.download("/tmp")
+        with pytest.raises(ValueError, match="Unknown LithoBench artifact"):
+            ds.download(str(tmp_path / "out"), artifact="bogus.tar.gz")
+
+    def test_download_requires_gdown(self, tmp_path):
+        import sys
+
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        ds = LithoBenchDataset(root=empty)
+        with (
+            patch.dict(sys.modules, {"gdown": None}),
+            pytest.raises(ImportError, match="gdown"),
+        ):
+            ds.download(str(tmp_path / "out"))
+
+    def test_download_verifies_sha256_and_rejects_mismatch(self, tmp_path):
+        """A gdown response with wrong bytes must surface as IntegrityError."""
+        import sys
+
+        from openlithohub._utils.integrity import IntegrityError
+
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        ds = LithoBenchDataset(root=empty)
+
+        out = tmp_path / "out"
+
+        def fake_download(url, dst, quiet):
+            # Write a 1-byte file — guaranteed to fail size check.
+            Path(dst).write_bytes(b"x")
+
+        fake_gdown = MagicMock()
+        fake_gdown.download.side_effect = fake_download
+
+        with (
+            patch.dict(sys.modules, {"gdown": fake_gdown}),
+            pytest.raises(IntegrityError, match="Size mismatch"),
+        ):
+            ds.download(str(out))
+
+    def test_download_extracts_when_hash_matches(self, tmp_path, monkeypatch):
+        """Happy path: matching SHA-256 triggers tar extraction."""
+        import io
+        import sys
+        import tarfile as tf
+
+        from openlithohub.data import lithobench as lb_mod
+
+        # Build a tiny tar in memory and override the pin to match its hash.
+        buf = io.BytesIO()
+        with tf.open(fileobj=buf, mode="w:gz") as tar:
+            payload = b"hello"
+            ti = tf.TarInfo(name="hello.txt")
+            ti.size = len(payload)
+            tar.addfile(ti, io.BytesIO(payload))
+        tar_bytes = buf.getvalue()
+
+        import hashlib
+
+        from openlithohub._utils.integrity import KnownGoodHash
+
+        pin = KnownGoodHash(
+            sha256=hashlib.sha256(tar_bytes).hexdigest(),
+            size_bytes=len(tar_bytes),
+            source="test fixture",
+        )
+
+        monkeypatch.setitem(lb_mod.KNOWN_GOOD_SHA256, "lithomodels.tar.gz", pin)
+
+        def fake_download(url, dst, quiet):
+            Path(dst).write_bytes(tar_bytes)
+
+        fake_gdown = MagicMock()
+        fake_gdown.download.side_effect = fake_download
+
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        ds = LithoBenchDataset(root=empty)
+
+        out = tmp_path / "out"
+        with patch.dict(sys.modules, {"gdown": fake_gdown}):
+            ds.download(str(out))
+
+        assert (out / "hello.txt").read_bytes() == b"hello"
+
+    def test_download_skips_when_already_present(self, tmp_path, monkeypatch):
+        """An existing-and-valid tarball must not be re-downloaded."""
+        import io
+        import sys
+        import tarfile as tf
+
+        from openlithohub.data import lithobench as lb_mod
+
+        buf = io.BytesIO()
+        with tf.open(fileobj=buf, mode="w:gz") as tar:
+            payload = b"already-here"
+            ti = tf.TarInfo(name="x.txt")
+            ti.size = len(payload)
+            tar.addfile(ti, io.BytesIO(payload))
+        tar_bytes = buf.getvalue()
+
+        import hashlib
+
+        from openlithohub._utils.integrity import KnownGoodHash
+
+        pin = KnownGoodHash(
+            sha256=hashlib.sha256(tar_bytes).hexdigest(),
+            size_bytes=len(tar_bytes),
+            source="test fixture",
+        )
+        monkeypatch.setitem(lb_mod.KNOWN_GOOD_SHA256, "lithomodels.tar.gz", pin)
+
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "lithomodels.tar.gz").write_bytes(tar_bytes)
+
+        fake_gdown = MagicMock()
+        fake_gdown.download.side_effect = AssertionError("must not be called")
+
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        ds = LithoBenchDataset(root=empty)
+
+        with patch.dict(sys.modules, {"gdown": fake_gdown}):
+            ds.download(str(out))
+        fake_gdown.download.assert_not_called()
 
 
 # ==== LithoSim tests (mocked HuggingFace) ====

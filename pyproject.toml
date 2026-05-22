@@ -36,6 +36,9 @@ dependencies = [
 data = [
     "datasets>=2.14",
     "pyarrow>=12.0",
+    # gdown powers the LithoBench auto-fetcher (Google Drive). Optional —
+    # only required when calling LithoBenchDataset.download().
+    "gdown>=5.0",
 ]
 workflow = [
     "klayout>=0.28",
@@ -148,7 +151,7 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "tomli.*", "onnxscript.*", "fastapi", "fastapi.*", "uvicorn"]
+module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "tomli.*", "onnxscript.*", "fastapi", "fastapi.*", "uvicorn", "gdown", "gdown.*"]
 ignore_missing_imports = true
 
 # server/app.py uses fastapi decorators which mypy flags as untyped when

@@ -26,13 +26,14 @@ from __future__ import annotations
 
 import json
 import re
+import tarfile
 from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
 import torch
 
-from openlithohub._utils.integrity import KnownGoodHash
+from openlithohub._utils.integrity import KnownGoodHash, verify_sha256
 from openlithohub.data.base import DatasetAdapter, LithoSample, natural_sort_key
 
 _FILENAME_RE = re.compile(r"^(?P<sample_id>.+?)_(?P<kind>design|mask|resist)\.npy$")
@@ -52,6 +53,14 @@ KNOWN_GOOD_SHA256: dict[str, KnownGoodHash] = {
     # behind a 24h cool-down; pin to be added once a clean local copy
     # exists. See ``acquisition_log.md`` row "LithoBench-data" for the
     # in-flight resume.
+}
+
+# Upstream Google Drive IDs for LithoBench artifacts. Recorded in
+# ``acquisition_log.md`` 2026-05-22; bytes verified against
+# ``KNOWN_GOOD_SHA256`` on every fetch so a silently re-uploaded artifact
+# (gdrive doesn't pin contents to the file ID) cannot land here.
+_GDRIVE_FILE_IDS: dict[str, str] = {
+    "lithomodels.tar.gz": "1N-VCv0gX49zzVWlwSs0yDqq2zKNQHKNB",
 }
 
 Kind = Literal["design", "mask", "resist"]
@@ -166,16 +175,81 @@ class LithoBenchDataset(DatasetAdapter):
         """Return True if the file for (sample_id, kind) exists on disk."""
         return self._resolve_path(sample_id, kind).exists()
 
-    def download(self, root: str) -> None:
-        raise NotImplementedError(
-            "LithoBench auto-download is not implemented and we do not ship a "
-            "canonical mirror URL. Refer to the NeurIPS'23 LithoBench paper "
-            '("LithoBench: Benchmarking AI Computational Lithography for '
-            "Semiconductor Manufacturing\") for the project's current data "
-            "release page, then arrange the .npy files so that "
-            "<root>/{design,mask,resist}/sample_*.npy or "
-            "<root>/sample_*_{design,mask,resist}.npy exists."
-        )
+    def download(self, root: str, artifact: str = "lithomodels.tar.gz") -> None:
+        """Download a pinned LithoBench artifact via gdown and verify its SHA-256.
+
+        Args:
+            root: Destination directory. Created if missing. The tar is
+                streamed to ``<root>/<artifact>`` and extracted into
+                ``<root>``; if the file already exists *and* matches the
+                pinned hash, the download is skipped (idempotent resume).
+            artifact: Canonical filename of the artifact to fetch. Must be
+                a key in :data:`KNOWN_GOOD_SHA256` and :data:`_GDRIVE_FILE_IDS`.
+
+        Raises:
+            ValueError: ``artifact`` is unknown.
+            ImportError: ``gdown`` is not installed (``pip install gdown``).
+            IntegrityError: bytes-on-disk don't match the pinned SHA-256.
+        """
+        if artifact not in KNOWN_GOOD_SHA256:
+            raise ValueError(
+                f"Unknown LithoBench artifact: {artifact!r}. "
+                f"Known artifacts: {sorted(KNOWN_GOOD_SHA256)}"
+            )
+        if artifact not in _GDRIVE_FILE_IDS:
+            raise NotImplementedError(
+                f"No Google Drive ID registered for {artifact!r}. Open an issue or PR to add one."
+            )
+
+        try:
+            import gdown
+        except ImportError as e:
+            raise ImportError(
+                "Auto-fetching LithoBench requires gdown. Install it with: pip install gdown"
+            ) from e
+
+        dest_root = Path(root)
+        dest_root.mkdir(parents=True, exist_ok=True)
+        target = dest_root / artifact
+        pin = KNOWN_GOOD_SHA256[artifact]
+
+        if target.exists():
+            try:
+                verify_sha256(target, pin)
+                self._extract_tarball(target, dest_root)
+                return
+            except Exception:
+                # Stale or corrupt; re-download below.
+                target.unlink()
+
+        url = f"https://drive.google.com/uc?id={_GDRIVE_FILE_IDS[artifact]}"
+        gdown.download(url, str(target), quiet=False)  # type: ignore[attr-defined]
+
+        verify_sha256(target, pin)
+        self._extract_tarball(target, dest_root)
+
+    @staticmethod
+    def _extract_tarball(tar_path: Path, dest: Path) -> None:
+        """Extract ``tar_path`` into ``dest``, refusing path-traversal members.
+
+        ``tarfile.extractall`` historically followed ``../`` and absolute
+        member names — we add an explicit guard so a tampered upload (the
+        SHA-256 is verified before this is called, but in case of future
+        re-pinning) cannot escape ``dest``.
+        """
+        dest_resolved = dest.resolve()
+        with tarfile.open(tar_path, "r:*") as tar:
+            for member in tar.getmembers():
+                member_path = (dest / member.name).resolve()
+                if not str(member_path).startswith(str(dest_resolved)):
+                    raise RuntimeError(
+                        f"Refusing to extract path-traversal member: {member.name!r}"
+                    )
+            # B202: members were validated above; safe to extract.
+            # ``filter="data"`` activates Python 3.12+ tar filter that
+            # additionally blocks symlinks/hardlinks pointing outside the
+            # destination — defence in depth on top of the manual guard.
+            tar.extractall(dest, filter="data")  # nosec B202
 
     @property
     def sample_ids(self) -> list[str]:
