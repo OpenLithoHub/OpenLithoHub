@@ -166,3 +166,23 @@ def test_zernike_z4_is_defocus_paraboloid() -> None:
 def test_zernike_phase_map_grid_size_too_small() -> None:
     with pytest.raises(ValueError, match=">= 2|≥ 2"):
         zernike_phase_map({4: 0.1}, grid_size=1)
+
+
+def test_optics_helpers_reexported_from_simulators() -> None:
+    """Issue #65: measured-source / Zernike-pupil I/O must be discoverable
+    from `openlithohub.simulators` so users finding `HopkinsSimulator`
+    also find the loaders that feed it. Direct `_utils.optics` import is
+    private API and was the only path before the re-export."""
+    from openlithohub.simulators import (
+        load_source_intensity as ls_public,
+    )
+    from openlithohub.simulators import (
+        load_zernike_coefficients as lz_public,
+    )
+    from openlithohub.simulators import (
+        zernike_phase_map as zpm_public,
+    )
+
+    assert ls_public is load_source_intensity
+    assert lz_public is load_zernike_coefficients
+    assert zpm_public is zernike_phase_map

@@ -15,7 +15,15 @@ needs more:
   pupil grid.
 
 Both outputs are plain ``torch.Tensor`` so they can be plugged into a
-custom Hopkins / SOCS run without further conversion.
+custom Hopkins / SOCS run without further conversion. These three
+functions are re-exported from :mod:`openlithohub.simulators` for
+discoverability — the bundled :class:`HopkinsSimulator` does **not**
+yet consume them through ``SimulatorConfig.extra``; users who need
+measured-source or Zernike-pupil pathing currently do so by calling
+:func:`openlithohub._utils.hopkins.simulate_aerial_image_hopkins`
+directly with the loaded tensor injected into a custom params object.
+Wiring through the public ``HopkinsSimulator`` is roadmap (item #65 in
+the bug-triage list once the API knobs are settled).
 
 Coordinate convention: normalized pupil coordinates run from -1 to +1
 across the diameter, with the unit circle being the NA-defined edge.

@@ -26,6 +26,11 @@ This module is the answer to OpenLithoHub_NextSteps item #12.
 
 from __future__ import annotations
 
+from openlithohub._utils.optics import (
+    load_source_intensity,
+    load_zernike_coefficients,
+    zernike_phase_map,
+)
 from openlithohub.simulators.base import (
     BaseSimulator,
     SimulatorConfig,
@@ -51,5 +56,8 @@ __all__ = [
     "describe_simulators",
     "get_simulator",
     "list_simulators",
+    "load_source_intensity",
+    "load_zernike_coefficients",
     "register_simulator",
+    "zernike_phase_map",
 ]
