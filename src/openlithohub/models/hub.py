@@ -18,6 +18,12 @@ from pathlib import Path
 
 _DEFAULT_CACHE_DIR = Path.home() / ".openlithohub" / "models"
 
+# Pinned for reproducibility per playbook §6. ``main`` is mutable, so any
+# load that resolves the default branch is, by definition, irreproducible —
+# but it is the only safe default at the hub level (per-repo SHA pins live
+# on the model entry in `models/registry.py`).
+_DEFAULT_REVISION: str = "main"
+
 
 class ChecksumMismatchError(RuntimeError):
     """Raised when a downloaded file's SHA256 does not match the expected value."""
@@ -167,7 +173,7 @@ class ModelHub:
         self,
         model_id: str,
         filename: str = "model.pt",
-        revision: str = "main",
+        revision: str = _DEFAULT_REVISION,
         sha256: str | None = None,
     ) -> Path:
         """Download model weights, returning the cached file path.

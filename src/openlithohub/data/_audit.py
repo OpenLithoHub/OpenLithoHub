@@ -116,7 +116,7 @@ def wrap_download(adapter_cls: type) -> None:
     wrapped.__wrapped__ = original  # type: ignore[attr-defined]
     wrapped.__name__ = original.__name__
     wrapped.__doc__ = original.__doc__
-    adapter_cls.download = wrapped  # type: ignore[assignment]
+    adapter_cls.download = wrapped  # type: ignore[attr-defined]
 
 
 def _append_record(audit_dir: Path, adapter_cls: type, record: dict[str, Any]) -> None:

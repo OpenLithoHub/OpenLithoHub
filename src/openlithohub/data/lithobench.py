@@ -223,7 +223,24 @@ class LithoBenchDataset(DatasetAdapter):
                 target.unlink()
 
         url = f"https://drive.google.com/uc?id={_GDRIVE_FILE_IDS[artifact]}"
-        gdown.download(url, str(target), quiet=False)  # type: ignore[attr-defined]
+        # ``resume=True`` is the gdown analogue of ``--continue``: a partial
+        # ``<target>`` from a prior aborted run is appended to instead of
+        # restarted from byte 0 — important for the ~14.7 GB ``lithodata``
+        # tar where Google Drive can drop the connection mid-stream.
+        # Proxy passthrough flows through ``HTTPS_PROXY`` / ``HTTP_PROXY``
+        # env vars (see docs/developer-guide/network.md); we deliberately
+        # do NOT name internal hosts in code per ``feedback_proxy_usage.md``.
+        try:
+            gdown.download(url, str(target), quiet=False, resume=True)  # type: ignore[attr-defined]
+        except Exception as exc:  # noqa: BLE001 — re-raised below
+            msg = str(exc).lower()
+            if "quota" in msg or "rate" in msg or "too many requests" in msg:
+                raise RuntimeError(
+                    f"Google Drive rate-limited the LithoBench artifact "
+                    f"({artifact!r}). Wait 24h and retry, or fetch from a "
+                    f"different network. Original error: {exc}"
+                ) from exc
+            raise
 
         verify_sha256(target, pin)
         self._extract_tarball(target, dest_root)

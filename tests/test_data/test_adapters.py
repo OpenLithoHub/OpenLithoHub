@@ -242,7 +242,7 @@ class TestLithoBenchErrors:
 
         out = tmp_path / "out"
 
-        def fake_download(url, dst, quiet):
+        def fake_download(url, dst, quiet, resume=False):
             # Write a 1-byte file — guaranteed to fail size check.
             Path(dst).write_bytes(b"x")
 
@@ -284,7 +284,7 @@ class TestLithoBenchErrors:
 
         monkeypatch.setitem(lb_mod.KNOWN_GOOD_SHA256, "lithomodels.tar.gz", pin)
 
-        def fake_download(url, dst, quiet):
+        def fake_download(url, dst, quiet, resume=False):
             Path(dst).write_bytes(tar_bytes)
 
         fake_gdown = MagicMock()

@@ -21,9 +21,18 @@ against. Two pieces of evidence:
 
 Files per test case:
 
-- ``testcaseN.oas`` — OASIS layout. ``(layer=1000, datatype=0)`` is
-  the design polygons. ``(layer=10000, datatype=0)`` is the auxiliary
-  clip-site layer (exposed under ``metadata['clip_sites']``).
+- ``testcaseN.oas`` — OASIS layout. The N7M2EUV stack is documented in
+  [Yang2020_BatchAL, §III-A, p.4]; the per-layer mapping below applies
+  to every test case in this distribution:
+
+  | GDS layer | Datatype | Meaning                                                     |
+  |-----------|----------|-------------------------------------------------------------|
+  | 1000      | 0        | Design polygons (drawn metal-2 features at N7, 16 nm CD).   |
+  | 10000     | 0        | Auxiliary clip-site grid (16×16 nm boxes, hotspot inspection sites). |
+
+  ``(layer=1000, datatype=0)`` is exposed as the loaded ``design``
+  tensor. ``(layer=10000, datatype=0)`` is exposed under
+  ``metadata['clip_sites']``.
 - ``testN.csv`` — hotspot annotations with columns ``def, id,
   category, x, y``. Coordinates are in OASIS database units (1 dbu =
   1 nm for these files); ``category`` is the contest's defect type

@@ -20,13 +20,16 @@ class NeuralILTModel(LithographyModel):
     forward pass. Much faster than iterative methods at inference time,
     but requires pretrained weights for good results.
 
-    Architecture lineage: ``Jiang2020_NeuralILT`` (ICCAD'20). OpenLithoHub's
-    v0.1 baseline diverges from the paper in two ways: encoder/decoder
-    channel widths are halved (32→64→128→256 vs paper's 64→128→256→512), and
-    the differentiable ILT correction layer is not packaged inside the
-    adapter — eval-time forward simulation lives in the leaderboard scoring
-    pipeline. See ``docs/audits/neural-ilt-architecture.md`` for the full
-    audit and re-audit triggers.
+    Architecture lineage: ``Jiang2020_NeuralILT`` (ICCAD'20, paywalled).
+    Open-access substitute is [Yang2023_LithoBench, §4.3] (NeurIPS 2023,
+    arXiv:2305.04345), which describes the same architecture and training
+    schedule. OpenLithoHub's v0.1 baseline diverges from the paper in two
+    ways: encoder/decoder channel widths are halved (32→64→128→256 vs
+    paper's 64→128→256→512), and the differentiable ILT correction layer
+    is not packaged inside the adapter — eval-time forward simulation
+    lives in the leaderboard scoring pipeline. See
+    ``docs/audits/neural-ilt-architecture.md`` for the full audit and
+    re-audit triggers.
     """
 
     NAME = "neural-ilt"

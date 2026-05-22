@@ -42,6 +42,7 @@ from typing import Any
 import numpy as np
 import torch
 
+from openlithohub._utils.integrity import KnownGoodHash, verify_sha256
 from openlithohub.data.base import DatasetAdapter, LithoSample, natural_sort_key
 
 _UPSTREAM_REPO = "https://github.com/phdyang007/GAN-OPC"
@@ -50,6 +51,164 @@ _UPSTREAM_REPO = "https://github.com/phdyang007/GAN-OPC"
 # Override via the ``revision`` argument to ``download_ganopc`` if a new
 # upstream tag has been validated against the eval pipeline.
 _DEFAULT_REVISION = "main"
+
+# Per playbook §6: the upstream tracks no LFS / no release artefact, so we
+# pin every volume of the multi-volume 7z archive by SHA-256. Hashes were
+# captured at acquisition time (acquisition_log.md 2026-05-18); a silent
+# upstream rewrite that swaps a volume changes the hash and the fetcher
+# refuses to extract.
+KNOWN_GOOD_SHA256: dict[str, KnownGoodHash] = {
+    "ganopc-data.7z.001": KnownGoodHash(
+        sha256="04d17ec4c657496f9b0b2273e24a3b0c4dca5522a5c5b84024218eb4c798ab71",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.002": KnownGoodHash(
+        sha256="6d69d2af585f4c32b85b00e8b7799221b1533ad3f91ea3f4e160b28c103b31a6",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.003": KnownGoodHash(
+        sha256="818a71d8dd825e50eb0b2ecd72326f851f6d85056df4114cc89a747a7e21ad0a",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.004": KnownGoodHash(
+        sha256="050def5b23e368fb62cf71067e48cf7bf89037608aabe4dc735a9fe96e125504",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.005": KnownGoodHash(
+        sha256="acf8573d8ae7ca1528d7de1d0d29c4df242b547fd5a09c1803bec7e1590e757b",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.006": KnownGoodHash(
+        sha256="5c82bdc4150acf329fed6b46c3bfae82f2379e1739c4b262fe103e2ed7c053fd",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.007": KnownGoodHash(
+        sha256="ad8dd8385422482d6f5a21a8916001772522a4a85c68486e2c30b65c8c63b060",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.008": KnownGoodHash(
+        sha256="207442ee2d1b75937b2c9a7878224cbe491febd2f7d43044944e6d1e8dff83cc",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.009": KnownGoodHash(
+        sha256="3417f9869e1755affd1bca8eb7d7d822c2d88ed1e3e6426c6c53f0047ee4e7f6",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.010": KnownGoodHash(
+        sha256="4bb3f3fd4a6f858b94ac9a72a8a8a9bdc7ff1ebcd2693e643396fef535bc828f",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.011": KnownGoodHash(
+        sha256="0682f62825e1f51e4e8db0ec88adec8b29077f6702857769f92a705b6db77a79",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.012": KnownGoodHash(
+        sha256="ceb24b62c5d79c1243172fe8ce76d057b9caf33f3f6a9733ee63475d7a85cfdd",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.013": KnownGoodHash(
+        sha256="300183b68dcedba49332442a297e09df072739d3a71913000d3da99af7741417",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.014": KnownGoodHash(
+        sha256="dafe634d35b7fed2999cafccec6c29203f93d565f2e0cce564f6dd1913d297b2",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.015": KnownGoodHash(
+        sha256="7b4c0f68d839ae515427083e64c978a914976c84ed8e595d6d22dcbf02bb6324",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.016": KnownGoodHash(
+        sha256="b9dfa1bbe32718f3c4fe74bef65109ecdd1fa8ac584cddc2feeeaf6afd385003",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.017": KnownGoodHash(
+        sha256="0b096debd193e0559bb53b1e60e4f2def864f40d7ab1899579c5af18744cc2bb",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.018": KnownGoodHash(
+        sha256="0003a46b7662451284a5aab60facf560907c2333cdb8ce8eb339f9858e22eea5",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.019": KnownGoodHash(
+        sha256="c092570a9caa9a128a9ad3bc88436d73f09c6c65487ce30f9202d55c69eb77b8",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.020": KnownGoodHash(
+        sha256="4561317f03adbe5d7d4db6396d846a43c5a5c67666ef49ac893efad8392b90c5",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.021": KnownGoodHash(
+        sha256="4b74db6c80e7b6923c11adc9bb50e674b89455e3360ab068c1c7ef12f8f1d18b",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.022": KnownGoodHash(
+        sha256="a48881bf970e5d0ff4742a1aca2b5f1a30cc366e3fffb7c6e9c2ff788a617aa9",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.023": KnownGoodHash(
+        sha256="c184deef46664049c4a631db49b8638466f7889b27f9e7cf72b91d21dd477a98",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.024": KnownGoodHash(
+        sha256="03169fc883aa3ec62044ae16a9da390d49642746e578c09d0d2f9adadd60c0b5",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.025": KnownGoodHash(
+        sha256="08cbd616589633124611137343c39e4ccf5db4940498a38f1c2c480d21fec2ba",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.026": KnownGoodHash(
+        sha256="54e02a31f77c1064d2c767f994d16f59e859b5ac3a89de0b6be515d4a44924b2",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.027": KnownGoodHash(
+        sha256="6cf794720ca4b1a62e7c04e3e681f0ae4fe1aa5983058a759c531433eabdf013",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.028": KnownGoodHash(
+        sha256="ff25024f20bdab10c5ada5dea7e0828ec9a98730f84f1fc7b218e48e64a5805e",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.029": KnownGoodHash(
+        sha256="475647cd11dfd35714b65ff2631cf082e24bf5d01dcbe929100d5ef4ea6fc0cd",
+        size_bytes=1048576,
+        source="acquisition_log.md 2026-05-18",
+    ),
+    "ganopc-data.7z.030": KnownGoodHash(
+        sha256="d8384f6bccae6696514d903b5d87067bb57961c38139ebe3892a56e20e1297df",
+        size_bytes=617579,
+        source="acquisition_log.md 2026-05-18",
+    ),
+}
 
 
 def download_ganopc(
@@ -88,8 +247,8 @@ def download_ganopc(
             "manually."
         )
     try:
-        import multivolumefile  # type: ignore[import-not-found]
-        import py7zr  # type: ignore[import-not-found]
+        import multivolumefile
+        import py7zr
     except ImportError as e:
         raise ImportError(
             "GAN-OPC auto-fetch requires py7zr and multivolumefile. Install "
@@ -122,10 +281,21 @@ def download_ganopc(
             "Open an issue at https://github.com/OpenLithoHub/OpenLithoHub/issues."
         )
 
+    for volume in volumes:
+        pin = KNOWN_GOOD_SHA256.get(volume.name)
+        if pin is None:
+            raise RuntimeError(
+                f"Unexpected upstream volume {volume.name}: no SHA-256 pin in "
+                "KNOWN_GOOD_SHA256. The upstream repo may have re-cut the archive."
+            )
+        verify_sha256(volume, pin)
+
     archive_prefix = volumes[0].with_suffix("")  # strip ``.001`` etc.
     with (
         multivolumefile.open(str(archive_prefix), mode="rb") as joined,
-        py7zr.SevenZipFile(joined, mode="r") as archive,
+        # multivolumefile returns a RawIOBase that py7zr handles natively;
+        # the type stubs declare a narrower IO[bytes] signature.
+        py7zr.SevenZipFile(joined, mode="r") as archive,  # type: ignore[arg-type]
     ):
         archive.extractall(path=dest_root)
 

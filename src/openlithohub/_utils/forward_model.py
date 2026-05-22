@@ -117,5 +117,11 @@ def apply_resist_threshold(
     aerial_image: torch.Tensor,
     threshold: float = 0.5,
 ) -> torch.Tensor:
-    """Apply resist threshold to produce binary resist pattern."""
+    """Apply resist threshold to produce binary resist pattern.
+
+    The 0.5 default is a generic mid-intensity cutoff for ad-hoc use; the
+    canonical ICCAD16 / LithoBench cutoff is 0.225 (see
+    [Yang2023_LithoBench, §3.2, p.5] and ``SimulatorConfig.threshold``).
+    Pass ``threshold=0.225`` when reproducing benchmark numbers.
+    """
     return (aerial_image >= threshold).float()
