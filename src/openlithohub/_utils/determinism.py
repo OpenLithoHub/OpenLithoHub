@@ -75,7 +75,9 @@ def set_deterministic(*, strict: bool = False) -> None:
         # CUBLAS_WORKSPACE_CONFIG is consumed at cuBLAS handle creation,
         # which happens on first cuBLAS use. If CUDA has already been
         # initialised the env var write above is too late to take effect.
-        if already_set is None and torch.cuda.is_available() and torch.cuda.is_initialized():
+        if (
+            already_set is None and torch.cuda.is_available() and torch.cuda.is_initialized()  # type: ignore[no-untyped-call]
+        ):
             logger.warning(
                 "set_deterministic(strict=True) called after CUDA was "
                 "initialised; CUBLAS_WORKSPACE_CONFIG=:4096:8 was set but "

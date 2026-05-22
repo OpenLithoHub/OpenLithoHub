@@ -225,7 +225,9 @@ class LevelSetILTModel(LithographyModel):
             # to load under the 2.6+ default. Checkpoints are written by
             # this code path only, so the trust boundary is the user's own
             # filesystem.
-            state = torch.load(str(resume_from), map_location=target.device, weights_only=False)
+            state = torch.load(  # nosec B614 — trust boundary is the user's own filesystem; checkpoint written by this code path
+                str(resume_from), map_location=target.device, weights_only=False
+            )
             with torch.no_grad():
                 mask_logit.copy_(state["mask_logit"])
             optimizer.load_state_dict(state["optimizer"])

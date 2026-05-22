@@ -236,7 +236,7 @@ class LithoBenchDataset(DatasetAdapter):
         # env vars (see docs/developer-guide/network.md); we deliberately
         # do NOT name internal hosts in code per ``feedback_proxy_usage.md``.
         try:
-            gdown.download(url, str(target), quiet=False, resume=True)
+            gdown.download(url, str(target), quiet=False, resume=True)  # type: ignore[attr-defined]
         except Exception as exc:  # noqa: BLE001 — re-raised below
             msg = str(exc).lower()
             if "quota" in msg or "rate" in msg or "too many requests" in msg:
