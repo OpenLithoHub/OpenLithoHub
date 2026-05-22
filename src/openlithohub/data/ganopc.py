@@ -293,7 +293,7 @@ def download_ganopc(
     archive_prefix = volumes[0].with_suffix("")  # strip ``.001`` etc.
     with (
         multivolumefile.open(str(archive_prefix), mode="rb") as joined,
-        py7zr.SevenZipFile(joined, mode="r") as archive,  # type: ignore[arg-type]
+        py7zr.SevenZipFile(joined, mode="r") as archive,
     ):
         archive.extractall(path=dest_root)
 
