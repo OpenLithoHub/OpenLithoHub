@@ -352,6 +352,31 @@ class TestLithoSimDataset:
             assert ds.revision == lithosim_mod._DEFAULT_REVISION
 
 
+class TestSupportsRandomAccess:
+    """Adapters declare whether `len()` / `ds[i]` are well-defined.
+
+    Streaming adapters answer False so callers can branch between batched
+    evaluation and online consumption without catching TypeError.
+    """
+
+    def test_lithobench_supports_random_access(self, tmp_path):
+        design_dir = tmp_path / "design"
+        design_dir.mkdir()
+        np.save(design_dir / "s_0.npy", np.zeros((4, 4), dtype=np.float32))
+        ds = LithoBenchDataset(root=tmp_path)
+        assert ds.supports_random_access is True
+
+    @patch("openlithohub.data.lithosim._ensure_datasets_available")
+    def test_lithosim_batched_supports_random_access(self, mock_ensure):
+        ds = LithoSimDataset(split="test", streaming=False)
+        assert ds.supports_random_access is True
+
+    @patch("openlithohub.data.lithosim._ensure_datasets_available")
+    def test_lithosim_streaming_does_not_support_random_access(self, mock_ensure):
+        ds = LithoSimDataset(split="test", streaming=True)
+        assert ds.supports_random_access is False
+
+
 class TestLithoSimAuthErrorDetection:
     def test_detects_status_401(self):
         from openlithohub.data.lithosim import _is_auth_error

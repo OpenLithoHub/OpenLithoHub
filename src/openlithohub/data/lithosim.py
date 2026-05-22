@@ -105,6 +105,13 @@ class LithoSimDataset(DatasetAdapter):
         self._ds: Any = None
         self._len: int | None = None
 
+    @property
+    def supports_random_access(self) -> bool:
+        # Streaming mode wraps an HF IterableDataset — `len()` / `ds[i]`
+        # would require draining the stream, so they raise TypeError. The
+        # batched (non-streaming) load is materialised and supports both.
+        return not self.streaming
+
     def _load_dataset(self) -> Any:
         if self._ds is None:
             from datasets import load_dataset

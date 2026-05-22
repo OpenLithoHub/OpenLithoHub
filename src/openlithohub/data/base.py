@@ -46,6 +46,21 @@ class DatasetAdapter(ABC):
     @abstractmethod
     def __getitem__(self, index: int) -> LithoSample: ...
 
+    @property
+    def supports_random_access(self) -> bool:
+        """Whether ``len()`` and integer indexing are well-defined.
+
+        Streaming adapters (e.g. ``LithoSimDataset(streaming=True)``) lazily
+        consume an iterable and cannot answer ``len()`` or ``ds[i]`` without
+        materialising the whole stream — they raise :class:`TypeError`
+        instead. Callers that branch between batched evaluation (random
+        access) and online consumption (iteration only) should query this
+        property rather than catching ``TypeError`` after the fact.
+
+        Defaults to ``True``; streaming adapters override to ``False``.
+        """
+        return True
+
     def __iter__(self) -> Iterator[LithoSample]:
         for i in range(len(self)):
             yield self[i]

@@ -46,3 +46,5 @@ htmlcov/
 /out/
 site/
 .wrangler/
+checkpoints/*.pt
+checkpoints/*.metadata.json
