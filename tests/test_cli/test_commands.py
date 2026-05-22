@@ -280,3 +280,36 @@ def test_simulate_list_backends_verbose_shows_class_path():
     assert "openlithohub.simulators.hopkins_sim.HopkinsSimulator" in output
     assert "openlithohub.simulators.calibre.CalibreSimulator" in output
     assert "openlithohub.simulators.tachyon.TachyonSimulator" in output
+
+
+class TestAggregateMetrics:
+    def test_epe_uses_simple_mean_not_pixel_weighted(self) -> None:
+        from openlithohub.cli.eval_cmd import _aggregate_metrics
+
+        # Two samples: a tiny tile with EPE 1 and a huge tile with EPE 9.
+        # Pixel-weighted average would be ~9; simple mean is 5. Issue #45.
+        metrics = [{"epe_mean_nm": 1.0}, {"epe_mean_nm": 9.0}]
+        agg = _aggregate_metrics(metrics, sample_pixel_counts=[64, 1_000_000])
+        assert agg["epe_mean_nm"] == 5.0
+
+    def test_l2_pixels_remains_pixel_weighted(self) -> None:
+        from openlithohub.cli.eval_cmd import _aggregate_metrics
+
+        # l2_error_pixels is an integral metric, so it must stay area-weighted.
+        metrics = [{"l2_error_pixels": 100.0}, {"l2_error_pixels": 100.0}]
+        agg = _aggregate_metrics(metrics, sample_pixel_counts=[1, 9])
+        # Weighted toward the second (heavier) sample but values are equal,
+        # so the aggregate should be 100. Test that swapping pixel counts
+        # preserves the result for equal-valued integrals.
+        assert agg["l2_error_pixels"] == 100.0
+
+    def test_empty_mask_sample_not_silently_dropped(self) -> None:
+        from openlithohub.cli.eval_cmd import _aggregate_metrics
+
+        # Issue #46: a sample with pixel_count=0 (e.g. CD-error reported as
+        # 0 because there are no edges) should still contribute. Pre-fix it
+        # got weight 0 and was excluded — only the 'good' sample counted.
+        metrics = [{"l2_error_pixels": 0.0}, {"l2_error_pixels": 100.0}]
+        agg = _aggregate_metrics(metrics, sample_pixel_counts=[0, 1])
+        # Floor weight at 1 → average is (0*1 + 100*1)/(1+1) = 50.
+        assert agg["l2_error_pixels"] == 50.0

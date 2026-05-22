@@ -415,15 +415,31 @@ def _aggregate_metrics(
 ) -> dict[str, Any]:
     """Aggregate per-sample metrics into a single dict.
 
-    All metrics are averaged with each sample's pixel count as a soft
-    weight, so a 4096×4096 production tile contributes ~4000× as much to
-    the aggregate as a 64×64 toy tile. ``l2_error_pixels`` already
-    integrates over the mask in the per-sample metric, so cross-sample
-    *summation* would double-integrate and produce a number that scales
-    linearly with sample count — making leaderboard submissions from a
-    user-supplied dataset incomparable with the published baselines (which
-    average) and with each other (a longer eval run would always rank
-    worse). Mean across samples keeps the scalar comparable.
+    Two weighting regimes (issue #45):
+
+    - **Area-weighted** (default): for *integral* metrics whose per-sample
+      value already scales with image area — e.g. ``l2_error_pixels``,
+      ``l2_error_nm2``. A 4096×4096 production tile should contribute
+      ~4000× as much to the aggregate as a 64×64 toy tile.
+
+    - **Unweighted (sample mean)**: for metrics that are *already*
+      sample-internal averages — e.g. EPE, PVB, CD-error. Multiplying
+      these by pixel count makes large images dominate the leaderboard
+      regardless of how good their mean was; the canonical leaderboard
+      number is "average EPE across the eval set", which is a
+      simple-mean over samples, not pixel-weighted.
+
+    The ``_UNWEIGHTED_KEY_PREFIXES`` set marks which metrics are already
+    per-sample means; everything else falls through to area weighting
+    so callers do not have to opt in for newly-added integral metrics.
+
+    Empty-mask handling (issue #46): a sample with ``pixel_count == 0``
+    is *not* a degenerate input — it just means the resist contour is
+    empty (e.g. no foreground extracted). Those samples used to be
+    silently dropped because the area weight was 0. We now keep them
+    with a unit weight so a metric that is well-defined on an empty
+    mask (e.g. CD-error reported as 0 because there are no edges) still
+    contributes to the average.
 
     Non-finite values (``nan`` / ``inf``) are dropped before averaging so a
     single degenerate tile cannot poison the aggregate. Affected metrics:
@@ -436,9 +452,11 @@ def _aggregate_metrics(
         return {}
 
     if sample_pixel_counts is None or len(sample_pixel_counts) != len(metrics_list):
-        weights = [1] * len(metrics_list)
+        area_weights = [1] * len(metrics_list)
     else:
-        weights = list(sample_pixel_counts)
+        # Floor at 1 so empty-mask samples still contribute (issue #46).
+        area_weights = [max(1, int(w)) for w in sample_pixel_counts]
+    unit_weights = [1] * len(metrics_list)
 
     all_keys: set[str] = set()
     for m in metrics_list:
@@ -446,6 +464,7 @@ def _aggregate_metrics(
 
     aggregated: dict[str, Any] = {}
     for key in sorted(all_keys):
+        weights = unit_weights if _is_unweighted_metric(key) else area_weights
         raw_pairs = [(m[key], w) for m, w in zip(metrics_list, weights, strict=True) if key in m]
         finite_pairs = [
             (v, w) for v, w in raw_pairs if isinstance(v, int | float) and math.isfinite(v)
@@ -460,6 +479,28 @@ def _aggregate_metrics(
         if dropped > 0:
             aggregated[f"{key}_dropped_nonfinite"] = dropped
     return aggregated
+
+
+# Metric keys whose per-sample value is *already* a mean — averaging them
+# again with pixel-area weights distorts the leaderboard so that large
+# tiles dominate regardless of their mean quality. Everything not in this
+# set falls through to area weighting (which is correct for integral
+# metrics like ``l2_error_pixels``).
+_UNWEIGHTED_KEY_PREFIXES: tuple[str, ...] = (
+    "epe_",
+    "epe_wafer_",
+    "pvb_",
+    "pvband_",
+    "cd_",
+    "edge_flip_rate",
+    "bridge_probability",
+    "break_probability",
+    "robustness_score",
+)
+
+
+def _is_unweighted_metric(key: str) -> bool:
+    return any(key.startswith(p) or key == p.rstrip("_") for p in _UNWEIGHTED_KEY_PREFIXES)
 
 
 def _build_forward_simulator(node: str, pixel_nm: float) -> Any:
