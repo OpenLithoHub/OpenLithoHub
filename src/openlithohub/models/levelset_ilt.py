@@ -61,7 +61,11 @@ class LevelSetILTModel(LithographyModel):
 
     NAME = "levelset-ilt"
     SUPPORTS_CURVILINEAR = True
-    RECEPTIVE_FIELD_PX = 0
+    # Issue #75: see openilt.py — iterative ILT gradient flow propagates
+    # across many OIR's worth of pixels, so 0 px under-shoots the seam-free
+    # halo at tile boundaries. 64 px is the same conservative bound used by
+    # the U-Net-based Neural-ILT / GAN-OPC.
+    RECEPTIVE_FIELD_PX = 64
 
     def __init__(
         self,

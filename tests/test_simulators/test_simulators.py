@@ -60,8 +60,12 @@ class TestHopkinsSimulator:
         every published L2/PVB number computed against this backend
         becomes wrong by a constant. This test catches that drift.
 
-        Reference values were captured on the v1 implementation; tolerances
-        are tight (~1e-4) because the kernel construction is deterministic.
+        Reference values were rebaselined when issue #29 (polar-grid
+        Jacobian for source samples) was fixed: pre-fix mean was 0.173868
+        because the dc-side of the disk was over-weighted; post-fix mean
+        of 0.161144 reflects the area-correct integration. Tolerances
+        remain tight (~1e-4) because the kernel construction is
+        deterministic.
         """
         sim = HopkinsSimulator(SimulatorConfig(pixel_size_nm=4.0))
         result = sim.simulate(_make_mask())
@@ -69,10 +73,10 @@ class TestHopkinsSimulator:
         assert result.metadata["num_kernels"] == 24
         assert result.metadata["illumination"] == "circular"
         # Reference stats for a 32x32 centered pad on a 64x64 grid.
-        assert result.aerial.mean().item() == pytest.approx(0.173868, abs=2e-4)
-        assert result.aerial.max().item() == pytest.approx(1.149142, abs=2e-4)
+        assert result.aerial.mean().item() == pytest.approx(0.161144, abs=2e-4)
+        assert result.aerial.max().item() == pytest.approx(0.942922, abs=2e-4)
         # Resist duty cycle at threshold=0.225, dose=1.0.
-        assert result.resist.sum().item() == pytest.approx(1000.0, abs=4.0)
+        assert result.resist.sum().item() == pytest.approx(1004.0, abs=4.0)
 
 
 class TestHopkinsWithConfig:

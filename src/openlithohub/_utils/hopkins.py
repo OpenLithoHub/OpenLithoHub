@@ -200,7 +200,13 @@ def _illumination_samples(
     unique_keys, inverse = torch.unique(flat_key, return_inverse=True)
     n_unique = unique_keys.numel()
     src_weights = torch.zeros(n_unique, dtype=torch.float32, device=device)
-    src_weights.scatter_add_(0, inverse, torch.ones_like(rr, dtype=torch.float32))
+    # Polar-grid Jacobian: an (r, θ) bin covers physical area r·dr·dθ, so
+    # each sample contributes its radius — not a flat 1 — to the source
+    # intensity. Without this the centre is over-weighted (issue #29:
+    # circular illumination measured ~38% of intensity in the inner third
+    # instead of the ~11% an equal-area source predicts).
+    sample_jac = rr.to(torch.float32)
+    src_weights.scatter_add_(0, inverse, sample_jac)
     src_weights = src_weights / src_weights.sum()
     unique_shifts = torch.stack([unique_keys // grid_size, unique_keys % grid_size], dim=1)
     return unique_shifts, src_weights

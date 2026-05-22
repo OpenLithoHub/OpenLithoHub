@@ -103,7 +103,12 @@ class OpenILTModel(LithographyModel):
 
     NAME = "openilt"
     SUPPORTS_CURVILINEAR = True
-    RECEPTIVE_FIELD_PX = 0
+    # Issue #75: 200 iterations of FFT-conv against a Hopkins/Gaussian PSF
+    # propagate gradients far beyond a single optical-interaction radius;
+    # tiling at the OIR alone leaves visible seams. 64 px is a conservative
+    # empirical halo (matches the U-Net-based Neural-ILT and GAN-OPC) and
+    # combines with `node.optical_radius_nm` via `compute_halo_px`.
+    RECEPTIVE_FIELD_PX = 64
 
     def __init__(
         self,

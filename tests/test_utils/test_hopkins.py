@@ -200,3 +200,36 @@ class TestDtypeAndCompile:
         except Exception as exc:  # noqa: BLE001 — torch.compile may not be available
             pytest.skip(f"torch.compile unavailable in this env: {exc}")
         assert torch.allclose(out, eager, atol=1e-5)
+
+
+class TestPolarJacobian:
+    """Issue #29 regression: source samples must carry the polar `r·dr·dθ`
+    Jacobian, otherwise the centre is over-weighted because every angular
+    bin has the same sample count regardless of its physical area."""
+
+    def test_circular_source_inner_third_not_overweighted(self) -> None:
+        from openlithohub._utils.hopkins import _illumination_samples
+
+        # 512 px @ 1 nm pitch resolves the source disk well enough that the
+        # binning artifact is bounded; without the Jacobian, the inner third
+        # held ~21% of the source intensity (measured pre-fix) instead of
+        # the geometric ~11%. After the fix, it must come in below 15%.
+        params = HopkinsParams(illumination="circular", sigma=0.7, pixel_size_nm=1.0)
+        shifts, weights = _illumination_samples(params, 512, torch.device("cpu"))
+
+        f_pupil = params.na / params.wavelength_nm
+        fstep = 1.0 / (512 * params.pixel_size_nm)
+        r_source_bins = f_pupil * params.sigma / fstep
+
+        sy = shifts[:, 0].to(torch.float32)
+        sx = shifts[:, 1].to(torch.float32)
+        sy = torch.where(sy <= 256, sy, sy - 512)
+        sx = torch.where(sx <= 256, sx, sx - 512)
+        r = torch.sqrt(sy * sy + sx * sx)
+
+        inner_w = float(weights[r <= r_source_bins / 3.0].sum())
+        total_w = float(weights.sum())
+        assert total_w == pytest.approx(1.0, abs=1e-6)
+        assert inner_w / total_w < 0.15, (
+            f"inner-third weight {inner_w / total_w:.3f} too large — Jacobian missing?"
+        )
