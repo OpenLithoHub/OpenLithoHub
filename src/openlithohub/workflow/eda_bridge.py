@@ -7,6 +7,37 @@ of "I have OASIS, now what?" for layout engineers, not to replace a real
 sign-off deck.
 
 The emitted files are pure text. No EDA tool is invoked here.
+
+Unit handling (issue #50)
+-------------------------
+
+The Calibre template uses ``PRECISION 1000`` (1000 dbu/µm = 1 dbu/nm)
+and threshold literals are emitted in **microns** (``min_width_nm /
+1000``). SVRF interprets bare numerics on ``INTERNAL ... < N`` /
+``EXTERNAL ... < N`` directives as user units (microns by default), so
+emitting ``< 40`` for a 40-nm rule would have meant "< 40 µm" — i.e.
+the rule check would be 1000× too lax and would never flag a real
+violation. The IC Validator template has the same convention.
+
+Run any deck-emission test that pins literal text against this
+nm-vs-µm shift if you change the format strings.
+
+Geometric scope (issue #51)
+---------------------------
+
+The Calibre ``INTERNAL mask < N ABUT < 90 SINGULAR REGION`` and the ICV
+``internal1(mask, < N)`` directives are measured **edge-to-edge**, which
+is well-defined for Manhattan polygons but can produce direction-dependent
+results on curvilinear / concave geometry (the classic case: a notch on
+the inside of an arc, where the closest "internal" pair of edges is the
+arc-tangent rather than the notch wall). For Manhattan OPC output (the
+default of ``workflow.contour.manhattan``) this template is correct. For
+curvilinear ILT output (``workflow.contour.curvilinear``), replace
+``INTERNAL ... ABUT < 90`` with ``INTERNAL ... PROJECTING < 90`` (Calibre)
+or pair ``internal1`` with a ``with_radius`` curvature filter (ICV) so
+arc-segment curvature is not mis-classified as a width violation. We
+ship the Manhattan-correct deck because it's the headline OPC path; the
+curvilinear deck is a roadmap item.
 """
 
 from __future__ import annotations
@@ -70,12 +101,12 @@ mask = COPY MASK
 
 min_width {{
    @ Minimum width on MASK is {min_width_nm} nm.
-   INTERNAL mask < {min_width_nm} ABUT < 90 SINGULAR REGION
+   INTERNAL mask < {min_width_um} ABUT < 90 SINGULAR REGION
 }}
 
 min_spacing {{
    @ Minimum spacing on MASK is {min_spacing_nm} nm.
-   EXTERNAL mask < {min_spacing_nm} ABUT < 90 SINGULAR REGION
+   EXTERNAL mask < {min_spacing_um} ABUT < 90 SINGULAR REGION
 }}
 """
 
@@ -87,10 +118,10 @@ layout("{oasis_path}", OASIS, "{cell_name}");
 
 mask = assign({{ {{ {layer}, {datatype} }} }});
 
-min_width = internal1(mask, < {min_width_nm});
+min_width = internal1(mask, < {min_width_um});
 output(min_width, {{ {{ 1000, 0 }} }}, "min_width_violations");
 
-min_spacing = external1(mask, < {min_spacing_nm});
+min_spacing = external1(mask, < {min_spacing_um});
 output(min_spacing, {{ {{ 1001, 0 }} }}, "min_spacing_violations");
 """
 
@@ -137,6 +168,8 @@ def emit_calibre_svrf(
             datatype=rules.datatype,
             min_width_nm=rules.min_width_nm,
             min_spacing_nm=rules.min_spacing_nm,
+            min_width_um=rules.min_width_nm / 1000.0,
+            min_spacing_um=rules.min_spacing_nm / 1000.0,
         ),
         encoding="utf-8",
     )
@@ -162,8 +195,8 @@ def emit_icv_runset(
             cell_name=cell_name,
             layer=rules.layer,
             datatype=rules.datatype,
-            min_width_nm=rules.min_width_nm,
-            min_spacing_nm=rules.min_spacing_nm,
+            min_width_um=rules.min_width_nm / 1000.0,
+            min_spacing_um=rules.min_spacing_nm / 1000.0,
         ),
         encoding="utf-8",
     )
