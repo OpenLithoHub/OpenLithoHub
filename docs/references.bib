@@ -16,7 +16,7 @@
 %      OpenLithoHub — future maintainers should be able to audit without
 %      reading the paper.
 %
-% Last verified: 2026-05-22.
+% Last verified: 2026-05-23.
 
 @inproceedings{Yang2023_LithoBench,
   author    = {Zheng, Su and Yang, Haoyu and Yu, Bei and Pan, David Z. and Wong, Martin D. F.},
@@ -110,6 +110,17 @@
   doi     = {10.1109/TCAD.2020.3014184},
   url     = {https://arxiv.org/abs/1807.06446},
   note    = {Open-access preprint at the arXiv URL. ICCAD 2016 contest data at \url{https://github.com/phdyang007/ICCAD16-N7M2EUV}.}
+}
+
+@inproceedings{He2022_MAE,
+  author    = {He, Kaiming and Chen, Xinlei and Xie, Saining and Li, Yanghao and Doll{\'a}r, Piotr and Girshick, Ross},
+  title     = {Masked Autoencoders Are Scalable Vision Learners},
+  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year      = {2022},
+  pages     = {16000--16009},
+  doi       = {10.1109/CVPR52688.2022.01553},
+  url       = {https://arxiv.org/abs/2111.06377},
+  note      = {Canonical MAE recipe — ViT encoder, lightweight ViT decoder, 75\% random masking, mask-token-and-gather decoder input, 2D sin-cos pos-embeds, MSE reconstruction over masked patches with per-patch target normalisation. The OpenLithoHub \texttt{LayoutMAE} module (\texttt{src/openlithohub/models/layout\_mae.py}) follows this recipe with two project-level divergences pinned by RFC 0001: L1 loss instead of MSE, and no per-patch target normalisation (well-motivated for binary rasterised layouts). See \texttt{docs/audits/layout-mae-architecture.md}.}
 }
 
 @inproceedings{Clark2016_ASAP7,

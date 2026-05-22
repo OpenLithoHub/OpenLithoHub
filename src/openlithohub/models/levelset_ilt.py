@@ -17,6 +17,7 @@ paper values.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
@@ -91,21 +92,32 @@ class LevelSetILTModel(LithographyModel):
         self._cached_weights: torch.Tensor | None = None
         self._cached_grid: int | None = None
         self._compiled_hopkins_cache: dict[tuple[Any, ...], Any] = {}
+        # Guards the kernel cache so concurrent ``predict()`` callers (e.g. a
+        # FastAPI handler under load) cannot race on the check-then-rebuild
+        # path and leave the cache in a half-populated state. Mirrors the
+        # pattern in ``OpenILTModel``.
+        self._cache_lock = threading.Lock()
 
     def _ensure_hopkins_kernels(
         self, grid_size: int, device: torch.device
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        if (
-            self._cached_kernels is None
-            or self._cached_weights is None
-            or self._cached_grid != grid_size
-            or self._cached_kernels.device != device
-        ):
-            kernels, weights = compute_socs_kernels(self._hopkins_params, grid_size, device)
-            self._cached_kernels = kernels
-            self._cached_weights = weights
-            self._cached_grid = grid_size
-        return self._cached_kernels, self._cached_weights
+        # The lock serializes the check-then-rebuild so two concurrent
+        # callers cannot both observe a stale-or-empty cache and race on
+        # the write.
+        with self._cache_lock:
+            if (
+                self._cached_kernels is None
+                or self._cached_weights is None
+                or self._cached_grid != grid_size
+                or self._cached_kernels.device != device
+            ):
+                kernels, weights = compute_socs_kernels(self._hopkins_params, grid_size, device)
+                self._cached_kernels = kernels
+                self._cached_weights = weights
+                self._cached_grid = grid_size
+            assert self._cached_kernels is not None
+            assert self._cached_weights is not None
+            return self._cached_kernels, self._cached_weights
 
     def predict(self, design: torch.Tensor, **kwargs: Any) -> PredictionResult:
         """Optimize a mask to reproduce the target design under lithography simulation.

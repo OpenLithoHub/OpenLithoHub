@@ -10,13 +10,13 @@ OpenLithoHub ships a `LayoutMAE` module (`src/openlithohub/models/layout_mae.py`
 Compared `models/layout_mae.py` against:
 
 - `docs/rfcs/0001-base-model.md` — the project RFC that pins the recipe.
-- He et al., *Masked Autoencoders Are Scalable Vision Learners* (CVPR 2022, [arXiv:2111.06377](https://arxiv.org/abs/2111.06377)) — canonical MAE reference. **Not in `docs/references.bib` as of 2026-05-23 — see Findings.**
+- He et al., *Masked Autoencoders Are Scalable Vision Learners* (CVPR 2022, [arXiv:2111.06377](https://arxiv.org/abs/2111.06377)) — canonical MAE reference. Bib key: `He2022_MAE` (added to `docs/references.bib` 2026-05-23).
 
 Confidence:
 
-- **A** — verified against the source in this repo.
+- **A** — verified against the source in this repo, with paper-side claims grounded in the canonical MAE reference now pinned in `docs/references.bib` as `He2022_MAE`.
 - **B** — verified against RFC 0001's stated values.
-- **C** — derived from the canonical MAE reference (paper PDF not on disk).
+- **C** — derived from the canonical MAE reference where the paper PDF would otherwise be needed; with `He2022_MAE` now in the bib, items that were previously dual-marked **A** / **C** are upgraded to **A**.
 
 ## What RFC 0001 specifies
 
@@ -40,11 +40,11 @@ Confidence:
 | Decoder | `decoder_embed_dim=256`, `decoder_depth=4`, `decoder_num_heads=8` (ll. ~39–41). | **Yes.** | **A** |
 | Patch | `patch_size=16`, `image_size=256`, `in_channels=1` (single-channel rasterised layout). | **Yes** for spatial dims; canonical MAE uses 3-channel ImageNet. Single-channel is the project's domain choice. | **A** |
 | Patch embedding | `nn.Conv2d` with kernel=stride=patch_size (ll. ~95–97). | **Yes** — standard ViT patchify-via-conv. | **A** |
-| Position embedding | 2D sin-cos via `_sincos_pos_embed`, non-learned (`requires_grad=False`, ll. ~98–100). | **Yes** — matches MAE paper §A.1. | **A** / **C** |
-| Random masking | Per-batch sample-the-noise, argsort-shuffle, keep first `n*(1-mask_ratio)` indices (ll. ~141–154). `mask_ratio=0.75` default. | **Yes** — the canonical MAE shuffle algorithm. | **A** / **C** |
+| Position embedding | 2D sin-cos via `_sincos_pos_embed`, non-learned (`requires_grad=False`, ll. ~98–100). | **Yes** — matches MAE paper §A.1. | **A** |
+| Random masking | Per-batch sample-the-noise, argsort-shuffle, keep first `n*(1-mask_ratio)` indices (ll. ~141–154). `mask_ratio=0.75` default. | **Yes** — the canonical MAE shuffle algorithm. | **A** |
 | Encoder block | `LayerNorm → MultiheadAttention → residual → LayerNorm → MLP(GELU) → residual`, pre-norm (`_Block`, ll. ~70–84). | **Yes** — standard pre-norm Transformer. | **A** |
-| Decoder | Linear projection from encoder dim to `decoder_embed_dim`, mask-token expansion + restore-via-gather, decoder-side pos-embed addition, `decoder_depth` blocks, final linear → flat patch values (ll. ~178–189). | **Yes** — matches MAE paper §3.4. | **A** / **C** |
-| Mask token | Single learned embedding of shape `(1, 1, decoder_embed_dim)`, init `N(0, 0.02)` (ll. ~107–108). | **Yes** — matches MAE paper. | **A** / **C** |
+| Decoder | Linear projection from encoder dim to `decoder_embed_dim`, mask-token expansion + restore-via-gather, decoder-side pos-embed addition, `decoder_depth` blocks, final linear → flat patch values (ll. ~178–189). | **Yes** — matches MAE paper §3.4. | **A** |
+| Mask token | Single learned embedding of shape `(1, 1, decoder_embed_dim)`, init `N(0, 0.02)` (ll. ~107–108). | **Yes** — matches MAE paper. | **A** |
 | Reconstruction loss | L1 over masked patches only — `(pred − target).abs().mean(dim=-1)` weighted by `mask`, summed and normalised (ll. ~192–199). | **Yes** in form. **The MAE paper uses MSE (per-patch L2), not L1.** RFC 0001 explicitly chooses L1; this is a documented divergence. | **A** |
 | Patch normalization | **Not implemented.** MAE paper §3.4 normalizes target patches by per-patch mean/std before computing loss. | **No** — RFC 0001 does not mention this. Possible quality gap on natural-image-like layouts; less likely to matter on binary rasterised layouts (mean/std are nearly constant per patch). | **A** |
 | `train_step` | Single step: forward → loss → backward → optimizer.step. Returns scalar loss. | **Yes** — minimal training-loop primitive. | **A** |
@@ -64,13 +64,13 @@ Confidence:
 
 5. **No fine-tune adapter API.** RFC 0001 explicitly defers this to v0.2. The `encode()` method is the documented frozen-feature path for any consumer that wants to pretrain elsewhere and consume features here.
 
-6. **`Yang2022_MAE` (or equivalent) is not in `docs/references.bib`.** Confidence on paper-side claims is **C**. Adding the He et al. 2022 entry would let us promote the items marked **C** to **A** without the audit needing the paper PDF on disk.
+6. **`He2022_MAE` is now in `docs/references.bib`** (added 2026-05-23). Paper-side architecture claims that were previously dual-marked **A** / **C** are now **A** — the canonical citation is pinned in the bib, so the audit no longer relies on an out-of-tree paper note. Adding `docs/papers/He2022_MAE.pdf` would be a further nicety but is no longer required for **A** confidence on these rows.
 
 ## Implications for users
 
 - **Treat this as a recipe, not a model.** Random-init `LayoutMAE()` will not give meaningful features. The work to pretrain on a layout corpus is downstream of this audit.
 - **Don't compare reconstruction loss values to published MAE numbers.** L1 vs. MSE + no patch-normalization → different absolute scale.
-- **Citation hygiene:** if you publish using this module, cite the canonical MAE paper (He et al., CVPR 2022) for architecture lineage, and `docs/rfcs/0001-base-model.md` for the project-level recipe choices (L1, single-channel, 256×256, 16×16 patches). Once the He et al. entry lands in `references.bib`, use the canonical key (suggested `He2022_MAE`).
+- **Citation hygiene:** if you publish using this module, cite `He2022_MAE` (now in `docs/references.bib`) for architecture lineage, and `docs/rfcs/0001-base-model.md` for the project-level recipe choices (L1, single-channel, 256×256, 16×16 patches).
 
 ## Re-audit triggers
 
@@ -80,4 +80,4 @@ Re-run this audit when any of the following change:
 - `reconstruction_loss` switches from L1 to MSE, or gains target patch-normalization.
 - `set_decoder` / fine-tune adapter API lands.
 - A `from_pretrained` path lands and v0.2 pretrained weights are published.
-- The He et al. MAE paper PDF lands in `docs/papers/` (or its bib entry lands in `docs/references.bib`) — promote items marked **C** to **A**.
+- The He et al. MAE paper PDF lands in `docs/papers/` — a nicety since `He2022_MAE` is already in `docs/references.bib` (2026-05-23), but useful for any future claim that needs a direct quote rather than a citation.
