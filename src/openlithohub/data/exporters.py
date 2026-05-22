@@ -302,7 +302,7 @@ class ParquetExporter:
                     "meta": pa.array(metas, type=pa.string()),
                 }
             )
-            pq.write_table(table, path, compression=self.compression)  # type: ignore[no-untyped-call]
+            pq.write_table(table, path, compression=self.compression)  # type: ignore[no-untyped-call,unused-ignore]
 
         croissant_path = self.output_dir / "croissant.json"
         croissant_path.write_text(

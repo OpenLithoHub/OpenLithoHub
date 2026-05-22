@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-from scipy.optimize import linear_sum_assignment
 
 
 def compute_hotspot_detection(
@@ -114,6 +113,12 @@ def compute_hotspot_detection(
     # solver still runs on rectangular matrices (it requires a square cost
     # internally, but linear_sum_assignment handles non-square fine; only
     # finite costs matter). We post-filter those infeasible pairings.
+    # Lazy scipy import: scipy lives in the [workflow] extra, but
+    # importing this module unconditionally pulls scipy into every test
+    # shard via benchmark/metrics/__init__.py. Defer to call time so
+    # only callers that actually score hotspots pay the dependency.
+    from scipy.optimize import linear_sum_assignment
+
     cost = dists.detach().cpu().numpy().astype(np.float64)
     big = radius + 1.0  # any value strictly greater than radius
     cost_for_solver = np.where(cost <= radius, cost, big)
