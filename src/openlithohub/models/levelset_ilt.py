@@ -157,12 +157,22 @@ class LevelSetILTModel(LithographyModel):
             if compile_forward:
                 cache_key = (
                     target.shape[0],
+                    target.shape[-1],
                     str(target.device),
                     str(dtype),
                     forward_model,
                 )
                 compiled = self._compiled_hopkins_cache.get(cache_key)
                 if compiled is None:
+                    # Lift dynamo's per-function recompile ceiling so a run that
+                    # legitimately encounters several tile sizes (e.g. ORFS with
+                    # mixed-pitch designs) keeps cache hits instead of evicting.
+                    try:
+                        import torch._dynamo as _dynamo
+
+                        _dynamo.config.cache_size_limit = max(_dynamo.config.cache_size_limit, 64)
+                    except Exception:  # noqa: BLE001, S110 — best-effort tuning; old PyTorch lacks the symbol
+                        pass
                     try:
                         compiled = torch.compile(hopkins_fn, mode="reduce-overhead", dynamic=False)
                     except Exception:

@@ -95,6 +95,25 @@ def load_layout(
     dbu_nm = layout.dbu * 1000.0
     pixels_per_dbu = dbu_nm / pixel_nm
 
+    # Non-integer ratios silently collapse adjacent DBU coordinates to the
+    # same pixel after ``round()``, which shifts polygon edges by 1 px.
+    # At advanced nodes 1 px == one design rule violation. Warn the
+    # caller so they can pick a pixel_nm that divides DBU cleanly (e.g.
+    # 1.0 nm with DBU=0.001 um, not 1.5 nm).
+    if dbu_nm > 0 and pixel_nm > 0:
+        ratio = dbu_nm / pixel_nm
+        if abs(ratio - round(ratio)) > 1e-6 and abs(1.0 / ratio - round(1.0 / ratio)) > 1e-6:
+            import warnings
+
+            warnings.warn(
+                f"load_layout: pixel_nm={pixel_nm} does not divide DBU "
+                f"({dbu_nm} nm) cleanly; adjacent vertices may collapse to "
+                f"the same pixel and polygon edges may shift by 1 px. "
+                f"Pick pixel_nm such that dbu_nm / pixel_nm is integer.",
+                UserWarning,
+                stacklevel=2,
+            )
+
     w_px = max(1, int(width_dbu * pixels_per_dbu))
     h_px = max(1, int(height_dbu * pixels_per_dbu))
 

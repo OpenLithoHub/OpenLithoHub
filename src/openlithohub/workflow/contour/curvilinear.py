@@ -99,6 +99,25 @@ def fit_bspline(
                     )
                 continue
 
+        # Drop consecutive duplicate points anywhere in the loop. Moore
+        # neighborhood tracing in ``trace_contour`` can revisit the same
+        # boundary edge, producing zero-length segments that make
+        # ``splprep`` raise "Invalid inputs" or singular-matrix errors.
+        diffs = np.diff(loop, axis=0, append=loop[:1])
+        keep = np.any(np.abs(diffs) > 1e-9, axis=1)
+        if not np.all(keep):
+            loop = loop[keep]
+            n = len(loop)
+            if n < 5:
+                if warn_on_skip:
+                    warnings.warn(
+                        f"fit_bspline: loop {idx} reduced to {n} points after "
+                        f"consecutive-duplicate dedup; skipping.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                continue
+
         loop_scaled = loop * pixel_size_nm
         smoothing = (tolerance_nm**2) * n
 

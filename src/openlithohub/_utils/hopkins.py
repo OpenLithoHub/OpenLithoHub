@@ -26,6 +26,7 @@ auto-differentiable (the mask is the optimization variable in ILT).
 from __future__ import annotations
 
 import math
+import warnings
 from collections import OrderedDict
 from collections.abc import Hashable
 from dataclasses import dataclass
@@ -389,6 +390,24 @@ def simulate_aerial_image_hopkins(
         if params is None:
             raise ValueError("Provide either (params) or (kernels and weights).")
         kernels, weights = compute_socs_kernels(params, H, mask4d.device)
+
+    if params is not None:
+        # Tile must be wider than a few Rayleigh units, otherwise the
+        # circular FFT convolution wraps optical energy from one edge to
+        # the other and contaminates the interior. ~4 Rayleigh
+        # (lambda/NA) gives the kernel room to decay before wrapping.
+        rayleigh_nm = params.wavelength_nm / max(params.na, 1e-6)
+        tile_extent_nm = H * params.pixel_size_nm
+        if tile_extent_nm < 4.0 * rayleigh_nm:
+            warnings.warn(
+                f"Hopkins forward: tile extent {tile_extent_nm:.0f} nm "
+                f"({H} px x {params.pixel_size_nm} nm) is smaller than "
+                f"4*lambda/NA={4 * rayleigh_nm:.0f} nm; circular FFT "
+                f"wraparound will pollute tile edges. Use larger tiles "
+                f"or pad before calling.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     image = mask4d.to(torch.float32).squeeze(1)  # (B, H, W)
     K = kernels.shape[0]  # noqa: N806

@@ -106,6 +106,12 @@ def _get_or_load_model(name: str, kwargs: dict[str, Any]) -> tuple[Any, threadin
                     evicted.teardown()
                 except Exception:  # noqa: BLE001 — teardown failure shouldn't block eviction
                     logger.exception("teardown failed while evicting %r", evicted_key)
+                # teardown() drops Python refs, but CUDA caching
+                # allocator holds the freed VRAM until empty_cache().
+                # Without this, an LRU-bounded cache still leaks
+                # GPU memory on a long-running worker.
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 logger.info(
                     "evicted model %r from cache (capacity=%d)",
                     evicted_key,
@@ -174,9 +180,17 @@ def _run_optimize(
         output_path = fallback
         export_format = "torch"
 
+    n_tiles = len(tiles)
+    # Drop request-local tensors and flush the CUDA caching allocator so
+    # per-request activations from this optimize() don't accumulate as
+    # reserved (but unused) VRAM across many requests on the same worker.
+    del layout_tensor, tiles, tile_results, optimized
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     return {
         "shape": [int(h), int(w)],
-        "tiles": len(tiles),
+        "tiles": n_tiles,
         "halo_px": int(halo_px),
         "writer": writer,
         "export_format": export_format,
