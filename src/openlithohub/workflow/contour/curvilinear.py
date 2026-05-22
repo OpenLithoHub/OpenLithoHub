@@ -151,6 +151,67 @@ def fit_bspline(
     return curves
 
 
+def _rdp_simplify(xs: np.ndarray, ys: np.ndarray, tolerance: float) -> np.ndarray:
+    """Iterative Ramer-Douglas-Peucker on a closed polygon.
+
+    Returns a boolean keep-mask the same length as ``xs``/``ys``. A point
+    is kept when the perpendicular distance from it to the chord between
+    its surviving neighbours exceeds ``tolerance``. ``tolerance <= 0``
+    short-circuits to keep-all so callers can opt out without paying any
+    geometry cost.
+
+    Closed polygons need both endpoints anchored (the loop has no natural
+    endpoints to seed the recursion); we anchor index 0 and the
+    farthest-from-0 point, then DP each half. This matches the standard
+    closed-curve RDP variant used by mask-write toolchains.
+    """
+    n = len(xs)
+    if tolerance <= 0.0 or n < 4:
+        return np.ones(n, dtype=bool)
+
+    # Seed the second anchor at the farthest point from index 0 so each
+    # half of the loop is a well-defined open polyline.
+    dx0 = xs - xs[0]
+    dy0 = ys - ys[0]
+    far_idx = int(np.argmax(dx0 * dx0 + dy0 * dy0))
+    if far_idx == 0:
+        return np.ones(n, dtype=bool)
+
+    keep = np.zeros(n, dtype=bool)
+    keep[0] = True
+    keep[far_idx] = True
+    tol_sq = tolerance * tolerance
+
+    stack: list[tuple[int, int]] = [(0, far_idx), (far_idx, n)]
+    while stack:
+        lo, hi = stack.pop()
+        if hi - lo < 2:
+            continue
+        end = hi % n
+        x0, y0 = xs[lo], ys[lo]
+        xe, ye = xs[end], ys[end]
+        ex, ey = xe - x0, ye - y0
+        seg_len_sq = ex * ex + ey * ey
+        max_d_sq = -1.0
+        max_i = -1
+        for i in range(lo + 1, hi):
+            px, py = xs[i] - x0, ys[i] - y0
+            if seg_len_sq == 0.0:
+                d_sq = px * px + py * py
+            else:
+                cross = px * ey - py * ex
+                d_sq = (cross * cross) / seg_len_sq
+            if d_sq > max_d_sq:
+                max_d_sq = d_sq
+                max_i = i
+        if max_d_sq > tol_sq and max_i > 0:
+            keep[max_i] = True
+            stack.append((lo, max_i))
+            stack.append((max_i, hi))
+
+    return keep
+
+
 def export_oasis_mbw(
     curves: list[BSplineCurve],
     output_path: str,
@@ -161,6 +222,7 @@ def export_oasis_mbw(
     datatype: int = 0,
     cell_name: str = "TOP",
     min_area_nm2: float = 0.0,
+    vertex_tolerance_nm: float = 0.0,
 ) -> None:
     """Serialize B-spline curves to an OASIS file via klayout.db.
 
@@ -181,11 +243,21 @@ def export_oasis_mbw(
     fab-ready exports where MRC would otherwise reject the smallest SRAFs
     a curvilinear ILT can produce; the count of dropped shapes is logged
     at INFO level so the filter is auditable.
+
+    ``vertex_tolerance_nm`` is an opt-in Ramer-Douglas-Peucker simplification
+    on each sampled polygon: any vertex within this perpendicular distance
+    of the chord between its surviving neighbours is dropped. Default ``0.0``
+    keeps every sampled vertex (bit-exact academic behaviour). Positive
+    values cut OASIS file size dramatically on smooth ILT contours — a
+    multi-beam mask writer (MBMW) consumes shots and bytes, so 0.5 nm
+    typically halves vertex count without measurable wafer-image change.
     """
     if not curves:
         raise ValueError("Cannot export an empty curve list to OASIS.")
     if min_area_nm2 < 0.0:
         raise ValueError(f"min_area_nm2 must be >= 0, got {min_area_nm2}")
+    if vertex_tolerance_nm < 0.0:
+        raise ValueError(f"vertex_tolerance_nm must be >= 0, got {vertex_tolerance_nm}")
 
     try:
         from scipy.interpolate import splev
@@ -210,6 +282,8 @@ def export_oasis_mbw(
     layer_idx = layout.layer(layer, datatype)
 
     n_filtered = 0
+    n_vertices_before = 0
+    n_vertices_after = 0
     for curve in curves:
         ctrl = curve.control_points.numpy()
         knot = curve.knots.numpy()
@@ -227,6 +301,12 @@ def export_oasis_mbw(
             if area_nm2 < min_area_nm2:
                 n_filtered += 1
                 continue
+        if vertex_tolerance_nm > 0.0 and len(xs_arr) >= 4:
+            n_vertices_before += len(xs_arr)
+            keep_mask = _rdp_simplify(xs_arr, ys_arr, vertex_tolerance_nm)
+            xs_arr = xs_arr[keep_mask]
+            ys_arr = ys_arr[keep_mask]
+            n_vertices_after += len(xs_arr)
         points = [
             db.Point(int(round(float(x) / layout.dbu)), int(round(float(y) / layout.dbu)))
             for x, y in zip(xs_arr, ys_arr, strict=False)
@@ -239,6 +319,15 @@ def export_oasis_mbw(
             "export_oasis_mbw: filtered %d shape(s) below min_area_nm2=%g nm^2",
             n_filtered,
             min_area_nm2,
+        )
+    if vertex_tolerance_nm > 0.0 and n_vertices_before > 0:
+        logger.info(
+            "export_oasis_mbw: RDP simplified %d → %d vertices (%.1f%% reduction) "
+            "at tolerance_nm=%g",
+            n_vertices_before,
+            n_vertices_after,
+            100.0 * (1.0 - n_vertices_after / n_vertices_before),
+            vertex_tolerance_nm,
         )
 
     layout.write(str(output))

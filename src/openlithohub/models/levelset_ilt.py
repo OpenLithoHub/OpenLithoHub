@@ -18,6 +18,7 @@ paper values.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Literal
 
 import torch
@@ -113,7 +114,7 @@ class LevelSetILTModel(LithographyModel):
             design: Target design pattern (H, W), binary.
             **kwargs: Optional overrides — iterations, lr, sigma_px, tv_weight,
                 forward_model, hopkins_params, device, dtype, compile_forward,
-                process_window, pw_corners.
+                process_window, pw_corners, checkpoint_dir, save_freq, resume_from.
 
                 ``process_window=True`` swaps the nominal-only fidelity loss
                 for ``workflow.process_window.pw_fidelity_loss`` evaluated
@@ -121,6 +122,14 @@ class LevelSetILTModel(LithographyModel):
                 ``workflow.process_window.DEFAULT_PW_CORNERS``). Currently only
                 supported on the ``gaussian`` forward model — pass
                 ``forward_model="gaussian"`` (the default) when enabling PW.
+
+                ``checkpoint_dir`` (``str | Path | None``) + ``save_freq``
+                (int, default 0 = off) write the running ``mask_logit`` and
+                Adam state to ``{checkpoint_dir}/ckpt_iter{N}.pt`` every
+                ``save_freq`` iterations. ``resume_from`` (``str | Path``)
+                loads such a file and continues from its iteration counter,
+                so a SLURM preemption or CUDA crash does not erase prior
+                progress.
         """
         target = design.detach().float()
         if target.ndim > 2:
@@ -137,6 +146,17 @@ class LevelSetILTModel(LithographyModel):
         device = kwargs.get("device")
         process_window = kwargs.get("process_window", False)
         pw_corners = kwargs.get("pw_corners", DEFAULT_PW_CORNERS)
+        checkpoint_dir = kwargs.get("checkpoint_dir")
+        save_freq = int(kwargs.get("save_freq", 0))
+        resume_from = kwargs.get("resume_from")
+        if save_freq < 0:
+            raise ValueError(f"save_freq must be >= 0, got {save_freq}")
+        if save_freq > 0 and checkpoint_dir is None:
+            raise ValueError("save_freq > 0 requires checkpoint_dir to be set.")
+        ckpt_dir_path: Path | None = None
+        if checkpoint_dir is not None:
+            ckpt_dir_path = Path(checkpoint_dir)
+            ckpt_dir_path.mkdir(parents=True, exist_ok=True)
         if process_window and forward_model != "gaussian":
             raise ValueError(
                 "process_window=True currently only supports forward_model='gaussian'; "
@@ -197,8 +217,24 @@ class LevelSetILTModel(LithographyModel):
 
         best_loss = float("inf")
         best_mask: torch.Tensor = target.clone()
+        start_iter = 0
 
-        for _ in range(iterations):
+        if resume_from is not None:
+            # ``weights_only=False`` because we serialise an Adam state_dict
+            # alongside the tensor — pickled Python dicts that torch refuses
+            # to load under the 2.6+ default. Checkpoints are written by
+            # this code path only, so the trust boundary is the user's own
+            # filesystem.
+            state = torch.load(str(resume_from), map_location=target.device, weights_only=False)
+            with torch.no_grad():
+                mask_logit.copy_(state["mask_logit"])
+            optimizer.load_state_dict(state["optimizer"])
+            start_iter = int(state.get("iteration", 0))
+            best_loss = float(state.get("best_loss", best_loss))
+            if "best_mask" in state:
+                best_mask = state["best_mask"].to(target.device)
+
+        for it in range(start_iter, iterations):
             optimizer.zero_grad()
 
             mask_continuous = torch.sigmoid(mask_logit)
@@ -240,6 +276,22 @@ class LevelSetILTModel(LithographyModel):
             if loss_val < best_loss:
                 best_loss = loss_val
                 best_mask = (mask_continuous > 0.5).float().detach()
+
+            if save_freq > 0 and ckpt_dir_path is not None and (it + 1) % save_freq == 0:
+                # ``it + 1`` is the count of *completed* steps, so a resume
+                # from this file restarts iteration index at it+1 and runs
+                # exactly ``iterations - (it+1)`` more steps — total work
+                # equals an uninterrupted run.
+                torch.save(
+                    {
+                        "iteration": it + 1,
+                        "mask_logit": mask_logit.detach().clone(),
+                        "optimizer": optimizer.state_dict(),
+                        "best_loss": best_loss,
+                        "best_mask": best_mask.detach().clone(),
+                    },
+                    str(ckpt_dir_path / f"ckpt_iter{it + 1}.pt"),
+                )
 
         return PredictionResult(
             mask=best_mask,

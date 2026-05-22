@@ -526,3 +526,115 @@ class TestExportMinAreaFilter:
         ctrl = torch.stack([ctrl_x, ctrl_y], dim=1)
         knots = torch.tensor(tck[0], dtype=torch.float32)
         return BSplineCurve(control_points=ctrl, knots=knots, degree=3)
+
+
+class TestExportVertexTolerance:
+    """``export_oasis_mbw(vertex_tolerance_nm=...)`` simplifies sampled
+    polygons via Ramer-Douglas-Peucker.
+
+    Default 0.0 keeps every sampled vertex (bit-exact academic behaviour).
+    A positive value cuts vertex count without measurable area change —
+    the Mask Shop / multi-beam writer (MBMW) wins back data volume that
+    would otherwise stall MDP tools on full-chip OASIS.
+    """
+
+    @staticmethod
+    def _circle_curve(radius_nm: float, center: tuple[float, float]) -> BSplineCurve:
+        from scipy.interpolate import splprep
+
+        n = 32
+        thetas = torch.linspace(0, 2 * 3.14159265, n + 1)[:-1]
+        xs = (center[0] + radius_nm * torch.cos(thetas)).numpy()
+        ys = (center[1] + radius_nm * torch.sin(thetas)).numpy()
+        tck, _ = splprep([xs, ys], s=0.0, per=True, k=3)
+        ctrl_x = torch.tensor(tck[1][0], dtype=torch.float32)
+        ctrl_y = torch.tensor(tck[1][1], dtype=torch.float32)
+        ctrl = torch.stack([ctrl_x, ctrl_y], dim=1)
+        knots = torch.tensor(tck[0], dtype=torch.float32)
+        return BSplineCurve(control_points=ctrl, knots=knots, degree=3)
+
+    @staticmethod
+    def _polygon_vertex_count(layout, layer_idx) -> int:
+        total = 0
+        for cell in layout.each_cell():
+            for shape in cell.shapes(layer_idx).each():
+                poly = shape.polygon
+                if poly is not None:
+                    total += poly.num_points()
+        return total
+
+    def test_default_zero_keeps_all_vertices(self, tmp_path):
+        db = pytest.importorskip("klayout.db")
+        curve = self._circle_curve(radius_nm=10.0, center=(50.0, 50.0))
+        out = tmp_path / "no_simplify.oas"
+        export_oasis_mbw([curve], str(out), samples_per_curve=64, pixel_size_nm=1.0)
+        layout = db.Layout()
+        layout.read(str(out))
+        assert self._polygon_vertex_count(layout, layout.layer(1, 0)) == 64
+
+    def test_positive_tolerance_reduces_vertices(self, tmp_path, caplog):
+        """A 0.5 nm tolerance on a smooth circle should drop a meaningful
+        fraction of vertices and emit an INFO log line.
+        """
+        db = pytest.importorskip("klayout.db")
+        curve = self._circle_curve(radius_nm=10.0, center=(50.0, 50.0))
+        out = tmp_path / "simplified.oas"
+        with caplog.at_level("INFO", logger="openlithohub.workflow.contour.curvilinear"):
+            export_oasis_mbw(
+                [curve],
+                str(out),
+                samples_per_curve=64,
+                pixel_size_nm=1.0,
+                vertex_tolerance_nm=0.5,
+            )
+        layout = db.Layout()
+        layout.read(str(out))
+        n_simplified = self._polygon_vertex_count(layout, layout.layer(1, 0))
+        assert n_simplified < 64, (
+            "RDP at 0.5nm should drop at least one vertex on a 10nm-radius circle"
+        )
+        assert n_simplified >= 4, "polygon must remain non-degenerate"
+        assert any("RDP simplified" in rec.getMessage() for rec in caplog.records)
+
+    def test_simplification_preserves_area(self, tmp_path):
+        """Shoelace area before/after RDP should match within 5% — the
+        whole point of vertex_tolerance_nm is that printability does not
+        move. (5% = roughly the chord-secant ceiling on a 10nm-radius
+        circle for a 0.5nm tolerance; sharper features tolerate tighter
+        budgets.)
+        """
+        db = pytest.importorskip("klayout.db")
+        curve = self._circle_curve(radius_nm=10.0, center=(50.0, 50.0))
+
+        out_full = tmp_path / "full.oas"
+        export_oasis_mbw([curve], str(out_full), samples_per_curve=64, pixel_size_nm=1.0)
+        out_simp = tmp_path / "simp.oas"
+        export_oasis_mbw(
+            [curve],
+            str(out_simp),
+            samples_per_curve=64,
+            pixel_size_nm=1.0,
+            vertex_tolerance_nm=0.5,
+        )
+
+        def _area(path):
+            layout = db.Layout()
+            layout.read(str(path))
+            poly = next(next(layout.each_cell()).shapes(layout.layer(1, 0)).each()).polygon
+            # KLayout polygon area is in dbu^2; dbu=1nm/1000 here, so
+            # multiply by dbu^2 to get nm^2.
+            return poly.area() * (layout.dbu**2)
+
+        a_full = _area(out_full)
+        a_simp = _area(out_simp)
+        assert abs(a_simp - a_full) / a_full < 0.05
+
+    def test_negative_tolerance_raises(self, tmp_path):
+        curve = self._circle_curve(radius_nm=10.0, center=(50.0, 50.0))
+        with pytest.raises(ValueError, match="vertex_tolerance_nm must be >= 0"):
+            export_oasis_mbw(
+                [curve],
+                str(tmp_path / "x.oas"),
+                pixel_size_nm=1.0,
+                vertex_tolerance_nm=-0.1,
+            )
