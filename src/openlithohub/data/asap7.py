@@ -59,6 +59,79 @@ CANONICAL_CELLS: tuple[str, ...] = (
 DEFAULT_DESIGN_LAYER: tuple[int, int] = LAYERS["asap7"].metal1
 
 
+# Recognised flavors and tracks for ``resolve_cell_name``. Verified
+# against the asap7sc7p5t_28 LEF on 2026-05-22:
+#   <FUNC><DRIVE>_ASAP7_<TRACK>t_<FLAVOR>
+# where TRACK ∈ {6, 75} (6T or 7.5T library) and
+#       FLAVOR ∈ {R (regular-Vt), L (low-Vt), SL (super-low-Vt), SRAM}.
+_ASAP7_FLAVORS: frozenset[str] = frozenset({"R", "L", "SL", "SRAM"})
+_ASAP7_TRACKS: frozenset[str] = frozenset({"6", "75"})
+
+
+def resolve_cell_name(
+    shorthand: str,
+    *,
+    drive: str = "x1",
+    flavor: str = "R",
+    track: str = "75",
+) -> str:
+    """Expand a function-name shorthand into the ASAP7 canonical cell name.
+
+    The ASAP7 stdcell library names every cell as
+    ``<FUNC><DRIVE>_ASAP7_<TRACK>t_<FLAVOR>``. Issue spec language often
+    uses the bare function name (``"INV"``, ``"NAND2"``, ``"DFFHQN"``);
+    this helper composes the canonical string a downstream reader
+    actually expects, with sensible defaults for drive / flavor / track.
+
+    Args:
+        shorthand: Function name, with or without trailing ``x...`` drive
+            spec. ``"INV"``, ``"INVx1"``, and ``"INVx1_ASAP7_75t_R"`` all
+            resolve identically. Already-canonical names pass through
+            unchanged.
+        drive: Drive-strength suffix (``"x1"``, ``"x2"``, ``"xp33"``,
+            ``"x1p5"``, ...). Used only when ``shorthand`` does not
+            already include one. ``p`` is the decimal separator
+            (e.g. ``"xp5"`` is ½×).
+        flavor: ``"R"`` (regular-Vt, default), ``"L"`` (low-Vt),
+            ``"SL"`` (super-low-Vt), or ``"SRAM"``.
+        track: ``"75"`` for the 7.5-track library (default) or ``"6"``
+            for the 6-track sibling library.
+
+    Returns:
+        The canonical cell-name string, e.g. ``"INVx1_ASAP7_75t_R"``.
+
+    Raises:
+        ValueError: For unknown flavor/track values.
+
+    Examples:
+        >>> resolve_cell_name("INV")
+        'INVx1_ASAP7_75t_R'
+        >>> resolve_cell_name("NAND2", drive="x2", flavor="L")
+        'NAND2x2_ASAP7_75t_L'
+        >>> resolve_cell_name("INVx1_ASAP7_75t_R")  # passthrough
+        'INVx1_ASAP7_75t_R'
+    """
+    if flavor not in _ASAP7_FLAVORS:
+        raise ValueError(f"flavor must be one of {sorted(_ASAP7_FLAVORS)}, got {flavor!r}")
+    if track not in _ASAP7_TRACKS:
+        raise ValueError(f"track must be one of {sorted(_ASAP7_TRACKS)}, got {track!r}")
+    # Already canonical? Pass through unchanged.
+    if "_ASAP7_" in shorthand:
+        return shorthand
+    # Drive baked into the shorthand (e.g. "INVx1", "NAND2xp5")?
+    # The "x" must be lowercase and precede a digit or "p".
+    func = shorthand
+    drive_suffix = drive
+    for i, ch in enumerate(shorthand):
+        if ch == "x" and i > 0 and i + 1 < len(shorthand):
+            tail = shorthand[i + 1 :]
+            if tail and (tail[0].isdigit() or tail[0] == "p"):
+                func = shorthand[:i]
+                drive_suffix = shorthand[i:]
+                break
+    return f"{func}{drive_suffix}_ASAP7_{track}t_{flavor}"
+
+
 def rasterize_cell_layer(
     layout: Any,
     cell: Any,
@@ -136,7 +209,10 @@ class Asap7Dataset(DatasetAdapter):
             ``Asap7Dataset.download(root, accept_license=True)`` to
             create one.
         cells: Cell names to expose, in order. Defaults to
-            ``CANONICAL_CELLS``.
+            ``CANONICAL_CELLS``. Function-name shorthand (``"INV"``,
+            ``"NAND2"``, ``"DFFHQN"``) is accepted alongside canonical
+            ASAP7 strings (``"INVx1_ASAP7_75t_R"``) — see
+            ``resolve_shorthand`` and ``resolve_cell_name``.
         design_layer: ``(layer, datatype)`` to rasterize as the design
             tensor. Defaults to M1 (10, 0).
         pixel_nm: Raster pixel size in nm. Defaults to 1.0 to match the
@@ -145,6 +221,12 @@ class Asap7Dataset(DatasetAdapter):
         gds_path: Optional explicit override for the GDS file path. If
             unset, the adapter globs ``asap7sc7p5t_27/GDS/...`` under
             ``root`` and picks the lexicographically last match.
+        resolve_shorthand: When True (default), attempt to expand
+            function-name shorthand into the canonical ASAP7 cell-name
+            (drive=x1, flavor=R, track=75) before raising KeyError.
+            ``LithoSample.metadata['cell_name']`` reflects the resolved
+            string; ``metadata['requested_cell_name']`` records the
+            original input. Set False to require exact-match names.
 
     The adapter requires ``klayout`` (already pinned in pyproject.toml).
     """
@@ -156,6 +238,7 @@ class Asap7Dataset(DatasetAdapter):
         design_layer: tuple[int, int] = DEFAULT_DESIGN_LAYER,
         pixel_nm: float = 1.0,
         gds_path: str | Path | None = None,
+        resolve_shorthand: bool = True,
     ) -> None:
         self.root = Path(root)
         if not self.root.exists():
@@ -163,6 +246,7 @@ class Asap7Dataset(DatasetAdapter):
         self.design_layer = design_layer
         self.pixel_nm = float(pixel_nm)
         self.cells: tuple[str, ...] = tuple(cells) if cells is not None else CANONICAL_CELLS
+        self.resolve_shorthand = resolve_shorthand
         self._gds_path = Path(gds_path) if gds_path is not None else self._resolve_gds_path()
         if not self._gds_path.exists():
             raise FileNotFoundError(
@@ -200,6 +284,19 @@ class Asap7Dataset(DatasetAdapter):
         layout = kdb.Layout()
         layout.read(str(self._gds_path))
         cell = layout.cell(name)
+        resolved_name = name
+        if cell is None and self.resolve_shorthand and "_ASAP7_" not in name:
+            # Caller passed a function-name shorthand ("INV", "NAND2"); try the
+            # canonical default flavour/drive before giving up. Records the
+            # resolved string in metadata so the caller can see what was picked.
+            try:
+                candidate = resolve_cell_name(name)
+            except ValueError:
+                candidate = None
+            if candidate is not None:
+                cell = layout.cell(candidate)
+                if cell is not None:
+                    resolved_name = candidate
         if cell is None:
             available = sorted(c.name for c in layout.each_cell())[:10]
             raise KeyError(
@@ -212,7 +309,8 @@ class Asap7Dataset(DatasetAdapter):
             "dataset": "asap7",
             "pdk": "asap7",
             "pdk_variant": "asap7sc7p5t_27_R",
-            "cell_name": name,
+            "cell_name": resolved_name,
+            "requested_cell_name": name,
             "source_gds": str(self._gds_path),
             "dbu_nm": layout.dbu * 1000.0,
             "pixel_nm": self.pixel_nm,

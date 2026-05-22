@@ -19,6 +19,7 @@ from openlithohub.data.asap7 import (  # noqa: E402
     CANONICAL_CELLS,
     DEFAULT_DESIGN_LAYER,
     rasterize_cell_layer,
+    resolve_cell_name,
 )
 
 
@@ -184,3 +185,71 @@ class TestRasterizeHelper:
         cell = layout.cell("INVx1_ASAP7_75t_R")
         arr, _ = rasterize_cell_layer(layout, cell, DEFAULT_DESIGN_LAYER, pixel_nm=1.0)
         assert arr.sum() > 0
+
+
+class TestResolveCellName:
+    def test_bare_function_defaults(self):
+        assert resolve_cell_name("INV") == "INVx1_ASAP7_75t_R"
+        assert resolve_cell_name("NAND2") == "NAND2x1_ASAP7_75t_R"
+        assert resolve_cell_name("DFFHQN") == "DFFHQNx1_ASAP7_75t_R"
+
+    def test_function_with_drive_passed_through(self):
+        # If the shorthand already names a drive, do not double-append.
+        assert resolve_cell_name("INVx2") == "INVx2_ASAP7_75t_R"
+        assert resolve_cell_name("NAND2xp5") == "NAND2xp5_ASAP7_75t_R"
+        assert resolve_cell_name("BUFx1p5") == "BUFx1p5_ASAP7_75t_R"
+
+    def test_canonical_passes_through_unchanged(self):
+        for name in CANONICAL_CELLS:
+            assert resolve_cell_name(name) == name
+
+    def test_explicit_drive_flavor_track(self):
+        assert resolve_cell_name("NAND2", drive="x2", flavor="L") == "NAND2x2_ASAP7_75t_L"
+        assert (
+            resolve_cell_name("INV", drive="xp33", flavor="SL", track="6") == "INVxp33_ASAP7_6t_SL"
+        )
+
+    def test_invalid_flavor_raises(self):
+        with pytest.raises(ValueError, match="flavor must be"):
+            resolve_cell_name("INV", flavor="X")
+
+    def test_invalid_track_raises(self):
+        with pytest.raises(ValueError, match="track must be"):
+            resolve_cell_name("INV", track="9")
+
+
+class TestAsap7DatasetShorthand:
+    def test_shorthand_loads_canonical_cell(self, asap7_root):
+        # Plain "INV" should resolve to "INVx1_ASAP7_75t_R" — exactly what
+        # B1 (issue #4 verification round) said callers would expect.
+        ds = Asap7Dataset(root=asap7_root, cells=["INV"])
+        sample = ds[0]
+        md = sample.metadata
+        assert md["cell_name"] == "INVx1_ASAP7_75t_R"
+        assert md["requested_cell_name"] == "INV"
+
+    def test_shorthand_with_drive_loads(self, asap7_root):
+        ds = Asap7Dataset(root=asap7_root, cells=["NAND2x1"])
+        md = ds[0].metadata
+        assert md["cell_name"] == "NAND2x1_ASAP7_75t_R"
+        assert md["requested_cell_name"] == "NAND2x1"
+
+    def test_canonical_records_request_unchanged(self, asap7_root):
+        ds = Asap7Dataset(root=asap7_root, cells=["INVx1_ASAP7_75t_R"])
+        md = ds[0].metadata
+        # Both fields should equal the canonical name when no resolution
+        # was needed — keeps downstream consumers from special-casing.
+        assert md["cell_name"] == "INVx1_ASAP7_75t_R"
+        assert md["requested_cell_name"] == "INVx1_ASAP7_75t_R"
+
+    def test_unknown_shorthand_still_raises_keyerror(self, asap7_root):
+        # If the resolved canonical name isn't in the GDS either, the user
+        # should still get a KeyError — silently degrading would mask typos.
+        ds = Asap7Dataset(root=asap7_root, cells=["NOTACELL"])
+        with pytest.raises(KeyError, match="not found"):
+            ds[0]
+
+    def test_resolve_shorthand_disabled_keeps_strict_match(self, asap7_root):
+        ds = Asap7Dataset(root=asap7_root, cells=["INV"], resolve_shorthand=False)
+        with pytest.raises(KeyError, match="not found"):
+            ds[0]
