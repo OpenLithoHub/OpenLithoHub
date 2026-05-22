@@ -44,6 +44,14 @@ workflow = [
     "klayout>=0.28",
     "scipy>=1.10",
 ]
+freepdk45-sram = [
+    # OpenRAM ships FreePDK45 SRAM-cell GDS files inside the wheel; the
+    # FreePdk45SramDataset adapter locates them via importlib.resources.
+    # We don't run OpenRAM's compiler (numpy-2 regression upstream),
+    # only consume the bundled GDS — so the pin is a soft floor, not a
+    # tight upper bound.
+    "openram>=1.2.48",
+]
 models = [
     "huggingface_hub>=0.16",
 ]
@@ -83,7 +91,7 @@ export = [
     # exporter cannot ship green just because torch.onnx.export() returned.
     "onnxruntime>=1.17",
 ]
-all = ["openlithohub[data,workflow,models,dev,docs,jupyter,server,export]"]
+all = ["openlithohub[data,workflow,freepdk45-sram,models,dev,docs,jupyter,server,export]"]
 
 [project.urls]
 Homepage = "https://openlithohub.com"
