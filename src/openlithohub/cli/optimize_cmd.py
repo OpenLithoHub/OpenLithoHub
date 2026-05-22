@@ -96,6 +96,25 @@ def run(
             "fewer GPUs are visible than requested."
         ),
     ),
+    export_min_area: float = typer.Option(
+        0.0,
+        "--export-min-area",
+        help=(
+            "Drop curvilinear shapes below this polygon area (nm^2) at export. "
+            "Default 0.0 keeps every shape so academic / Hackathon scoring "
+            "stays bit-exact. Set >0 for fab-ready exports where MRC would "
+            "reject the smallest SRAFs an ILT can produce."
+        ),
+    ),
+    deterministic: bool = typer.Option(
+        False,
+        "--deterministic/--no-deterministic",
+        help=(
+            "Force bit-reproducible torch backends (cudnn.deterministic=True, "
+            "cudnn.benchmark=False, allow_tf32=False). Slower but required "
+            "when two identical optimize runs must produce identical masks."
+        ),
+    ),
 ) -> None:
     """Run end-to-end mask optimization on a layout file.
 
@@ -104,6 +123,11 @@ def run(
         --writer mbmw --node 3nm-euv --drc-check --output optimized.oas
     """
     console = Console()
+
+    if deterministic:
+        from openlithohub._utils.determinism import set_deterministic
+
+        set_deterministic()
 
     if num_gpus < 1:
         raise typer.BadParameter("--num-gpus must be >= 1")
@@ -239,7 +263,13 @@ def run(
     try:
         from openlithohub.workflow.export import export_oasis
 
-        export_oasis(optimized, output, mode=export_mode, pixel_size_nm=pixel_nm)
+        export_oasis(
+            optimized,
+            output,
+            mode=export_mode,
+            pixel_size_nm=pixel_nm,
+            min_area_nm2=export_min_area,
+        )
         console.print(f"  [green]Output written to {output}[/green]")
     except ImportError as e:
         console.print(f"  [yellow]Warning:[/yellow] {e}")

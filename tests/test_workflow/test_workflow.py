@@ -438,3 +438,91 @@ class TestManhattanContour:
             ys = [v[1] for v in poly]
             assert max(xs) - min(xs) == 1.0
             assert max(ys) - min(ys) == 1.0
+
+
+class TestExportMinAreaFilter:
+    """``export_oasis_mbw(min_area_nm2=...)`` drops sub-resolution islands.
+
+    Default 0.0 keeps every shape (Hackathon-safe); a positive value drops
+    polygons below the threshold and logs the count. Guards the fab-ready
+    export path against MRC-rejecting micro-SRAFs without changing
+    Hackathon scoring.
+    """
+
+    def _two_squares_mask(self) -> torch.Tensor:
+        # Big square (16x16 = 256 px area) + tiny isolated square (2x2 = 4 px)
+        # Spaced apart so the contour tracer treats them as separate loops.
+        mask = torch.zeros(64, 64)
+        mask[8:24, 8:24] = 1.0
+        mask[40:42, 40:42] = 1.0
+        return mask
+
+    def test_default_zero_keeps_all_shapes(self, tmp_path):
+        db = pytest.importorskip("klayout.db")
+        mask = self._two_squares_mask()
+        curves = fit_bspline(mask, tolerance_nm=1.0, warn_on_skip=False)
+        # The 2x2 island may be skipped by fit_bspline (n<5 after dedup) —
+        # that path is unrelated to the area filter. We need at least one
+        # curve plus one we can construct synthetically below.
+        assert len(curves) >= 1
+
+        out = tmp_path / "default.oas"
+        export_oasis_mbw(curves, str(out), pixel_size_nm=1.0)
+        layout = db.Layout()
+        layout.read(str(out))
+        polys = list(next(layout.each_cell()).shapes(layout.layer(1, 0)).each())
+        assert len(polys) == len(curves)
+
+    def test_positive_threshold_drops_small_polygon(self, tmp_path, caplog):
+        """Synthesise two B-spline curves with known areas and verify the
+        filter drops only the small one.
+        """
+        db = pytest.importorskip("klayout.db")
+        # Big circle: radius 10 nm → area ~314 nm^2
+        big = self._make_circle_curve(radius_nm=10.0, center=(20.0, 20.0))
+        # Small circle: radius 1 nm → area ~3.14 nm^2
+        small = self._make_circle_curve(radius_nm=1.0, center=(50.0, 50.0))
+
+        out = tmp_path / "filtered.oas"
+        with caplog.at_level("INFO", logger="openlithohub.workflow.contour.curvilinear"):
+            export_oasis_mbw([big, small], str(out), pixel_size_nm=1.0, min_area_nm2=50.0)
+        layout = db.Layout()
+        layout.read(str(out))
+        polys = list(next(layout.each_cell()).shapes(layout.layer(1, 0)).each())
+        assert len(polys) == 1, "small SRAF below 50 nm^2 should be filtered"
+        assert any("filtered 1 shape" in rec.getMessage() for rec in caplog.records)
+
+    def test_threshold_above_all_drops_everything(self, tmp_path):
+        db = pytest.importorskip("klayout.db")
+        big = self._make_circle_curve(radius_nm=10.0, center=(20.0, 20.0))
+        out = tmp_path / "all_dropped.oas"
+        export_oasis_mbw([big], str(out), pixel_size_nm=1.0, min_area_nm2=1e9)
+        layout = db.Layout()
+        layout.read(str(out))
+        polys = list(next(layout.each_cell()).shapes(layout.layer(1, 0)).each())
+        assert polys == []
+
+    def test_negative_threshold_raises(self, tmp_path):
+        big = self._make_circle_curve(radius_nm=10.0, center=(20.0, 20.0))
+        with pytest.raises(ValueError, match="min_area_nm2 must be >= 0"):
+            export_oasis_mbw([big], str(tmp_path / "x.oas"), pixel_size_nm=1.0, min_area_nm2=-1.0)
+
+    @staticmethod
+    def _make_circle_curve(*, radius_nm: float, center: tuple[float, float]) -> BSplineCurve:
+        """Build a closed periodic cubic B-spline that traces a circle.
+
+        Uses scipy.interpolate.splprep on a sampled circle so the output
+        round-trips through splev → polygon → shoelace area cleanly.
+        """
+        from scipy.interpolate import splprep
+
+        n = 32
+        thetas = torch.linspace(0, 2 * 3.14159265, n + 1)[:-1]
+        xs = (center[0] + radius_nm * torch.cos(thetas)).numpy()
+        ys = (center[1] + radius_nm * torch.sin(thetas)).numpy()
+        tck, _ = splprep([xs, ys], s=0.0, per=True, k=3)
+        ctrl_x = torch.tensor(tck[1][0], dtype=torch.float32)
+        ctrl_y = torch.tensor(tck[1][1], dtype=torch.float32)
+        ctrl = torch.stack([ctrl_x, ctrl_y], dim=1)
+        knots = torch.tensor(tck[0], dtype=torch.float32)
+        return BSplineCurve(control_points=ctrl, knots=knots, degree=3)

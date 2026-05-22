@@ -15,6 +15,7 @@ def export_oasis(
     *,
     mode: str = "curvilinear",
     pixel_size_nm: float = 1.0,
+    min_area_nm2: float = 0.0,
 ) -> None:
     """Export an optimized mask tensor to OASIS format.
 
@@ -23,6 +24,10 @@ def export_oasis(
     (sampled polygons on a designated layer; see ``contour.curvilinear``).
     Native SEMI P39 (OASIS.MASK) curve primitives and SEMI P44 multi-beam
     mask-writer input are tracked separately and not yet emitted here.
+
+    ``min_area_nm2`` (curvilinear only) drops sub-resolution islands below
+    the given polygon area before writing. Default ``0.0`` keeps every
+    shape so academic / Hackathon evaluation stays bit-exact.
     """
     if mode not in ("manhattan", "curvilinear"):
         raise ValueError(f"mode must be 'manhattan' or 'curvilinear', got '{mode}'")
@@ -34,7 +39,7 @@ def export_oasis(
     if mode == "manhattan":
         _export_manhattan(m, output_path, pixel_size_nm)
     else:
-        _export_curvilinear(m, output_path, pixel_size_nm)
+        _export_curvilinear(m, output_path, pixel_size_nm, min_area_nm2=min_area_nm2)
 
 
 def export_gds(
@@ -44,6 +49,7 @@ def export_gds(
     mode: str = "curvilinear",
     pixel_size_nm: float = 1.0,
     samples_per_curve: int = 64,
+    min_area_nm2: float = 0.0,
 ) -> None:
     """Export an optimized mask tensor to GDSII format.
 
@@ -72,7 +78,13 @@ def export_gds(
     if mode == "manhattan":
         _export_manhattan(m, output_path, pixel_size_nm)
     else:
-        _export_curvilinear(m, output_path, pixel_size_nm, samples_per_curve=samples_per_curve)
+        _export_curvilinear(
+            m,
+            output_path,
+            pixel_size_nm,
+            samples_per_curve=samples_per_curve,
+            min_area_nm2=min_area_nm2,
+        )
 
 
 def _export_manhattan(mask: torch.Tensor, output_path: Path, pixel_size_nm: float) -> None:
@@ -108,6 +120,7 @@ def _export_curvilinear(
     pixel_size_nm: float,
     *,
     samples_per_curve: int = 64,
+    min_area_nm2: float = 0.0,
 ) -> None:
     from openlithohub.workflow.contour.curvilinear import export_oasis_mbw, fit_bspline
 
@@ -125,4 +138,5 @@ def _export_curvilinear(
         str(output_path),
         pixel_size_nm=pixel_size_nm,
         samples_per_curve=samples_per_curve,
+        min_area_nm2=min_area_nm2,
     )

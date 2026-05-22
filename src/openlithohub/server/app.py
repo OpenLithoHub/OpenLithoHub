@@ -132,6 +132,7 @@ def _run_optimize(
     writer: str,
     layer: str | None,
     pretrained: bool,
+    min_area_nm2: float = 0.0,
 ) -> dict[str, Any]:
     """Synchronous optimization core. Mirrors the CLI optimize flow but
     with no Rich I/O — returns a small JSON-friendly summary."""
@@ -172,7 +173,13 @@ def _run_optimize(
 
     export_mode = "curvilinear" if writer == "mbmw" else "manhattan"
     try:
-        export_oasis(optimized, output_path, mode=export_mode, pixel_size_nm=pixel_nm)
+        export_oasis(
+            optimized,
+            output_path,
+            mode=export_mode,
+            pixel_size_nm=pixel_nm,
+            min_area_nm2=min_area_nm2,
+        )
         export_format = "oasis"
     except ImportError:
         fallback = output_path.with_suffix(".pt")
@@ -240,6 +247,14 @@ def create_app() -> FastAPI:
             None, description="OASIS/GDSII layer 'LAYER:DTYPE'; required for multi-layer files."
         ),
         pretrained: bool = Form(False, description="Load pretrained weights when supported."),
+        min_area_nm2: float = Form(
+            0.0,
+            description=(
+                "Drop curvilinear shapes below this polygon area (nm^2) at export. "
+                "Default 0.0 keeps every shape (Hackathon-safe); set >0 for "
+                "fab-ready MRC-compliant output."
+            ),
+        ),
     ) -> Response | JSONResponse:
         if not layout.filename:
             raise HTTPException(status_code=400, detail="layout upload missing filename")
@@ -287,6 +302,7 @@ def create_app() -> FastAPI:
                     writer=writer,
                     layer=layer,
                     pretrained=pretrained,
+                    min_area_nm2=min_area_nm2,
                 )
             except KeyError as e:
                 # Both unknown model names and unknown node names raise KeyError;

@@ -9,6 +9,7 @@ a valid OASIS file that any vendor tool can read.
 
 from __future__ import annotations
 
+import logging
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,8 @@ import torch
 
 from openlithohub._utils.contour_trace import trace_contour
 from openlithohub._utils.tensor_ops import ensure_2d
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -157,6 +160,7 @@ def export_oasis_mbw(
     layer: int = 1,
     datatype: int = 0,
     cell_name: str = "TOP",
+    min_area_nm2: float = 0.0,
 ) -> None:
     """Serialize B-spline curves to an OASIS file via klayout.db.
 
@@ -169,9 +173,19 @@ def export_oasis_mbw(
     Native SEMI P44 multi-beam curve primitives are not yet emitted; the
     polygon approximation is the standard interim representation that all
     multi-beam writer flows accept.
+
+    ``min_area_nm2`` is an opt-in filter for sub-resolution islands: any
+    sampled polygon with absolute area below this threshold is dropped
+    before insertion. Default ``0.0`` keeps every shape so academic /
+    Hackathon evaluation stays bit-exact. A positive value is intended for
+    fab-ready exports where MRC would otherwise reject the smallest SRAFs
+    a curvilinear ILT can produce; the count of dropped shapes is logged
+    at INFO level so the filter is auditable.
     """
     if not curves:
         raise ValueError("Cannot export an empty curve list to OASIS.")
+    if min_area_nm2 < 0.0:
+        raise ValueError(f"min_area_nm2 must be >= 0, got {min_area_nm2}")
 
     try:
         from scipy.interpolate import splev
@@ -195,17 +209,36 @@ def export_oasis_mbw(
     top = layout.create_cell(cell_name)
     layer_idx = layout.layer(layer, datatype)
 
+    n_filtered = 0
     for curve in curves:
         ctrl = curve.control_points.numpy()
         knot = curve.knots.numpy()
         tck = (knot, [ctrl[:, 0], ctrl[:, 1]], curve.degree)
         u_eval = np.linspace(0.0, 1.0, samples_per_curve, endpoint=False)
         xs, ys = splev(u_eval, tck)
+        xs_arr = np.asarray(xs, dtype=np.float64)
+        ys_arr = np.asarray(ys, dtype=np.float64)
+        if min_area_nm2 > 0.0 and len(xs_arr) >= 3:
+            # Shoelace on the sampled polygon (xs/ys are in nm because
+            # ``fit_bspline`` scales control points by pixel_size_nm).
+            area_nm2 = 0.5 * abs(
+                float(np.dot(xs_arr, np.roll(ys_arr, -1)) - np.dot(ys_arr, np.roll(xs_arr, -1)))
+            )
+            if area_nm2 < min_area_nm2:
+                n_filtered += 1
+                continue
         points = [
             db.Point(int(round(float(x) / layout.dbu)), int(round(float(y) / layout.dbu)))
-            for x, y in zip(xs, ys, strict=False)
+            for x, y in zip(xs_arr, ys_arr, strict=False)
         ]
         if len(points) >= 3:
             top.shapes(layer_idx).insert(db.Polygon(points))
+
+    if n_filtered > 0:
+        logger.info(
+            "export_oasis_mbw: filtered %d shape(s) below min_area_nm2=%g nm^2",
+            n_filtered,
+            min_area_nm2,
+        )
 
     layout.write(str(output))

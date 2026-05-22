@@ -105,9 +105,24 @@ def run(
             "Ignored by other datasets."
         ),
     ),
+    deterministic: bool = typer.Option(
+        False,
+        "--deterministic/--no-deterministic",
+        help=(
+            "Force bit-reproducible torch backends (cudnn.deterministic=True, "
+            "cudnn.benchmark=False, allow_tf32=False). Slower but required for "
+            "leaderboard / Hackathon scoring where two identical submissions "
+            "must produce the same score."
+        ),
+    ),
 ) -> None:
     """Run evaluation of a lithography model on a benchmark dataset."""
     console = Console()
+
+    if deterministic:
+        from openlithohub._utils.determinism import set_deterministic
+
+        set_deterministic()
 
     import openlithohub.models.examples.dummy_model  # noqa: F401 — register built-in models
     import openlithohub.models.levelset_ilt  # noqa: F401
