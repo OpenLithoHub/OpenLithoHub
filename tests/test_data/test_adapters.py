@@ -621,9 +621,37 @@ class TestAlignResolution:
             align_resolution(t, source_pixel_nm=1.0, target_pixel_nm=-1.0)
 
     def test_invalid_ndim(self):
-        t = torch.rand(2, 3, 64, 64)
+        t = torch.rand(2, 3, 4, 5, 6)
         with pytest.raises(ValueError):
             align_resolution(t, source_pixel_nm=1.0, target_pixel_nm=2.0)
+
+    def test_4d_input_supported(self):
+        """Issue #28: pipelines commonly carry (N, C, H, W); rejecting 4D
+        forced callers to squeeze/unsqueeze around every call. F.interpolate
+        already accepts 4D natively, just thread it through."""
+        t = torch.rand(2, 1, 32, 32)
+        result = align_resolution(t, source_pixel_nm=2.0, target_pixel_nm=1.0)
+        assert result.shape == (2, 1, 64, 64)
+
+    def test_binarize_keeps_mask_binary(self):
+        """Issue #28: bilinear scaling a {0,1} mask leaves grayscale fringes
+        on edges. Downstream DRC/MRC raster ops treat any non-zero pixel as
+        foreground, so the fringe inflates feature widths. The opt-in
+        `binarize=True` rebinarises after interpolation."""
+        t = torch.zeros(16, 16)
+        t[6:10, 6:10] = 1.0
+        result = align_resolution(t, source_pixel_nm=1.0, target_pixel_nm=0.5, binarize=True)
+        assert result.shape == (32, 32)
+        assert torch.equal(result, (result > 0).to(result.dtype))
+
+    def test_non_integer_scale_deterministic_size(self):
+        """Issue #28: the prior `scale_factor=` form left the output dim
+        to F.interpolate's rounding policy (which differs across modes
+        and PyTorch versions). Explicit `size=round(H*scale)` makes
+        non-integer scales (e.g. 1.5x) reproducible."""
+        t = torch.rand(100, 100)
+        result = align_resolution(t, source_pixel_nm=1.5, target_pixel_nm=1.0)
+        assert result.shape == (150, 150)
 
     def test_nearest_mode(self):
         t = torch.rand(32, 32)
