@@ -48,6 +48,8 @@ nav:
   - Networking & Proxies: networking.md
   - References: references.md
   - Citation Map: citations.md
+  - Audits:
+    - "Neural-ILT Architecture": audits/neural-ilt-architecture.md
   - API Reference:
     - "Object-oriented API": api/oo_api.md
     - Data Adapters: api/data.md

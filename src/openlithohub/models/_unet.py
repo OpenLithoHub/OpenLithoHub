@@ -59,6 +59,11 @@ class _Up(nn.Module):
 class UNet(nn.Module):
     """4-level U-Net for lithography mask prediction.
 
+    Channel widths (32→64→128→256) are intentionally half of those in
+    ``Jiang2020_NeuralILT`` Fig. 4 — this is the v0.1 inference-budget
+    baseline, not a paper-faithful re-implementation. See
+    ``docs/audits/neural-ilt-architecture.md``.
+
     Input: (B, 1, H, W) design layout
     Output: (B, 1, H, W) mask logits
     """
