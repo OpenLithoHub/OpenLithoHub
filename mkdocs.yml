@@ -61,6 +61,7 @@ nav:
     - Benchmark Metrics: api/benchmark.md
     - Model Interface: api/models.md
     - Workflow Engine: api/workflow.md
+    - Simulator Backends: api/simulators.md
     - Visualization: api/vis.md
     - Leaderboard: api/leaderboard.md
   - Leaderboard Submissions: leaderboard-submission.md

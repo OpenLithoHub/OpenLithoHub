@@ -83,7 +83,7 @@ expose annotations through `metadata`.
 
 | Check | Function | Description |
 |-------|----------|-------------|
-| MRC | `check_mrc()` | Minimum width/spacing rule check (hard-fail) |
+| MRC | `check_mrc()` | Minimum width/spacing rule check (hard-fail). Reports `actual_nm` as the local distance-transform maximum within the violating component (feature spine), matching what foundry MRC docks print. |
 | Curvilinear MRC | `check_curvilinear_mrc()` | Min curvature radius and feature area for post-ILT curvilinear shapes |
 | DRC | `check_drc()` | Full design rule check: area, notch, width, spacing |
 
@@ -167,7 +167,11 @@ The resist path used by the leaderboard's EPE/PVB scoring is a **constant
 threshold resist (CTR) without diffusion**: a fixed sigmoid threshold
 applied to the aerial image, no Mack-style acid diffusion, no per-node
 calibration. The default cutoff is `threshold = 0.225` (Yang2023_LithoBench
-§3.2 / ICCAD16 reference).
+§3.2 / ICCAD16 reference). The same value flows through `openlithohub eval`,
+`openlithohub optimize` (`--threshold` flag, default `0.225`), and the
+stochastic-defect metrics (`resist_threshold` kwarg) so all three see one
+calibration. The leaderboard pins `0.225` — overriding it produces
+non-comparable numbers.
 
 This is a deliberate scope decision, not a TODO:
 

@@ -53,6 +53,7 @@ openlithohub eval run [OPTIONS]
 | `--topology` | TEXT | Mask topology: `manhattan` or `curvilinear`. | `manhattan` |
 | `--paper-url` | TEXT | Paper URL (used when submitting). | unset |
 | `--code-url` | TEXT | Code/repo URL (used when submitting). | unset |
+| `--deterministic / --no-deterministic` | FLAG | Force bit-reproducible torch backends (`cudnn.deterministic=True`, `cudnn.benchmark=False`, `allow_tf32=False`). Slower, required when two evaluation runs must produce identical numbers. | `--no-deterministic` |
 
 **Example:**
 
@@ -87,6 +88,9 @@ openlithohub optimize run [OPTIONS]
 | `--overlap` | INT | **Legacy.** Tile overlap in pixels. Kept for back-compat with pre-RFC-0005 scripts. Prefer `--halo`. | none |
 | `--pixel-nm` | FLOAT | Pixel size in nanometers. | `1.0` |
 | `--num-gpus` | INT | Worker processes for tile inference. `1` = sequential (default). `>1` spawns one worker per GPU and shards tiles round-robin. | `1` |
+| `--threshold` | FLOAT | Final mask binarisation threshold. `0.225` matches the LithoBench/Yang2023 calibration; pass `0.5` for the legacy mid-grey cut. | `0.225` |
+| `--export-min-area` | FLOAT | Drop curvilinear shapes below this polygon area (nm²) at export. `0.0` keeps every shape (academic / Hackathon scoring stays bit-exact); `>0` for fab-ready exports where MRC would reject the smallest SRAFs. | `0.0` |
+| `--deterministic / --no-deterministic` | FLAG | Force bit-reproducible torch backends (`cudnn.deterministic=True`, `cudnn.benchmark=False`, `allow_tf32=False` on cudnn+matmul). Slower, required when two runs must produce identical masks. | `--no-deterministic` |
 
 **Example:**
 
@@ -311,6 +315,7 @@ openlithohub export run [OPTIONS]
 | `--pretrained / --no-pretrained` | FLAG | Load pretrained weights when supported. | `--no-pretrained` |
 | `--device` | TEXT | Torch device to trace on (`cpu`, `cuda`, `mps`). | `cpu` |
 | `--dynamic-batch / --static-batch` | FLAG | Mark the batch dimension as dynamic in the exported graph. | `--dynamic-batch` |
+| `--verify / --no-verify` | FLAG | After export, reload the artifact and check a single forward pass agrees with the PyTorch reference (TorchScript path). Off by default to keep CI export fast. | `--no-verify` |
 
 ---
 

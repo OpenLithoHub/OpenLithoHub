@@ -44,7 +44,10 @@ Things worth knowing about these numbers:
   the lower MRC pass rate reflects narrow features that fall under the
   default `min_width_nm=40` rather than an optimizer regression. Run
   against a real LithoBench layout or relaxed MRC thresholds for
-  production-grade numbers.
+  production-grade numbers. Single-exposure regime — multi-patterning
+  flows (LELE / SAQP / SADP) require upstream colouring + a per-mask
+  optimisation pass; OpenLithoHub does not currently decompose the
+  target.
 - **`openilt`** is the
   [OpenILT](https://github.com/OpenOPC/OpenILT)-style baseline (clean-room
   PyTorch reimplementation of the SimpleILT formulation, MIT-licensed
@@ -223,6 +226,14 @@ canonical baseline numbers are published here yet.
 Two forward models ship in `openlithohub._utils`. Both are pure PyTorch
 and auto-differentiable, so they slot directly into ILT optimization
 loops, AI-OPC training, or any downstream gradient-based pipeline.
+
+> **Which forward model does which metric use?** `compute_l2_error` and
+> `compute_wafer_epe` route through Hopkins/SOCS (the partial-coherent
+> path used by the leaderboard). The PV-Band metric (`compute_pvband`)
+> uses the **fast Gaussian PSF approximation**, *not* SOCS — it sweeps
+> dose/focus corners cheaply at the cost of physical fidelity. Treat
+> PVB and L2 as different forward passes; do not assume one validates
+> the other.
 
 ### Gaussian PSF (default)
 

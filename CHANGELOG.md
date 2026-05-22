@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **RDP vertex decimation on OASIS export** — `export_oasis_mbw(vertex_tolerance_nm=...)` runs an iterative anchored Ramer-Douglas-Peucker simplification on each sampled curvilinear polygon. Default `0.0` keeps bit-exact academic behaviour; positive values cut full-chip OASIS data volume (MBMW shot/byte budget) without measurable wafer-image change. Reduction count and ratio logged at INFO.
+- **ILT checkpointing** — `LevelSetILTModel.predict(checkpoint_dir=, save_freq=, resume_from=)` periodically `torch.save`s the mask logit, Adam state, and best-loss tracker. Deterministic resume (resume-vs-uninterrupted equality is pinned by test). SLURM preemption / CUDA crash on multi-thousand-iter runs no longer wipes prior progress. Off by default; `save_freq>0` without `checkpoint_dir` raises.
+- **SRAF min-area export filter** — `export_oasis_mbw(min_area_nm2=...)` and the matching `workflow.export.{export_oasis,export_gds}` parameter drop sub-resolution polygons via shoelace area before OASIS insert (default `0.0`, Hackathon-safe). Plumbed through `optimize --export-min-area` and the `/v1/optimize` HTTP form so fab-ready exports can clear MRC without touching academic scoring runs. Dropped count logged at INFO.
+- **Deterministic mode** — `openlithohub._utils.determinism.set_deterministic()` centralises the four torch backend flags needed for bit-reproducible scoring (`cudnn.deterministic`, `cudnn.benchmark=False`, `allow_tf32=False` on cudnn + matmul). Exposed via `--deterministic` on `openlithohub optimize` and `openlithohub eval`; off by default (the flags carry a real perf cost).
+- **HF Hub SHA256 verification** — `ModelHub.download_weights` now verifies an expected `sha256` digest on the HuggingFace Hub path (previously only the direct-URL path did). Mutable revisions (branch names like `main`) trigger a warning so users know the digest can drift between fetches; pin a commit SHA or tag for reproducible scoring. Closes #20.
+- **Measured-source / Zernike-pupil I/O on simulators public API** — `load_source_intensity`, `load_zernike_coefficients`, and `zernike_phase_map` are now re-exported from `openlithohub.simulators` (previously defined in `_utils/optics.py` with full test coverage but no `src/` callers). The README and v0.1 milestone advertised this feature; it is now backed by a public import path. Closes #65.
+- **Multi-patterning regime guidance** — `levelset-ilt` README and docstring now document that the model targets single-exposure regimes; multi-patterning (LELE / SAQP / SADP) requires upstream colouring + per-mask runs.
+- **DRC-vs-MRC count semantics** — eval-aggregation docs and `_repr_html_` panels disambiguate DRC violation count (per-rule hard-fail) vs MRC violation count (geometric width/spacing samples). Same number, different denominator.
 - **`openilt` baseline model** (`openlithohub.models.openilt`) — clean-room
   PyTorch reimplementation of the OpenILT SimpleILT formulation
   (MIT-licensed upstream pinned at commit
@@ -173,6 +181,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **MRC `actual_nm` reports feature spine, not edge-pixel distance** — `compliance.mrc.check_mrc` now samples the local distance-transform maximum within the violating component (feature spine) instead of the edge-pixel value. The reported number is now the actual narrow-feature width, matching what foundry MRC docks would print.
+- **Hopkins dose application** — `simulate_aerial_image_hopkins` no longer multiplies dose into both the aerial and the binarisation threshold (the previous double-application made `dose` cancel under the constant-threshold-resist path). Dose now affects the aerial image only; threshold is dose-independent. Closes #52.
+- **Polar-grid Jacobian on Hopkins illumination samples** — source-sample weighting now applies the polar-grid Jacobian, fixing a systematic bias toward on-axis samples. Canonical Hopkins aerial mean baselines were rebaselined as part of the fix. Closes #29.
+- **ILT receptive field lifted from 0 → 64** — `levelset-ilt` and `openilt` now declare a 64-px receptive field, so `--halo auto` accounts for the ILT spread when computing tile halos. Closes #75.
+- **EUV H-V CD bias measured in shadowed-mask domain** — `compute_euv_hv_cd_bias` now operates on the shadowed-mask image rather than the pre-shadow aerial, matching the physical observable. Closes #24.
+- **Eval-aggregation per-metric weighting + empty-mask floor** — aggregations now apply explicit per-metric weights and floor empty-mask tiles to a pass result instead of NaN-dropping silently.
+- **Stochastic resist threshold consistency** — `--threshold` plumbed through `eval` / `optimize` / stochastic metrics so all three see the same value; default `0.225` everywhere. Closes #19, #33.
+- **OASIS export single-tile shortcut** — when a layout is smaller than `tile_size`, the tiling pipeline now skips redundant tile dispatch and runs a single in-memory pass.
+- **`align_resolution` binary-safe + 4D + deterministic** — re-binarises after rescale so masks stay {0,1}, supports 4D batched tensors, and is deterministic on non-integer scale factors.
 - **`openlithohub simulate list-backends --verbose`** — adds a
   `--verbose`/`-v` flag that prints `name  module.ClassName` for every
   registered backend; bare invocation stays script-friendly (one name
@@ -188,6 +205,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Monte-Carlo dose jitter applied as post-hoc aerial scaling** — previously `dose_jitter_sigma` was plumbed via `config.dose`, which (because `threshold = cfg.threshold * cfg.dose`) cancelled out and produced no observable jitter. Jitter now scales the aerial image and threshold offset *outside* the simulator config so the cancellation cannot bite. Closes #54.
+- **Simultaneous bridge + break detection** — `_bridge_and_break_versus` builds nominal and trial component-label maps and detects each axis independently (a single trial can register on both); previously a trial that bridged one pair *and* broke a third left the net component count unchanged and was silently classified as a no-op. `failure_probability` is now clamped to `[0, 1]` instead of summing past 1. Closes #55.
+- **forward_model 1-px axis raises instead of silent replicate fallback** — `simulate_aerial_image` on a degenerate H=1 or W=1 input now raises `ValueError`; the previous silent replicate-padded fallback produced meaningless aerials. Closes #10.
+- **`auto_crop` replicate padding** — boundary crops near image edges now use replicate padding instead of zero-padding, eliminating a halo bias at the crop edge. Closes #32.
+- **Process-window caveats documented** — `process_window` workflow docstring now states that the 5-corner sweep is a coarse approximation; production callers should pin their own corner set. Closes #27.
+- **SVRF micron thresholds in `eda_bridge`** — SVRF rule decks emitted by the EDA bridge now use micron units (not nanometres) per Calibre conventions; curvilinear scope is documented. Closes #50, #51.
+- **TorchScript `--verify` round-trip** — `openlithohub export run --verify` reloads the TorchScript artifact and checks the forward pass agrees with the PyTorch reference, catching dynamo / scripting regressions before they reach users.
+- **Symmetric EPE + Hungarian hotspot match** — `compute_epe` now averages predicted-vs-target and target-vs-predicted contour distances; hotspot matching uses Hungarian assignment instead of greedy nearest-neighbour. Gauges report single-edge EPE consistently.
+- **PVB Gaussian-vs-SOCS forward model documented** — PV-Band metric uses a fast Gaussian-PSF approximation, *not* the Hopkins/SOCS path used by `compute_l2_error` / `compute_wafer_epe`. The benchmarks doc now states this explicitly so callers do not assume PVB and L2 share a forward pass.
+- **vis/contours figure leak** — opt-in `close=True` on `plot_contours` and friends so notebook callers don't leak matplotlib `Figure`s.
+- **Polygon raster hole semantics** — `rasterize_polygons` now treats CCW outer rings as solid and CW inner rings as holes (consistent with OGC simple-features), not foreground regardless of orientation.
+- **`contour_trace` small-feature handling** — single-pixel and single-row features are no longer silently dropped by the tracer.
+- **BSpline diagnostics** — `BSplineCurve.evaluate` now raises with a clear message when control points are colinear (previously produced NaN coordinates downstream).
+- **Trust-root manifest helpers + lithosim revision pin** — adapter integrity warnings on dataset open, manifest helpers exposed, and the LithoSim adapter pins a default revision so `huggingface_hub` cache misses don't silently pull `main`.
+- **LitheEngine threads node-bound simulator into wafer metrics** — the OO façade no longer constructs an ad-hoc default simulator inside `evaluate`; the node-bound one configured on the engine is reused so wafer EPE and L2 see consistent optics.
+- **VSB shot count via rectilinear decomposition** — `vsb_shot_count` now decomposes the mask into axis-aligned rectangles; the previous `perimeter² / area` heuristic over-counted Manhattan masks and under-counted curvilinear ones.
 - **`typecheck` CI on `fb5c9b4`** — dropped two now-unused
   `# type: ignore` comments (`lithobench.py:234`, `ganopc.py:298`) and
   added `multivolumefile.*` / `py7zr.*` to the mypy
