@@ -37,6 +37,7 @@ _GATED_REMEDIATION = (
     "  1. Visit https://huggingface.co/datasets/{name} and request access.\n"
     "  2. Once approved, run `huggingface-cli login` (or set the\n"
     "     HF_TOKEN env var) so `datasets.load_dataset` can authenticate.\n"
+    "Full guide: https://docs.openlithohub.com/hf-auth/\n"
     "Original error: {err}"
 )
 

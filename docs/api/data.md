@@ -1,5 +1,12 @@
 # Data Adapters
 
+!!! info "Authentication for gated datasets"
+    Some adapters (currently `LithoSim`) load data from a gated
+    HuggingFace Hub repository. If a `load()` call raises a
+    `RuntimeError` mentioning HTTP 401, see
+    **[HuggingFace Authentication](../hf-auth.md)** for the unblock
+    steps (request access → `huggingface-cli login` / `HF_TOKEN`).
+
 ::: openlithohub.data.base
     options:
       show_root_heading: true

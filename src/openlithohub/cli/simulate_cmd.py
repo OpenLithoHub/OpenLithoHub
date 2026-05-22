@@ -10,6 +10,7 @@ import typer
 
 from openlithohub.simulators import (
     SimulatorConfig,
+    describe_simulators,
     get_simulator,
     list_simulators,
 )
@@ -55,11 +56,26 @@ def run(
 
 
 @simulate_app.command("list-backends")
-def list_backends_cmd() -> None:
-    """Print registered simulator backends."""
+def list_backends_cmd(
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Also print the backing simulator class."
+    ),
+) -> None:
+    """Print registered simulator backends.
 
-    for name in list_simulators():
-        typer.echo(name)
+    Without ``--verbose`` this prints one name per line (script-friendly).
+    With ``--verbose`` it adds the implementing class so users can locate
+    the source without reading ``simulators/registry.py`` directly.
+    """
+
+    names = list_simulators()
+    if not verbose:
+        for name in names:
+            typer.echo(name)
+        return
+    width = max((len(n) for n in names), default=0)
+    for name, cls in describe_simulators():
+        typer.echo(f"{name.ljust(width)}  {cls.__module__}.{cls.__qualname__}")
 
 
 def _load_mask(path: Path) -> torch.Tensor:

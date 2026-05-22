@@ -222,11 +222,18 @@ openlithohub simulate run [OPTIONS] MASK_PATH
 
 #### `simulate list-backends`
 
-Print registered simulator backends.
+Print registered simulator backends. With `--verbose` (`-v`), each line
+also includes the backing class path so you can locate the source
+without grepping `simulators/registry.py`.
 
 ```bash
 openlithohub simulate list-backends
+openlithohub simulate list-backends --verbose
 ```
+
+| Argument | Type | Description | Default |
+|----------|------|-------------|---------|
+| `--verbose`, `-v` | FLAG | Also print the implementing `module.ClassName`. | off |
 
 ---
 

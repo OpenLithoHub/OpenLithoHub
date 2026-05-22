@@ -30,6 +30,16 @@ def list_simulators() -> list[str]:
     return sorted(_REGISTRY)
 
 
+def describe_simulators() -> list[tuple[str, type[BaseSimulator]]]:
+    """Return ``(name, class)`` pairs for every registered simulator, sorted by name.
+
+    Used by the CLI to print human-readable backend listings without
+    reaching into ``_REGISTRY`` from the outside.
+    """
+
+    return sorted(_REGISTRY.items())
+
+
 def get_simulator(
     name: str,
     config: SimulatorConfig | None = None,

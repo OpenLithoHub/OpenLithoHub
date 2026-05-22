@@ -259,3 +259,24 @@ def test_optimize_run_drc_check_smoke():
         output = _strip_ansi(result.output)
         assert ("All checks passed" in output) or ("violations" in output)
         assert "Optimization complete" in output
+
+
+def test_simulate_list_backends_plain():
+    result = runner.invoke(app, ["simulate", "list-backends"])
+    assert result.exit_code == 0, result.output
+    output = _strip_ansi(result.output)
+    # Built-in backends from simulators.registry; if any of these stops
+    # being registered, both this test and the public API have changed.
+    for name in ("hopkins", "calibre", "tachyon"):
+        assert name in output, output
+
+
+def test_simulate_list_backends_verbose_shows_class_path():
+    result = runner.invoke(app, ["simulate", "list-backends", "--verbose"])
+    assert result.exit_code == 0, result.output
+    output = _strip_ansi(result.output)
+    # --verbose annotates each name with the implementing module.class
+    # so users can locate the source without grepping the registry.
+    assert "openlithohub.simulators.hopkins_sim.HopkinsSimulator" in output
+    assert "openlithohub.simulators.calibre.CalibreSimulator" in output
+    assert "openlithohub.simulators.tachyon.TachyonSimulator" in output

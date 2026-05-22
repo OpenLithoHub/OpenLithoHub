@@ -161,8 +161,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   override `submission_id`, or smuggle Python objects.
 - **`scripts/build_litho_tiny.py`** — deterministic 100-pair generator
   emitting an HF-ready parquet + dataset card under `out/litho-tiny/`.
+- **HuggingFace authentication guide** (`docs/hf-auth.md`) — single-page
+  walkthrough for unblocking gated Hub datasets (request access →
+  `huggingface-cli login` / `HF_TOKEN` → verify), with corporate-proxy
+  notes linking to `networking.md`. The `LithoSim` adapter's HTTP 401
+  remediation now points users at this page.
+- **`describe_simulators()`** in `openlithohub.simulators` — public
+  `(name, class)` accessor for the simulator registry. Used by the CLI
+  (`simulate list-backends --verbose`) to print the implementing class
+  path so users can locate the source without grepping the registry.
 
 ### Changed
+
+- **`openlithohub simulate list-backends --verbose`** — adds a
+  `--verbose`/`-v` flag that prints `name  module.ClassName` for every
+  registered backend; bare invocation stays script-friendly (one name
+  per line).
 
 - **`--compile` defaults to `True`** on the `eval` and `optimize` CLI
   commands, with a graceful fallback to eager when `torch.compile`
@@ -174,6 +188,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`typecheck` CI on `fb5c9b4`** — dropped two now-unused
+  `# type: ignore` comments (`lithobench.py:234`, `ganopc.py:298`) and
+  added `multivolumefile.*` / `py7zr.*` to the mypy
+  `ignore_missing_imports` overrides. The two ignores were needed
+  locally (where `py7zr` is installed and provides typing) but unused
+  in CI (where the lazy optional deps are not installed and mypy
+  treats the modules as `Any`). Commit `2aa14cb`.
 - **Stochastic defect counting + NaN-safe aggregation** — fixed
   net-component-count formula in `compute_stochastic_robustness` so
   trials that simultaneously bridge some lines and break others

@@ -34,6 +34,7 @@ from openlithohub.simulators.base import (
 from openlithohub.simulators.calibre import CalibreSimulator
 from openlithohub.simulators.hopkins_sim import HopkinsSimulator
 from openlithohub.simulators.registry import (
+    describe_simulators,
     get_simulator,
     list_simulators,
     register_simulator,
@@ -47,6 +48,7 @@ __all__ = [
     "SimulatorConfig",
     "SimulatorResult",
     "TachyonSimulator",
+    "describe_simulators",
     "get_simulator",
     "list_simulators",
     "register_simulator",
