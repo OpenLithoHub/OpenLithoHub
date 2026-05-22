@@ -139,12 +139,27 @@ def test_unknown_node_name_raises() -> None:
 
 
 def test_node_overrides_default_pixel_pitch(sample_design: torch.Tensor) -> None:
-    """When the input mask uses the default 1.0 nm/px, the node's pitch wins."""
+    """When the caller passes a raw tensor (no pitch annotation), the engine
+    substitutes the node's native pitch.
+
+    A user-supplied ``Mask`` is treated as authoritative — see
+    :func:`test_node_does_not_override_explicit_pitch`. The override only
+    applies to bare-tensor inputs that have no pitch metadata.
+    """
     engine = LitheEngine(model="dummy-identity", node="3nm-euv")
-    mask = Mask.from_tensor(sample_design)  # default pixel_size_nm = 1.0
-    out = engine.optimize(mask)
+    out = engine.optimize(sample_design)  # raw tensor, no pitch annotation
     # 3nm-euv has pixel_size_nm = 0.5 in PROCESS_NODES
     assert out.pixel_size_nm == 0.5
+
+
+def test_explicit_mask_pitch_is_authoritative(sample_design: torch.Tensor) -> None:
+    """Even when the supplied pitch happens to equal 1.0, the engine must
+    not override it with the node's pitch — 1.0 is a legitimate value
+    (e.g. ICCAD16 benchmarks)."""
+    engine = LitheEngine(model="dummy-identity", node="3nm-euv")
+    mask = Mask.from_tensor(sample_design, pixel_size_nm=1.0)
+    out = engine.optimize(mask)
+    assert out.pixel_size_nm == 1.0
 
 
 def test_node_does_not_override_explicit_pitch(sample_design: torch.Tensor) -> None:

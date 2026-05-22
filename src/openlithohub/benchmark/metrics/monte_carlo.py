@@ -61,7 +61,7 @@ def monte_carlo_failure_probability(
     num_trials: int = 50,
     dose_jitter_sigma: float = 0.02,
     threshold_jitter_sigma: float = 0.01,
-    seed: int | None = None,
+    seed: int | None = 0,
     perturb: Callable[[torch.Tensor, torch.Generator], torch.Tensor] | None = None,
 ) -> MonteCarloFailureResult:
     """Estimate stochastic-failure probability against a simulator backend.
@@ -81,7 +81,8 @@ def monte_carlo_failure_probability(
         dose_jitter_sigma: Std-dev of multiplicative dose jitter.
         threshold_jitter_sigma: Std-dev of additive resist-threshold
             jitter.
-        seed: PRNG seed; ``None`` uses a fresh generator.
+        seed: PRNG seed; defaults to ``0`` so leaderboard runs are
+            reproducible. Pass ``None`` for a fresh entropy-seeded generator.
         perturb: Optional ``(mask, generator) -> mask`` callable for
             domain-specific perturbations (e.g. mask-write spot jitter).
 

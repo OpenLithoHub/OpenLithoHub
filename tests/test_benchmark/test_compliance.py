@@ -31,7 +31,14 @@ class TestMRCWidthCheck:
     def test_feature_exactly_at_threshold(self):
         mask = torch.zeros(64, 64)
         mask[20:40, 20:40] = 1.0  # 20px wide
-        # radius = floor(20/(2*1)) = 10. Erode 20x20 by 10 -> vanishes. Fails.
+        # min_width=20nm at 1nm/px → kernel = floor(20/1) = 20, radius = 9.
+        # Opening with r=9 (kernel size 19) preserves a 20×20 feature.
+        result = check_mrc(mask, min_width_nm=20.0, min_spacing_nm=4.0, pixel_size_nm=1.0)
+        assert result.passed is True
+
+    def test_feature_below_threshold_fails(self):
+        mask = torch.zeros(64, 64)
+        mask[20:38, 20:38] = 1.0  # 18px wide — under 20px min
         result = check_mrc(mask, min_width_nm=20.0, min_spacing_nm=4.0, pixel_size_nm=1.0)
         assert result.passed is False
 

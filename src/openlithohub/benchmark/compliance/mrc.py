@@ -108,13 +108,15 @@ def check_mrc(
     MRC violations are a hard-fail metric — a mask that violates these rules
     cannot be manufactured regardless of optical performance.
 
-    Width check: perform morphological opening (erosion then dilation) with
-    radius = floor(min_width / (2 * pixel_size)). Features that survive opening
-    are wide enough. Foreground pixels that disappear after opening are width
-    violation pixels.
+    Width check: morphological opening with structuring element of size
+    ``kernel = floor(min_width_nm / pixel_size_nm)`` (i.e. the largest disk
+    that physically fits inside a feature of exactly ``min_width_nm``). The
+    kernel half-width passed to ``binary_erosion`` is therefore
+    ``(kernel - 1) // 2``. Features that disappear under this opening are
+    width violations. A feature exactly ``min_width_nm`` wide passes.
 
-    Spacing check: same logic on the inverted mask — gaps between features that
-    disappear under opening are too narrow.
+    Spacing check: same logic on the inverted mask — gaps that disappear
+    under opening are too narrow.
 
     Args:
         mask: Binary mask tensor (H, W) or (B, C, H, W).
@@ -135,8 +137,8 @@ def check_mrc(
 
     violations: list[dict[str, float]] = []
 
-    radius_width = int(math.floor(min_width_nm / (2.0 * pixel_size_nm)))
-    radius_spacing = int(math.floor(min_spacing_nm / (2.0 * pixel_size_nm)))
+    radius_width = max(0, (int(math.floor(min_width_nm / pixel_size_nm)) - 1) // 2)
+    radius_spacing = max(0, (int(math.floor(min_spacing_nm / pixel_size_nm)) - 1) // 2)
 
     width_violation_count = 0
     spacing_violation_count = 0

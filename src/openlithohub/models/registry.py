@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import warnings
 from typing import Any
 
 from openlithohub.models.base import LithographyModel
@@ -21,6 +22,12 @@ class ModelRegistry:
         it). The registry reads ``vars(model_cls)`` so that a default ``NAME``
         on a future base class cannot cause every concrete subclass that
         forgets to override it to silently collide on the same key.
+
+        Re-registering an identical class (same module + qualname) is a
+        no-op — that happens when ``register_builtin_models`` is called
+        multiple times. A *different* class with the same NAME emits a
+        ``UserWarning`` and overrides; users who shadow a built-in by
+        accident will see the warning instead of silent replacement.
         """
         name = vars(model_cls).get("NAME")
         if not isinstance(name, str) or not name:
@@ -29,6 +36,21 @@ class ModelRegistry:
                 f"`NAME: ClassVar[str]` attribute on itself (not inherited) "
                 f"to be registered."
             )
+        existing = self._models.get(name)
+        if existing is not None and existing is not model_cls:
+            same_qualname = (
+                existing.__module__ == model_cls.__module__
+                and existing.__qualname__ == model_cls.__qualname__
+            )
+            if not same_qualname:
+                warnings.warn(
+                    f"Model NAME {name!r} is being re-registered: "
+                    f"{existing.__module__}.{existing.__qualname__} -> "
+                    f"{model_cls.__module__}.{model_cls.__qualname__}. "
+                    f"The previous registration will be replaced.",
+                    UserWarning,
+                    stacklevel=2,
+                )
         self._models[name] = model_cls
         return model_cls
 

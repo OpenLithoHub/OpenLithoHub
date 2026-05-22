@@ -150,8 +150,11 @@ class FreePdk45SramDataset(DatasetAdapter):
         return len(self.cells)
 
     def __getitem__(self, index: int) -> LithoSample:
-        if index < 0 or index >= len(self.cells):
-            raise IndexError(f"Index {index} out of range [0, {len(self.cells)})")
+        n = len(self.cells)
+        if index < -n or index >= n:
+            raise IndexError(f"Index {index} out of range [{-n}, {n})")
+        if index < 0:
+            index += n
         name = self.cells[index]
         if name in self._cache:
             return self._cache[name]

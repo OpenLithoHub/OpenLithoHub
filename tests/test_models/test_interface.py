@@ -39,3 +39,55 @@ def test_registry_list():
 
     models = registry.list_models()
     assert "dummy-identity" in models
+
+
+def test_registry_warns_on_name_collision():
+    """Re-registering a different class with an existing NAME must warn, not silently overwrite."""
+    import warnings
+
+    from openlithohub.models.registry import ModelRegistry
+
+    class A:
+        NAME = "collide-me"
+
+        def predict(self, *_, **__):  # pragma: no cover - shape only
+            ...
+
+    class B:
+        NAME = "collide-me"
+
+        def predict(self, *_, **__):  # pragma: no cover - shape only
+            ...
+
+    reg = ModelRegistry()
+    reg.register(A)  # type: ignore[arg-type]
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        reg.register(B)  # type: ignore[arg-type]
+    assert any(
+        issubclass(w.category, UserWarning) and "re-registered" in str(w.message) for w in caught
+    )
+
+
+def test_registry_idempotent_on_same_class():
+    """Re-registering the exact same class must NOT warn.
+
+    ``register_builtin_models`` is called from both the parent and worker
+    processes, so the same class can pass through ``register`` more than once.
+    """
+    import warnings
+
+    from openlithohub.models.registry import ModelRegistry
+
+    class C:
+        NAME = "idempotent"
+
+        def predict(self, *_, **__):  # pragma: no cover - shape only
+            ...
+
+    reg = ModelRegistry()
+    reg.register(C)  # type: ignore[arg-type]
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        reg.register(C)  # type: ignore[arg-type]
+    assert not any(issubclass(w.category, UserWarning) for w in caught)

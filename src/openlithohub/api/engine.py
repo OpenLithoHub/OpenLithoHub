@@ -107,11 +107,14 @@ class LitheEngine:
         self.close()
 
     def _resolve_pixel_size(self, supplied: float) -> float:
-        # Mirror server/app.py:67–69 — when the caller did not override the
-        # default 1.0 nm/px and a process node is active, prefer the node's
-        # native pitch.
-        if self._node_config is not None and supplied == 1.0:
-            return self._node_config.pixel_size_nm
+        # The Mask carries its pixel pitch; trust it. ``_coerce_to_mask``
+        # already substitutes the node's native pitch when the caller
+        # passed a bare tensor without a pitch annotation, so by the time
+        # we reach here the value is authoritative.
+        #
+        # Earlier versions used ``supplied == 1.0`` as a "not set" sentinel,
+        # but 1.0 nm/px is a legitimate pitch (e.g. ICCAD16 benchmarks),
+        # which silently overrode the caller's value with the node's.
         return supplied
 
     def _coerce_to_mask(self, design: Mask | torch.Tensor) -> Mask:

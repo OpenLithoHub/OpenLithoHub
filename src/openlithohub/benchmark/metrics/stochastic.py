@@ -66,12 +66,16 @@ def compute_stochastic_robustness(
     num_trials: int = 100,
     dose_photons_per_nm2: float = 30.0,
     pixel_size_nm: float = 1.0,
-    seed: int | None = None,
+    seed: int | None = 0,
 ) -> dict[str, float]:
     """Evaluate mask robustness against EUV photon shot noise.
 
     Simulates stochastic resist exposure via Poisson photon noise to quantify
     probability of micro-bridging and line breaks.
+
+    ``seed`` defaults to ``0`` so leaderboard runs are reproducible. Pass
+    ``seed=None`` to draw from system entropy (intentional non-determinism,
+    e.g. ensemble runs).
     """
     state = _nominal_state(mask, dose_photons_per_nm2, pixel_size_nm)
     resist_nominal = state.resist_nominal
@@ -284,7 +288,7 @@ def compute_stochastic_defect_classes(
     num_trials: int = 100,
     dose_photons_per_nm2: float = 30.0,
     pixel_size_nm: float = 1.0,
-    seed: int | None = None,
+    seed: int | None = 0,
     contact_aspect_max: float = 1.5,
     contact_area_max: int = 64,
 ) -> StochasticDefectRates:

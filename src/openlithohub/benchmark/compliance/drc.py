@@ -113,7 +113,10 @@ def check_drc(
 def _check_width(
     binary: torch.Tensor, min_width_nm: float, pixel_size_nm: float
 ) -> list[dict[str, float]]:
-    radius = int(math.floor(min_width_nm / (2.0 * pixel_size_nm)))
+    # Opening kernel is the largest disk that fits inside a feature exactly
+    # ``min_width_nm`` wide; ``2r+1 == floor(min_width / pixel)`` so a
+    # legitimate min-width feature is preserved.
+    radius = max(0, (int(math.floor(min_width_nm / pixel_size_nm)) - 1) // 2)
     if radius < 1 or binary.sum() == 0:
         return []
 
@@ -125,7 +128,7 @@ def _check_width(
 def _check_spacing(
     binary: torch.Tensor, min_spacing_nm: float, pixel_size_nm: float
 ) -> list[dict[str, float]]:
-    radius = int(math.floor(min_spacing_nm / (2.0 * pixel_size_nm)))
+    radius = max(0, (int(math.floor(min_spacing_nm / pixel_size_nm)) - 1) // 2)
     bg = (binary < 0.5).float()
     if radius < 1 or bg.sum() == 0 or binary.sum() == 0:
         return []

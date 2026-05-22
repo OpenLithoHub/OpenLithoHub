@@ -71,7 +71,7 @@ def _run_optimize(
     output_path: Path,
     model_name: str,
     node: str,
-    pixel_nm: float,
+    pixel_nm: float | None,
     tile_size: int,
     writer: str,
     layer: str | None,
@@ -86,7 +86,7 @@ def _run_optimize(
     from openlithohub.workflow.tiling import stitch_tiles, tile_layout
 
     node_config = get_node(node)
-    if pixel_nm == 1.0:
+    if pixel_nm is None:
         pixel_nm = node_config.pixel_size_nm
 
     model_kwargs: dict[str, Any] = {"pretrained": True} if pretrained else {}
@@ -159,7 +159,13 @@ def create_app() -> FastAPI:
         layout: UploadFile = File(..., description="Layout file (.oas, .gds, .pt, .npy)"),
         model: str = Form(..., description="Registered model name."),
         node: str = Form("3nm-euv", description="Process node."),
-        pixel_nm: float = Form(1.0, description="Pixel size in nanometers."),
+        pixel_nm: float | None = Form(
+            None,
+            description=(
+                "Pixel size in nanometers. If unset, falls back to the node's "
+                "native pitch (1.0 nm/px is treated as a real value, not a sentinel)."
+            ),
+        ),
         tile_size: int = Form(2048, description="Tile size in pixels."),
         writer: str = Form("mbmw", description="Target writer: mbmw or vsb."),
         layer: str | None = Form(
