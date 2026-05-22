@@ -47,7 +47,13 @@ class HopkinsParams:
             outer sigma for annular/dipole/quasar.
         sigma_inner: Inner sigma for annular/dipole/quasar (ignored for circular).
         pixel_size_nm: Physical size of one mask pixel.
-        num_kernels: SOCS truncation order. 24 is a common production default.
+        num_kernels: SOCS truncation order. Defaults to 24 to match the
+            ``Yang2023_LithoBench`` Table II benchmark; that paper does
+            not publish a truncation-error vs K curve, so the underlying
+            defensibility chain is Cobb 1995, §IV (the original SOCS
+            construction) plus accumulated practice. Production
+            deployments at a different node should re-sweep K against
+            their own EPE noise floor before pinning this value.
         illumination: Source shape — circular, annular, dipole (X-direction
             poles), or quasar (4-pole, CQuad).
         dipole_angle_deg: Pole-pair orientation for dipole/quasar (degrees).
