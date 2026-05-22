@@ -135,9 +135,23 @@ class _SampleBlob:
         return cls(key=key, design_npy=design, mask_npy=mask, meta_json=meta, nominal_bytes=size)
 
 
-def _iter_blobs(adapter: DatasetAdapter, dataset_tag: str) -> Iterator[_SampleBlob]:
+def _iter_blobs(
+    adapter: DatasetAdapter,
+    dataset_tag: str,
+    *,
+    first_blob: _SampleBlob | None = None,
+) -> Iterator[_SampleBlob]:
+    """Iterate sample blobs. ``first_blob`` short-circuits index 0 so callers
+    that already produced it (e.g. shard-size estimation) do not re-rasterize.
+    """
     total = len(adapter)
-    for i in range(total):
+    if total == 0:
+        return
+    start = 0
+    if first_blob is not None:
+        yield first_blob
+        start = 1
+    for i in range(start, total):
         sample = adapter[i]
         yield _SampleBlob.from_sample(_stable_key(dataset_tag, i, total), sample)
 
@@ -147,24 +161,26 @@ def _resolve_shard_count(
     dataset_tag: str,
     shards: int | None,
     shard_size_bytes: int | None,
-) -> int:
-    """Resolve the final shard count from the user's --shards / --shard-size knob."""
+) -> tuple[int, _SampleBlob | None]:
+    """Resolve the final shard count, returning the probed first blob when one
+    was produced so the caller can avoid re-rasterizing index 0 in ``export()``.
+    """
     total = len(adapter)
     if shards is not None and shard_size_bytes is not None:
         raise ValueError("--shards and --shard-size are mutually exclusive")
     if shards is not None:
         if shards < 1:
             raise ValueError(f"--shards must be >= 1, got {shards}")
-        return min(shards, max(total, 1))
+        return min(shards, max(total, 1)), None
     if shard_size_bytes is not None:
-        # Probe the first sample to estimate per-record bytes, then derive N.
         if total == 0:
-            return 1
-        first = next(_iter_blobs(adapter, dataset_tag))
+            return 1, None
+        first = _SampleBlob.from_sample(_stable_key(dataset_tag, 0, total), adapter[0])
         per_sample = max(first.nominal_bytes, 1)
         target_records_per_shard = max(shard_size_bytes // per_sample, 1)
-        return max(1, (total + target_records_per_shard - 1) // target_records_per_shard)
-    return 1
+        n_shards = max(1, (total + target_records_per_shard - 1) // target_records_per_shard)
+        return n_shards, first
+    return 1, None
 
 
 class WebdatasetExporter:
@@ -206,7 +222,9 @@ class WebdatasetExporter:
         self.adapter = adapter
         self.output_dir = Path(output_dir)
         self.dataset_tag = (dataset_tag or adapter.croissant_name()).lower().replace(" ", "-")
-        self.shards = _resolve_shard_count(adapter, self.dataset_tag, shards, shard_size_bytes)
+        self.shards, self._probed_first = _resolve_shard_count(
+            adapter, self.dataset_tag, shards, shard_size_bytes
+        )
 
     def export(self) -> list[Path]:
         """Write all shards. Returns the list of shard paths in shard-index order."""
@@ -217,7 +235,8 @@ class WebdatasetExporter:
         with ExitStack() as stack:
             # Open all shard tarfiles up front so we can dispatch records round-robin.
             shard_writers = [stack.enter_context(tarfile.open(p, mode="w")) for p in shard_paths]
-            for i, blob in enumerate(_iter_blobs(self.adapter, self.dataset_tag)):
+            blob_iter = _iter_blobs(self.adapter, self.dataset_tag, first_blob=self._probed_first)
+            for i, blob in enumerate(blob_iter):
                 _add_blob_to_tar(shard_writers[i % self.shards], blob)
 
         # Drop dataset-level Croissant metadata next to the shards.
@@ -273,7 +292,9 @@ class ParquetExporter:
         self.adapter = adapter
         self.output_dir = Path(output_dir)
         self.dataset_tag = (dataset_tag or adapter.croissant_name()).lower().replace(" ", "-")
-        self.shards = _resolve_shard_count(adapter, self.dataset_tag, shards, shard_size_bytes)
+        self.shards, self._probed_first = _resolve_shard_count(
+            adapter, self.dataset_tag, shards, shard_size_bytes
+        )
         self.compression = compression
 
     def export(self) -> list[Path]:
@@ -286,7 +307,8 @@ class ParquetExporter:
         # len(adapter)//shards, so this stays well under any reasonable RAM
         # budget for the foundation-model use case (issue #12).
         buckets: list[list[_SampleBlob]] = [[] for _ in range(self.shards)]
-        for i, blob in enumerate(_iter_blobs(self.adapter, self.dataset_tag)):
+        blob_iter = _iter_blobs(self.adapter, self.dataset_tag, first_blob=self._probed_first)
+        for i, blob in enumerate(blob_iter):
             buckets[i % self.shards].append(blob)
 
         for path, rows in zip(shard_paths, buckets, strict=True):

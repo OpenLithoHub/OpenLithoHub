@@ -237,30 +237,38 @@ class Iccad16Dataset(DatasetAdapter):
             if i1 > i0 and j1 > j0:
                 arr[j0:j1, i0:i1] = 1.0
 
-        for shape_obj in top.shapes(layer_index).each():
+        # Recursive iteration so hierarchical layouts (geometry referenced
+        # through cell instances) are not silently dropped. Today's published
+        # ICCAD16 files are flat — single TOPCELL — but matching the canonical
+        # pattern from data/io.py:128 keeps this robust against future
+        # contributions or upstream regenerations that introduce hierarchy.
+        shapes_iter = top.begin_shapes_rec(layer_index)
+        while not shapes_iter.at_end():
+            shape_obj = shapes_iter.shape()
+            trans = shapes_iter.trans()
             if shape_obj.is_box():
-                _fill_box(shape_obj.box)
+                _fill_box(shape_obj.box.transformed(trans))
+                shapes_iter.next()
                 continue
             if shape_obj.is_path():
-                # Convert path to polygon then trapezoidize below.
                 poly = shape_obj.path.polygon()
             elif shape_obj.is_polygon():
                 poly = shape_obj.polygon
             else:
+                shapes_iter.next()
                 continue
-            # Manhattan polygons decompose into axis-aligned rectangles;
-            # a non-Manhattan polygon would yield trapezoids whose bbox is
-            # a pessimistic over-fill (one pixel wide at most for typical
-            # foundry tilt — accepted given ICCAD16 is Manhattan).
+            poly = poly.transformed(trans)
             try:
                 trapezoids = list(poly.decompose_trapezoids(kdb.Polygon.TD_simple))
             except AttributeError:
                 # Older klayout: fall back to whole-polygon bbox (still over-fills
                 # concavities, but no worse than the historical behavior).
                 _fill_box(poly.bbox())
+                shapes_iter.next()
                 continue
             for tz in trapezoids:
                 _fill_box(tz.bbox())
+            shapes_iter.next()
 
         return arr, origin
 
@@ -276,12 +284,17 @@ class Iccad16Dataset(DatasetAdapter):
             return []
         dbu_nm = layout.dbu * 1000.0
         out: list[dict[str, float]] = []
-        for s in top.shapes(layer_index).each():
+        # Recursive iteration matches _rasterize_layer above.
+        shapes_iter = top.begin_shapes_rec(layer_index)
+        while not shapes_iter.at_end():
+            s = shapes_iter.shape()
+            trans = shapes_iter.trans()
             if s.is_box():
-                b = s.box
+                b = s.box.transformed(trans)
             elif s.is_polygon():
-                b = s.polygon.bbox()
+                b = s.polygon.transformed(trans).bbox()
             else:
+                shapes_iter.next()
                 continue
             out.append(
                 {
@@ -291,6 +304,7 @@ class Iccad16Dataset(DatasetAdapter):
                     "y1_nm": b.top * dbu_nm,
                 }
             )
+            shapes_iter.next()
         return out
 
     def _load_hotspots(self, csv_path: Path) -> list[HotspotAnnotation]:
