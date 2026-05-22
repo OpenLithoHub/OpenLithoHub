@@ -56,6 +56,38 @@ class TestEuv3D:
         assert {"residual_l2", "residual_linf", "hv_bias_nm"} == set(out)
         assert out["residual_l2"] >= 0
 
+    def test_hv_bias_responds_to_horizontal_line_array(self) -> None:
+        """Issue #24: hv_bias_nm should be in nanometres and reflect the
+        H-vs-V printed-CD difference under the chief-ray shadow. Build a
+        mask with horizontal-only stripes — its V-azimuth shadow
+        narrows the lines along their length axis, the H-azimuth shadow
+        leaves them untouched, so the H-azimuth printed contour is
+        wider than the V-azimuth one. Sign: positive (H wider)."""
+        # Horizontal stripes: rows of foreground separated by rows of bg.
+        mask = torch.zeros(64, 64)
+        for r in range(8, 64, 16):
+            mask[r : r + 4, :] = 1.0
+        out = compute_3d_mask_residual(
+            mask,
+            Mask3DParams(absorber_thickness_nm=200.0, chief_ray_angle_deg=10.0),
+        )
+        # Strong shadow → measurable, signed bias in nm.
+        assert isinstance(out["hv_bias_nm"], float)
+        # H-stripes shadowed along the H-azimuth (along the line) preserve
+        # CD; shadowed along the V-azimuth (across the line) shrink CD —
+        # so H_width > V_width and the bias is positive.
+        assert out["hv_bias_nm"] > 0.0
+
+    def test_hv_bias_zero_for_zero_thickness(self) -> None:
+        """No absorber, no shadow, so H ≡ V and bias = 0."""
+        mask = torch.zeros(64, 64)
+        mask[20:44, 20:44] = 1.0
+        out = compute_3d_mask_residual(
+            mask,
+            Mask3DParams(absorber_thickness_nm=0.0, chief_ray_angle_deg=0.0),
+        )
+        assert out["hv_bias_nm"] == pytest.approx(0.0, abs=1e-9)
+
 
 class TestMonteCarloFailure:
     def test_zero_jitter_yields_zero_failure(self) -> None:

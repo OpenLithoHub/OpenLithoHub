@@ -118,6 +118,70 @@ def apply_3d_shadow(
     return shadowed.squeeze(0).squeeze(0).clamp(0.0, 1.0)
 
 
+def _hv_cd_bias_nm(
+    shadowed_h: torch.Tensor,
+    shadowed_v: torch.Tensor,
+    mask: torch.Tensor,
+    pixel_size_nm: float,
+    threshold: float = 0.5,
+) -> float:
+    """Estimate H-vs-V CD bias in nanometres from two shadowed *masks*.
+
+    The H–V signal lives in the shadowed-mask domain: the chief-ray
+    azimuth determines which axis the absorber's geometric shadow
+    falls along, so the ``apply_3d_shadow`` output is directly
+    anisotropic. Hopkins is bandlimited and partially erases that
+    anisotropy at sub-resolution pitch (a checkerboard at 1 px/cycle
+    blurs to a uniform mid-grey regardless of azimuth), so a
+    Hopkins-domain H–V metric reads zero on layouts where the bias is
+    physically present.
+
+    Compute it before the optical convolution: threshold each shadowed
+    mask at ``threshold`` to get a printed footprint, take the
+    foreground-area difference, then divide by the original mask's
+    contour length to get a 1D CD bias in pixels — finally scale by
+    ``pixel_size_nm``.
+
+        cd_bias_nm = (area_h - area_v) / contour_length_px × pixel_nm
+
+    Sign: positive when horizontal-azimuth shadow leaves a wider print
+    than vertical (i.e. H-stripes survive shadow better than V-stripes
+    on a layout dominated by horizontal lines), matching the
+    "horizontal lines print wider" convention.
+
+    The previous metric was ``(aerial_h - aerial_v).mean() * pixel_size_nm``
+    — a difference of mean intensities multiplied by a single pixel
+    pitch, which has neither units of length nor any monotone relation
+    to printed CD. Issue #24.
+    """
+    contour_h = (shadowed_h > threshold).to(shadowed_h.dtype)
+    contour_v = (shadowed_v > threshold).to(shadowed_v.dtype)
+    area_diff_px = float((contour_h.sum() - contour_v.sum()).item())
+
+    # Contour length of the *original* mask (4-connected edge count).
+    # We divide by this rather than the shadowed contour's perimeter so
+    # the normalisation is azimuth-independent — the H and V branches
+    # share a single denominator and the ratio cleanly represents
+    # "extra width per unit of edge-length".
+    m = (mask > 0.5).to(mask.dtype)
+    pad = functional.pad(m.unsqueeze(0).unsqueeze(0), [1, 1, 1, 1], mode="constant", value=0.0)
+    up = pad[..., :-2, 1:-1].squeeze(0).squeeze(0)
+    down = pad[..., 2:, 1:-1].squeeze(0).squeeze(0)
+    left = pad[..., 1:-1, :-2].squeeze(0).squeeze(0)
+    right = pad[..., 1:-1, 2:].squeeze(0).squeeze(0)
+    edges = (
+        (m - up).clamp(min=0)
+        + (m - down).clamp(min=0)
+        + (m - left).clamp(min=0)
+        + (m - right).clamp(min=0)
+    )
+    contour_length_px = float(edges.sum().item())
+    if contour_length_px <= 0.0:
+        return 0.0
+
+    return area_diff_px / contour_length_px * pixel_size_nm
+
+
 def compute_3d_mask_residual(
     mask: torch.Tensor,
     params: Mask3DParams | None = None,
@@ -138,7 +202,10 @@ def compute_3d_mask_residual(
     Returns:
         Dict with keys ``residual_l2``, ``residual_linf``, and
         ``hv_bias_nm`` (positive when horizontal lines print wider than
-        vertical lines after 3D-shadow correction).
+        vertical lines after 3D-shadow correction). The H–V bias is
+        derived from thresholded shadowed-mask area, normalised by the
+        original mask's contour length, so it carries genuine units of
+        length — see :func:`_hv_cd_bias_nm`.
     """
 
     p = params or Mask3DParams()
@@ -170,9 +237,9 @@ def compute_3d_mask_residual(
         chief_ray_azimuth_deg=90.0,
         pixel_size_nm=p.pixel_size_nm,
     )
-    aerial_h = sim.simulate(apply_3d_shadow(m, horizontal_p)).aerial
-    aerial_v = sim.simulate(apply_3d_shadow(m, vertical_p)).aerial
-    hv_bias_nm = float((aerial_h - aerial_v).mean().item() * cfg.pixel_size_nm)
+    shadowed_h = apply_3d_shadow(m, horizontal_p)
+    shadowed_v = apply_3d_shadow(m, vertical_p)
+    hv_bias_nm = _hv_cd_bias_nm(shadowed_h, shadowed_v, m, cfg.pixel_size_nm)
 
     return {
         "residual_l2": residual_l2,
