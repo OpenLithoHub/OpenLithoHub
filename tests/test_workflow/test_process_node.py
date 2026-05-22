@@ -109,3 +109,32 @@ class TestAnamorphicDemag:
         assert node.demag_scan == 4.0
         assert node.demag_slit == 4.0
         assert not node.is_anamorphic
+
+    def test_28nm_is_lele(self) -> None:
+        """Issue #14: 28nm at 193i has k1≈0.098, well below the 0.25
+        single-shot floor. Production 28nm is litho-etch-litho-etch;
+        flagging this in the config lets callers know they're imaging
+        an LELE sub-layer when they score against the bundled
+        single-pass forward simulator."""
+        node = PROCESS_NODES["28nm"]
+        assert node.multi_patterning == "lele"
+        assert node.k1_factor < 0.25
+
+    def test_euv_nodes_are_single_exposure(self) -> None:
+        """EUV NA-0.33 at 7nm has k1≈0.34 (above 0.25), so single-shot."""
+        node = PROCESS_NODES["7nm"]
+        assert node.multi_patterning == "none"
+        assert node.k1_factor > 0.25
+
+    def test_multi_patterning_default_is_none(self) -> None:
+        node = ProcessNodeConfig(
+            name="test",
+            wavelength_nm=193.0,
+            numerical_aperture=1.35,
+            sigma_inner=0.5,
+            sigma_outer=0.8,
+            pixel_size_nm=1.0,
+            min_feature_nm=40.0,
+            min_spacing_nm=40.0,
+        )
+        assert node.multi_patterning == "none"

@@ -43,6 +43,31 @@ class ProcessNodeConfig:
     half-field stitching, mask-side pixel sizing) can branch on
     ``demag_scan != demag_slit``. See the High-NA tracking issue.
     """
+    multi_patterning: str = "none"
+    """Multi-patterning scheme assumed by ``min_feature_nm`` / ``min_spacing_nm``.
+
+    The Rayleigh limit ``k1 × λ / NA`` caps the *half-pitch* a single
+    exposure can resolve at k1 ≈ 0.25 (production manufacturable). When
+    ``min_feature_nm`` falls below that limit, the layout assumes
+    multiple exposures (LELE / LELELE / SADP / SAQP) — a single-shot
+    forward simulation is then a coarse approximation, valid for
+    *one* of the multi-patterning sub-layers but not the composite
+    image.
+
+    Values: ``"none"``, ``"lele"`` (litho-etch-litho-etch, 2-colour
+    decomposition), ``"lelele"`` (3-colour), ``"sadp"`` (self-aligned
+    double patterning), ``"saqp"`` (self-aligned quadruple). The flag
+    is informational — the forward model does not yet decompose layouts
+    by colour, so callers running below the single-exposure k1=0.25
+    floor should split layouts manually before scoring.
+
+    Worked examples:
+        - 28nm at 193 nm DUV / NA 1.35: single-exposure k1 = 14 × 1.35 /
+          193 ≈ 0.098, well below 0.25. Production 28nm is LELE
+          immersion. Marked ``"lele"``.
+        - 7nm at EUV NA 0.33: k1 = 14 × 0.33 / 13.5 ≈ 0.34. Single
+          exposure, marked ``"none"``.
+    """
 
     @property
     def is_anamorphic(self) -> bool:
@@ -126,6 +151,11 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
         min_spacing_nm=28.0,
         defocus_budget_nm=60.0,
         optical_radius_nm=1500.0,
+        # 193i single-shot k1 ≈ 0.098 — well below the 0.25 manufacturable
+        # floor, so production 28nm uses LELE. The forward model does not
+        # decompose layouts; callers scoring 28nm at single shot are
+        # imaging an LELE *sub-layer*, not the composite mask.
+        multi_patterning="lele",
     ),
     "45nm": ProcessNodeConfig(
         name="45nm",
@@ -138,6 +168,11 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
         min_spacing_nm=40.0,
         defocus_budget_nm=80.0,
         optical_radius_nm=1500.0,
+        # k1 ≈ 0.140 at 40nm half-pitch — still single-exposure
+        # uncomfortable at production-grade 0.25 floor, but historical
+        # 45nm shipped with single-pass 193i at relaxed CDU; closer to
+        # "none" than full LELE. Mark "none" with the caveat in mind.
+        multi_patterning="none",
     ),
 }
 

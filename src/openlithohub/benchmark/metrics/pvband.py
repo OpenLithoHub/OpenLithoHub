@@ -1,4 +1,24 @@
-"""Process Variation Band (PV Band) computation."""
+"""Process Variation Band (PV Band) computation.
+
+Forward model: PV Band runs a *fast Gaussian-PSF* aerial-image
+approximation at four dose/focus corners and reports the local
+thickness of the union-minus-intersection band. This is intentionally
+*not* the SOCS / Hopkins forward path used by ``compute_l2_error`` and
+``compute_wafer_epe``: PV Band is meant to be the cheap printability
+diagnostic that runs in inner loops and on every commit, while the
+SOCS-based metrics are reserved for headline numbers. The Gaussian
+model is calibrated so the absolute PV Band number tracks the SOCS
+result at the published Neural-ILT corners — both are stable signals
+of process-window robustness, but they are not interchangeable
+numerically and the README baseline table reports the Gaussian-PVB
+value (matching ``baselines/results.md``).
+
+If you need PV Band derived from the same SOCS kernels as L2/EPE,
+score the predicted mask with :func:`compute_l2_error` at the four
+corners explicitly and take the band yourself — wiring a
+``simulator=`` parameter through this helper is a roadmap item, not a
+silent default change.
+"""
 
 from __future__ import annotations
 
@@ -18,16 +38,18 @@ def compute_pvband(
 ) -> dict[str, float]:
     """Compute Process Variation Band width for a given mask.
 
-    PV Band measures the perpendicular distance between the resist contours
-    at process window extremes. Uses a simplified Gaussian forward model to
-    simulate aerial images at four dose/focus corners, then reports the
-    band's local thickness — twice the distance from each band-interior pixel
-    to the nearest non-band pixel (i.e. either the outer or inner contour).
+    PV Band measures the perpendicular distance between the resist
+    contours at process window extremes. Uses the **fast Gaussian-PSF
+    forward model** (not Hopkins/SOCS — see module docstring) to
+    simulate aerial images at four dose/focus corners, then reports
+    the band's local thickness — twice the distance from each
+    band-interior pixel to the nearest non-band pixel.
 
-    The factor of two converts "distance to the nearest contour" (half-width
-    at the band's centerline) into the full perpendicular contour-to-contour
-    distance that the literature publishes. Without it the metric under-reports
-    by 2× and cannot be compared with other papers' PV-band numbers.
+    The factor of two converts "distance to the nearest contour"
+    (half-width at the band's centerline) into the full perpendicular
+    contour-to-contour distance that the literature publishes. Without
+    it the metric under-reports by 2× and cannot be compared with
+    other papers' PV-band numbers.
     """
     m = ensure_2d(mask)
     binary = (m > 0.5).float()
