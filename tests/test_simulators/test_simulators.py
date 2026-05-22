@@ -78,6 +78,23 @@ class TestHopkinsSimulator:
         # Resist duty cycle at threshold=0.225, dose=1.0.
         assert result.resist.sum().item() == pytest.approx(1004.0, abs=4.0)
 
+    def test_dose_actually_moves_resist_contour(self) -> None:
+        """Issue #52: dose used to be cancelled in HopkinsSimulator.simulate
+        because the threshold was scaled by dose AND the aerial was scaled
+        by dose, so the comparison `aerial >= threshold * dose` reduced to
+        `aerial_unit >= threshold_unit`. PW dose corners, MC dose jitter,
+        and PVB dose-axis sweeps all reported zero dose sensitivity. After
+        the fix, threshold is held constant and dose linearly scales the
+        aerial — so a dose nudge clearly moves the resist contour."""
+        mask = _make_mask()
+        cfg_low = SimulatorConfig(pixel_size_nm=4.0, dose=0.95)
+        cfg_high = SimulatorConfig(pixel_size_nm=4.0, dose=1.05)
+        r_low = HopkinsSimulator(cfg_low).simulate(mask).resist
+        r_high = HopkinsSimulator(cfg_high).simulate(mask).resist
+        # Higher dose clears resist over a strictly larger area than lower
+        # dose (more of the aerial exceeds the fixed threshold).
+        assert r_high.sum().item() > r_low.sum().item()
+
 
 class TestHopkinsWithConfig:
     """Direct coverage for HopkinsSimulator.with_config kernel-reuse path.

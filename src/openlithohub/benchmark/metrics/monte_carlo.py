@@ -153,11 +153,13 @@ def monte_carlo_failure_probability(
 
     for _trial in range(num_trials):
         # Per-trial multiplicative dose jitter and additive threshold
-        # jitter. We apply both *outside* the simulator to dodge the
-        # threshold-scales-with-dose cancellation in HopkinsSimulator
-        # (issue #52) — re-running the simulator with a perturbed
-        # config.dose would simply rescale the aerial-vs-threshold ratio
-        # back to 1.0, defeating the perturbation.
+        # jitter. We apply both *outside* the simulator and scale the
+        # aerial intensity directly. After issue #52 was fixed (the
+        # threshold no longer scales with dose), passing dose through
+        # `config.dose` would also work, but doing it here keeps the
+        # MC path independent of any future simulator-side dose
+        # convention drift and lets us apply both jitters in one
+        # pass without rebuilding the simulator config.
         dose_factor = 1.0 + dose_jitter_sigma * torch.randn(1, generator=generator).item()
         dose_factor = max(dose_factor, 1e-6)
         threshold_offset = threshold_jitter_sigma * torch.randn(1, generator=generator).item()

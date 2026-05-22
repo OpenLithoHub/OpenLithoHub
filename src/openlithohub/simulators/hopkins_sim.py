@@ -87,7 +87,16 @@ class HopkinsSimulator(BaseSimulator):
             params=self._hparams,
             dose=self.config.dose,
         )
-        threshold = self.config.threshold * self.config.dose
+        # Issue #52: do NOT scale the threshold by dose. `simulate_aerial_image_hopkins`
+        # already multiplies the aerial by dose; if we also multiply the threshold by
+        # dose, the comparison `aerial >= threshold * dose` reduces to
+        # `aerial_unit >= threshold_unit` — i.e. dose is fully cancelled and the
+        # resist contour is invariant under dose. The physical convention is the
+        # opposite: changing dose changes the resist contour at a *fixed* clearing
+        # threshold, since the resist's clearing intensity is a chemical
+        # invariant. PW dose corners, stochastic / Monte-Carlo dose jitter, and
+        # PVB dose-axis variation all relied on this.
+        threshold = self.config.threshold
         resist = (aerial >= threshold).to(aerial.dtype)
         return SimulatorResult(
             aerial=aerial,
