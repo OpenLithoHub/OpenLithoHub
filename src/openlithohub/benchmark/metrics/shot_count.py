@@ -77,35 +77,54 @@ def _estimate_vsb(
     min_shot_size_nm: float,
     pixel_size_nm: float,
 ) -> dict[str, int | float]:
-    """VSB estimation: approximate rectangle decomposition via complexity heuristic."""
+    """VSB estimation: rectilinear-polygon rectangle-decomposition lower bound.
+
+    For axis-aligned rectilinear polygons, the minimum number of
+    axis-aligned rectangles needed to tile a single component is
+    ``concave_corners / 2 + 1`` (Lipski et al., 1979 / Imai-Asano).
+    A perfect rectangle has zero concave corners → 1 shot regardless of
+    aspect ratio (the previous ``perimeter² / area`` heuristic reported
+    50 shots for a 100×2 stripe and 4 shots for a 100×100 square — both
+    wrong).
+
+    We then split each component by ``max_shot_area`` to model VSB's
+    write-field cap, sum across connected components, and floor at 1.
+    """
+    from openlithohub._utils.morphology import connected_components
+
+    # Pad once with a one-pixel background border so 2×2 corner kernels
+    # never spill off the canvas — equivalent to the zero-pad boundary
+    # convention used elsewhere in this module.
     h, w = binary.shape
-    b = binary > 0.5
-    # Boundary detection compares each foreground pixel against its 4 neighbours
-    # under zero-padding (pixels outside the canvas are treated as background).
-    # `torch.roll` wraps circularly, which would mark border-touching shapes as
-    # bordered on the opposite edge as well — inflating perimeter for cropped
-    # tiles, which is the common case.
-    zero_row = torch.zeros((1, w), dtype=b.dtype, device=b.device)
-    zero_col = torch.zeros((h, 1), dtype=b.dtype, device=b.device)
-    up = torch.cat([b[1:, :], zero_row], dim=0)
-    down = torch.cat([zero_row, b[:-1, :]], dim=0)
-    left = torch.cat([b[:, 1:], zero_col], dim=1)
-    right = torch.cat([zero_col, b[:, :-1]], dim=1)
-    boundary = ((b != up) | (b != down) | (b != left) | (b != right)) & b
-    perimeter_pixels = int(boundary.sum().item())
+    bg = torch.zeros((h + 2, w + 2), dtype=binary.dtype, device=binary.device)
+    bg[1:-1, 1:-1] = binary > 0.5
+    b = bg
 
-    # Complexity ratio: higher perimeter/area means more shots needed
-    # For a simple rectangle: perimeter ~ 4*sqrt(area), needing 1 shot
-    # For complex shapes: more rectangular decomposition needed
-    if perimeter_pixels == 0:
-        shot_count = 1
-    else:
-        max_shot_area_nm2 = min_shot_size_nm * min_shot_size_nm * 1024
-        complexity = (perimeter_pixels * perimeter_pixels) / max(1, foreground_pixels)
-        avg_shot_area_px = max(1.0, foreground_pixels / max(1.0, complexity * 0.25))
-        max_area_px = max_shot_area_nm2 / (pixel_size_nm * pixel_size_nm)
-        avg_shot_area_px = min(avg_shot_area_px, max_area_px)
-        shot_count = max(1, int(foreground_pixels / avg_shot_area_px + 0.5))
+    # 2×2 block sum: each interior pixel position counts how many of the
+    # four pixels meeting at that corner are foreground. A concave corner
+    # is where exactly three of the four are foreground (the fourth is
+    # the "bite" out of the rectilinear contour). Convex corners have
+    # exactly one foreground pixel, edges have two, interior has four.
+    block = b[:-1, :-1] + b[1:, :-1] + b[:-1, 1:] + b[1:, 1:]
+    concave_corners = int((block == 3).sum().item())
 
+    labels, n_components = connected_components(binary > 0.5, connectivity=4)
+    if n_components == 0:
+        return {"shot_count": 0, "estimated_write_time_s": 0.0}
+
+    # Lipski 1979 lower bound: a simply-connected rectilinear polygon
+    # with k concave corners requires at least k + 1 axis-aligned
+    # rectangles to tile. Sum over components: each component
+    # contributes its own +1 baseline. A perfect rectangle has zero
+    # concave corners → 1 shot regardless of aspect ratio.
+    rect_decomposition = n_components + concave_corners
+
+    # VSB write-field cap: a single rectangle cannot exceed the writer's
+    # max field. Approximate by area. This only matters for large solid
+    # regions; concave-heavy patterns are already shot-bound.
+    max_shot_area_px = max(1.0, (min_shot_size_nm * 1024) ** 2 / pixel_size_nm**2)
+    field_cap_extra = max(0, int(foreground_pixels / max_shot_area_px + 0.5) - n_components)
+
+    shot_count = max(1, rect_decomposition + field_cap_extra)
     write_time_s = shot_count * _VSB_SHOT_TIME_S
     return {"shot_count": shot_count, "estimated_write_time_s": write_time_s}

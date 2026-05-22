@@ -258,6 +258,39 @@ class TestShotCount:
         assert "shot_count" in result
         assert "estimated_write_time_s" in result
 
+    def test_vsb_rectangle_aspect_ratio_invariant(self):
+        # Issue #56: previous perimeter² / area heuristic gave 50 shots for
+        # a 100×2 stripe and 4 for a 100×100 square. Both are 1 rectangle
+        # → 1 VSB shot regardless of aspect ratio.
+        square = torch.zeros(120, 120)
+        square[10:110, 10:110] = 1.0
+        stripe = torch.zeros(20, 120)
+        stripe[5:7, 10:110] = 1.0
+        r_square = estimate_shot_count(square, writer_type="vsb", pixel_size_nm=1.0)
+        r_stripe = estimate_shot_count(stripe, writer_type="vsb", pixel_size_nm=1.0)
+        assert r_square["shot_count"] == 1
+        assert r_stripe["shot_count"] == 1
+
+    def test_vsb_concave_corner_increments_shot_count(self):
+        # L-shape has one concave (reflex) corner where the two arms meet.
+        # Lipski's rectilinear-polygon decomposition lower bound says
+        # k concave corners → ≥ k + 1 rectangles, so an L-shape needs 2.
+        l_shape = torch.zeros(40, 40)
+        l_shape[5:35, 5:15] = 1.0
+        l_shape[25:35, 5:35] = 1.0
+        result = estimate_shot_count(l_shape, writer_type="vsb", pixel_size_nm=1.0)
+        assert result["shot_count"] == 2
+
+    def test_vsb_disjoint_components_sum(self):
+        # Three disjoint rectangles → 3 independent shots, no extra
+        # concave corners since each component is itself a rectangle.
+        three = torch.zeros(64, 64)
+        three[10:54, 10:20] = 1.0
+        three[10:54, 25:35] = 1.0
+        three[10:54, 40:50] = 1.0
+        result = estimate_shot_count(three, writer_type="vsb", pixel_size_nm=1.0)
+        assert result["shot_count"] == 3
+
 
 class TestPVBand:
     def test_returns_expected_keys(self):
