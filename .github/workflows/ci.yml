@@ -77,6 +77,13 @@ jobs:
         # the dynamo exporter would ship green.
         if: matrix.shard.name == 'other'
         run: pip install -e ".[export]"
+      - name: Install workflow extras for benchmark shard
+        # benchmark/metrics/hotspot.py lazy-imports scipy.optimize at call
+        # time (kept out of the main module so other shards don't pay the
+        # scipy dep). The hotspot-detection tests in test_benchmark exercise
+        # that path, so scipy must be present on this shard.
+        if: matrix.shard.name == 'benchmark'
+        run: pip install -e ".[workflow]"
       - name: Run tests
         run: pytest ${{ matrix.shard.xdist }} --cov=openlithohub --cov-report=xml --cov-report= -v ${{ matrix.shard.paths }}
       - name: Upload coverage
