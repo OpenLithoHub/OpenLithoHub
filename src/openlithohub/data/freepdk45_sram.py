@@ -144,6 +144,9 @@ class FreePdk45SramDataset(DatasetAdapter):
         )
         if not self._gds_lib.is_dir():
             raise FileNotFoundError(f"FreePDK45 SRAM gds_lib not found: {self._gds_lib}")
+        from openlithohub._utils.integrity import warn_unverified_data_root
+
+        warn_unverified_data_root(self._gds_lib, "freepdk45_sram")
         self._cache: dict[str, LithoSample] = {}
 
     def __len__(self) -> int:

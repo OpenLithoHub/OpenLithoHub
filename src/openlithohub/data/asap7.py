@@ -256,6 +256,13 @@ class Asap7Dataset(DatasetAdapter):
         self.root = Path(root)
         if not self.root.exists():
             raise FileNotFoundError(f"ASAP7 root not found: {self.root}")
+        # Surface a warning when no MANIFEST.SHA256 sits next to the data
+        # — this adapter's `download()` helper clones the upstream repo
+        # but does not pin per-file hashes; bytes loaded later are
+        # trusted blindly without this signal.
+        from openlithohub._utils.integrity import warn_unverified_data_root
+
+        warn_unverified_data_root(self.root, "asap7")
         self.design_layer = design_layer
         self.pixel_nm = float(pixel_nm)
         self.cells: tuple[str, ...] = tuple(cells) if cells is not None else CANONICAL_CELLS

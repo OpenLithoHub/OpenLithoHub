@@ -148,6 +148,9 @@ class OrfsArtifactDataset(DatasetAdapter):
         self.gds_path = Path(gds_path)
         if not self.gds_path.exists():
             raise FileNotFoundError(f"ORFS GDS not found: {self.gds_path}")
+        from openlithohub._utils.integrity import warn_unverified_data_root
+
+        warn_unverified_data_root(self.gds_path.parent, "orfs")
         if tile_nm is not None and tile_nm <= 0:
             raise ValueError(f"tile_nm must be positive or None, got {tile_nm!r}")
         self.cell_name = cell_name

@@ -105,6 +105,22 @@ class LithoSimDataset(DatasetAdapter):
         self.revision = revision
         self._ds: Any = None
         self._len: int | None = None
+        # Mutable default revision ("main") gives no reproducibility — the
+        # upstream dataset can advance at any time and existing scores
+        # silently rebase. Warn loudly so downstream evaluators know the
+        # bytes are not pinned. Pinned revisions (commit hash / tag) are
+        # silent.
+        if revision in (None, "main"):
+            import warnings as _w
+
+            _w.warn(
+                f"LithoSimDataset is loading {dataset_name!r} at revision="
+                f"{revision!r} — this is mutable. For reproducible scoring "
+                "pass a commit hash or tag (e.g. revision='abc1234'). "
+                "Loaded bytes are not integrity-pinned.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     @property
     def supports_random_access(self) -> bool:

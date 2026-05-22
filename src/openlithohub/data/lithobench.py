@@ -33,7 +33,7 @@ from typing import Any, Literal
 import numpy as np
 import torch
 
-from openlithohub._utils.integrity import KnownGoodHash, verify_sha256
+from openlithohub._utils.integrity import KnownGoodHash, verify_sha256, warn_unverified_data_root
 from openlithohub.data.base import DatasetAdapter, LithoSample, natural_sort_key
 
 _FILENAME_RE = re.compile(r"^(?P<sample_id>.+?)_(?P<kind>design|mask|resist)\.npy$")
@@ -92,6 +92,11 @@ class LithoBenchDataset(DatasetAdapter):
         self._index: list[str] = []
         self._layout: str = "unknown"
         self._metadata: dict[str, Any] = {}
+        # Surface a clear warning when --data-root points at unverified
+        # bytes. download() verifies the upstream tarball and is the
+        # supported integrity path; bypassing it via a hand-extracted
+        # data-root used to silently load whatever was on disk.
+        warn_unverified_data_root(self.root, "lithobench")
         self._build_index()
 
     def _build_index(self) -> None:

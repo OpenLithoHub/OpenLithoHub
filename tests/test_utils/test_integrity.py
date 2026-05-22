@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import warnings
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,10 @@ from openlithohub._utils.integrity import (
     IntegrityError,
     KnownGoodHash,
     sha256_of_file,
+    verify_manifest,
     verify_sha256,
+    warn_unverified_data_root,
+    write_manifest,
 )
 
 
@@ -125,3 +129,42 @@ class TestLithoBenchKnownGoodTable:
         pin = KNOWN_GOOD_SHA256["lithomodels.tar.gz"]
         assert pin.size_bytes > 0
         assert pin.source  # provenance must be non-empty
+
+
+class TestManifest:
+    def test_write_then_verify_round_trip(self, tmp_path: Path) -> None:
+        (tmp_path / "a.npy").write_bytes(b"alpha")
+        (tmp_path / "sub").mkdir()
+        (tmp_path / "sub" / "b.npy").write_bytes(b"beta-bytes")
+        manifest = write_manifest(tmp_path)
+        assert manifest.name == "MANIFEST.SHA256"
+        verify_manifest(tmp_path)  # passes silently
+
+    def test_verify_detects_tampering(self, tmp_path: Path) -> None:
+        (tmp_path / "a.bin").write_bytes(b"original")
+        write_manifest(tmp_path)
+        # Tamper after manifest write.
+        (tmp_path / "a.bin").write_bytes(b"changed")
+        with pytest.raises(IntegrityError, match="Manifest mismatch"):
+            verify_manifest(tmp_path)
+
+    def test_verify_no_manifest_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(IntegrityError, match="No MANIFEST.SHA256"):
+            verify_manifest(tmp_path)
+
+
+class TestWarnUnverifiedDataRoot:
+    def test_warns_when_no_manifest(self, tmp_path: Path) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            warn_unverified_data_root(tmp_path, "lithobench")
+        assert any("MANIFEST.SHA256" in str(w.message) for w in caught)
+
+    def test_silent_with_manifest(self, tmp_path: Path) -> None:
+        (tmp_path / "MANIFEST.SHA256").write_text("# empty manifest\n")
+        # Use a fresh path to avoid the dedup cache from earlier tests.
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            warn_unverified_data_root(tmp_path, "freepdk45")
+        # Manifest present → no warning emitted.
+        assert not any("MANIFEST.SHA256" in str(w.message) for w in caught)

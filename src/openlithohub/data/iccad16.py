@@ -115,6 +115,9 @@ class Iccad16Dataset(DatasetAdapter):
         self.root = Path(root)
         if not self.root.exists():
             raise FileNotFoundError(f"ICCAD16 root not found: {self.root}")
+        from openlithohub._utils.integrity import warn_unverified_data_root
+
+        warn_unverified_data_root(self.root, "iccad16")
         self.design_layer = design_layer
         self.clip_layer = clip_layer
         self.pixel_nm = float(pixel_nm)

@@ -97,6 +97,9 @@ class FreePdk45Dataset(DatasetAdapter):
         self.root = Path(root)
         if not self.root.exists():
             raise FileNotFoundError(f"FreePDK45 root not found: {self.root}")
+        from openlithohub._utils.integrity import warn_unverified_data_root
+
+        warn_unverified_data_root(self.root, "freepdk45")
         self.design_layer = design_layer
         self.pixel_nm = float(pixel_nm)
         self.cells: tuple[str, ...] = tuple(cells) if cells is not None else CANONICAL_CELLS

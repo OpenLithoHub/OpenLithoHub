@@ -181,6 +181,13 @@ markers = [
     "gpu: marks tests that require >=2 CUDA GPUs (skipped in default CI)",
 ]
 filterwarnings = [
+    # data-root manifest warnings: production bytes get a one-shot
+    # warning per (dataset, root) pair; tests use tmp_path roots and
+    # would otherwise spam thousands of identical lines. The warning
+    # itself is the fix for #74 / #31 — keep narrow so unrelated
+    # UserWarnings still surface.
+    "ignore:.*has no MANIFEST.SHA256.*:UserWarning",
+    "ignore:LithoSimDataset is loading.*revision=.*:UserWarning",
     # torch >=2.x emits this from inside torch.jit when our hopkins
     # tests touch torch.fft. Not actionable from our side; keep the
     # filter narrow so genuine deprecation warnings still surface.
