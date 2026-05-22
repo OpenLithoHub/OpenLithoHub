@@ -258,3 +258,63 @@ class TestRegistry:
             from openlithohub.simulators import registry as _registry
 
             _registry._REGISTRY.pop("fake", None)
+
+
+class TestParity:
+    """Schema-only parity between the open Hopkins backend and commercial stubs.
+
+    The vendor toolchains (Calibre / Tachyon) are not installable in CI,
+    so a numerical Hopkins ↔ Calibre/Tachyon comparison is impossible
+    here. What we *can* lock down is that the three backends agree on
+    the public surface — same ``SimulatorConfig`` keys, same registry
+    handle, same ``SimulatorResult`` envelope on success — so a refactor
+    that drifts the stubs away from Hopkins fails CI immediately.
+    """
+
+    @pytest.mark.parametrize(
+        "name,extras",
+        [
+            ("hopkins", {}),
+            ("calibre", {"calibre_home": "/opt/calibre", "runset": "x.svrf"}),
+            ("tachyon", {"tachyon_home": "/opt/tachyon", "recipe": "x.tcl"}),
+        ],
+    )
+    def test_construction_accepts_shared_config(self, name: str, extras: dict) -> None:
+        # Optical/process knobs from SimulatorConfig must round-trip
+        # through every backend constructor — drift here would mean the
+        # leaderboard cannot evaluate a model on more than one backend
+        # without rewriting the config.
+        cfg = SimulatorConfig(
+            wavelength_nm=193.0,
+            na=1.35,
+            sigma=0.7,
+            pixel_size_nm=4.0,
+            threshold=0.225,
+            dose=1.0,
+            extra=extras,
+        )
+        sim = get_simulator(name, cfg)
+        assert sim.config.wavelength_nm == 193.0
+        assert sim.config.na == 1.35
+        assert sim.config.threshold == 0.225
+
+    def test_hopkins_returns_complete_result(self) -> None:
+        # Anchor: Hopkins is the open reference. SimulatorResult on a
+        # successful run carries an aerial tensor of the input shape,
+        # a binary resist contour, and the backend tag.
+        sim = HopkinsSimulator(SimulatorConfig(pixel_size_nm=4.0))
+        result = sim.simulate(_make_mask())
+        assert isinstance(result, SimulatorResult)
+        assert result.aerial.shape == (64, 64)
+        assert result.resist is not None and result.resist.shape == (64, 64)
+        assert result.backend == "hopkins"
+
+    def test_stubs_share_simulate_signature(self) -> None:
+        # The stub ``simulate`` raises NotImplementedError but must
+        # accept exactly the same call shape as Hopkins — refactors that
+        # break this contract would silently divert one backend's API.
+        import inspect
+
+        hopkins_sig = inspect.signature(HopkinsSimulator.simulate)
+        for cls in (CalibreSimulator, TachyonSimulator):
+            assert inspect.signature(cls.simulate) == hopkins_sig

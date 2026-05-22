@@ -99,6 +99,7 @@ def register_builtin_models() -> None:
     this so workers populate their registry the same way the parent does.
     """
     import openlithohub.models.examples.dummy_model  # noqa: F401
+    import openlithohub.models.gan_opc  # noqa: F401
     import openlithohub.models.levelset_ilt  # noqa: F401
     import openlithohub.models.neural_ilt  # noqa: F401
     import openlithohub.models.openilt  # noqa: F401

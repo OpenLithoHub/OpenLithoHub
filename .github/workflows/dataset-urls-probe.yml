@@ -1,0 +1,86 @@
+name: Dataset URL liveness probe
+
+# Weekly HEAD-probe of every external URL referenced by the dataset
+# adapters in DATA-LICENSES.md. Opens a GitHub issue on any non-2xx /
+# non-3xx response so a silently rotted upstream cannot break new
+# users without anyone noticing.
+
+on:
+  schedule:
+    # Mondays 09:17 UTC — off-the-hour to avoid GitHub Actions cron drift
+    # piling up at :00.
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe URLs
+        id: probe
+        shell: bash
+        run: |
+          set -uo pipefail
+          urls=(
+            "https://github.com/phdyang007/GAN-OPC"
+            "https://github.com/phdyang007/ICCAD16-N7M2EUV"
+            "https://github.com/The-OpenROAD-Project/asap7"
+            "https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts"
+            "https://github.com/mflowgen/freepdk-45nm"
+            "https://huggingface.co/datasets/OpenLithoHub/LithoSim"
+          )
+          fails=()
+          for u in "${urls[@]}"; do
+            code=$(curl -sS -L -o /dev/null -w "%{http_code}" --max-time 30 -I "$u" || echo "000")
+            echo "  $code  $u"
+            case "$code" in
+              2*|3*) ;;
+              # 401/403 on the gated LithoSim dataset is expected (the
+              # repo *exists*, the probe is unauthenticated). Treat as
+              # alive so we don't page weekly on a known-good gate.
+              401|403)
+                if [[ "$u" == *"OpenLithoHub/LithoSim"* ]]; then
+                  echo "    (gated; treating as alive)"
+                else
+                  fails+=("$code $u")
+                fi
+                ;;
+              *) fails+=("$code $u") ;;
+            esac
+          done
+          if (( ${#fails[@]} > 0 )); then
+            {
+              echo "## Dataset URL liveness probe failed"
+              echo
+              echo "The following URLs returned a non-success status:"
+              echo
+              for f in "${fails[@]}"; do echo "- \`$f\`"; done
+              echo
+              echo "Probe run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            } > probe_report.md
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open issue on failure
+        if: steps.probe.outputs.failed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="dataset-urls-probe: upstream link rotted ($(date -u +%Y-%m-%d))"
+          # Avoid duplicate issues — if one is already open with the same
+          # title prefix, just append a comment.
+          existing=$(gh issue list --state open --search "in:title \"dataset-urls-probe\"" --json number --jq '.[0].number' || true)
+          if [[ -n "$existing" && "$existing" != "null" ]]; then
+            gh issue comment "$existing" --body-file probe_report.md
+          else
+            gh issue create --title "$title" --body-file probe_report.md --label "infra"
+          fi

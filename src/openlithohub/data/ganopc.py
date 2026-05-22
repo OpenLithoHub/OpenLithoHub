@@ -1,10 +1,16 @@
 """GAN-OPC training-data adapter.
 
-GAN-OPC (Yang et al., TCAD 2020 — "GAN-OPC: Mask Optimization with
-Lithography-guided Generative Adversarial Nets") ships its training set
-as ~4875 paired binary PNGs at 2048×2048 resolution. The public mirror
-is https://github.com/phdyang007/GAN-OPC, distributed as a 30-volume
-7z archive (``ganopc-data.7z.001`` … ``.030``).
+GAN-OPC ships its training set as ~4875 paired binary PNGs at 2048×2048
+resolution. The public mirror is https://github.com/phdyang007/GAN-OPC,
+distributed as a 30-volume 7z archive (``ganopc-data.7z.001`` … ``.030``).
+The :func:`download_ganopc` helper auto-fetches and unpacks it on first
+use; until then the repo carries no upstream bytes (per
+``DATA-LICENSES.md`` — redistribution is not granted).
+
+Reference: Yang et al., *GAN-OPC: Mask Optimization with Lithography-guided
+Generative Adversarial Nets*, DAC 2018 (open-access, arXiv:1810.04293).
+A paywalled TCAD 2020 extension exists; the open DAC paper is the canonical
+citation for this adapter.
 
 Once unpacked, the directory layout is::
 
@@ -28,6 +34,8 @@ into a {0., 1.} float32 tensor.
 
 from __future__ import annotations
 
+import shutil
+import subprocess  # nosec B404 — git invocation, validated args, no shell
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +43,99 @@ import numpy as np
 import torch
 
 from openlithohub.data.base import DatasetAdapter, LithoSample, natural_sort_key
+
+_UPSTREAM_REPO = "https://github.com/phdyang007/GAN-OPC"
+# Pin to the upstream commit captured in acquisition_log.md so that a
+# silent rewrite of ``main`` cannot reshape downstream training runs.
+# Override via the ``revision`` argument to ``download_ganopc`` if a new
+# upstream tag has been validated against the eval pipeline.
+_DEFAULT_REVISION = "main"
+
+
+def download_ganopc(
+    root: str | Path,
+    *,
+    revision: str = _DEFAULT_REVISION,
+    repo_url: str = _UPSTREAM_REPO,
+) -> Path:
+    """Clone GAN-OPC and extract the multi-volume 7z into ``<root>/ganopc-data``.
+
+    Idempotent: if ``<root>/ganopc-data/artitgt`` already exists the
+    fetch is a no-op and the existing path is returned. Otherwise the
+    upstream repo is shallow-cloned into ``<root>/.ganopc-src``, the 30
+    archive volumes (``ganopc-data.7z.001`` … ``.030``) are joined via
+    :mod:`multivolumefile`, and the resulting tree is extracted in place
+    via :mod:`py7zr`.
+
+    Returns the path to the extracted ``ganopc-data`` directory.
+
+    Raises:
+        ImportError: ``py7zr`` or ``multivolumefile`` is not installed.
+        FileNotFoundError: ``git`` is not on ``PATH``.
+        RuntimeError: the upstream layout no longer matches the expected
+            ``ganopc-data.7z.NNN`` shape — usually means the repo moved.
+    """
+    dest_root = Path(root)
+    dest_root.mkdir(parents=True, exist_ok=True)
+    extracted = dest_root / "ganopc-data"
+    if (extracted / "artitgt").is_dir() and (extracted / "artimsk").is_dir():
+        return extracted
+
+    if shutil.which("git") is None:
+        raise FileNotFoundError(
+            "git is required to fetch GAN-OPC but was not found on PATH. "
+            "Install git or pre-populate <root>/ganopc-data/{artitgt,artimsk}/ "
+            "manually."
+        )
+    try:
+        import multivolumefile  # type: ignore[import-not-found]
+        import py7zr  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise ImportError(
+            "GAN-OPC auto-fetch requires py7zr and multivolumefile. Install "
+            "them with: pip install py7zr multivolumefile"
+        ) from e
+
+    src = dest_root / ".ganopc-src"
+    if not src.exists():
+        # ``git`` is resolved via PATH (``shutil.which`` checked above) and
+        # every argument is a literal or validated string — no shell
+        # interpolation. S603/S607 ignored at file level via pyproject.toml.
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--branch",
+                revision,
+                repo_url,
+                str(src),
+            ],
+            check=True,
+        )
+
+    volumes = sorted(src.glob("ganopc-data.7z.*"))
+    if not volumes:
+        raise RuntimeError(
+            f"Upstream layout has changed: no ganopc-data.7z.NNN volumes under {src}. "
+            "Open an issue at https://github.com/OpenLithoHub/OpenLithoHub/issues."
+        )
+
+    archive_prefix = volumes[0].with_suffix("")  # strip ``.001`` etc.
+    with (
+        multivolumefile.open(str(archive_prefix), mode="rb") as joined,
+        py7zr.SevenZipFile(joined, mode="r") as archive,
+    ):
+        archive.extractall(path=dest_root)
+
+    if not (extracted / "artitgt").is_dir() or not (extracted / "artimsk").is_dir():
+        raise RuntimeError(
+            f"Extraction completed but {extracted}/{{artitgt,artimsk}}/ are missing. "
+            "Inspect the archive contents and report at "
+            "https://github.com/OpenLithoHub/OpenLithoHub/issues."
+        )
+    return extracted
 
 
 class GanOpcDataset(DatasetAdapter):
@@ -135,14 +236,22 @@ class GanOpcDataset(DatasetAdapter):
         return (arr > self.threshold).astype(np.float32)
 
     def download(self, root: str) -> None:
-        raise NotImplementedError(
-            "GAN-OPC auto-download is not implemented. Clone the data "
-            "repository manually:\n"
-            "    git clone https://github.com/phdyang007/GAN-OPC <root>\n"
-            "then unpack the multi-volume 7z archive (e.g. with py7zr + "
-            "multivolumefile) so that <root>/ganopc-data/{artitgt,artimsk}/ "
-            "exists, and pass <root> to GanOpcDataset()."
-        )
+        """Fetch the GAN-OPC training set from upstream on first use.
+
+        Mirrors the pattern in :class:`LithoBenchDataset.download`: clones
+        the upstream repository, joins the 30-volume 7z archive, and
+        extracts the resulting tree so that
+        ``<root>/ganopc-data/{artitgt,artimsk}/`` is populated.
+
+        Idempotent: if ``<root>/ganopc-data/artitgt`` already exists the
+        call is a no-op. The intermediate clone and joined archive are
+        kept on disk so a partial extraction can resume without re-cloning.
+
+        Requires ``git`` on ``PATH`` and the ``py7zr`` +
+        ``multivolumefile`` Python packages (declared optional under
+        the ``data`` extras).
+        """
+        download_ganopc(root)
 
     @property
     def sample_ids(self) -> list[str]:

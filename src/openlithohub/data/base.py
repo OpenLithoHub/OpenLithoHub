@@ -40,6 +40,16 @@ class DatasetAdapter(ABC):
     unified PyTorch Tensor access regardless of underlying format.
     """
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # Wrap the subclass's ``download`` (if it overrides the abstract
+        # parent) with a per-call audit hook keyed off
+        # ``OPENLITHOHUB_AUDIT_DIR``. The wrapper is a no-op unless that
+        # env var is set, so production callers pay only one env lookup.
+        from openlithohub.data._audit import install_audit_hook
+
+        install_audit_hook(cls)
+
     @abstractmethod
     def __len__(self) -> int: ...
 

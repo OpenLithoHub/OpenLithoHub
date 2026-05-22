@@ -1,4 +1,19 @@
-"""LevelSet-ILT: Iterative mask optimization via gradient descent."""
+"""LevelSet-ILT: Iterative mask optimization via gradient descent.
+
+The level-set / continuous-mask formulation of Inverse Lithography
+Technology dates to Pang, Liu & Abrams, *Inverse lithography technology
+principles in practice: unintuitive patterns* (Proc. SPIE 5992, 2005)
+and Poonawala & Milanfar, *Mask design for optical microlithography —
+an inverse imaging problem* (IEEE TIP 16(3), 2007). This implementation
+follows the SimpleILT-style L2 + total-variation formulation surveyed
+in [Yang2023_LithoBench, §3.3, p.5] (open-access substitute for the
+paywalled Granik / Pang journal write-ups).
+
+Confidence **B** — algorithmic intent is matched against the
+LithoBench narrative; specific hyperparameters here (``lr``,
+``sigma_px``, ``tv_weight``) are this project's defaults, not literal
+paper values.
+"""
 
 from __future__ import annotations
 
