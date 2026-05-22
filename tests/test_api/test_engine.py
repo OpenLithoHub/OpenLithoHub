@@ -206,3 +206,27 @@ def test_close_is_idempotent() -> None:
         assert engine.model.teardown_calls == 1  # type: ignore[attr-defined]
     finally:
         registry._models.pop("counting-close-idempotent", None)
+
+
+def test_evaluate_uses_node_bound_simulator_for_wafer_metrics() -> None:
+    """Issue #72: wafer-level metrics (wafer EPE, L2) must be scored
+    through a simulator built from the engine's bound process node.
+    The metric defaults are 193 nm DUV / NA 1.35; an EUV-bound engine
+    must override them or the report silently grades EUV layouts
+    against DUV optics.
+    """
+    from openlithohub.api.mask import Mask
+
+    design = torch.zeros(64, 64)
+    design[16:48, 16:48] = 1.0
+    mask = Mask.from_tensor(design, pixel_size_nm=1.0)
+
+    with LitheEngine(model="dummy-identity", node="3nm-euv") as engine_euv:
+        report_euv = engine_euv.evaluate(mask, mask)
+    with LitheEngine(model="dummy-identity") as engine_default:
+        report_default = engine_default.evaluate(mask, mask)
+
+    # The two configurations exercise materially different optics, so
+    # the wafer-level scalars must diverge — proves the node binding
+    # actually reaches the metric layer.
+    assert report_euv.l2_error_pixels != report_default.l2_error_pixels

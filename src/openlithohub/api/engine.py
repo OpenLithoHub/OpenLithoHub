@@ -21,6 +21,8 @@ from openlithohub.benchmark.metrics.pvband import compute_pvband
 from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
 from openlithohub.models.base import LithographyModel
 from openlithohub.models.registry import register_builtin_models, registry
+from openlithohub.simulators.base import BaseSimulator, SimulatorConfig
+from openlithohub.simulators.hopkins_sim import HopkinsSimulator
 from openlithohub.workflow.halo import compute_halo_px
 from openlithohub.workflow.process_node import ProcessNodeConfig, get_node
 from openlithohub.workflow.tiling import stitch_tiles, tile_layout
@@ -117,6 +119,30 @@ class LitheEngine:
         # which silently overrode the caller's value with the node's.
         return supplied
 
+    def _build_simulator(self, pixel_nm: float) -> BaseSimulator | None:
+        # Issue #72: when the engine is bound to a process node, the
+        # wafer-level metrics (compute_wafer_epe, compute_l2_error) must
+        # see *that* node's wavelength / NA / illumination. Otherwise
+        # each metric internally constructs a fresh HopkinsSimulator at
+        # the 193 nm DUV / NA 1.35 / 1.0 nm/px defaults and a 3 nm EUV
+        # engine silently scores against DUV optics.
+        #
+        # Returning None falls back to each metric's default — preserves
+        # existing behaviour when no node is bound (callers explicitly
+        # picking an unconfigured engine were not expecting our defaults
+        # to apply).
+        if self._node_config is None:
+            return None
+        node = self._node_config
+        config = SimulatorConfig(
+            wavelength_nm=node.wavelength_nm,
+            na=node.numerical_aperture,
+            sigma=node.sigma_outer,
+            sigma_inner=node.sigma_inner,
+            pixel_size_nm=pixel_nm,
+        )
+        return HopkinsSimulator(config)
+
     def _coerce_to_mask(self, design: Mask | torch.Tensor) -> Mask:
         if isinstance(design, Mask):
             return design
@@ -177,11 +203,19 @@ class LitheEngine:
         # `epe` above is 0 for an Identity model by construction; this
         # one isn't, since diffraction and resist threshold reshape the
         # printed contour.
-        wafer_epe = compute_wafer_epe(pred.tensor, tgt.tensor, pixel_size_nm=pixel_nm)
+        #
+        # Build the simulator from the engine's node so the wavelength /
+        # NA / illumination match what `optimize()` would have run; metric
+        # defaults (193 nm DUV / NA 1.35) would otherwise silently override
+        # an EUV engine's bound node parameters (issue #72).
+        simulator = self._build_simulator(pixel_nm)
+        wafer_epe = compute_wafer_epe(
+            pred.tensor, tgt.tensor, pixel_size_nm=pixel_nm, simulator=simulator
+        )
         # L2 wafer error — Neural-ILT canonical printability scalar.
         # Same forward-sim path as wafer_epe, different aggregation:
         # |wafer - target|.sum() instead of edge-distance.
-        l2 = compute_l2_error(pred.tensor, tgt.tensor, pixel_size_nm=pixel_nm)
+        l2 = compute_l2_error(pred.tensor, tgt.tensor, pixel_size_nm=pixel_nm, simulator=simulator)
         pvband = compute_pvband(pred.tensor, pixel_size_nm=pixel_nm)
         drc = check_drc(pred.tensor, pixel_size_nm=pixel_nm)
         mrc = check_mrc(pred.tensor, pixel_size_nm=pixel_nm)
