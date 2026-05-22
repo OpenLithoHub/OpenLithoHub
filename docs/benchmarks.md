@@ -69,6 +69,14 @@ Things worth knowing about these numbers:
   LithoBench-trained release is planned and will diverge. With
   `--no-pretrained` the model falls back to a randomly-initialised
   U-Net, which is what the older "no-weights" numbers reflected.
+- **`MRC pass`** is the fraction of samples whose mask passes both the
+  width and spacing rules in the active rule deck (pass/fail per sample,
+  not per pixel). The underlying `MRCResult.violation_count` is a
+  **pixel-count** sum — it scales with feature area and is **not
+  directly comparable to DRC `violation_count`**, which counts connected
+  components capped at the rule's `max_reports`. `passed` vs `passed`
+  comparisons across MRC and DRC are well-defined; raw-magnitude
+  comparisons are not.
 
 ## Reproducing on real data
 

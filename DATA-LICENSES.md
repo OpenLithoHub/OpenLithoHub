@@ -30,6 +30,14 @@ that introduces them — see [CONTRIBUTING.md](CONTRIBUTING.md).
 > commercial product on top of these datasets, **independently confirm the
 > upstream license terms** before doing so.
 
+> **Note on `download()` behavior**: `Asap7Dataset.download()` is intentionally
+> rejected and points callers at `Asap7Dataset.fetch(root, accept_license=True)`
+> — the BSD-3-Clause attribution requirement needs an explicit license-
+> acknowledgement flag that the base `DatasetAdapter.download` signature does
+> not carry. `GanOpcDataset.download()` does not need this guard because the
+> upstream repository does not declare a license that imposes attribution at
+> fetch time. Do not "harmonise" the API by removing the ASAP7 guard.
+
 ---
 
 ## What OpenLithoHub Does and Does Not Do
