@@ -161,6 +161,36 @@ the ILT loops and PV-band metric:
 - **Morphology** (`binary_dilation`, `binary_erosion`, `distance_transform`)
   — GPU-friendly binary primitives shared by metrics and the dummy generator.
 
+### Resist Model Simplification
+
+The resist path used by the leaderboard's EPE/PVB scoring is a **constant
+threshold resist (CTR) without diffusion**: a fixed sigmoid threshold
+applied to the aerial image, no Mack-style acid diffusion, no per-node
+calibration. The default cutoff is `threshold = 0.225` (Yang2023_LithoBench
+§3.2 / ICCAD16 reference).
+
+This is a deliberate scope decision, not a TODO:
+
+- **Per-node CTR `(threshold, resist_blur_sigma_nm)` calibration is
+  foundry-confidential.** Real numbers come from wafer SEM measurements
+  on a specific resist + track + bake recipe. They are not published and
+  cannot ship in an open-source repo regardless of effort spent.
+- **For benchmark-relative comparison this is fine.** All models on the
+  leaderboard are scored against the same CTR, so the ordering is
+  meaningful even though the absolute EPE numbers are not predictive of
+  wafer print at any specific fab.
+- **For absolute wafer prediction this is not.** A user who needs to
+  trust an OPC mask through a real fab flow must replace
+  `apply_resist_threshold` (and ideally also add a
+  `gauss_blur(resist_diffusion_nm)` step) with calibrated parameters
+  for their target node. The function lives in
+  `src/openlithohub/_utils/forward_model.py` for that reason — it is
+  intentionally a single override point.
+
+The differentiable variants `simulate_resist_soft` and
+`differentiable_threshold` exist for ILT training (the hard step is not
+backprop-friendly); they share the same simplification.
+
 ## Performance
 
 The Hopkins forward model and the CLI both expose opt-in performance flags.

@@ -123,5 +123,12 @@ def apply_resist_threshold(
     canonical ICCAD16 / LithoBench cutoff is 0.225 (see
     [Yang2023_LithoBench, §3.2, p.5] and ``SimulatorConfig.threshold``).
     Pass ``threshold=0.225`` when reproducing benchmark numbers.
+
+    This is **constant threshold resist (CTR) without diffusion** — the
+    sigmoid-on-aerial simplification documented in
+    ``docs/architecture.md → Resist Model Simplification``. Real per-node
+    CTR parameters are foundry-confidential and cannot ship in an
+    open-source repo; benchmark-relative comparison is unaffected, but
+    absolute wafer prediction is not in scope.
     """
     return (aerial_image >= threshold).float()
