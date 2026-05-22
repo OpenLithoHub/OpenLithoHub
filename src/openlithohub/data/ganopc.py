@@ -293,9 +293,7 @@ def download_ganopc(
     archive_prefix = volumes[0].with_suffix("")  # strip ``.001`` etc.
     with (
         multivolumefile.open(str(archive_prefix), mode="rb") as joined,
-        # multivolumefile returns a RawIOBase that py7zr handles natively;
-        # the type stubs declare a narrower IO[bytes] signature.
-        py7zr.SevenZipFile(joined, mode="r") as archive,  # type: ignore[arg-type]
+        py7zr.SevenZipFile(joined, mode="r") as archive,
     ):
         archive.extractall(path=dest_root)
 
