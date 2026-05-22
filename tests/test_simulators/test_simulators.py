@@ -53,7 +53,7 @@ class TestHopkinsSimulator:
     def test_canonical_aerial_image_regression(self) -> None:
         """Pin the aerial intensity for the LithoBench-canonical optical config.
 
-        Per Yang2023_LithoBench (NeurIPS'23, arXiv:2305.04345) Table II /
+        Per Yang2023_LithoBench (NeurIPS'23) Table II /
         §3.2, the reference forward-simulation pipeline uses ArF 193nm,
         NA=1.35, sigma=0.7, 24 SOCS kernels, threshold=0.225. If any of
         those defaults — or the underlying SOCS decomposition — drifts,

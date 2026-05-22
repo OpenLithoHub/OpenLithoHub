@@ -2,7 +2,7 @@
 
 Architecture follows Yang et al., *GAN-OPC: Mask Optimization with
 Lithography-guided Generative Adversarial Nets*, DAC 2018
-([arXiv:1810.04293](https://arxiv.org/abs/1810.04293)) §IV.A — the
+([doi:10.1145/3195970.3196056](https://doi.org/10.1145/3195970.3196056)) §IV.A — the
 generator is an encoder-decoder with skip connections trained against a
 discriminator on the GAN-OPC paired dataset (target layout → OPC mask).
 This adapter only ships the generator side; the discriminator is a

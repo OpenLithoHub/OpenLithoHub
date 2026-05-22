@@ -21,8 +21,8 @@ class NeuralILTModel(LithographyModel):
     but requires pretrained weights for good results.
 
     Architecture lineage: ``Jiang2020_NeuralILT`` (ICCAD'20, paywalled).
-    Open-access substitute is [Yang2023_LithoBench, §4.3] (NeurIPS 2023,
-    arXiv:2305.04345), which describes the same architecture and training
+    Open-access substitute is [Yang2023_LithoBench, §4.3] (NeurIPS 2023),
+    which describes the same architecture and training
     schedule. OpenLithoHub's v0.1 baseline diverges from the paper in two
     ways: encoder/decoder channel widths are halved (32→64→128→256 vs
     paper's 64→128→256→512), and the differentiable ILT correction layer

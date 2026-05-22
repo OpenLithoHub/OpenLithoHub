@@ -8,7 +8,7 @@ use; until then the repo carries no upstream bytes (per
 ``DATA-LICENSES.md`` — redistribution is not granted).
 
 Reference: Yang et al., *GAN-OPC: Mask Optimization with Lithography-guided
-Generative Adversarial Nets*, DAC 2018 (open-access, arXiv:1810.04293).
+Generative Adversarial Nets*, DAC 2018 (doi:10.1145/3195970.3196056).
 A paywalled TCAD 2020 extension exists; the open DAC paper is the canonical
 citation for this adapter.
 

@@ -197,10 +197,10 @@ adding a function to the `PREDICTORS` dict that consumes a
 
 `openlithohub.data.GanOpcDataset` exposes the ~4875 paired-PNG training
 set from Yang et al., *GAN-OPC: Mask Optimization with
-Lithography-guided Generative Adversarial Nets* (DAC 2018, open-access
-[arXiv:1810.04293](https://arxiv.org/abs/1810.04293); a paywalled TCAD
-2020 extension exists but the DAC paper is canonical). Source:
-https://github.com/phdyang007/GAN-OPC (multi-volume 7z archive,
+Lithography-guided Generative Adversarial Nets* (DAC 2018,
+[doi:10.1145/3195970.3196056](https://doi.org/10.1145/3195970.3196056);
+a paywalled TCAD 2020 extension exists but the DAC paper is canonical).
+Source: https://github.com/phdyang007/GAN-OPC (multi-volume 7z archive,
 unpacks to `ganopc-data/{artitgt,artimsk}/N.glp.png` +
 `N.glpOPC.png`).
 
