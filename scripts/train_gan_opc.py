@@ -308,6 +308,7 @@ def _step(
         "lambda_mrc": torch.tensor(lambda_mrc, device=design.device),
         "lambda_pvb": torch.tensor(lambda_pvb, device=design.device),
         "mask_mean": mask_continuous.detach().mean(),
+        "target_mean": target_mask.detach().mean(),
     }
 
 
@@ -401,7 +402,6 @@ def train(cfg: TrainConfig) -> dict:
     prev_bn: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
 
     first_step_logged = False
-    v01_mask_mean: float | None = None  # captured at first step; collapse guard reference
     plateau_streak = 0
     last_loss = math.inf
 
@@ -415,6 +415,7 @@ def train(cfg: TrainConfig) -> dict:
             "pvb": [],
         }
         epoch_mask_means: list[float] = []
+        epoch_target_means: list[float] = []
         for batch in loader:
             optimizer.zero_grad()
             losses = _step(model, batch, cfg, epoch, kernels, weights_t, kernels_f)
@@ -429,16 +430,17 @@ def train(cfg: TrainConfig) -> dict:
                 pvb_v = float(losses["pvb"].item())
                 lam_mrc = float(losses["lambda_mrc"].item())
                 lam_pvb = float(losses["lambda_pvb"].item())
+                tgt_mean = float(losses["target_mean"].item())
                 print(
                     f"[step-1] bce={bce_v:.4f} consistency={cons_v:.4f} "
                     f"mrc={mrc_v:.4f} pvb={pvb_v:.4f} "
-                    f"lambda_mrc={lam_mrc:.3f} lambda_pvb={lam_pvb:.3f}"
+                    f"lambda_mrc={lam_mrc:.3f} lambda_pvb={lam_pvb:.3f} "
+                    f"target_mean={tgt_mean:.4f}"
                 )
                 if pvb_v > 5.0 * max(bce_v, 1e-6) and cfg.lambda_pvb > 0.0:
                     print(
                         "[step-1] WARN: PVB step-1 > 5× BCE; consider lowering --lambda-pvb."
                     )
-                v01_mask_mean = float(losses["mask_mean"].item())
                 first_step_logged = True
 
             total.backward()
@@ -449,6 +451,7 @@ def train(cfg: TrainConfig) -> dict:
             epoch_components["mrc"].append(float(losses["mrc"].item()))
             epoch_components["pvb"].append(float(losses["pvb"].item()))
             epoch_mask_means.append(float(losses["mask_mean"].item()))
+            epoch_target_means.append(float(losses["target_mean"].item()))
             if cfg.smoke_test:
                 break
         scheduler.step()
@@ -465,13 +468,14 @@ def train(cfg: TrainConfig) -> dict:
         component_history.append(means)
         mask_mean_epoch = sum(epoch_mask_means) / max(1, len(epoch_mask_means))
         mask_mean_history.append(mask_mean_epoch)
+        target_mean_epoch = sum(epoch_target_means) / max(1, len(epoch_target_means))
         print(
             f"epoch {epoch}: loss={mean:.4f} bce={means['bce']:.4f} "
             f"consistency={means['consistency']:.4f} mrc={means['mrc']:.4f} "
             f"pvb={means['pvb']:.4f} "
             f"lambda_mrc={_lambda_mrc_at(epoch, cfg):.3f} "
             f"lambda_pvb={_lambda_pvb_at(epoch, cfg):.3f} "
-            f"mask_mean={mask_mean_epoch:.4f} "
+            f"mask_mean={mask_mean_epoch:.4f} target_mean={target_mean_epoch:.4f} "
             f"bn_max_dvar={bn_summary['max_d_var']:.3e}"
         )
 
@@ -487,11 +491,23 @@ def train(cfg: TrainConfig) -> dict:
                     f"BN drift escalation: epoch {epoch} max_d_var={cur:.3f} > "
                     f"1.5×v0.2_baseline={1.5*base_cur:.3f} for two consecutive epochs."
                 )
-        # 2. Mask-mean collapse guard.
-        if v01_mask_mean is not None and mask_mean_epoch < 0.1 * v01_mask_mean and not cfg.smoke_test:
+        # 2. Mask-mean collapse guard. Reference is the target_mask mean over
+        #    the same epoch — the network is learning to match the targets,
+        #    so a predicted mean far below target mean signals collapse.
+        #    Threshold: mask_mean < 0.1 × target_mean. Only fires after
+        #    epoch 5 to give the warmup time to calibrate. Per plan §2.6:
+        #    "predicted-mask mean intensity drops below 0.1× v0.1's
+        #    predicted-mask mean intensity"; the target distribution is the
+        #    closest available proxy for v0.1's predicted distribution.
+        if (
+            epoch >= 5
+            and target_mean_epoch > 0.0
+            and mask_mean_epoch < 0.1 * target_mean_epoch
+            and not cfg.smoke_test
+        ):
             raise RuntimeError(
                 f"Mask-mean collapsed at epoch {epoch}: "
-                f"{mask_mean_epoch:.4f} < 0.1 * step1_mean={v01_mask_mean:.4f}. "
+                f"{mask_mean_epoch:.4f} < 0.1 * target_mean={target_mean_epoch:.4f}. "
                 "PVB term may be mis-constructed."
             )
         # 3. Total-loss plateau after warm-up.
