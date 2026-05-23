@@ -139,10 +139,10 @@ class _GanOpcPairs(Dataset):
     """
 
     def __init__(self, root: Path, resize_to: int | None, resize_mode: str) -> None:
-        self.inner = GanOpcDataset(root=root)
-        self.resize_to = resize_to
         if resize_mode not in {"bilinear", "area"}:
             raise ValueError(f"resize_mode must be bilinear|area, got {resize_mode!r}")
+        self.inner = GanOpcDataset(root=root)
+        self.resize_to = resize_to
         self.resize_mode = resize_mode
 
     def __len__(self) -> int:
