@@ -180,7 +180,7 @@ def load_layout(
     # so A's hole rectangle covers B's pixels).
     for poly in region.each():
         try:
-            convex_pieces: list[Any] = list(poly.decompose_convex(db.Polygon.PO_any))
+            convex_pieces = list(poly.decompose_convex(db.Polygon.PO_any))
         except (AttributeError, TypeError):
             # Older klayout: fall back to per-polygon hull/holes draw.
             # Hole-vs-other-polygon hazard re-emerges, but the previous

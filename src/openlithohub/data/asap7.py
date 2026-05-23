@@ -214,7 +214,7 @@ def rasterize_cell_layer(
         # cannot erase a separate polygon nested inside its hole — the
         # global-canvas hazard fixed in data.io.load_layout.
         try:
-            convex_pieces: list[Any] = list(poly.decompose_convex(kdb.Polygon.PO_any))
+            convex_pieces = list(poly.decompose_convex(kdb.Polygon.PO_any))
         except (AttributeError, TypeError):
             convex_pieces = [poly]
         for piece in convex_pieces:

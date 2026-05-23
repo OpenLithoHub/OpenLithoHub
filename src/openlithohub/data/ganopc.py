@@ -294,7 +294,7 @@ def download_ganopc(
     dest_resolved = dest_root.resolve()
     with (
         multivolumefile.open(str(archive_prefix), mode="rb") as joined,
-        py7zr.SevenZipFile(joined, mode="r") as archive,  # type: ignore[arg-type]
+        py7zr.SevenZipFile(joined, mode="r") as archive,
     ):
         # Path-traversal guard: refuse archive members that resolve outside
         # ``dest_root``. SHA-256 pins above mitigate tampering for the known
