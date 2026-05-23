@@ -131,6 +131,8 @@ window that adds no metric resolution at 7nm node settings. Reproduce with:
 | `levelset-ilt` | 1 | 10.49 | 32.0 | ❌ | 0.97% | ❌ |
 | `openilt` | 1 | 14.82 | 64.0 | ❌ | 15.93% | ❌ |
 | `neural-ilt` | 1 | 0.00 | 0.0 | ✅ | 0% | ✅ |
+| `gan-opc` (v0.1) | 1 | 10.97 | 48.0 | ❌ | 8.48% | ❌ |
+| `gan-opc` (v0.2) | 1 | 11.76 | 64.0 | ❌ | 5.99% | ❌ |
 
 Things worth knowing about these numbers:
 
@@ -156,3 +158,8 @@ Things worth knowing about these numbers:
   applied to a layout that includes hotspot patterns deliberately
   designed to violate width / spacing rules — `dummy-identity` failing
   MRC is expected for a hotspot benchmark.
+- **`gan-opc` v0.1 vs v0.2.** v0.2 was trained with the Hopkins forward
+  model in the loop; the eval shows the trade — MRC violation rate
+  drops 8.48% → 5.99% (−29% rel.) but PVB mean rises 10.97 → 11.76 nm
+  (+7%). v0.1 is the line we keep as the reference; v0.2 weights are
+  retained locally as an ablation, not promoted.
