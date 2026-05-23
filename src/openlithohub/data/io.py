@@ -180,7 +180,7 @@ def load_layout(
     # so A's hole rectangle covers B's pixels).
     for poly in region.each():
         try:
-            convex_pieces = list(poly.decompose_convex(db.Polygon.PO_any))
+            convex_pieces: list[Any] = list(poly.decompose_convex(db.Polygon.PO_any))
         except (AttributeError, TypeError):
             # Older klayout: fall back to per-polygon hull/holes draw.
             # Hole-vs-other-polygon hazard re-emerges, but the previous
@@ -191,7 +191,7 @@ def load_layout(
             # vertices via each_point. Fall back to each_point_hull for
             # the donut-fallback path that yields a Polygon.
             iter_points = (
-                piece.each_point if hasattr(piece, "each_point") else (piece.each_point_hull)
+                piece.each_point if hasattr(piece, "each_point") else piece.each_point_hull
             )
             hull = [_project(p) for p in iter_points()]
             if len(hull) >= 3:
