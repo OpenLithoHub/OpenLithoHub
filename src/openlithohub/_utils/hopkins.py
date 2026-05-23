@@ -353,6 +353,7 @@ def simulate_aerial_image_hopkins(
     weights: torch.Tensor | None = None,
     dose: float = 1.0,
     dtype: torch.dtype = torch.float32,
+    precomputed_kernels_f: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Simulate aerial image via SOCS-truncated Hopkins imaging.
 
@@ -369,6 +370,11 @@ def simulate_aerial_image_hopkins(
             ``complex64`` because PyTorch's ``fft2`` does not support
             ``bfloat16``-complex; the cast happens before squaring and at
             the output.
+        precomputed_kernels_f: Optional pre-FFT'd kernels of shape
+            (K, H, W), complex64. When provided, the inner loop skips the
+            per-kernel ``ifftshift + fft2`` cost. Must be the FFT of
+            ``ifftshift(kernels, dim=(-2,-1))`` for numerical equivalence.
+            Coerced to complex64 if a different complex dtype is passed.
 
     Returns:
         Real-valued aerial image with the same spatial shape as `mask`.
@@ -414,11 +420,23 @@ def simulate_aerial_image_hopkins(
     aerial = torch.zeros_like(image)
     kernels_c64 = kernels.to(torch.complex64) if kernels.dtype != torch.complex64 else kernels
 
+    if precomputed_kernels_f is not None:
+        if precomputed_kernels_f.dtype != torch.complex64:
+            precomputed_kernels_f = precomputed_kernels_f.to(torch.complex64)
+        if precomputed_kernels_f.shape[0] != K:
+            raise ValueError(
+                f"precomputed_kernels_f has K={precomputed_kernels_f.shape[0]}; "
+                f"expected {K} matching kernels."
+            )
+
     image_c = image.to(torch.complex64)
     image_f = torch.fft.fft2(image_c)  # (B, H, W)
     for k in range(K):
-        kernel_shifted = torch.fft.ifftshift(kernels_c64[k], dim=(-2, -1))
-        kernel_f = torch.fft.fft2(kernel_shifted)  # (H, W)
+        if precomputed_kernels_f is not None:
+            kernel_f = precomputed_kernels_f[k]
+        else:
+            kernel_shifted = torch.fft.ifftshift(kernels_c64[k], dim=(-2, -1))
+            kernel_f = torch.fft.fft2(kernel_shifted)  # (H, W)
         coherent = torch.fft.ifft2(image_f * kernel_f.unsqueeze(0))  # (B, H, W)
         aerial = aerial + weights[k] * (coherent.real**2 + coherent.imag**2)
 
