@@ -49,7 +49,8 @@ import torch
 def _l2_normalise(features: torch.Tensor, *, eps: float = 1e-12) -> torch.Tensor:
     """L2-normalise rows of ``features`` for cosine-similarity diversity."""
     norms = torch.linalg.vector_norm(features, dim=1, keepdim=True).clamp_min(eps)
-    return features / norms
+    out: torch.Tensor = features / norms
+    return out
 
 
 def batch_active_select(
@@ -124,7 +125,7 @@ def batch_active_select(
 
 def extract_clip_features(
     design: torch.Tensor,
-    clip_sites: list[dict],
+    clip_sites: list[dict[str, float]],
     *,
     pixel_nm: float,
     origin_nm: tuple[float, float] = (0.0, 0.0),
