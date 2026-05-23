@@ -480,8 +480,16 @@ def train(cfg: TrainConfig) -> dict:
         )
 
         # Stopping rules (plan §2.6).
-        # 1. BN-drift relative to v0.2 baseline.
-        if epoch >= 1 and len(bn_drift_history) >= 2 and not cfg.smoke_test:
+        # 1. BN-drift relative to v0.2 baseline. The baseline was measured on
+        #    the v0.2 px=4 / 512² regime; BN dynamics at px=8 / 256² (Run D
+        #    v0.1-replay) are naturally noisier and would false-positive. Gate
+        #    the guard to the px<=5 regime where it was calibrated.
+        if (
+            epoch >= 1
+            and len(bn_drift_history) >= 2
+            and not cfg.smoke_test
+            and cfg.pixel_size_nm <= 5.0
+        ):
             cur = bn_summary["max_d_var"]
             prev_bn_v = bn_drift_history[-2]["max_d_var"]
             base_cur = _v02_bn_baseline(epoch)
