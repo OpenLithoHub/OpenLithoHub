@@ -48,3 +48,6 @@ site/
 .wrangler/
 checkpoints/*.pt
 checkpoints/*.metadata.json
+
+# Claude harness internals
+.claude/
