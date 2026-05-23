@@ -481,11 +481,16 @@ def train(cfg: TrainConfig) -> dict:
 
         # Stopping rules (plan §2.6).
         # 1. BN-drift relative to v0.2 baseline. The baseline was measured on
-        #    the v0.2 px=4 / 512² regime; BN dynamics at px=8 / 256² (Run D
-        #    v0.1-replay) are naturally noisier and would false-positive. Gate
-        #    the guard to the px<=5 regime where it was calibrated.
+        #    v0.2 (px=4 / 512², MRC radius=1, no PVB term). v0.3-A adds the
+        #    4-corner PVB term (5 forward passes/step) which materially shifts
+        #    BN gradient dynamics during the warmup window. To avoid false
+        #    positives from regime change, require BOTH (a) BN drift > 1.5×
+        #    baseline for 2 consecutive epochs AND (b) corroborating divergence
+        #    signal: loss is not decreasing OR mask_mean has drifted >50% from
+        #    target_mean. Guard remains active for px<=5 where calibrated.
         if (
-            epoch >= 1
+            epoch >= 2
+            and len(history) >= 2
             and len(bn_drift_history) >= 2
             and not cfg.smoke_test
             and cfg.pixel_size_nm <= 5.0
@@ -494,10 +499,17 @@ def train(cfg: TrainConfig) -> dict:
             prev_bn_v = bn_drift_history[-2]["max_d_var"]
             base_cur = _v02_bn_baseline(epoch)
             base_prev = _v02_bn_baseline(epoch - 1)
-            if cur > 1.5 * base_cur and prev_bn_v > 1.5 * base_prev:
+            bn_escalating = cur > 1.5 * base_cur and prev_bn_v > 1.5 * base_prev
+            loss_stalled = history[-1] >= history[-2]
+            mask_drift = (
+                target_mean_epoch > 0.0
+                and abs(mask_mean_epoch - target_mean_epoch) > 0.5 * target_mean_epoch
+            )
+            if bn_escalating and (loss_stalled or mask_drift):
                 raise RuntimeError(
-                    f"BN drift escalation: epoch {epoch} max_d_var={cur:.3f} > "
-                    f"1.5×v0.2_baseline={1.5*base_cur:.3f} for two consecutive epochs."
+                    f"BN drift escalation + divergence signal at epoch {epoch}: "
+                    f"max_d_var={cur:.3f} > 1.5×v0.2_baseline={1.5*base_cur:.3f}, "
+                    f"loss_stalled={loss_stalled} mask_drift={mask_drift}."
                 )
         # 2. Mask-mean collapse guard. Reference is the target_mask mean over
         #    the same epoch — the network is learning to match the targets,
