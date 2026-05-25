@@ -90,7 +90,8 @@ class TestResizeMode:
 
     def test_bilinear_differs_from_area_for_thin_feature(self, mod) -> None:
         # On a real-world-like random binary pattern the resize modes don't
-        # agree byte-for-byte (otherwise the v0.2 → v0.3 revert is a no-op).
+        # agree byte-for-byte (otherwise reverting v0.2's area mode would be a
+        # no-op).
         torch.manual_seed(42)
         big = (torch.rand(256, 256) > 0.7).float()
         out_b = mod._GanOpcPairs._resize(big, 64, "bilinear")

@@ -481,13 +481,14 @@ def train(cfg: TrainConfig) -> dict:
 
         # Stopping rules (plan §2.6).
         # 1. BN-drift relative to v0.2 baseline. The baseline was measured on
-        #    v0.2 (px=4 / 512², MRC radius=1, no PVB term). v0.3-A adds the
-        #    4-corner PVB term (5 forward passes/step) which materially shifts
-        #    BN gradient dynamics during the warmup window. To avoid false
-        #    positives from regime change, require BOTH (a) BN drift > 1.5×
-        #    baseline for 2 consecutive epochs AND (b) corroborating divergence
-        #    signal: loss is not decreasing OR mask_mean has drifted >50% from
-        #    target_mean. Guard remains active for px<=5 where calibrated.
+        #    v0.2 (px=8 / 256², Hopkins forward, lambda_mrc=1.0, no PVB term).
+        #    v0.3-A adds the 4-corner PVB term (5 forward passes/step) which
+        #    materially shifts BN gradient dynamics during the warmup window.
+        #    To avoid false positives from regime change, require BOTH (a) BN
+        #    drift > 1.5× baseline for 2 consecutive epochs AND (b) corroborating
+        #    divergence signal: loss is not decreasing OR mask_mean has drifted
+        #    >50% from target_mean. Guard is gated to px<=5 to avoid triggering
+        #    on Run D (px=8) which intentionally matches the v0.2 regime.
         if (
             epoch >= 2
             and len(history) >= 2
