@@ -58,7 +58,7 @@ import json
 import math
 import os
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
@@ -399,7 +399,7 @@ def _compute_loss(
     return total, metrics
 
 
-class _nullcontext:
+class _NullContext:
     """Minimal no-op context manager for when AMP is disabled."""
 
     def __enter__(self):
@@ -711,7 +711,10 @@ def train(cfg: TrainConfig) -> dict:
             and not cfg.smoke_test
             and len(component_history) >= 5
         ):
-            recent_pvb = [component_history[-i]["pvb"] for i in range(1, min(6, len(component_history) + 1))]
+            recent_pvb = [
+                component_history[-i]["pvb"]
+                for i in range(1, min(6, len(component_history) + 1))
+            ]
             if all(p >= component_history[-5]["pvb"] - 1e-6 for p in recent_pvb):
                 print(f"[warn] Bandwidth loss not decreasing for 5 epochs (epoch {epoch}).")
 

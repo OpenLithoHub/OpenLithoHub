@@ -18,8 +18,7 @@ import torch.nn.functional as functional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from openlithohub._utils.resist_model import differentiable_threshold
-from openlithohub.models._unet import UNet, UNetV2
+from openlithohub.models._unet import UNet
 
 
 def _simulate_aerial_batch(mask: torch.Tensor, sigma_px: float, dose: float = 1.0) -> torch.Tensor:
@@ -76,7 +75,9 @@ def probe_p4() -> dict:
         for i in range(n_check):
             d_on, m_on = online[i]
             d_ca, m_ca = cached[i]
-            if not torch.allclose(d_on, d_ca, atol=1e-3) or not torch.allclose(m_on, m_ca, atol=1e-3):
+            d_close = torch.allclose(d_on, d_ca, atol=1e-3)
+            m_close = torch.allclose(m_on, m_ca, atol=1e-3)
+            if not d_close or not m_close:
                 mismatches += 1
 
         return {
@@ -96,10 +97,9 @@ def probe_p5() -> dict:
     """
     model = UNet()
     model.eval()
-    device = "cpu"
 
     results = []
-    for trial in range(5):
+    for _ in range(5):
         x = torch.randn(2, 1, 64, 64)
         target = (torch.rand(2, 1, 64, 64) > 0.5).float()
 
@@ -163,11 +163,9 @@ def probe_p6() -> dict:
     results["unet_peak_rss_mb"] = mem_after / 1024
 
     # AMP benchmark
-    amp_times = []
-    fp32_times = []
     n_steps = 5
 
-    for label, use_amp in [("fp32", False), ("amp", True)]:
+    for _, use_amp in [("fp32", False), ("amp", True)]:
         model = UNet()
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         times = []
@@ -186,10 +184,8 @@ def probe_p6() -> dict:
 
         avg_time = sum(times) / len(times)
         if use_amp:
-            amp_times = times
             results["amp_avg_step_s"] = avg_time
         else:
-            fp32_times = times
             results["fp32_avg_step_s"] = avg_time
 
     amp_ratio = results["amp_avg_step_s"] / max(results["fp32_avg_step_s"], 1e-8)

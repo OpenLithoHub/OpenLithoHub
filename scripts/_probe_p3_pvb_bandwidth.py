@@ -173,7 +173,6 @@ def main() -> int:
         "blurred_bandwidth_focus": float(bw_blurred_focus.item()),
         "sharp_bandwidth_dose": float(bw_sharp_dose.item()),
         "blurred_bandwidth_dose": float(bw_blurred_dose.item()),
-        "dose_relative_change": dose_relative_change,
     })
 
     # (d) v0.3 MSE vs v0.4 bandwidth comparison
