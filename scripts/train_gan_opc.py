@@ -478,6 +478,9 @@ def train(cfg: TrainConfig) -> dict:
         torch.set_num_threads(6)
     device = torch.device(cfg.device)
     model = _build_model(cfg).to(device)
+    # torch.compile() kernel fusion — can speed up CPU conv 1.5-2x
+    if hasattr(torch, "compile"):
+        model = torch.compile(model)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(1, cfg.epochs))
 
