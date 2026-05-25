@@ -359,9 +359,13 @@ def _compute_loss(
     logits = model(design)
     mask_continuous = torch.sigmoid(logits)
 
-    bce = functional.binary_cross_entropy_with_logits(logits, target_mask)
+    # Ensure float32 for loss computations that don't support half precision
+    mask_continuous = mask_continuous.float()
+    logits_for_bce = logits.float()
+
+    bce = functional.binary_cross_entropy_with_logits(logits_for_bce, target_mask.float())
     aerial = _forward(mask_continuous, cfg, kernels, weights, kernels_f)
-    consistency = functional.mse_loss(aerial, design)
+    consistency = functional.mse_loss(aerial, design.float())
 
     if cfg.lambda_mrc > 0.0:
         mrc = curvilinear_mrc_loss(
