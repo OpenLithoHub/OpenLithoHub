@@ -233,3 +233,88 @@ class TestPolarJacobian:
         assert inner_w / total_w < 0.15, (
             f"inner-third weight {inner_w / total_w:.3f} too large — Jacobian missing?"
         )
+
+
+class TestPrecomputedKernelsF:
+    """v0.2 P2-a regression: precomputed_kernels_f kwarg must produce
+    bit-equivalent (within float tolerance) aerial images vs. the no-FFT
+    path, so training with the precompute is numerically faithful to v0.1
+    inference paths that don't pass it."""
+
+    def test_precomputed_path_matches_inner_loop_path(self) -> None:
+        from openlithohub._utils.hopkins import (
+            HopkinsParams,
+            compute_socs_kernels,
+            simulate_aerial_image_hopkins,
+        )
+
+        torch.manual_seed(0)
+        H = 64  # noqa: N806
+        params = HopkinsParams(num_kernels=4, pixel_size_nm=8.0)
+        device = torch.device("cpu")
+        kernels, weights = compute_socs_kernels(params, H, device)
+
+        kernels_c64 = kernels.to(torch.complex64)
+        kernels_shifted = torch.fft.ifftshift(kernels_c64, dim=(-2, -1))
+        kernels_f = torch.fft.fft2(kernels_shifted)
+
+        mask = (torch.rand(H, H) > 0.5).float()
+
+        out_inner = simulate_aerial_image_hopkins(mask, kernels=kernels, weights=weights)
+        out_pre = simulate_aerial_image_hopkins(
+            mask,
+            kernels=kernels,
+            weights=weights,
+            precomputed_kernels_f=kernels_f,
+        )
+        assert torch.allclose(out_inner, out_pre, atol=1e-5), (
+            f"precomputed path diverges: max diff {(out_inner - out_pre).abs().max().item():.3e}"
+        )
+
+    def test_precomputed_dtype_coerced_to_complex64(self) -> None:
+        from openlithohub._utils.hopkins import (
+            HopkinsParams,
+            compute_socs_kernels,
+            simulate_aerial_image_hopkins,
+        )
+
+        H = 64  # noqa: N806
+        params = HopkinsParams(num_kernels=4, pixel_size_nm=8.0)
+        device = torch.device("cpu")
+        kernels, weights = compute_socs_kernels(params, H, device)
+        kernels_shifted = torch.fft.ifftshift(kernels.to(torch.complex64), dim=(-2, -1))
+        kernels_f_c128 = torch.fft.fft2(kernels_shifted).to(torch.complex128)
+
+        mask = torch.zeros(H, H)
+        mask[20:40, 20:40] = 1.0
+
+        out_c128 = simulate_aerial_image_hopkins(
+            mask, kernels=kernels, weights=weights, precomputed_kernels_f=kernels_f_c128
+        )
+        out_c64 = simulate_aerial_image_hopkins(
+            mask,
+            kernels=kernels,
+            weights=weights,
+            precomputed_kernels_f=kernels_f_c128.to(torch.complex64),
+        )
+        assert torch.allclose(out_c128, out_c64, atol=1e-5)
+
+    def test_precomputed_kernels_f_count_mismatch_raises(self) -> None:
+        from openlithohub._utils.hopkins import (
+            HopkinsParams,
+            compute_socs_kernels,
+            simulate_aerial_image_hopkins,
+        )
+
+        H = 64  # noqa: N806
+        params = HopkinsParams(num_kernels=4, pixel_size_nm=8.0)
+        kernels, weights = compute_socs_kernels(params, H, torch.device("cpu"))
+
+        wrong = torch.zeros((3, H, H), dtype=torch.complex64)
+        with pytest.raises(ValueError, match="precomputed_kernels_f has K="):
+            simulate_aerial_image_hopkins(
+                torch.zeros(H, H),
+                kernels=kernels,
+                weights=weights,
+                precomputed_kernels_f=wrong,
+            )

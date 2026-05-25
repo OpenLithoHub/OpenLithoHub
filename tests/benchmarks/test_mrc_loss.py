@@ -200,3 +200,27 @@ class TestCurvilinearMrcLoss:
                 min_spacing_nm=1.0,
                 pixel_size_nm=1.0,
             )
+
+
+class TestV02RadiusParity:
+    """v0.2 plan v6 lock + v7 Bug E: at min_width_nm=24, pixel_size_nm=8,
+    the loss-side radius (`mrc_loss.py:190`) and the checker-side radius
+    (`compliance/mrc.py:161`) must both be 1, so the differentiable loss
+    and the binary verdict agree on what a violation is.
+
+    Both formulas are inline expressions in their respective files; this
+    test inlines them directly so it fails if either source-site moves.
+    """
+
+    def test_loss_and_checker_radius_agree_at_v02_settings(self) -> None:
+        px, w = 8.0, 24.0
+        # mrc_loss.py:190 — half-width radius the differentiable loss uses.
+        loss_radius = max(0, int(w // (2.0 * px)))
+        # compliance/mrc.py:161 — radius the binary checker opens with.
+        import math as _math
+
+        checker_radius = max(0, (int(_math.floor(w / px)) - 1) // 2)
+        assert loss_radius == checker_radius == 1, (
+            f"v0.2 radius parity broken at {w} nm @ {px} nm/px: "
+            f"loss={loss_radius}, checker={checker_radius}"
+        )

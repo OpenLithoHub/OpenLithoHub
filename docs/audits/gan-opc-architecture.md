@@ -40,9 +40,9 @@ Confidence: the items below marked **C** (citation-derived) are taken from the d
 | Normalisation | BatchNorm after each conv (`_unet.py:16,19`). | Likely yes (paper does not strongly specify, and BN is the defacto choice for U-Nets of this era). | **A** for code, **C** for paper match |
 | Output head | Plain `1×1 conv → logits`. Sigmoid is applied by the caller in `predict()` (`gan_opc.py:131`), not inside the module. | **Functionally yes**, structurally different. | **A** |
 | Discriminator | **Not implemented.** Adapter docstring: "This adapter only ships the generator side; the discriminator is a training-time concern." | **No, by design** — discriminator only matters at training time, not at inference. | **A** |
-| Adversarial / lithography-aware loss | **Not implemented in this repo.** Training script does not exist as of the audit date. | **N/A** — no training code to audit. | **A** |
+| Adversarial / lithography-aware loss | **Not implemented in this repo.** Training script (`scripts/train_gan_opc.py`) exists but is generator-only (no discriminator, no adversarial loss). | **Partial** — training script has BCE + consistency + MRC + PVB losses but no adversarial term. | **A** |
 | Training data wiring | `data/ganopc/extracted/ganopc-data/{artitgt,artimsk}` is on disk (4875 pairs); `GanOpcDataset` reads it. | **Yes**, dataset side is wired. | **A** |
-| Trained weights | `pretrained=True` points at HF Hub `openlithohub/gan-opc-v0.1` — **placeholder, no weights uploaded as of 2026-05-23**. The adapter falls back to a randomly initialised `UNet` with a `warnings.warn("…predictions will be near-random…")` warning. | **No** — adapter is a smoke-test, not a baseline. | **A** |
+| Trained weights | `pretrained=True` points at HF Hub `openlithohub/gan-opc-v0.1` — **placeholder, no weights uploaded as of 2026-05-23**. A v0.3 training script (`scripts/train_gan_opc.py`) can produce checkpoints locally. The adapter falls back to a randomly initialised `UNet` with a `warnings.warn("…predictions will be near-random…")` warning when no pretrained weights are available. | **No** — adapter is a smoke-test, not a baseline. | **A** |
 
 ## Findings
 
@@ -50,16 +50,16 @@ Confidence: the items below marked **C** (citation-derived) are taken from the d
 
 2. **Generator channel widths are halved.** 32→64→128→256 instead of the (assumed) 64→128→256→512 from the paper. Like Neural-ILT, this is an intentional inference-budget choice for the v0.1 line. Acceptable as a baseline; not paper-faithful.
 
-3. **No trained weights ship with this adapter.** `gan_opc-v0.1` on HF Hub is a placeholder. A run of `scripts/generate_baselines.py` against `data/ganopc/extracted/` produces near-random masks plus a warning. **The dataset is on disk and the network is in code, but no training script exists** — Phase 2 task #3 in `out/plans/external-resource-utilization.md` is to close that loop.
+3. **No trained weights ship with this adapter.** `gan_opc-v0.1` on HF Hub is a placeholder. A run of `scripts/generate_baselines.py` against `data/ganopc/extracted/` produces near-random masks plus a warning. **A training script (`scripts/train_gan_opc.py`) now exists** (v0.3, generator-only), and can produce local checkpoints, but no weights have been published to HF Hub.
 
-4. **Discriminator and adversarial loss intentionally absent.** This is honest: discriminator is training-time only and inference-only adapters don't need it. But the absence of a training script means the adversarial loss has never run against this dataset inside OpenLithoHub. A future "paper-faithful re-training" needs both the discriminator module and the L_lith term reconstructed.
+4. **Discriminator and adversarial loss intentionally absent.** This is honest: discriminator is training-time only and inference-only adapters don't need it. The existing training script (`scripts/train_gan_opc.py`, v0.3) uses BCE + forward-consistency + MRC + PVB losses but no adversarial term. A future "paper-faithful re-training" needs both the discriminator module and the L_lith term reconstructed.
 
 5. **Paper PDF is not on disk.** Confidence on paper-side specifications is "C" (citation-derived). To upgrade to "A" we would need the paper PDF in `docs/papers/` or equivalent, with this audit re-checked against §IV.
 
 ## Implications for users
 
 - **Comparing to Yang2018 numbers:** Don't. The shipped adapter has no weights and the generator is shallower + narrower than the paper. Cite the paper for *lineage*, not for *expected metric*.
-- **Training your own GAN-OPC inside OpenLithoHub:** the U-Net is here and the dataset is on disk, but you'll need to write the discriminator + adversarial loop yourself. Track progress under `out/plans/external-resource-utilization.md` task #3.
+- **Training your own GAN-OPC inside OpenLithoHub:** the U-Net is here, the dataset is on disk, and a generator-only training script (`scripts/train_gan_opc.py`) is available. To match the paper you'll need to add the discriminator + adversarial loop yourself.
 - **Citation hygiene:** when reporting results from this adapter, cite both `Yang2018_GANOPC` (architecture lineage) **and** the v0.1 weights tag (model-size disclosure). If running without weights, do not cite Yang2018 at all — there is no paper-derived signal in the output.
 
 ## Re-audit triggers
