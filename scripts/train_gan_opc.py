@@ -218,16 +218,15 @@ class _MemmapGanOpcPairs(Dataset):
         t0 = time.time()
         inner = _GanOpcPairs(root, resize_to, resize_mode)
         arr = np.memmap(self.path, dtype=np.float16, mode="w+", shape=self.shape)
-        from concurrent.futures import ProcessPoolExecutor
 
-        def _process(i: int) -> tuple[int, np.ndarray, np.ndarray]:
+        # Sequential preprocessing — avoids pickle issues with local functions
+        # and is fast enough (~5 min for 4875 samples at 512²)
+        for i in range(self.inner_n):
             design, mask = inner[i]
-            return i, design.numpy().astype(np.float16), mask.numpy().astype(np.float16)
-
-        with ProcessPoolExecutor(max_workers=8) as pool:
-            for i, design, mask in pool.map(_process, range(self.inner_n)):
-                arr[i, 0] = design
-                arr[i, 1] = mask
+            arr[i, 0] = design.numpy().astype(np.float16)
+            arr[i, 1] = mask.numpy().astype(np.float16)
+            if (i + 1) % 500 == 0:
+                print(f"  [memmap] {i + 1}/{self.inner_n} samples cached...")
         arr.flush()
         del arr
         elapsed = time.time() - t0
