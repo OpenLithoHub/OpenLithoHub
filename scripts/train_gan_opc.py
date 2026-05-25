@@ -77,11 +77,13 @@ from openlithohub.benchmark.metrics.mrc_loss import curvilinear_mrc_loss
 from openlithohub.data.ganopc import GanOpcDataset
 from openlithohub.models._unet import UNet, UNetV2
 
-# Thread control (R3+R4): limit OMP/MKL/OPENBLAS threads to avoid contention.
-# Must be set before torch imports take effect in worker processes.
-os.environ.setdefault("OMP_NUM_THREADS", "6")
-os.environ.setdefault("MKL_NUM_THREADS", "6")
-os.environ.setdefault("OPENBLAS_NUM_THREADS", "6")
+# Thread control (R3+R4): leverage AMD 5600G 6C/12T fully.
+# Use all 12 hardware threads — OpenBLAS benefits from SMT on Zen 3.
+_N_PHYSICAL = os.cpu_count() or 6
+_N_THREADS = min(_N_PHYSICAL, 12)  # 12 for 6C/12T AMD
+os.environ.setdefault("OMP_NUM_THREADS", str(_N_THREADS))
+os.environ.setdefault("MKL_NUM_THREADS", str(_N_THREADS))
+os.environ.setdefault("OPENBLAS_NUM_THREADS", str(_N_THREADS))
 
 
 @dataclass
@@ -475,11 +477,11 @@ def _build_model(cfg: TrainConfig) -> torch.nn.Module:
 def train(cfg: TrainConfig) -> dict:
     torch.manual_seed(cfg.seed)
     if cfg.device == "cpu":
-        torch.set_num_threads(6)
+        torch.set_num_threads(_N_THREADS)
     device = torch.device(cfg.device)
     model = _build_model(cfg).to(device)
-    # torch.compile() kernel fusion — can speed up CPU conv 1.5-2x
-    if hasattr(torch, "compile"):
+    # torch.compile() kernel fusion — enable only on CUDA where it helps
+    if cfg.device == "cuda" and hasattr(torch, "compile"):
         model = torch.compile(model)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(1, cfg.epochs))
