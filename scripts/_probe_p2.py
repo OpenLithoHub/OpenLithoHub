@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as functional
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -63,12 +63,16 @@ CORNERS_FOCUS_ONLY = [
 ]
 
 
-def _l_pvb(mask: torch.Tensor, target: torch.Tensor, corners: list[tuple[float, float]]) -> torch.Tensor:
+def _l_pvb(
+    mask: torch.Tensor,
+    target: torch.Tensor,
+    corners: list[tuple[float, float]],
+) -> torch.Tensor:
     target_aerial = target  # treat target mask itself as the aerial reference
     total = mask.new_zeros(())
     for dose, sigma in corners:
-        I = simulate_aerial_image(mask, sigma_px=sigma, dose=dose)
-        total = total + F.mse_loss(I, target_aerial)
+        aerial = simulate_aerial_image(mask, sigma_px=sigma, dose=dose)
+        total = total + functional.mse_loss(aerial, target_aerial)
     return total / len(corners)
 
 
@@ -82,16 +86,18 @@ def _gaussian_blur(mask: torch.Tensor, sigma_px: float) -> torch.Tensor:
     k1 = g.view(1, 1, 1, -1)
     k2 = g.view(1, 1, -1, 1)
     x = mask.float().unsqueeze(0).unsqueeze(0)
-    x = F.pad(x, (half, half, 0, 0), mode="replicate")
-    x = F.conv2d(x, k1)
-    x = F.pad(x, (0, 0, half, half), mode="replicate")
-    x = F.conv2d(x, k2)
+    x = functional.pad(x, (half, half, 0, 0), mode="replicate")
+    x = functional.conv2d(x, k1)
+    x = functional.pad(x, (0, 0, half, half), mode="replicate")
+    x = functional.conv2d(x, k2)
     return x.squeeze(0).squeeze(0)
 
 
 def main() -> int:
-    print(f"P2 probe: pixel_nm={PIXEL_NM} delta={DELTA} sigma_nom={SIGMA_NOM} "
-          f"sigma_hi={SIGMA_HI:.3f} sigma_lo={SIGMA_LO:.3f}")
+    print(
+        f"P2 probe: pixel_nm={PIXEL_NM} delta={DELTA} sigma_nom={SIGMA_NOM} "
+        f"sigma_hi={SIGMA_HI:.3f} sigma_lo={SIGMA_LO:.3f}"
+    )
 
     ckpt = Path("checkpoints/gan_opc_v0_1.pt")
     if not ckpt.exists():
@@ -112,7 +118,9 @@ def main() -> int:
     # Use target as aerial reference. Resize target to sharp_mask if shapes differ.
     if target.shape != sharp_mask.shape:
         target_4 = target.unsqueeze(0).unsqueeze(0)
-        target = F.interpolate(target_4, size=sharp_mask.shape, mode="bilinear", align_corners=False)
+        target = functional.interpolate(
+            target_4, size=sharp_mask.shape, mode="bilinear", align_corners=False
+        )
         target = target.squeeze(0).squeeze(0)
 
     # (a) non-zero

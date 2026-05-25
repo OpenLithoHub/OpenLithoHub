@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as functional
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -37,13 +37,15 @@ DATA_ROOT = Path("data/ganopc/extracted/ganopc-data")
 
 def _resize_bilinear_thresh(t: torch.Tensor, target: int) -> torch.Tensor:
     t4 = t.float().unsqueeze(0).unsqueeze(0)
-    resized = F.interpolate(t4, size=(target, target), mode="bilinear", align_corners=False)
+    resized = functional.interpolate(
+        t4, size=(target, target), mode="bilinear", align_corners=False
+    )
     return (resized.squeeze(0).squeeze(0) > 0.5).float()
 
 
 def _resize_area_thresh(t: torch.Tensor, target: int) -> torch.Tensor:
     t4 = t.float().unsqueeze(0).unsqueeze(0)
-    resized = F.interpolate(t4, size=(target, target), mode="area")
+    resized = functional.interpolate(t4, size=(target, target), mode="area")
     return (resized.squeeze(0).squeeze(0) > 0.5).float()
 
 
@@ -98,11 +100,7 @@ def main() -> int:
     out_path.write_text(json.dumps(out, indent=2))
     print(f"\nwrote {out_path}")
 
-    ok = (
-        v01_match_ref == n
-        and v03_match_ref == n
-        and v03_differs_from_v02 >= int(0.5 * n)
-    )
+    ok = v01_match_ref == n and v03_match_ref == n and v03_differs_from_v02 >= int(0.5 * n)
     if not ok:
         print("\nP1 FAILED — bilinear+thresh resize implementation drift.")
         return 1

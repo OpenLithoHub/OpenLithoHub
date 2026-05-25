@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+import openlithohub.models.gan_opc  # noqa: E402, F401  # register gan-opc
 from openlithohub.benchmark.compliance.drc import check_drc  # noqa: E402
 from openlithohub.benchmark.compliance.mrc import check_mrc  # noqa: E402
 from openlithohub.benchmark.metrics import (  # noqa: E402
@@ -26,7 +27,6 @@ from openlithohub.benchmark.metrics import (  # noqa: E402
     compute_wafer_epe,
 )
 from openlithohub.data import Iccad16Dataset  # noqa: E402
-import openlithohub.models.gan_opc  # noqa: E402, F401  # register gan-opc
 from openlithohub.models.registry import registry  # noqa: E402
 from openlithohub.simulators.base import SimulatorConfig  # noqa: E402
 from openlithohub.simulators.hopkins_sim import HopkinsSimulator  # noqa: E402

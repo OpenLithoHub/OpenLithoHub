@@ -17,8 +17,6 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-import torch
-
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from openlithohub.benchmark.compliance.mrc import check_mrc  # noqa: E402
@@ -32,10 +30,7 @@ def main() -> int:
     pixel_nm = node.pixel_size_nm
     min_width_nm = node.min_feature_nm
     min_spacing_nm = node.min_spacing_nm
-    print(
-        f"node=7nm pixel_nm={pixel_nm} min_width={min_width_nm} "
-        f"min_spacing={min_spacing_nm}"
-    )
+    print(f"node=7nm pixel_nm={pixel_nm} min_width={min_width_nm} min_spacing={min_spacing_nm}")
 
     ckpt = Path("checkpoints/gan_opc_v0_1.pt")
     if not ckpt.exists():
@@ -95,10 +90,7 @@ def main() -> int:
             n = counts.get(lbl, 0)
             print(f"  {lbl:>6} nm: {n:5d}")
         if vals:
-            print(
-                f"  min={min(vals):.2f} max={max(vals):.2f} "
-                f"mean={sum(vals) / len(vals):.2f}"
-            )
+            print(f"  min={min(vals):.2f} max={max(vals):.2f} mean={sum(vals) / len(vals):.2f}")
 
     # Decision summary.
     width_vals = widths_by_type.get("width", [])
@@ -110,9 +102,7 @@ def main() -> int:
         "spacing_violation_count": mrc.spacing_violation_count,
         "n_width_samples": len(width_vals),
         "n_spacing_samples": len(spacing_vals),
-        "width_p50": (
-            sorted(width_vals)[len(width_vals) // 2] if width_vals else None
-        ),
+        "width_p50": (sorted(width_vals)[len(width_vals) // 2] if width_vals else None),
         "width_max": max(width_vals) if width_vals else None,
     }
     print("\n--- decision summary ---")
@@ -143,16 +133,14 @@ def main() -> int:
         above_24 = sum(1 for v in width_vals if v > 24)
         n = len(width_vals)
         print(
-            f"\nDistribution: <=16: {below_16}/{n} "
-            f"16-24: {between_16_24}/{n} >24: {above_24}/{n}"
+            f"\nDistribution: <=16: {below_16}/{n} 16-24: {between_16_24}/{n} >24: {above_24}/{n}"
         )
         if above_24 > 0.5 * n:
             print("DECISION: ABORT — mass at >=24 nm; v0.2 as designed cannot fix.")
             return 1
         if below_16 < 0.3 * n and spacing_vals:
             print(
-                "DECISION: enable weight_min_spacing > 0 in Change 1; "
-                "spacing dominates over width."
+                "DECISION: enable weight_min_spacing > 0 in Change 1; spacing dominates over width."
             )
         else:
             print("DECISION: PROCEED — radius-1 MRC loss targets the right failure mode.")

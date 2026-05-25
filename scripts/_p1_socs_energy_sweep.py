@@ -32,9 +32,7 @@ def main() -> int:
     threshold = 0.99
 
     params = HopkinsParams(num_kernels=base_n, pixel_size_nm=pixel_nm)
-    kernels, weights = compute_socs_kernels(
-        params, grid_size=grid, device=torch.device("cpu")
-    )
+    kernels, weights = compute_socs_kernels(params, grid_size=grid, device=torch.device("cpu"))
     weights_np = weights.cpu().tolist()
     print(f"K={len(weights_np)} pixel_nm={pixel_nm} grid={grid}")
     total = sum(weights_np)

@@ -189,7 +189,7 @@ class TestPvbLossPhysics:
     def test_pvb_loss_smaller_on_sharp_than_blurred(self, mod) -> None:
         # P2(c)-style invariant baked into the test suite: loss is smaller
         # on the sharp mask than on a deliberately blurred copy.
-        import torch.nn.functional as F
+        import torch.nn.functional as functional
 
         cfg = _make_cfg(mod, lambda_pvb=0.1, pixel_size_nm=4.0)
         sharp = torch.zeros(1, 1, 64, 64)
@@ -199,13 +199,13 @@ class TestPvbLossPhysics:
         half = kernel_size // 2
         coords = torch.arange(kernel_size, dtype=torch.float32) - half
         g = torch.exp(-0.5 * (coords / 1.5) ** 2)
-        g = (g / g.sum())
+        g = g / g.sum()
         k1 = g.view(1, 1, 1, -1)
         k2 = g.view(1, 1, -1, 1)
-        x = F.pad(sharp, (half, half, 0, 0), mode="replicate")
-        x = F.conv2d(x, k1)
-        x = F.pad(x, (0, 0, half, half), mode="replicate")
-        blurred = F.conv2d(x, k2)
+        x = functional.pad(sharp, (half, half, 0, 0), mode="replicate")
+        x = functional.conv2d(x, k1)
+        x = functional.pad(x, (0, 0, half, half), mode="replicate")
+        blurred = functional.conv2d(x, k2)
 
         target = sharp
         l_sharp = float(mod._pvb_loss(sharp, target, cfg).item())

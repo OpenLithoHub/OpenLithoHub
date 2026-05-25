@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from openlithohub.data import Iccad16Dataset  # noqa: E402
+import openlithohub.models.gan_opc  # noqa: E402, F401  # register gan-opc
 from openlithohub.benchmark.compliance.drc import check_drc  # noqa: E402
 from openlithohub.benchmark.compliance.mrc import check_mrc  # noqa: E402
 from openlithohub.benchmark.metrics import (  # noqa: E402
@@ -22,7 +22,7 @@ from openlithohub.benchmark.metrics import (  # noqa: E402
     compute_pvband,
     compute_wafer_epe,
 )
-import openlithohub.models.gan_opc  # noqa: E402, F401  # register gan-opc
+from openlithohub.data import Iccad16Dataset  # noqa: E402
 from openlithohub.models.registry import registry  # noqa: E402
 from openlithohub.simulators.base import SimulatorConfig  # noqa: E402
 from openlithohub.simulators.hopkins_sim import HopkinsSimulator  # noqa: E402
@@ -89,9 +89,7 @@ def main() -> int:
         out.update({k: float(v) for k, v in pv.items()})
 
         # 7nm node defaults: min_width 20, min_spacing 20.
-        mrc = check_mrc(
-            result.mask, min_width_nm=20.0, min_spacing_nm=20.0, pixel_size_nm=pixel_nm
-        )
+        mrc = check_mrc(result.mask, min_width_nm=20.0, min_spacing_nm=20.0, pixel_size_nm=pixel_nm)
         out["mrc_passed"] = bool(mrc.passed)
         out["mrc_violation_count"] = int(mrc.violation_count)
         out["mrc_violation_rate"] = float(mrc.violation_rate)

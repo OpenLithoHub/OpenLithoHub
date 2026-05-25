@@ -19,7 +19,7 @@ Scope (v0.3, 2026-05-23 follow-up to v0.2):
     A   | 4.0     | bilinear    | 0.1      | gaussian  | yes      | yes
     B   | 4.0     | bilinear    | 0.1      | gaussian  | yes      | no
     C   | 4.0     | bilinear    | 0.1      | gaussian  | no       | yes
-    D   | 8.0     | bilinear    | 0.1      | gaussian  | no       | no  (v0.1 replay; manual_seed(1))
+    D   | 8.0     | bilinear    | 0.1      | gaussian  | no       | no (v0.1 replay, seed=1)
 
   At px=4.0 train resolution is 512×512 (4× compute vs. v0.2). At px=8.0
   it stays 256×256 (matches v0.1 / v0.2).
@@ -293,12 +293,7 @@ def _step(
 
     lambda_mrc = _lambda_mrc_at(epoch, cfg)
     lambda_pvb = _lambda_pvb_at(epoch, cfg)
-    total = (
-        bce
-        + cfg.consistency_weight * consistency
-        + lambda_mrc * mrc
-        + lambda_pvb * pvb
-    )
+    total = bce + cfg.consistency_weight * consistency + lambda_mrc * mrc + lambda_pvb * pvb
     return {
         "total": total,
         "bce": bce.detach(),
@@ -353,11 +348,56 @@ def _bn_drift_log(
 # gan_opc_v0_2.metadata.json:bn_drift_history). Conservative fill (10.38) for
 # epoch 0 if the array is shorter than queried.
 _V02_BN_BASELINE: tuple[float, ...] = (
-    9.66, 10.38, 8.5, 7.0, 6.0, 5.04, 4.5, 4.2, 4.0, 3.8,
-    3.6, 3.4, 3.3, 3.1, 3.0, 2.9, 2.8, 2.7, 2.6, 2.5,
-    2.4, 2.3, 2.2, 2.1, 2.0, 1.95, 1.9, 1.85, 1.8, 1.75,
-    1.7, 1.65, 1.6, 1.55, 1.5, 1.46, 1.42, 1.39, 1.36, 1.34,
-    1.32, 1.31, 1.30, 1.29, 1.28, 1.27, 1.26, 1.25, 1.24, 1.24,
+    9.66,
+    10.38,
+    8.5,
+    7.0,
+    6.0,
+    5.04,
+    4.5,
+    4.2,
+    4.0,
+    3.8,
+    3.6,
+    3.4,
+    3.3,
+    3.1,
+    3.0,
+    2.9,
+    2.8,
+    2.7,
+    2.6,
+    2.5,
+    2.4,
+    2.3,
+    2.2,
+    2.1,
+    2.0,
+    1.95,
+    1.9,
+    1.85,
+    1.8,
+    1.75,
+    1.7,
+    1.65,
+    1.6,
+    1.55,
+    1.5,
+    1.46,
+    1.42,
+    1.39,
+    1.36,
+    1.34,
+    1.32,
+    1.31,
+    1.30,
+    1.29,
+    1.28,
+    1.27,
+    1.26,
+    1.25,
+    1.24,
+    1.24,
 )
 
 
@@ -438,9 +478,7 @@ def train(cfg: TrainConfig) -> dict:
                     f"target_mean={tgt_mean:.4f}"
                 )
                 if pvb_v > 5.0 * max(bce_v, 1e-6) and cfg.lambda_pvb > 0.0:
-                    print(
-                        "[step-1] WARN: PVB step-1 > 5× BCE; consider lowering --lambda-pvb."
-                    )
+                    print("[step-1] WARN: PVB step-1 > 5× BCE; consider lowering --lambda-pvb.")
                 first_step_logged = True
 
             total.backward()
@@ -509,7 +547,7 @@ def train(cfg: TrainConfig) -> dict:
             if bn_escalating and (loss_stalled or mask_drift):
                 raise RuntimeError(
                     f"BN drift escalation + divergence signal at epoch {epoch}: "
-                    f"max_d_var={cur:.3f} > 1.5×v0.2_baseline={1.5*base_cur:.3f}, "
+                    f"max_d_var={cur:.3f} > 1.5×v0.2_baseline={1.5 * base_cur:.3f}, "
                     f"loss_stalled={loss_stalled} mask_drift={mask_drift}."
                 )
         # 2. Mask-mean collapse guard. Reference is the target_mask mean over
