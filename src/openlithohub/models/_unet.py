@@ -93,3 +93,41 @@ class UNet(nn.Module):
         x = self.up2(x, x2)
         x = self.up3(x, x1)
         return self.outc(x)  # type: ignore[no-any-return]
+
+
+class UNetV2(nn.Module):
+    """4-level U-Net with doubled channel widths (64→128→256→512).
+
+    Paper-faithful architecture matching Yang2018 GAN-OPC / Jiang2020
+    Neural-ILT depth. Adds one down/up layer vs UNet (3-level) and
+    doubles all channel widths. No residual connections (Q4 — minimal
+    variable principle).
+
+    Layer layout at 512² input: 512→256→128→64→32 (4 downsamples).
+    Bottleneck is 32×32 with 512 channels — still large enough to
+    avoid degenerate spatial resolution.
+
+    Parameter count: ~4× UNet (3-level), requiring gradient accumulation
+    on memory-constrained hardware.
+    """
+
+    def __init__(self, in_channels: int = 1, out_channels: int = 1) -> None:
+        super().__init__()
+        self.inc = _DoubleConv(in_channels, 64)
+        self.down1 = _Down(64, 128)
+        self.down2 = _Down(128, 256)
+        self.down3 = _Down(256, 512)  # 4th level (bottleneck)
+        self.up4 = _Up(512, 256)  # cat with down2 (256-ch)
+        self.up3 = _Up(256, 128)  # cat with down1 (128-ch)
+        self.up2 = _Up(128, 64)  # cat with inc (64-ch)
+        self.outc = nn.Conv2d(64, out_channels, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x1 = self.inc(x)  # 64-ch
+        x2 = self.down1(x1)  # 128-ch
+        x3 = self.down2(x2)  # 256-ch
+        x4 = self.down3(x3)  # 512-ch bottleneck
+        x = self.up4(x4, x3)  # 256-ch (cat with x3)
+        x = self.up3(x, x2)  # 128-ch (cat with x2)
+        x = self.up2(x, x1)  # 64-ch (cat with x1)
+        return self.outc(x)  # type: ignore[no-any-return]

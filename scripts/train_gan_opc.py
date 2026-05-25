@@ -5,41 +5,39 @@ mirrors `scripts/train_neural_ilt.py` — same UNet, same BCE +
 forward-consistency loss formulation — but ingests the GAN-OPC paired-PNG
 dataset (`Yang2018_GANOPC`) instead of LithoBench.
 
-Scope (v0.3, 2026-05-23 follow-up to v0.2):
+Scope (v0.4, 2026-05-25):
 
-  v0.2 changed four things at once and three of them plausibly affected
-  PVB. See ``out/plans/gan-opc-v0.3-improvements.md`` §1 for the full
-  retrospective. v0.3 isolates one variable at a time via four ablation
-  runs (D, A, B, C) defined below.
+  v0.3 ablation revealed that the PVB regularizer was structurally
+  misaligned with the eval metric (MSE vs design vs envelope bandwidth).
+  v0.4 fixes this by directly minimizing 4-corner envelope bandwidth
+  using `differentiable_threshold` (sigmoid) instead of hard thresholding.
 
-  Run-level config matrix (from plan §2.4):
-
-    Run | px (nm) | resize mode | cons. wt | fwd model | MRC term | PVB term
-    ----|---------|-------------|----------|-----------|----------|---------
-    A   | 4.0     | bilinear    | 0.1      | gaussian  | yes      | yes
-    B   | 4.0     | bilinear    | 0.1      | gaussian  | yes      | no
-    C   | 4.0     | bilinear    | 0.1      | gaussian  | no       | yes
-    D   | 8.0     | bilinear    | 0.1      | gaussian  | no       | no (v0.1 replay, seed=1)
-
-  At px=4.0 train resolution is 512×512 (4× compute vs. v0.2). At px=8.0
-  it stays 256×256 (matches v0.1 / v0.2).
+  Key changes from v0.3:
+  1. PVB loss → bandwidth loss (metric-aligned, R2 core fix)
+  2. Gradient accumulation support
+  3. Mixed precision (AMP) support
+  4. Memmap-backed dataset cache
+  5. Thread control (OMP/MKL/OPENBLAS)
+  6. UNetV2 (4-level, 64→512) architecture option
+  7. Plateau early-stopping with best-checkpoint rollback
+  8. BN-drift sliding baseline for >50 epoch runs
 
 Usage:
     # Smoke test (one batch, no real training).
     python scripts/train_gan_opc.py --smoke-test
 
-    # Run D (v0.1 replay; falsification test):
+    # Stage 0 sanity check (256², 10 epochs):
     python scripts/train_gan_opc.py \\
         --data-root data/ganopc/extracted/ganopc-data \\
         --resize-to 256 --pixel-size-nm 8.0 \\
         --resize-mode bilinear --consistency-weight 0.1 \\
         --forward-model gaussian \\
-        --lambda-mrc 0.0 --lambda-pvb 0.0 \\
-        --epochs 50 --batch-size 8 --device mps \\
-        --seed 1 \\
-        --output checkpoints/gan_opc_v0_3_d.pt
+        --lambda-mrc 0.5 --lambda-pvb 0.1 \\
+        --epochs 10 --batch-size 4 --device cpu \\
+        --seed 0 --mixed-precision \\
+        --output checkpoints/gan_opc_v0_4_stage0.pt
 
-    # Run A (v0.3 candidate):
+    # Stage 1 Run E (v0.4-aerial-pvb):
     python scripts/train_gan_opc.py \\
         --data-root data/ganopc/extracted/ganopc-data \\
         --resize-to 512 --pixel-size-nm 4.0 \\
@@ -47,21 +45,23 @@ Usage:
         --forward-model gaussian \\
         --lambda-mrc 0.5 --mrc-min-width-nm 20 --mrc-min-spacing-nm 20 \\
         --lambda-pvb 0.1 \\
-        --epochs 50 --batch-size 8 --device mps \\
-        --seed 0 \\
-        --output checkpoints/gan_opc_v0_3_a.pt
-
-  B and C are A with --lambda-pvb 0.0 / --lambda-mrc 0.0 respectively.
+        --epochs 50 --batch-size 4 --gradient-accumulation 2 \\
+        --device cpu --seed 0 \\
+        --output checkpoints/gan_opc_v0_4_e.pt
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
-from dataclasses import asdict, dataclass
+import os
+import time
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn.functional as functional
 from torch.utils.data import DataLoader, Dataset
@@ -72,9 +72,16 @@ from openlithohub._utils.hopkins import (
     compute_socs_kernels,
     simulate_aerial_image_hopkins,
 )
+from openlithohub._utils.resist_model import differentiable_threshold
 from openlithohub.benchmark.metrics.mrc_loss import curvilinear_mrc_loss
 from openlithohub.data.ganopc import GanOpcDataset
-from openlithohub.models._unet import UNet
+from openlithohub.models._unet import UNet, UNetV2
+
+# Thread control (R3+R4): limit OMP/MKL/OPENBLAS threads to avoid contention.
+# Must be set before torch imports take effect in worker processes.
+os.environ.setdefault("OMP_NUM_THREADS", "6")
+os.environ.setdefault("MKL_NUM_THREADS", "6")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "6")
 
 
 @dataclass
@@ -104,7 +111,14 @@ class TrainConfig:
     lambda_pvb_dose_delta: float
     lambda_pvb_defocus_range_nm: float
     lambda_pvb_sigma_nominal: float
+    pvb_steepness: float
     seed: int
+    gradient_accumulation: int
+    mixed_precision: bool
+    arch: str
+    plateau_patience: int
+    num_workers: int
+    cache_dir: str
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -133,9 +147,8 @@ class _GanOpcPairs(Dataset):
     """Adapter wrapping GanOpcDataset to yield (design, mask) tensors.
 
     Optionally resizes from native 2048×2048 down to ``resize_to`` so the
-    training loop fits in unified memory on consumer Apple Silicon. Resize
-    mode is selectable: ``bilinear`` (v0.1, v0.3) or ``area`` (v0.2; kept
-    for ablation reproducibility, not recommended — see plan §1.3 Cause 1).
+    training loop fits in unified memory on consumer hardware. Resize
+    mode is selectable: ``bilinear`` (v0.1, v0.3) or ``area`` (v0.2).
     """
 
     def __init__(self, root: Path, resize_to: int | None, resize_mode: str) -> None:
@@ -170,9 +183,82 @@ class _GanOpcPairs(Dataset):
         return (resized.squeeze(0).squeeze(0) > 0.5).float()
 
 
+class _MemmapGanOpcPairs(Dataset):
+    """Single-file memmap-backed dataset cache (R3 Q7).
+
+    Stores the entire preprocessed dataset as a single NumPy memmap file,
+    avoiding the I/O bottleneck of thousands of small .pt files.
+
+    4875 samples × 2 (design+mask) × H² × 2 bytes (float16) ≈ 5.1 GB at 512².
+    Uses numpy.memmap for on-demand loading, not occupying full RAM.
+    Multi-worker DataLoader can safely read the same memmap file concurrently.
+    """
+
+    def __init__(
+        self,
+        root: Path,
+        resize_to: int | None,
+        resize_mode: str,
+        cache_dir: str = "cache/ganopc/",
+    ) -> None:
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.inner_n = len(GanOpcDataset(root=root))
+        self.resize_to = resize_to or 2048
+        self.shape = (self.inner_n, 2, self.resize_to, self.resize_to)
+        tag = f"ganopc_{self.resize_to}_{resize_mode}"
+        self.path = self.cache_dir / f"{tag}.memmap"
+        self._ensure_cache(root, resize_to, resize_mode)
+        self._mmap: np.memmap | None = None
+
+    def _ensure_cache(self, root: Path, resize_to: int | None, resize_mode: str) -> None:
+        if self.path.exists():
+            return
+        print(f"[memmap] Building cache at {self.path} ({self.inner_n} samples)...")
+        t0 = time.time()
+        inner = _GanOpcPairs(root, resize_to, resize_mode)
+        arr = np.memmap(self.path, dtype=np.float16, mode="w+", shape=self.shape)
+        from concurrent.futures import ProcessPoolExecutor
+
+        def _process(i: int) -> tuple[int, np.ndarray, np.ndarray]:
+            design, mask = inner[i]
+            return i, design.numpy().astype(np.float16), mask.numpy().astype(np.float16)
+
+        with ProcessPoolExecutor(max_workers=8) as pool:
+            for i, design, mask in pool.map(_process, range(self.inner_n)):
+                arr[i, 0] = design
+                arr[i, 1] = mask
+        arr.flush()
+        del arr
+        elapsed = time.time() - t0
+        print(f"[memmap] Cache built in {elapsed:.1f}s ({self.path.stat().st_size / 1e9:.2f} GB)")
+
+    def __len__(self) -> int:
+        return self.inner_n
+
+    def _get_memmap(self) -> np.memmap:
+        """Lazy singleton: open memmap once per worker, reuse across calls."""
+        if self._mmap is None:
+            self._mmap = np.memmap(self.path, dtype=np.float16, mode="r", shape=self.shape)
+        return self._mmap
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        arr = self._get_memmap()
+        design = torch.from_numpy(arr[idx, 0].astype(np.float32))
+        mask = torch.from_numpy(arr[idx, 1].astype(np.float32))
+        return design, mask
+
+
 def _build_dataset(cfg: TrainConfig) -> Dataset:
     if cfg.smoke_test or cfg.data_root is None:
         return _DummyPairs(n=max(cfg.batch_size, 4), size=64)
+    if cfg.cache_dir:
+        return _MemmapGanOpcPairs(
+            cfg.data_root,
+            resize_to=cfg.resize_to,
+            resize_mode=cfg.resize_mode,
+            cache_dir=cfg.cache_dir,
+        )
     return _GanOpcPairs(cfg.data_root, resize_to=cfg.resize_to, resize_mode=cfg.resize_mode)
 
 
@@ -198,40 +284,43 @@ def _forward(
     raise ValueError(f"Unknown forward model: {cfg.forward_model}")
 
 
-def _pvb_loss(
+def _pvb_bandwidth_loss(
     mask_continuous: torch.Tensor,
-    target_design: torch.Tensor,
     cfg: TrainConfig,
 ) -> torch.Tensor:
-    """4-corner (dose × defocus) printability term — v0.3 Change 5.
+    """Metric-aligned bandwidth loss — structurally aligned with eval metric.
 
-    Mirrors the eval-time ``compute_pvband`` (pvband.py:_gaussian_pw_envelopes)
-    construction verbatim:
-        sigma_def = defocus_range_nm / (2 * pixel_size_nm)
-        sigma_hi  = sigma_nom + sigma_def
-        sigma_lo  = max(0.5, sigma_nom - sigma_def * 0.5)  # asymmetric
-    Four corners: (dose × defocus) ∈ {(1+δ)·{hi,lo}, (1-δ)·{hi,lo}}.
+    Mirrors pvband.py:_gaussian_pw_envelopes construction verbatim,
+    but replaces apply_resist_threshold (hard, non-diff) with
+    differentiable_threshold (sigmoid, diff) to preserve gradients.
 
-    Returns mean MSE across corners against ``target_design``. Same MSE
-    scale as the consistency term so λ_pvb is comparable to consistency_weight.
+    Minimizes mean(outer_envelope - inner_envelope) across 4 corners.
+    No reference target needed — pure self-robustness measure.
     """
     delta = cfg.lambda_pvb_dose_delta
     sigma_nom = cfg.lambda_pvb_sigma_nominal
     sigma_def = cfg.lambda_pvb_defocus_range_nm / (2.0 * cfg.pixel_size_nm)
     sigma_hi = sigma_nom + sigma_def
     sigma_lo = max(0.5, sigma_nom - sigma_def * 0.5)
+    steepness = cfg.pvb_steepness
 
-    corners = (
+    corners = [
         (1.0 + delta, sigma_hi),
         (1.0 + delta, sigma_lo),
         (1.0 - delta, sigma_hi),
         (1.0 - delta, sigma_lo),
-    )
-    total = mask_continuous.new_zeros(())
+    ]
+
+    outer = mask_continuous.new_zeros(mask_continuous.shape)
+    inner = mask_continuous.new_ones(mask_continuous.shape)
     for dose, sigma in corners:
         aerial = simulate_aerial_image(mask_continuous, sigma_px=sigma, dose=dose)
-        total = total + functional.mse_loss(aerial, target_design)
-    return total / float(len(corners))
+        resist = differentiable_threshold(aerial, threshold=0.5, steepness=steepness)
+        outer = torch.maximum(outer, resist)
+        inner = torch.minimum(inner, resist)
+
+    bandwidth = (outer - inner).clamp(min=0.0)
+    return bandwidth.mean()
 
 
 def _lambda_mrc_at(epoch: int, cfg: TrainConfig) -> float:
@@ -253,15 +342,16 @@ def _lambda_pvb_at(epoch: int, cfg: TrainConfig) -> float:
     return (epoch / n) * cfg.lambda_pvb
 
 
-def _step(
-    model: UNet,
+def _compute_loss(
+    model: torch.nn.Module,
     batch: tuple[torch.Tensor, torch.Tensor],
     cfg: TrainConfig,
     epoch: int,
     kernels: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     kernels_f: torch.Tensor | None = None,
-) -> dict[str, torch.Tensor]:
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Compute loss and return (total, metrics_dict). No backward pass."""
     design, target_mask = batch
     design = design.to(cfg.device).unsqueeze(1)
     target_mask = target_mask.to(cfg.device).unsqueeze(1)
@@ -287,15 +377,16 @@ def _step(
         mrc = torch.zeros((), device=design.device)
 
     if cfg.lambda_pvb > 0.0:
-        pvb = _pvb_loss(mask_continuous, design, cfg)
+        pvb = _pvb_bandwidth_loss(mask_continuous, cfg)
     else:
         pvb = torch.zeros((), device=design.device)
 
     lambda_mrc = _lambda_mrc_at(epoch, cfg)
     lambda_pvb = _lambda_pvb_at(epoch, cfg)
     total = bce + cfg.consistency_weight * consistency + lambda_mrc * mrc + lambda_pvb * pvb
-    return {
-        "total": total,
+
+    metrics = {
+        "total": total.detach(),
         "bce": bce.detach(),
         "consistency": consistency.detach(),
         "mrc": mrc.detach(),
@@ -305,6 +396,17 @@ def _step(
         "mask_mean": mask_continuous.detach().mean(),
         "target_mean": target_mask.detach().mean(),
     }
+    return total, metrics
+
+
+class _nullcontext:
+    """Minimal no-op context manager for when AMP is disabled."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
 
 
 def _bn_drift_log(
@@ -344,60 +446,12 @@ def _bn_drift_log(
 
 # v0.2 baseline bn_max_d_var per epoch (peaks ~10.38, decays to 1.24).
 # Hard-coded so v0.3 abort guard fires at >1.5× v0.2 baseline at the same epoch.
-# Source: out/baselines/iccad16/gan-opc-v0.2.json bn_drift_history (or
-# gan_opc_v0_2.metadata.json:bn_drift_history). Conservative fill (10.38) for
-# epoch 0 if the array is shorter than queried.
 _V02_BN_BASELINE: tuple[float, ...] = (
-    9.66,
-    10.38,
-    8.5,
-    7.0,
-    6.0,
-    5.04,
-    4.5,
-    4.2,
-    4.0,
-    3.8,
-    3.6,
-    3.4,
-    3.3,
-    3.1,
-    3.0,
-    2.9,
-    2.8,
-    2.7,
-    2.6,
-    2.5,
-    2.4,
-    2.3,
-    2.2,
-    2.1,
-    2.0,
-    1.95,
-    1.9,
-    1.85,
-    1.8,
-    1.75,
-    1.7,
-    1.65,
-    1.6,
-    1.55,
-    1.5,
-    1.46,
-    1.42,
-    1.39,
-    1.36,
-    1.34,
-    1.32,
-    1.31,
-    1.30,
-    1.29,
-    1.28,
-    1.27,
-    1.26,
-    1.25,
-    1.24,
-    1.24,
+    9.66, 10.38, 8.5, 7.0, 6.0, 5.04, 4.5, 4.2, 4.0, 3.8,
+    3.6, 3.4, 3.3, 3.1, 3.0, 2.9, 2.8, 2.7, 2.6, 2.5,
+    2.4, 2.3, 2.2, 2.1, 2.0, 1.95, 1.9, 1.85, 1.8, 1.75,
+    1.7, 1.65, 1.6, 1.55, 1.5, 1.46, 1.42, 1.39, 1.36, 1.34,
+    1.32, 1.31, 1.30, 1.29, 1.28, 1.27, 1.26, 1.25, 1.24, 1.24,
 )
 
 
@@ -409,20 +463,34 @@ def _v02_bn_baseline(epoch: int) -> float:
     return _V02_BN_BASELINE[epoch]
 
 
+def _build_model(cfg: TrainConfig) -> torch.nn.Module:
+    if cfg.arch == "unetv2":
+        return UNetV2()
+    return UNet()
+
+
 def train(cfg: TrainConfig) -> dict:
     torch.manual_seed(cfg.seed)
+    if cfg.device == "cpu":
+        torch.set_num_threads(6)
     device = torch.device(cfg.device)
-    model = UNet().to(device)
+    model = _build_model(cfg).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(1, cfg.epochs))
 
     dataset = _build_dataset(cfg)
-    loader = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=True, num_workers=0)
+    num_workers = cfg.num_workers if not cfg.smoke_test else 0
+    loader = DataLoader(
+        dataset,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        persistent_workers=num_workers > 0,
+    )
 
     kernels: torch.Tensor | None = None
     weights_t: torch.Tensor | None = None
     kernels_f: torch.Tensor | None = None
-    grid_size: int | None = None
     if cfg.forward_model == "hopkins" and not cfg.smoke_test:
         grid_size = cfg.resize_to or 256
         params = HopkinsParams(num_kernels=cfg.num_kernels, pixel_size_nm=cfg.pixel_size_nm)
@@ -434,6 +502,11 @@ def train(cfg: TrainConfig) -> dict:
             f"pixel_nm={cfg.pixel_size_nm}"
         )
 
+    use_amp = cfg.mixed_precision and cfg.device == "cpu"
+    scaler: torch.amp.GradScaler | None = None
+    if use_amp:
+        scaler = torch.amp.GradScaler("cpu")
+
     history: list[float] = []
     component_history: list[dict[str, float]] = []
     bn_drift_history: list[dict[str, float]] = []
@@ -444,8 +517,16 @@ def train(cfg: TrainConfig) -> dict:
     first_step_logged = False
     plateau_streak = 0
     last_loss = math.inf
+    best_loss = math.inf
+    best_state: dict | None = None
+
+    # Sliding baseline for BN-drift guard in long runs (R4).
+    bn_sliding_window: list[float] = []
+
+    epoch_time_start = time.time()
 
     for epoch in range(epochs):
+        epoch_start = time.time()
         model.train()
         epoch_losses: list[float] = []
         epoch_components: dict[str, list[float]] = {
@@ -456,10 +537,18 @@ def train(cfg: TrainConfig) -> dict:
         }
         epoch_mask_means: list[float] = []
         epoch_target_means: list[float] = []
-        for batch in loader:
-            optimizer.zero_grad()
-            losses = _step(model, batch, cfg, epoch, kernels, weights_t, kernels_f)
-            total = losses["total"]
+        optimizer.zero_grad()
+
+        accum_steps = max(1, cfg.gradient_accumulation)
+
+        for step_idx, batch in enumerate(loader):
+            use_amp = cfg.mixed_precision and cfg.device == "cpu"
+            amp_ctx = torch.amp.autocast("cpu", enabled=use_amp)
+
+            with amp_ctx:
+                total, losses = _compute_loss(
+                    model, batch, cfg, epoch, kernels, weights_t, kernels_f
+                )
             if not torch.isfinite(total):
                 raise RuntimeError(f"Non-finite loss at epoch {epoch}: {total.item()}")
 
@@ -481,9 +570,23 @@ def train(cfg: TrainConfig) -> dict:
                     print("[step-1] WARN: PVB step-1 > 5× BCE; consider lowering --lambda-pvb.")
                 first_step_logged = True
 
-            total.backward()
-            optimizer.step()
-            epoch_losses.append(float(total.item()))
+            # Backward with optional gradient scaling
+            scaled_loss = total / accum_steps
+            if scaler is not None:
+                scaler.scale(scaled_loss).backward()
+            else:
+                scaled_loss.backward()
+
+            # Step optimizer every accum_steps
+            if (step_idx + 1) % accum_steps == 0 or (cfg.smoke_test and step_idx == 0):
+                if scaler is not None:
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    optimizer.step()
+                optimizer.zero_grad()
+
+            epoch_losses.append(float(losses["total"].item()))
             epoch_components["bce"].append(float(losses["bce"].item()))
             epoch_components["consistency"].append(float(losses["consistency"].item()))
             epoch_components["mrc"].append(float(losses["mrc"].item()))
@@ -492,6 +595,16 @@ def train(cfg: TrainConfig) -> dict:
             epoch_target_means.append(float(losses["target_mean"].item()))
             if cfg.smoke_test:
                 break
+
+        # Handle remaining accumulated gradients
+        if not cfg.smoke_test and (len(loader) % accum_steps) != 0:
+            if scaler is not None:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
+            optimizer.zero_grad()
+
         scheduler.step()
 
         if device.type == "mps":
@@ -503,10 +616,11 @@ def train(cfg: TrainConfig) -> dict:
         mean = sum(epoch_losses) / max(1, len(epoch_losses))
         history.append(mean)
         means = {k: sum(v) / max(1, len(v)) for k, v in epoch_components.items()}
-        component_history.append(means)
         mask_mean_epoch = sum(epoch_mask_means) / max(1, len(epoch_mask_means))
         mask_mean_history.append(mask_mean_epoch)
         target_mean_epoch = sum(epoch_target_means) / max(1, len(epoch_target_means))
+
+        epoch_elapsed = time.time() - epoch_start
         print(
             f"epoch {epoch}: loss={mean:.4f} bce={means['bce']:.4f} "
             f"consistency={means['consistency']:.4f} mrc={means['mrc']:.4f} "
@@ -514,19 +628,16 @@ def train(cfg: TrainConfig) -> dict:
             f"lambda_mrc={_lambda_mrc_at(epoch, cfg):.3f} "
             f"lambda_pvb={_lambda_pvb_at(epoch, cfg):.3f} "
             f"mask_mean={mask_mean_epoch:.4f} target_mean={target_mean_epoch:.4f} "
-            f"bn_max_dvar={bn_summary['max_d_var']:.3e}"
+            f"bn_max_dvar={bn_summary['max_d_var']:.3e} "
+            f"time={epoch_elapsed:.1f}s"
         )
 
-        # Stopping rules (plan §2.6).
-        # 1. BN-drift relative to v0.2 baseline. The baseline was measured on
-        #    v0.2 (px=8 / 256², Hopkins forward, lambda_mrc=1.0, no PVB term).
-        #    v0.3-A adds the 4-corner PVB term (5 forward passes/step) which
-        #    materially shifts BN gradient dynamics during the warmup window.
-        #    To avoid false positives from regime change, require BOTH (a) BN
-        #    drift > 1.5× baseline for 2 consecutive epochs AND (b) corroborating
-        #    divergence signal: loss is not decreasing OR mask_mean has drifted
-        #    >50% from target_mean. Guard is gated to px<=5 to avoid triggering
-        #    on Run D (px=8) which intentionally matches the v0.2 regime.
+        # Best state tracking (R4 split: plateau → 3 subtasks).
+        if mean < best_loss:
+            best_loss = mean
+            best_state = copy.deepcopy(model.state_dict())
+
+        # BN-drift guard.
         if (
             epoch >= 2
             and len(history) >= 2
@@ -536,9 +647,21 @@ def train(cfg: TrainConfig) -> dict:
         ):
             cur = bn_summary["max_d_var"]
             prev_bn_v = bn_drift_history[-2]["max_d_var"]
-            base_cur = _v02_bn_baseline(epoch)
-            base_prev = _v02_bn_baseline(epoch - 1)
-            bn_escalating = cur > 1.5 * base_cur and prev_bn_v > 1.5 * base_prev
+
+            # R4: Sliding baseline for >50 epoch runs.
+            if cfg.epochs > 50 and epoch >= 50:
+                bn_sliding_window.append(cur)
+                if len(bn_sliding_window) >= 10:
+                    sliding_avg = sum(bn_sliding_window[-10:]) / 10.0
+                    bn_threshold = 1.5 * sliding_avg
+                else:
+                    bn_threshold = 1.5 * cur  # not enough data yet, be lenient
+                bn_escalating = cur > bn_threshold and prev_bn_v > bn_threshold
+            else:
+                base_cur = _v02_bn_baseline(epoch)
+                base_prev = _v02_bn_baseline(epoch - 1)
+                bn_escalating = cur > 1.5 * base_cur and prev_bn_v > 1.5 * base_prev
+
             loss_stalled = history[-1] >= history[-2]
             mask_drift = (
                 target_mean_epoch > 0.0
@@ -547,17 +670,11 @@ def train(cfg: TrainConfig) -> dict:
             if bn_escalating and (loss_stalled or mask_drift):
                 raise RuntimeError(
                     f"BN drift escalation + divergence signal at epoch {epoch}: "
-                    f"max_d_var={cur:.3f} > 1.5×v0.2_baseline={1.5 * base_cur:.3f}, "
+                    f"max_d_var={cur:.3f}, "
                     f"loss_stalled={loss_stalled} mask_drift={mask_drift}."
                 )
-        # 2. Mask-mean collapse guard. Reference is the target_mask mean over
-        #    the same epoch — the network is learning to match the targets,
-        #    so a predicted mean far below target mean signals collapse.
-        #    Threshold: mask_mean < 0.1 × target_mean. Only fires after
-        #    epoch 5 to give the warmup time to calibrate. Per plan §2.6:
-        #    "predicted-mask mean intensity drops below 0.1× v0.1's
-        #    predicted-mask mean intensity"; the target distribution is the
-        #    closest available proxy for v0.1's predicted distribution.
+
+        # Mask-mean collapse guard.
         if (
             epoch >= 5
             and target_mean_epoch > 0.0
@@ -569,24 +686,42 @@ def train(cfg: TrainConfig) -> dict:
                 f"{mask_mean_epoch:.4f} < 0.1 * target_mean={target_mean_epoch:.4f}. "
                 "PVB term may be mis-constructed."
             )
-        # 3. Total-loss plateau after warm-up.
-        if epoch >= 15 and not cfg.smoke_test:
+
+        # Plateau early-stopping (R4: parameterized patience).
+        patience = cfg.plateau_patience
+        if epoch >= max(15, patience) and not cfg.smoke_test:
             if mean >= last_loss - 1e-6:
                 plateau_streak += 1
             else:
                 plateau_streak = 0
-            if plateau_streak >= 5:
-                raise RuntimeError(
-                    f"Loss plateau: no decrease for 5 consecutive epochs after warm-up "
-                    f"(epoch {epoch}, last_loss={last_loss:.4f})."
+            if plateau_streak >= patience:
+                print(
+                    f"[early-stop] Loss plateau: no decrease for {patience} epochs "
+                    f"(epoch {epoch}, best_loss={best_loss:.4f}). Rolling back to best."
                 )
+                if best_state is not None:
+                    model.load_state_dict(best_state)
+                break
         last_loss = mean
+
+        # Bandwidth loss monitoring (warmup-independent).
+        if (
+            cfg.lambda_pvb > 0.0
+            and epoch >= 20
+            and not cfg.smoke_test
+            and len(component_history) >= 5
+        ):
+            recent_pvb = [component_history[-i]["pvb"] for i in range(1, min(6, len(component_history) + 1))]
+            if all(p >= component_history[-5]["pvb"] - 1e-6 for p in recent_pvb):
+                print(f"[warn] Bandwidth loss not decreasing for 5 epochs (epoch {epoch}).")
 
         if cfg.smoke_test:
             break
 
+    # Save final checkpoint (best state if early-stopped, otherwise final).
     cfg.output.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), cfg.output)
+    final_state = best_state if best_state is not None else model.state_dict()
+    torch.save(final_state, cfg.output)
 
     metadata = {
         "config": cfg.to_dict(),
@@ -595,16 +730,23 @@ def train(cfg: TrainConfig) -> dict:
         "bn_drift_history": bn_drift_history,
         "mask_mean_history": mask_mean_history,
         "final_loss": history[-1] if history else math.nan,
+        "best_loss": best_loss,
+        "early_stopped": plateau_streak >= cfg.plateau_patience,
+        "total_time_s": time.time() - epoch_time_start,
         "dataset": "ganopc",
         "paper": "Yang2018_GANOPC",
         "scope": "generator-only (no discriminator); see scripts/train_gan_opc.py docstring",
-        "version": "v0.3",
-        "v03_changes": [
-            "Change 1: resize mode bilinear+thresh (revert v0.2 area)",
-            "Change 2: consistency_weight 0.1 (revert v0.2 0.05)",
-            "Change 3: forward model gaussian default (revert v0.2 hopkins)",
-            "Change 4: MRC term at px=4, w=20 (radius-2 parity); lambda_mrc=0.5",
-            "Change 5: 4-corner (dose × defocus) MSE PVB regulariser; lambda_pvb=0.1",
+        "version": "v0.4",
+        "v04_changes": [
+            "Change 1: PVB loss → metric-aligned bandwidth (mean(outer-inner))",
+            "Change 2: differentiable_threshold (steepness=20) replaces hard threshold",
+            "Change 3: Gradient accumulation support",
+            "Change 4: Mixed precision (AMP) support",
+            "Change 5: Memmap-backed dataset cache (single file)",
+            "Change 6: Thread control (OMP/MKL/OPENBLAS=6)",
+            "Change 7: UNetV2 (4-level, 64→512) architecture option",
+            "Change 8: Plateau early-stopping with best-checkpoint rollback",
+            "Change 9: BN-drift sliding baseline for >50 epoch runs",
         ],
         "lambda_mrc_schedule": {
             "start": cfg.lambda_mrc_warmup_start,
@@ -618,10 +760,12 @@ def train(cfg: TrainConfig) -> dict:
             "dose_delta": cfg.lambda_pvb_dose_delta,
             "defocus_range_nm": cfg.lambda_pvb_defocus_range_nm,
             "sigma_nominal": cfg.lambda_pvb_sigma_nominal,
+            "steepness": cfg.pvb_steepness,
         },
         "reproducibility_note": (
-            f"torch.manual_seed({cfg.seed}); MPS kernel-launch nondeterminism "
-            "limits bitwise reproducibility (~1e-5)."
+            f"torch.manual_seed({cfg.seed}); device={cfg.device}; "
+            f"arch={cfg.arch}; grad_accum={cfg.gradient_accumulation}; "
+            f"amp={cfg.mixed_precision}"
         ),
     }
     metadata_path = cfg.output.with_suffix(".metadata.json")
@@ -650,78 +794,94 @@ def _parse_args() -> TrainConfig:
         "--forward-model",
         default="gaussian",
         choices=["gaussian", "hopkins"],
-        help="v0.3 default: gaussian (Hopkins reverted per Change 3).",
     )
     p.add_argument("--device", default=_default_device())
-    p.add_argument("--output", type=Path, default=Path("checkpoints/gan_opc_v0_3.pt"))
+    p.add_argument("--output", type=Path, default=Path("checkpoints/gan_opc_v0_4.pt"))
     p.add_argument(
         "--resize-to",
         type=int,
         default=512,
-        help="Resize side. v0.3 default 512 (px=4.0). v0.1/D use 256 (px=8.0).",
+        help="Resize side. v0.4 default 512 (px=4.0). Stage 0 uses 256 (px=8.0).",
     )
     p.add_argument(
         "--resize-mode",
         default="bilinear",
         choices=["bilinear", "area"],
-        help="v0.3 default: bilinear+thresh (Change 1, revert v0.2 area).",
     )
     p.add_argument(
         "--consistency-weight",
         type=float,
         default=0.1,
-        help="v0.3 default 0.1 (Change 2, revert v0.2 0.05).",
     )
     p.add_argument("--num-kernels", type=int, default=24)
     p.add_argument(
         "--pixel-size-nm",
         type=float,
         default=4.0,
-        help="v0.3 default: 4.0 (Change 4 — eval-aligned). D uses 8.0.",
     )
     p.add_argument(
         "--lambda-mrc",
         type=float,
         default=0.5,
-        help="v0.3 final lambda_mrc (warm-up to this over 10 epochs). 0 disables.",
+        help="MRC loss weight. 0 disables.",
     )
     p.add_argument("--lambda-mrc-warmup-epochs", type=int, default=10)
     p.add_argument("--lambda-mrc-warmup-start", type=float, default=0.0)
-    p.add_argument(
-        "--mrc-min-width-nm",
-        type=float,
-        default=20.0,
-        help="v0.3 default 20 nm (radius-2 parity at px=4).",
-    )
+    p.add_argument("--mrc-min-width-nm", type=float, default=20.0)
     p.add_argument("--mrc-min-spacing-nm", type=float, default=20.0)
     p.add_argument("--mrc-weight-min-spacing", type=float, default=0.5)
     p.add_argument(
         "--lambda-pvb",
         type=float,
         default=0.1,
-        help="v0.3 final lambda_pvb (warm-up over 15 epochs). 0 disables.",
+        help="PVB bandwidth loss weight. 0 disables.",
     )
     p.add_argument("--lambda-pvb-warmup-epochs", type=int, default=15)
-    p.add_argument(
-        "--lambda-pvb-dose-delta",
-        type=float,
-        default=0.05,
-        help="Δ for dose perturbation; matches pvband.py default 0.05.",
-    )
-    p.add_argument(
-        "--lambda-pvb-defocus-range-nm",
-        type=float,
-        default=20.0,
-        help="defocus_range_nm for sigma_def; matches pvband.py default 20.0.",
-    )
+    p.add_argument("--lambda-pvb-dose-delta", type=float, default=0.05)
+    p.add_argument("--lambda-pvb-defocus-range-nm", type=float, default=20.0)
     p.add_argument("--lambda-pvb-sigma-nominal", type=float, default=2.0)
     p.add_argument(
-        "--seed",
-        type=int,
-        default=0,
-        help="torch.manual_seed. Run D requires --seed 1 (independent re-sample).",
+        "--pvb-steepness",
+        type=float,
+        default=20.0,
+        help="Steepness for differentiable_threshold in bandwidth loss. R3: fixed at 20.",
     )
+    p.add_argument("--seed", type=int, default=0)
     p.add_argument("--smoke-test", action="store_true")
+    p.add_argument(
+        "--gradient-accumulation",
+        type=int,
+        default=1,
+        help="Gradient accumulation steps. v0.4 default 1 (use 2 for effective batch=8).",
+    )
+    p.add_argument(
+        "--mixed-precision",
+        action="store_true",
+        help="Enable AMP (torch.amp.autocast('cpu')). May slow down on AMD 5600G.",
+    )
+    p.add_argument(
+        "--arch",
+        default="unet",
+        choices=["unet", "unetv2"],
+        help="Architecture: unet (3-level, 32→256) or unetv2 (4-level, 64→512).",
+    )
+    p.add_argument(
+        "--plateau-patience",
+        type=int,
+        default=5,
+        help="Plateau early-stopping patience. Stage 1=5, Stage 2=10.",
+    )
+    p.add_argument(
+        "--num-workers",
+        type=int,
+        default=4,
+        help="DataLoader num_workers. 0 for smoke test.",
+    )
+    p.add_argument(
+        "--cache-dir",
+        default="cache/ganopc/",
+        help="Directory for memmap cache. Empty string disables caching.",
+    )
     args = p.parse_args()
     return TrainConfig(
         data_root=args.data_root,
@@ -749,7 +909,14 @@ def _parse_args() -> TrainConfig:
         lambda_pvb_dose_delta=args.lambda_pvb_dose_delta,
         lambda_pvb_defocus_range_nm=args.lambda_pvb_defocus_range_nm,
         lambda_pvb_sigma_nominal=args.lambda_pvb_sigma_nominal,
+        pvb_steepness=args.pvb_steepness,
         seed=args.seed,
+        gradient_accumulation=args.gradient_accumulation,
+        mixed_precision=args.mixed_precision,
+        arch=args.arch,
+        plateau_patience=args.plateau_patience,
+        num_workers=args.num_workers,
+        cache_dir=args.cache_dir,
     )
 
 
