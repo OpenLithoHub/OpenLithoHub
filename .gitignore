@@ -51,3 +51,9 @@ checkpoints/*.metadata.json
 
 # Claude harness internals
 .claude/
+
+# macOS Apple Double files
+._*
+
+# Training cache
+cache/
