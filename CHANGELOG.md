@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Surrogate-ILT model** (`openlithohub.models.surrogate_ilt`) — CNN-accelerated ILT using an on-the-fly trained surrogate forward model. Periodically corrects with the true physics-based forward model, yielding 10–50× speedup during optimisation. Architecture adapted from DiffNano's `NeuralSurrogate`. Supports both Gaussian and Hopkins forward models.
+- **VAE-ILT model** (`openlithohub.models.vae_ilt`) — Latent-space ILT via variational autoencoder. Optimises in a compressed latent space for smoother loss landscape and faster convergence. Self-supervised training (no external dataset required). Architecture adapted from DiffNano's `LearnedRepresentation`.
+- **diff-surrogate integration** — External `diff_surrogate` library replaces the local convergence fallback for unified surrogate lifecycle management.
+- **GAN-OPC v0.4 training pipeline** (`scripts/train_gan_opc.py`) — metric-aligned PVB bandwidth loss (`mean(outer_envelope - inner_envelope)` across 4 dose/focus corners using differentiable sigmoid threshold), UNetV2 (4-level, 7.7M params), memmap dataset cache, gradient accumulation, AMP support, plateau early-stopping with best-checkpoint rollback, BN-drift sliding baseline guard for >50-epoch runs.
+- **v0.4 probes** — P3 (PVB bandwidth correctness), P4 (memmap integrity), P5 (AMP numerical consistency), P6 (memory peak + AMP benchmark).
+- **v0.4 eval script** (`scripts/_eval_v04_iccad16.py`) — greenlight rules: PVB≤10.9nm AND MRC≤7.5% AND PVBmax≤45nm.
+
+### Changed
+
+- **GAN-OPC PVB loss rewritten** — `_pvb_loss()` (MSE vs design) replaced by `_pvb_bandwidth_loss()` (metric-aligned envelope bandwidth minimisation). The new loss directly minimises `mean(max(resist_corners) - min(resist_corners))` across 4 dose/focus corners, structurally aligned with the eval-time `compute_pvband()` metric.
+- **Thread control** — `torch.set_num_threads` and OMP/MKL/OPENBLAS limits auto-detected from `os.cpu_count()` (capped at 12 for AMD 5600G).
+- **Model registry** — `register_builtin_models()` now imports surrogate_ilt and vae_ilt.
+
+### Added
+
 - **RDP vertex decimation on OASIS export** — `export_oasis_mbw(vertex_tolerance_nm=...)` runs an iterative anchored Ramer-Douglas-Peucker simplification on each sampled curvilinear polygon. Default `0.0` keeps bit-exact academic behaviour; positive values cut full-chip OASIS data volume (MBMW shot/byte budget) without measurable wafer-image change. Reduction count and ratio logged at INFO.
 - **ILT checkpointing** — `LevelSetILTModel.predict(checkpoint_dir=, save_freq=, resume_from=)` periodically `torch.save`s the mask logit, Adam state, and best-loss tracker. Deterministic resume (resume-vs-uninterrupted equality is pinned by test). SLURM preemption / CUDA crash on multi-thousand-iter runs no longer wipes prior progress. Off by default; `save_freq>0` without `checkpoint_dir` raises.
 - **SRAF min-area export filter** — `export_oasis_mbw(min_area_nm2=...)` and the matching `workflow.export.{export_oasis,export_gds}` parameter drop sub-resolution polygons via shoelace area before OASIS insert (default `0.0`, Hackathon-safe). Plumbed through `optimize --export-min-area` and the `/v1/optimize` HTTP form so fab-ready exports can clear MRC without touching academic scoring runs. Dropped count logged at INFO.
