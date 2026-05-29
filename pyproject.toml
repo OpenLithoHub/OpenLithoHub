@@ -30,6 +30,7 @@ dependencies = [
     "pydantic>=2.0",
     "rich>=13.0",
     "tomli>=2.0; python_version<'3.11'",
+    "diff-surrogate @ git+https://github.com/telleroutlook/diff-surrogate.git",
 ]
 
 [project.optional-dependencies]

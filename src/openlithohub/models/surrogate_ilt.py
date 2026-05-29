@@ -35,6 +35,23 @@ from typing import Any, Literal
 import torch
 import torch.nn as nn
 
+try:
+    from diff_surrogate import CorrectionPolicy
+except ImportError:
+    from dataclasses import dataclass
+
+    @dataclass
+    class CorrectionPolicy:  # type: ignore[no-redef]
+        correction_interval: int = 10
+        warmup_steps: int = 0
+
+        def should_correct(self, step: int) -> bool:
+            if step < self.warmup_steps:
+                return False
+            if self.correction_interval <= 0:
+                return False
+            return step % self.correction_interval == 0
+
 from openlithohub._utils.forward_model import simulate_aerial_image
 from openlithohub._utils.hopkins import (
     HopkinsParams,
@@ -127,6 +144,7 @@ class SurrogateILTModel(LithographyModel):
         self._forward_model = forward_model
         self._hopkins_params = hopkins_params or HopkinsParams()
         self._correction_interval = correction_interval
+        self._correction_policy = CorrectionPolicy(correction_interval=correction_interval)
         self._surrogate_train_samples = surrogate_train_samples
         self._surrogate_epochs = surrogate_epochs
         self._surrogate_lr = surrogate_lr
@@ -258,7 +276,7 @@ class SurrogateILTModel(LithographyModel):
             optimizer.zero_grad()
             mask_continuous = torch.sigmoid(mask_logit)
 
-            use_surrogate = (it % self._correction_interval) != 0
+            use_surrogate = not self._correction_policy.should_correct(it)
 
             if use_surrogate:
                 mask_4d = mask_continuous.unsqueeze(0).unsqueeze(0)
