@@ -1,5 +1,11 @@
 """Internal shared utilities."""
 
+from openlithohub._utils.convergence import (
+    ConvergenceAction,
+    ConvergenceMonitor,
+    ConvergenceVerdict,
+    HybridZScore,
+)
 from openlithohub._utils.helmholtz_filter import apply_helmholtz_filter
 from openlithohub._utils.hopkins import (
     HopkinsParams,
@@ -22,7 +28,11 @@ from openlithohub._utils.sampling import evenly_spaced_indices
 from openlithohub._utils.tensor_ops import ensure_2d
 
 __all__ = [
+    "ConvergenceAction",
+    "ConvergenceMonitor",
+    "ConvergenceVerdict",
     "HopkinsParams",
+    "HybridZScore",
     "apply_helmholtz_filter",
     "binary_dilation",
     "binary_erosion",

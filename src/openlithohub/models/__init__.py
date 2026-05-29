@@ -4,6 +4,7 @@ from openlithohub.models.base import LithographyModel, PredictionResult
 from openlithohub.models.hub import ModelHub
 from openlithohub.models.layout_mae import LayoutMAE, LayoutMAEConfig
 from openlithohub.models.registry import ModelRegistry
+from openlithohub.models.vae_benchmark import VAEBenchmark
 
 __all__ = [
     "LithographyModel",
@@ -12,4 +13,5 @@ __all__ = [
     "ModelHub",
     "LayoutMAE",
     "LayoutMAEConfig",
+    "VAEBenchmark",
 ]
