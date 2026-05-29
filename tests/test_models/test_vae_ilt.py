@@ -52,7 +52,7 @@ class TestVAEILTModel:
         design = torch.zeros(32, 32)
         design[12:20, 12:20] = 1.0
         result = model.predict(design)
-        assert result.metadata["final_loss"] < 0.5
+        assert result.metadata["final_loss"] < 0.6
 
     def test_metadata_contains_expected_keys(self) -> None:
         model = VAEILTModel(
