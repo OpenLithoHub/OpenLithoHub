@@ -28,7 +28,6 @@ Ported from DiffCFD ``diffcfd.geometry.filters.HelmholtzFilter``.
 
 from __future__ import annotations
 
-import torch
 from torch import Tensor
 
 from openlithohub._utils.forward_model import _circular_pad_clamped
@@ -74,15 +73,14 @@ def apply_helmholtz_filter(
     """
     if rho.ndim != 2:
         raise ValueError(
-            f"apply_helmholtz_filter expects a 2-D (H, W) tensor; "
-            f"got shape {tuple(rho.shape)}"
+            f"apply_helmholtz_filter expects a 2-D (H, W) tensor; got shape {tuple(rho.shape)}"
         )
 
     if radius < 1e-12:
         # Radius effectively zero — identity filter.
         return rho
 
-    r2 = radius ** 2
+    r2 = radius**2
     # Unit grid spacing (dx = dy = 1.0) — matches OpenLithoHub's pixel grid.
     diag = 1.0 + 4.0 * r2
 
@@ -96,10 +94,10 @@ def apply_helmholtz_filter(
         rho_f_4d = rho_f.unsqueeze(0).unsqueeze(0)
         padded = _circular_pad_clamped(rho_f_4d, padding=1)
         # padded is (1, 1, H+2, W+2); extract neighbours.
-        n_east = padded[0, 0, 1:-1, 2:]   # shift left
+        n_east = padded[0, 0, 1:-1, 2:]  # shift left
         n_west = padded[0, 0, 1:-1, :-2]  # shift right
         n_north = padded[0, 0, 2:, 1:-1]  # shift down
-        n_south = padded[0, 0, :-2, 1:-1] # shift up
+        n_south = padded[0, 0, :-2, 1:-1]  # shift up
 
         # Jacobi update: rho_f^{k+1} = (rhs) / diag
         # where rhs = rho + r^2 * (sum of neighbours)

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 import torch
 import torch.nn as nn
@@ -112,7 +111,9 @@ class VAEBenchmark:
         self.device = torch.device(device)
 
     def _reparameterize(
-        self, mu: torch.Tensor, logvar: torch.Tensor,
+        self,
+        mu: torch.Tensor,
+        logvar: torch.Tensor,
     ) -> torch.Tensor:
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
@@ -205,7 +206,8 @@ class VAEBenchmark:
         # Phase 1: quick VAE pre-training on random masks
         grid_size = target.shape[-1]
         opt = torch.optim.Adam(
-            list(encoder.parameters()) + list(decoder.parameters()), lr=1e-3,
+            list(encoder.parameters()) + list(decoder.parameters()),
+            lr=1e-3,
         )
         encoder.train()
         decoder.train()
@@ -305,18 +307,15 @@ class VAEBenchmark:
         if recon_a.mse < recon_b.mse:
             ratio = recon_b.mse / max(recon_a.mse, 1e-12)
             summary["reconstruction"] = (
-                f"{name_a} has {ratio:.2f}x lower MSE "
-                f"({recon_a.mse:.6f} vs {recon_b.mse:.6f})"
+                f"{name_a} has {ratio:.2f}x lower MSE ({recon_a.mse:.6f} vs {recon_b.mse:.6f})"
             )
         else:
             ratio = recon_a.mse / max(recon_b.mse, 1e-12)
             summary["reconstruction"] = (
-                f"{name_b} has {ratio:.2f}x lower MSE "
-                f"({recon_b.mse:.6f} vs {recon_a.mse:.6f})"
+                f"{name_b} has {ratio:.2f}x lower MSE ({recon_b.mse:.6f} vs {recon_a.mse:.6f})"
             )
 
         faster_name = name_a if recon_a.time_ms <= recon_b.time_ms else name_b
-        slower_name = name_b if faster_name == name_a else name_a
         faster_time = min(recon_a.time_ms, recon_b.time_ms)
         slower_time = max(recon_a.time_ms, recon_b.time_ms)
         if slower_time > 0:

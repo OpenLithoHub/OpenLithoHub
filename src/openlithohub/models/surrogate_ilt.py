@@ -30,7 +30,7 @@ a 1D diffraction-efficiency vector.
 from __future__ import annotations
 
 import threading
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 import torch.nn as nn
@@ -52,6 +52,7 @@ except ImportError:
                 return False
             return step % self.correction_interval == 0
 
+
 from openlithohub._utils.forward_model import simulate_aerial_image
 from openlithohub._utils.hopkins import (
     HopkinsParams,
@@ -68,6 +69,7 @@ ForwardModelKind = Literal["gaussian", "hopkins"]
 # ---------------------------------------------------------------------------
 # Surrogate CNN (adapted from DiffNano/solvers/surrogate.py)
 # ---------------------------------------------------------------------------
+
 
 class _AerialSurrogateNet(nn.Module):
     """CNN that predicts aerial image from mask.
@@ -95,6 +97,7 @@ class _AerialSurrogateNet(nn.Module):
 # ---------------------------------------------------------------------------
 # Surrogate-ILT Model
 # ---------------------------------------------------------------------------
+
 
 @registry.register
 class SurrogateILTModel(LithographyModel):
@@ -156,7 +159,9 @@ class SurrogateILTModel(LithographyModel):
         self._cache_lock = threading.Lock()
 
     def _ensure_hopkins_kernels(
-        self, grid_size: int, device: torch.device,
+        self,
+        grid_size: int,
+        device: torch.device,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         with self._cache_lock:
             if (
@@ -166,13 +171,16 @@ class SurrogateILTModel(LithographyModel):
                 or self._cached_kernels.device != device
             ):
                 kernels, weights = compute_socs_kernels(
-                    self._hopkins_params, grid_size, device,
+                    self._hopkins_params,
+                    grid_size,
+                    device,
                 )
                 self._cached_kernels = kernels
                 self._cached_weights = weights
                 self._cached_grid = grid_size
-            assert self._cached_kernels is not None
-            assert self._cached_weights is not None
+            if TYPE_CHECKING:
+                assert self._cached_kernels is not None
+                assert self._cached_weights is not None
             return self._cached_kernels, self._cached_weights
 
     def _run_true_forward(
@@ -185,7 +193,10 @@ class SurrogateILTModel(LithographyModel):
     ) -> torch.Tensor:
         if forward_model == "hopkins":
             return simulate_aerial_image_hopkins(
-                mask, kernels=kernels, weights=weights, dose=self._dose,
+                mask,
+                kernels=kernels,
+                weights=weights,
+                dose=self._dose,
             )
         return simulate_aerial_image(mask, sigma_px=sigma_px, dose=self._dose)
 
@@ -211,14 +222,18 @@ class SurrogateILTModel(LithographyModel):
                 aerials_list = []
                 for i in range(n):
                     aerial_i = self._run_true_forward(
-                        masks[i, 0], sigma_px, forward_model, kernels, weights,
+                        masks[i, 0],
+                        sigma_px,
+                        forward_model,
+                        kernels,
+                        weights,
                     )
                     aerials_list.append(aerial_i)
                 aerials = torch.stack(aerials_list).unsqueeze(1)
 
             perm = torch.randperm(n, device=device)
             for start in range(0, n, batch_size):
-                idx = perm[start:start + batch_size]
+                idx = perm[start : start + batch_size]
                 pred = net(masks[idx])
                 loss = nn.functional.mse_loss(pred, aerials[idx])
                 opt.zero_grad()
@@ -259,7 +274,13 @@ class SurrogateILTModel(LithographyModel):
         # --- Phase 1: train surrogate ---
         surrogate = _AerialSurrogateNet(self._surrogate_hidden).to(device)
         self._train_surrogate(
-            surrogate, grid_size, sigma_px, forward_model, kernels, weights, device,
+            surrogate,
+            grid_size,
+            sigma_px,
+            forward_model,
+            kernels,
+            weights,
+            device,
         )
 
         # --- Phase 2: ILT with surrogate + periodic correction ---
@@ -283,7 +304,11 @@ class SurrogateILTModel(LithographyModel):
                 aerial = surrogate(mask_4d).squeeze(0).squeeze(0)
             else:
                 aerial = self._run_true_forward(
-                    mask_continuous, sigma_px, forward_model, kernels, weights,
+                    mask_continuous,
+                    sigma_px,
+                    forward_model,
+                    kernels,
+                    weights,
                 )
                 # Fine-tune surrogate on this real pair
                 mask_4d = mask_continuous.detach().unsqueeze(0).unsqueeze(0)
@@ -297,7 +322,9 @@ class SurrogateILTModel(LithographyModel):
                     s_opt.step()
 
             resist = differentiable_threshold(
-                aerial, threshold=0.5, steepness=self._resist_steepness,
+                aerial,
+                threshold=0.5,
+                steepness=self._resist_steepness,
             )
             fidelity_loss = nn.functional.mse_loss(resist, target)
 

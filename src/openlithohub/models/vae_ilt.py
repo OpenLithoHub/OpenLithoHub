@@ -49,6 +49,7 @@ ForwardModelKind = Literal["gaussian", "hopkins"]
 # VAE components (adapted from DiffNano/design/representation_learning.py)
 # ---------------------------------------------------------------------------
 
+
 class _Encoder(nn.Module):
     def __init__(self, latent_dim: int = 16, hidden: int = 32):
         super().__init__()
@@ -79,7 +80,9 @@ class _Decoder(nn.Module):
             nn.ConvTranspose2d(hidden, 1, 3, stride=2, padding=1, output_padding=1),
         )
         self.final_upsample = nn.Upsample(
-            size=(out_size, out_size), mode="bilinear", align_corners=False,
+            size=(out_size, out_size),
+            mode="bilinear",
+            align_corners=False,
         )
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
@@ -98,6 +101,7 @@ def _reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
 # ---------------------------------------------------------------------------
 # VAE-ILT Model
 # ---------------------------------------------------------------------------
+
 
 @registry.register
 class VAEILTModel(LithographyModel):
@@ -246,12 +250,19 @@ class VAEILTModel(LithographyModel):
 
             if forward_model == "hopkins":
                 aerial = simulate_aerial_image_hopkins(
-                    mask_continuous, kernels=kernels, weights=weights, dose=self._dose,
+                    mask_continuous,
+                    kernels=kernels,
+                    weights=weights,
+                    dose=self._dose,
                 )
             else:
                 aerial = simulate_aerial_image(mask_continuous, sigma_px=sigma_px, dose=self._dose)
 
-            resist = differentiable_threshold(aerial, threshold=0.5, steepness=self._resist_steepness)
+            resist = differentiable_threshold(
+                aerial,
+                threshold=0.5,
+                steepness=self._resist_steepness,
+            )
             fidelity_loss = nn.functional.mse_loss(resist, target)
 
             if tv_weight > 0:
