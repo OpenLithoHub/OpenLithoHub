@@ -221,7 +221,7 @@ class VAEBenchmark:
             kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum()
             loss = recon_loss + kl_loss
             opt.zero_grad()
-            loss.backward()  # type: ignore[no-untyped-call]
+            loss.backward()
             opt.step()
 
         encoder.eval()
@@ -243,7 +243,7 @@ class VAEBenchmark:
             latent_opt.zero_grad()
             recon = decoder(z.unsqueeze(0))
             loss = nn.functional.mse_loss(recon, target)
-            loss.backward()  # type: ignore[no-untyped-call]
+            loss.backward()
             latent_opt.step()
             losses.append(loss.item())
         elapsed = (time.perf_counter() - start) * 1000.0
