@@ -20,7 +20,9 @@ class TestVAEILTModel:
 
     def test_predict_returns_prediction_result(self) -> None:
         model = VAEILTModel(
-            iterations=5, vae_train_masks=64, vae_epochs=2,
+            iterations=5,
+            vae_train_masks=64,
+            vae_epochs=2,
         )
         design = torch.zeros(32, 32)
         design[8:24, 8:24] = 1.0
@@ -30,7 +32,9 @@ class TestVAEILTModel:
 
     def test_predict_mask_is_binary(self) -> None:
         model = VAEILTModel(
-            iterations=10, vae_train_masks=64, vae_epochs=2,
+            iterations=10,
+            vae_train_masks=64,
+            vae_epochs=2,
         )
         design = torch.zeros(32, 32)
         design[10:22, 10:22] = 1.0
@@ -40,7 +44,10 @@ class TestVAEILTModel:
 
     def test_optimization_reduces_loss(self) -> None:
         model = VAEILTModel(
-            iterations=30, lr=0.05, vae_train_masks=128, vae_epochs=5,
+            iterations=30,
+            lr=0.05,
+            vae_train_masks=128,
+            vae_epochs=5,
         )
         design = torch.zeros(32, 32)
         design[12:20, 12:20] = 1.0
@@ -49,7 +56,9 @@ class TestVAEILTModel:
 
     def test_metadata_contains_expected_keys(self) -> None:
         model = VAEILTModel(
-            iterations=3, vae_train_masks=64, vae_epochs=2,
+            iterations=3,
+            vae_train_masks=64,
+            vae_epochs=2,
         )
         design = torch.zeros(16, 16)
         design[4:12, 4:12] = 1.0
@@ -61,7 +70,9 @@ class TestVAEILTModel:
 
     def test_empty_design(self) -> None:
         model = VAEILTModel(
-            iterations=3, vae_train_masks=32, vae_epochs=1,
+            iterations=3,
+            vae_train_masks=32,
+            vae_epochs=1,
         )
         design = torch.zeros(16, 16)
         result = model.predict(design)
@@ -69,7 +80,9 @@ class TestVAEILTModel:
 
     def test_full_design(self) -> None:
         model = VAEILTModel(
-            iterations=3, vae_train_masks=32, vae_epochs=1,
+            iterations=3,
+            vae_train_masks=32,
+            vae_epochs=1,
         )
         design = torch.ones(16, 16)
         result = model.predict(design)

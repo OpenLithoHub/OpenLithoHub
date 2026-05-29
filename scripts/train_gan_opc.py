@@ -452,11 +452,56 @@ def _bn_drift_log(
 # v0.2 baseline bn_max_d_var per epoch (peaks ~10.38, decays to 1.24).
 # Hard-coded so v0.3 abort guard fires at >1.5× v0.2 baseline at the same epoch.
 _V02_BN_BASELINE: tuple[float, ...] = (
-    9.66, 10.38, 8.5, 7.0, 6.0, 5.04, 4.5, 4.2, 4.0, 3.8,
-    3.6, 3.4, 3.3, 3.1, 3.0, 2.9, 2.8, 2.7, 2.6, 2.5,
-    2.4, 2.3, 2.2, 2.1, 2.0, 1.95, 1.9, 1.85, 1.8, 1.75,
-    1.7, 1.65, 1.6, 1.55, 1.5, 1.46, 1.42, 1.39, 1.36, 1.34,
-    1.32, 1.31, 1.30, 1.29, 1.28, 1.27, 1.26, 1.25, 1.24, 1.24,
+    9.66,
+    10.38,
+    8.5,
+    7.0,
+    6.0,
+    5.04,
+    4.5,
+    4.2,
+    4.0,
+    3.8,
+    3.6,
+    3.4,
+    3.3,
+    3.1,
+    3.0,
+    2.9,
+    2.8,
+    2.7,
+    2.6,
+    2.5,
+    2.4,
+    2.3,
+    2.2,
+    2.1,
+    2.0,
+    1.95,
+    1.9,
+    1.85,
+    1.8,
+    1.75,
+    1.7,
+    1.65,
+    1.6,
+    1.55,
+    1.5,
+    1.46,
+    1.42,
+    1.39,
+    1.36,
+    1.34,
+    1.32,
+    1.31,
+    1.30,
+    1.29,
+    1.28,
+    1.27,
+    1.26,
+    1.25,
+    1.24,
+    1.24,
 )
 
 
@@ -720,8 +765,7 @@ def train(cfg: TrainConfig) -> dict:
             and len(component_history) >= 5
         ):
             recent_pvb = [
-                component_history[-i]["pvb"]
-                for i in range(1, min(6, len(component_history) + 1))
+                component_history[-i]["pvb"] for i in range(1, min(6, len(component_history) + 1))
             ]
             if all(p >= component_history[-5]["pvb"] - 1e-6 for p in recent_pvb):
                 print(f"[warn] Bandwidth loss not decreasing for 5 epochs (epoch {epoch}).")

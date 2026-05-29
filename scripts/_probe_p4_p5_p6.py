@@ -24,11 +24,12 @@ from openlithohub.models._unet import UNet
 def _simulate_aerial_batch(mask: torch.Tensor, sigma_px: float, dose: float = 1.0) -> torch.Tensor:
     """Gaussian PSF convolution on (B,1,H,W) tensor."""
     import math
+
     radius = max(1, int(math.ceil(3.0 * sigma_px)))
     size = 2 * radius + 1
     coords = torch.arange(size, dtype=torch.float32) - radius
     g1d = torch.exp(-0.5 * (coords / max(sigma_px, 1e-6)) ** 2)
-    kernel = (g1d.unsqueeze(1) * g1d.unsqueeze(0))
+    kernel = g1d.unsqueeze(1) * g1d.unsqueeze(0)
     kernel = kernel / kernel.sum()
     kernel = kernel.unsqueeze(0).unsqueeze(0).to(mask.device)
     padding = radius
@@ -48,6 +49,7 @@ def probe_p4() -> dict:
         sys.path.insert(0, scripts_dir)
 
     import importlib.util
+
     spec = importlib.util.spec_from_file_location(
         "train_gan_opc",
         Path(__file__).resolve().parent / "train_gan_opc.py",
@@ -66,7 +68,9 @@ def probe_p4() -> dict:
     try:
         online = train_mod._GanOpcPairs(data_root, resize_to=512, resize_mode="bilinear")
         cached = train_mod._MemmapGanOpcPairs(
-            data_root, resize_to=512, resize_mode="bilinear",
+            data_root,
+            resize_to=512,
+            resize_mode="bilinear",
             cache_dir="cache/ganopc_probe/",
         )
 
@@ -114,11 +118,13 @@ def probe_p5() -> dict:
             loss_amp = functional.binary_cross_entropy_with_logits(logits_amp, target).item()
 
         rel_err = abs(loss_fp32 - loss_amp) / max(abs(loss_fp32), 1e-8)
-        results.append({
-            "fp32": loss_fp32,
-            "amp": loss_amp,
-            "rel_err": rel_err,
-        })
+        results.append(
+            {
+                "fp32": loss_fp32,
+                "amp": loss_amp,
+                "rel_err": rel_err,
+            }
+        )
 
     max_rel_err = max(r["rel_err"] for r in results)
     return {
@@ -191,9 +197,7 @@ def probe_p6() -> dict:
     amp_ratio = results["amp_avg_step_s"] / max(results["fp32_avg_step_s"], 1e-8)
     results["amp_slowdown_ratio"] = amp_ratio
     results["amp_decision"] = (
-        "DISABLE_AMP" if amp_ratio > 1.5
-        else "ENABLE_AMP" if amp_ratio < 0.9
-        else "NEUTRAL"
+        "DISABLE_AMP" if amp_ratio > 1.5 else "ENABLE_AMP" if amp_ratio < 0.9 else "NEUTRAL"
     )
     results["status"] = "PASS"
 

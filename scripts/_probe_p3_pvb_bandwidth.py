@@ -167,13 +167,15 @@ def main() -> int:
     results["checks"]["c_full_responsive"] = full_responsive
     results["checks"]["c_focus_responsive"] = focus_responsive
     results["checks"]["c_dose_responsive"] = dose_responsive
-    results["values"].update({
-        "blurred_bandwidth_full": float(bw_blurred_full.item()),
-        "sharp_bandwidth_focus": float(bw_sharp_focus.item()),
-        "blurred_bandwidth_focus": float(bw_blurred_focus.item()),
-        "sharp_bandwidth_dose": float(bw_sharp_dose.item()),
-        "blurred_bandwidth_dose": float(bw_blurred_dose.item()),
-    })
+    results["values"].update(
+        {
+            "blurred_bandwidth_full": float(bw_blurred_full.item()),
+            "sharp_bandwidth_focus": float(bw_sharp_focus.item()),
+            "blurred_bandwidth_focus": float(bw_blurred_focus.item()),
+            "sharp_bandwidth_dose": float(bw_sharp_dose.item()),
+            "blurred_bandwidth_dose": float(bw_blurred_dose.item()),
+        }
+    )
 
     # (d) v0.3 MSE vs v0.4 bandwidth comparison
     v03_sharp = _pvb_loss_v03(sharp_mask, target, CORNERS_FULL)
@@ -191,10 +193,9 @@ def main() -> int:
         and torch.isfinite(v03_sharp).item()
         and torch.isfinite(v04_sharp).item()
     )
-    results["checks"]["d_both_increase_on_blur"] = (
-        float(v03_blurred.item()) > float(v03_sharp.item())
-        and float(v04_blurred.item()) > float(v04_sharp.item())
-    )
+    results["checks"]["d_both_increase_on_blur"] = float(v03_blurred.item()) > float(
+        v03_sharp.item()
+    ) and float(v04_blurred.item()) > float(v04_sharp.item())
 
     # (e) Steepness sensitivity
     steepness_results = {}
