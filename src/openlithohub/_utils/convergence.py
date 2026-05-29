@@ -6,3 +6,10 @@ from diff_surrogate.convergence import (  # noqa: F401
     ConvergenceMonitor,
     hybrid_z_score,
 )
+
+__all__ = [
+    "ConvergenceAction",
+    "ConvergenceConfig",
+    "ConvergenceMonitor",
+    "hybrid_z_score",
+]

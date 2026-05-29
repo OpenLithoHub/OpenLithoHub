@@ -159,7 +159,7 @@ class VAEILTModel(LithographyModel):
         self._cached_weights: torch.Tensor | None = None
         self._cached_grid: int | None = None
 
-    def _build_vae(self, grid_size: int, device: torch.device):
+    def _build_vae(self, grid_size: int, device: torch.device) -> tuple[_Encoder, _Decoder]:
         encoder = _Encoder(self._latent_dim, self._hidden).to(device)
         decoder = _Decoder(self._latent_dim, grid_size, self._hidden).to(device)
         return encoder, decoder
@@ -223,10 +223,10 @@ class VAEILTModel(LithographyModel):
         self._train_vae(encoder, decoder, grid_size, device)
 
         # --- Phase 2: latent optimisation ---
+        kernels: torch.Tensor | None = None
+        weights: torch.Tensor | None = None
         if forward_model == "hopkins":
             kernels, weights = compute_socs_kernels(hopkins_params, grid_size, device)
-        else:
-            kernels = weights = None
 
         # Encode target as starting latent vector
         with torch.no_grad():

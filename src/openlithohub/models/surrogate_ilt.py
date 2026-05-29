@@ -91,7 +91,7 @@ class _AerialSurrogateNet(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.encoder(x).sigmoid()
+        return self.encoder(x).sigmoid()  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +237,7 @@ class SurrogateILTModel(LithographyModel):
                 pred = net(masks[idx])
                 loss = nn.functional.mse_loss(pred, aerials[idx])
                 opt.zero_grad()
-                loss.backward()
+                loss.backward()  # type: ignore[no-untyped-call]
                 opt.step()
 
         net.eval()
@@ -261,6 +261,8 @@ class SurrogateILTModel(LithographyModel):
         grid_size = target.shape[0]
 
         # Prepare Hopkins kernels if needed
+        kernels: torch.Tensor | None = None
+        weights: torch.Tensor | None = None
         if forward_model == "hopkins":
             if hopkins_params != self._hopkins_params:
                 self._hopkins_params = hopkins_params
@@ -268,8 +270,6 @@ class SurrogateILTModel(LithographyModel):
                 self._cached_weights = None
                 self._cached_grid = None
             kernels, weights = self._ensure_hopkins_kernels(grid_size, device)
-        else:
-            kernels = weights = None
 
         # --- Phase 1: train surrogate ---
         surrogate = _AerialSurrogateNet(self._surrogate_hidden).to(device)
@@ -318,7 +318,7 @@ class SurrogateILTModel(LithographyModel):
                     s_pred = surrogate(mask_4d)
                     s_loss = nn.functional.mse_loss(s_pred, aerial_detached)
                     s_opt.zero_grad()
-                    s_loss.backward()
+                    s_loss.backward()  # type: ignore[no-untyped-call]
                     s_opt.step()
 
             resist = differentiable_threshold(
