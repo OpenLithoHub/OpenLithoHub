@@ -27,6 +27,7 @@ What it is NOT (yet):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import torch
@@ -218,7 +219,7 @@ class LayoutTokenizer:
         return DecodedLayout(mask=torch.from_numpy(mask).to(torch.float32), report=report)
 
 
-def _rectangle_decomposition(binary: np.ndarray) -> list[tuple[int, int, int, int]]:
+def _rectangle_decomposition(binary: np.ndarray[Any, Any]) -> list[tuple[int, int, int, int]]:
     """Greedy horizontal-strip decomposition of a binary mask.
 
     Returns a list of axis-aligned rectangles ``(y0, x0, y1, x1)`` whose
@@ -233,7 +234,7 @@ def _rectangle_decomposition(binary: np.ndarray) -> list[tuple[int, int, int, in
 
     # Encode each row as a tuple of (start, end) runs so we can merge
     # rows with identical run patterns.
-    def _row_runs(row: np.ndarray) -> tuple[tuple[int, int], ...]:
+    def _row_runs(row: np.ndarray[Any, Any]) -> tuple[tuple[int, int], ...]:
         runs: list[tuple[int, int]] = []
         in_run = False
         start = 0

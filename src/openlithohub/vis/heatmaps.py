@@ -8,6 +8,7 @@ turned the metric red.
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import matplotlib.axes
 import matplotlib.figure
@@ -23,15 +24,15 @@ from openlithohub._utils.morphology import (
 from openlithohub.benchmark.metrics.epe import _extract_edges
 
 
-def _to_2d(arr: np.ndarray | torch.Tensor) -> torch.Tensor:
+def _to_2d(arr: np.ndarray[Any, Any] | torch.Tensor) -> torch.Tensor:
     if isinstance(arr, np.ndarray):
         arr = torch.from_numpy(arr.astype(np.float32))
     return arr.float()
 
 
 def plot_epe_heatmap(
-    predicted: np.ndarray | torch.Tensor,
-    target: np.ndarray | torch.Tensor,
+    predicted: np.ndarray[Any, Any] | torch.Tensor,
+    target: np.ndarray[Any, Any] | torch.Tensor,
     *,
     pixel_size_nm: float = 1.0,
     ax: matplotlib.axes.Axes | None = None,
@@ -80,7 +81,7 @@ def plot_epe_heatmap(
 
 
 def plot_mrc_overlay(
-    mask: np.ndarray | torch.Tensor,
+    mask: np.ndarray[Any, Any] | torch.Tensor,
     *,
     min_width_nm: float = 40.0,
     min_spacing_nm: float = 40.0,

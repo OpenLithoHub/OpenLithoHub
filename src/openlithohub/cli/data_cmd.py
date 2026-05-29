@@ -42,7 +42,7 @@ def _parse_design_layer(spec: str) -> tuple[int, int]:
         ) from exc
 
 
-def _save_png(arr: np.ndarray, out_path: Path) -> None:
+def _save_png(arr: np.ndarray[Any, Any], out_path: Path) -> None:
     """Write a 2D float array in [0, 1] to a grayscale PNG at ``out_path``."""
     from PIL import Image
 
@@ -116,7 +116,7 @@ def _canonical_cells(dataset: str) -> tuple[str, ...]:
 
 
 def _format_sample_line(
-    cell_label: str, arr: np.ndarray, md: dict[str, Any], out_path: Path
+    cell_label: str, arr: np.ndarray[Any, Any], md: dict[str, Any], out_path: Path
 ) -> str:
     h, w = arr.shape
     return (

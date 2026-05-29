@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 
-def trace_contour(binary: np.ndarray) -> list[np.ndarray]:
+def trace_contour(binary: np.ndarray[Any, Any]) -> list[np.ndarray[Any, Any]]:
     """Trace ordered boundary points from a binary mask using Moore neighborhood."""
     h, w = binary.shape
     padded = np.pad(binary, 1, mode="constant", constant_values=0)
     visited_edges: set[tuple[int, int]] = set()
-    contours: list[np.ndarray] = []
+    contours: list[np.ndarray[Any, Any]] = []
 
     directions = [
         (0, 1),

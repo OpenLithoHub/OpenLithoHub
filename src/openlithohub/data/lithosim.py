@@ -214,7 +214,7 @@ class LithoSimDataset(DatasetAdapter):
         return self._to_tensor(row[column])
 
     @staticmethod
-    def _array_to_tensor(arr: np.ndarray) -> torch.Tensor:
+    def _array_to_tensor(arr: np.ndarray[Any, Any]) -> torch.Tensor:
         """Convert a numpy image array to a normalized float32 tensor in [0, 1].
 
         SEM and aerial-image rows in industrial litho datasets are commonly

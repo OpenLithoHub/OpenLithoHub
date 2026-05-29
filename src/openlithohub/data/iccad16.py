@@ -198,7 +198,7 @@ class Iccad16Dataset(DatasetAdapter):
         layout: Any,
         top: Any,
         layer_spec: tuple[int, int],
-    ) -> tuple[np.ndarray, tuple[float, float]]:
+    ) -> tuple[np.ndarray[Any, Any], tuple[float, float]]:
         """Rasterize a single OASIS layer into a {0,1} numpy array.
 
         Decomposes each polygon into trapezoids via klayout's

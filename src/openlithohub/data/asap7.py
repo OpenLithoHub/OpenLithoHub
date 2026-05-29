@@ -137,7 +137,7 @@ def rasterize_cell_layer(
     cell: Any,
     layer_spec: tuple[int, int],
     pixel_nm: float,
-) -> tuple[np.ndarray, tuple[float, float]]:
+) -> tuple[np.ndarray[Any, Any], tuple[float, float]]:
     """Rasterize one (layer, datatype) of a klayout cell into a {0,1} array.
 
     Polygons are rasterized through ``PIL.ImageDraw.polygon`` after

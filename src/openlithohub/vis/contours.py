@@ -12,17 +12,17 @@ from openlithohub._utils.tensor_ops import ensure_2d
 from openlithohub.vis.style import PALETTE, paper_style
 
 
-def _to_numpy(x: torch.Tensor | np.ndarray) -> np.ndarray:
+def _to_numpy(x: torch.Tensor | np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
     if isinstance(x, torch.Tensor):
         return x.detach().cpu().numpy()
     return np.asarray(x)
 
 
 def plot_contours(
-    target: torch.Tensor | np.ndarray,
-    predicted: torch.Tensor | np.ndarray,
+    target: torch.Tensor | np.ndarray[Any, Any],
+    predicted: torch.Tensor | np.ndarray[Any, Any],
     *,
-    pv_band: torch.Tensor | np.ndarray | None = None,
+    pv_band: torch.Tensor | np.ndarray[Any, Any] | None = None,
     pixel_size_nm: float = 1.0,
     title: str | None = None,
     style: str = "ieee",
@@ -140,9 +140,9 @@ def plot_contours(
 
 
 def plot_pv_band(
-    nominal: torch.Tensor | np.ndarray,
-    inner: torch.Tensor | np.ndarray,
-    outer: torch.Tensor | np.ndarray,
+    nominal: torch.Tensor | np.ndarray[Any, Any],
+    inner: torch.Tensor | np.ndarray[Any, Any],
+    outer: torch.Tensor | np.ndarray[Any, Any],
     *,
     pixel_size_nm: float = 1.0,
     title: str | None = None,

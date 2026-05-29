@@ -13,6 +13,7 @@ import logging
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -151,7 +152,11 @@ def fit_bspline(
     return curves
 
 
-def _rdp_simplify(xs: np.ndarray, ys: np.ndarray, tolerance: float) -> np.ndarray:
+def _rdp_simplify(
+    xs: np.ndarray[Any, Any],
+    ys: np.ndarray[Any, Any],
+    tolerance: float,
+) -> np.ndarray[Any, Any]:
     """Iterative Ramer-Douglas-Peucker on a closed polygon.
 
     Returns a boolean keep-mask the same length as ``xs``/``ys``. A point

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import torch
@@ -252,7 +253,7 @@ def _add_violations(
         )
 
 
-def _smooth_loop(loop: np.ndarray, window: int) -> np.ndarray:
+def _smooth_loop(loop: np.ndarray[Any, Any], window: int) -> np.ndarray[Any, Any]:
     """Periodic moving-average smoother for closed contour loops.
 
     Removes single-pixel rasterization aliasing before curvature estimation.

@@ -70,12 +70,12 @@ SUPPORTED_TILE_NM: tuple[float, ...] = (2000.0, 5000.0)
 
 
 def tile_design_tensor(
-    design: np.ndarray,
+    design: np.ndarray[Any, Any],
     tile_nm: float,
     pixel_nm: float,
     stride_nm: float | None = None,
     drop_empty: bool = True,
-) -> list[tuple[np.ndarray, tuple[int, int]]]:
+) -> list[tuple[np.ndarray[Any, Any], tuple[int, int]]]:
     """Cut a rasterized design into fixed-size tiles.
 
     Returns ``[(tile_array, (x_pixels, y_pixels)), ...]`` where the
@@ -93,7 +93,7 @@ def tile_design_tensor(
     tile_px = max(1, int(round(tile_nm / pixel_nm)))
     stride_px = max(1, int(round((stride_nm if stride_nm is not None else tile_nm) / pixel_nm)))
     h, w = design.shape
-    tiles: list[tuple[np.ndarray, tuple[int, int]]] = []
+    tiles: list[tuple[np.ndarray[Any, Any], tuple[int, int]]] = []
     for y in range(0, h - tile_px + 1, stride_px):
         for x in range(0, w - tile_px + 1, stride_px):
             t = design[y : y + tile_px, x : x + tile_px]
@@ -162,10 +162,10 @@ class OrfsArtifactDataset(DatasetAdapter):
         self.design_name = design_name or self.gds_path.stem
         self.orfs_revision = orfs_revision
         # Lazy: rasterize on first __getitem__ so constructor is cheap.
-        self._design_arr: np.ndarray | None = None
+        self._design_arr: np.ndarray[Any, Any] | None = None
         self._origin_nm: tuple[float, float] | None = None
         self._dbu_nm: float | None = None
-        self._tiles: list[tuple[np.ndarray, tuple[int, int]]] | None = None
+        self._tiles: list[tuple[np.ndarray[Any, Any], tuple[int, int]]] | None = None
 
     def _ensure_loaded(self) -> None:
         if self._design_arr is not None:

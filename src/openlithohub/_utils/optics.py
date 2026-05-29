@@ -36,7 +36,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 
@@ -158,7 +158,7 @@ def load_source_intensity(
     return arr.to(device=device, dtype=torch.float32).contiguous()
 
 
-def _pil_to_float32(img: object) -> np.ndarray:
+def _pil_to_float32(img: object) -> np.ndarray[Any, Any]:
     """PIL Image → numpy float32 array. Handles 16-bit and float TIFFs."""
     import numpy as np
     from PIL import Image

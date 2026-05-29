@@ -406,7 +406,7 @@ class GanOpcDataset(DatasetAdapter):
             metadata=metadata,
         )
 
-    def _load_png(self, path: Path) -> np.ndarray:
+    def _load_png(self, path: Path) -> np.ndarray[Any, Any]:
         # Imported lazily so importing the data package does not require
         # Pillow for users who only touch other adapters.
         from PIL import Image

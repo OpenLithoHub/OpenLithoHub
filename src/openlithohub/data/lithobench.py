@@ -164,13 +164,13 @@ class LithoBenchDataset(DatasetAdapter):
             return self.root / kind / f"{sample_id}.npy"
         return self.root / f"{sample_id}_{kind}.npy"
 
-    def _load_array(self, sample_id: str, kind: Kind) -> np.ndarray:
+    def _load_array(self, sample_id: str, kind: Kind) -> np.ndarray[Any, Any]:
         path = self._resolve_path(sample_id, kind)
         if not path.exists():
             raise FileNotFoundError(f"Required file not found: {path}")
         return np.load(path, allow_pickle=False)  # type: ignore[no-any-return]
 
-    def _try_load_array(self, sample_id: str, kind: Kind) -> np.ndarray | None:
+    def _try_load_array(self, sample_id: str, kind: Kind) -> np.ndarray[Any, Any] | None:
         path = self._resolve_path(sample_id, kind)
         if path.exists():
             return np.load(path, allow_pickle=False)  # type: ignore[no-any-return]

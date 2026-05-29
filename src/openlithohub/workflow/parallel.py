@@ -21,6 +21,7 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
+import numpy as np
 import torch
 
 from openlithohub.workflow.tiling import Tile
@@ -62,7 +63,10 @@ def parallel_tile_inference(
     processes: list[Any] = []
 
     for rank, indices in enumerate(shards):
-        payload = [(idx, tiles[idx].tensor) for idx in indices]
+        # Convert tensors to numpy arrays so pickle never needs to share
+        # storage file descriptors across the spawn boundary — FD sharing
+        # breaks on some Linux configs (EOFError in rebuild_storage_fd).
+        payload = [(idx, tiles[idx].tensor.numpy()) for idx in indices]
         p = ctx.Process(
             target=_worker,
             args=(rank, effective, model_name, model_kwargs, base_perf_kwargs, payload, queue),
@@ -96,8 +100,8 @@ def parallel_tile_inference(
                     f"parallel_tile_inference: worker rank={rank} failed: {exc_repr}\n{tb}"
                 )
 
-            idx, mask = item
-            results[idx] = mask
+            idx, mask_arr = item
+            results[idx] = torch.from_numpy(mask_arr)
             if progress_cb is not None:
                 progress_cb()
     except KeyboardInterrupt:
@@ -149,7 +153,7 @@ def _worker(
     model_name: str,
     model_kwargs: dict[str, Any],
     base_perf_kwargs: dict[str, Any],
-    payload: list[tuple[int, torch.Tensor]],
+    payload: list[tuple[int, np.ndarray[Any, Any]]],
     result_queue: mp.Queue[Any],
 ) -> None:
     try:
@@ -164,9 +168,10 @@ def _worker(
         model = registry.get(model_name, **model_kwargs)
         model.setup()
         try:
-            for idx, tile_tensor in payload:
+            for idx, tile_arr in payload:
+                tile_tensor = torch.from_numpy(tile_arr)
                 result = model.predict(tile_tensor, **worker_perf_kwargs)
-                mask = result.mask.detach().to("cpu")
+                mask = result.mask.detach().cpu().numpy()
                 result_queue.put((idx, mask))
         finally:
             model.teardown()
