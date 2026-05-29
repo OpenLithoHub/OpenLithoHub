@@ -243,7 +243,7 @@ class VAEBenchmark:
             latent_opt.zero_grad()
             recon = decoder(z.unsqueeze(0))
             loss = nn.functional.mse_loss(recon, target)
-            loss.backward()
+            loss.backward()  # type: ignore[no-untyped-call]
             latent_opt.step()
             losses.append(loss.item())
         elapsed = (time.perf_counter() - start) * 1000.0
