@@ -2,9 +2,9 @@
 
 from openlithohub._utils.convergence import (
     ConvergenceAction,
+    ConvergenceConfig,
     ConvergenceMonitor,
-    ConvergenceVerdict,
-    HybridZScore,
+    hybrid_z_score,
 )
 from openlithohub._utils.helmholtz_filter import apply_helmholtz_filter
 from openlithohub._utils.hopkins import (
@@ -29,10 +29,10 @@ from openlithohub._utils.tensor_ops import ensure_2d
 
 __all__ = [
     "ConvergenceAction",
+    "ConvergenceConfig",
     "ConvergenceMonitor",
-    "ConvergenceVerdict",
     "HopkinsParams",
-    "HybridZScore",
+    "hybrid_z_score",
     "apply_helmholtz_filter",
     "binary_dilation",
     "binary_erosion",
