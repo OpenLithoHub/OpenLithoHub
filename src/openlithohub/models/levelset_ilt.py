@@ -25,6 +25,7 @@ from typing import Any, Literal
 import torch
 
 from openlithohub._utils.forward_model import simulate_aerial_image
+from openlithohub._utils.helmholtz_filter import apply_helmholtz_filter
 from openlithohub._utils.hopkins import (
     HopkinsParams,
     compute_socs_kernels,
@@ -59,6 +60,11 @@ class LevelSetILTModel(LithographyModel):
     - ``gaussian`` (default): a single Gaussian PSF — fast, used in tests.
     - ``hopkins``: SOCS-truncated partial-coherence Hopkins imaging — physically
       faithful, suitable for end-to-end AI-OPC research.
+
+    When ``helmholtz_radius > 0``, a differentiable Helmholtz PDE filter
+    is applied to the continuous mask before the aerial image simulation,
+    suppressing sub-resolution features and enforcing a minimum
+    manufacturable feature size (~2*radius).
     """
 
     NAME = "levelset-ilt"
@@ -79,6 +85,7 @@ class LevelSetILTModel(LithographyModel):
         resist_steepness: float = 50.0,
         forward_model: ForwardModelKind = "gaussian",
         hopkins_params: HopkinsParams | None = None,
+        helmholtz_radius: float = 0.0,
     ) -> None:
         self._iterations = iterations
         self._lr = lr
@@ -88,6 +95,7 @@ class LevelSetILTModel(LithographyModel):
         self._resist_steepness = resist_steepness
         self._forward_model = forward_model
         self._hopkins_params = hopkins_params or HopkinsParams()
+        self._helmholtz_radius = helmholtz_radius
         self._cached_kernels: torch.Tensor | None = None
         self._cached_weights: torch.Tensor | None = None
         self._cached_grid: int | None = None
@@ -125,8 +133,9 @@ class LevelSetILTModel(LithographyModel):
         Args:
             design: Target design pattern (H, W), binary.
             **kwargs: Optional overrides — iterations, lr, sigma_px, tv_weight,
-                forward_model, hopkins_params, device, dtype, compile_forward,
-                process_window, pw_corners, checkpoint_dir, save_freq, resume_from.
+                forward_model, hopkins_params, helmholtz_radius, device, dtype,
+                compile_forward, process_window, pw_corners, checkpoint_dir,
+                save_freq, resume_from.
 
                 ``process_window=True`` swaps the nominal-only fidelity loss
                 for ``workflow.process_window.pw_fidelity_loss`` evaluated
@@ -142,6 +151,14 @@ class LevelSetILTModel(LithographyModel):
                 loads such a file and continues from its iteration counter,
                 so a SLURM preemption or CUDA crash does not erase prior
                 progress.
+
+                ``helmholtz_radius`` (float, default ``0.0`` = disabled)
+                applies a differentiable Helmholtz PDE filter to
+                ``mask_continuous`` before the aerial image simulation.
+                When > 0, features smaller than ~2*radius are suppressed,
+                enforcing a minimum manufacturable feature size.  The
+                filter is fully differentiable — gradients flow through to
+                ``mask_logit`` without approximation.
         """
         target = design.detach().float()
         if target.ndim > 2:
@@ -153,6 +170,7 @@ class LevelSetILTModel(LithographyModel):
         tv_weight = kwargs.get("tv_weight", self._tv_weight)
         forward_model = kwargs.get("forward_model", self._forward_model)
         hopkins_params = kwargs.get("hopkins_params", self._hopkins_params)
+        helmholtz_radius = kwargs.get("helmholtz_radius", self._helmholtz_radius)
         dtype = kwargs.get("dtype", torch.float32)
         compile_forward = kwargs.get("compile_forward", False)
         device = kwargs.get("device")
@@ -252,6 +270,10 @@ class LevelSetILTModel(LithographyModel):
             optimizer.zero_grad()
 
             mask_continuous = torch.sigmoid(mask_logit)
+            if helmholtz_radius > 0.0:
+                mask_continuous = apply_helmholtz_filter(
+                    mask_continuous, radius=helmholtz_radius,
+                )
             if forward_model == "hopkins":
                 assert hopkins_fn is not None  # narrowed by forward_model == "hopkins" branch
                 aerial = hopkins_fn(
@@ -314,6 +336,7 @@ class LevelSetILTModel(LithographyModel):
                 "iterations": iterations,
                 "sigma_px": sigma_px,
                 "forward_model": forward_model,
+                "helmholtz_radius": helmholtz_radius,
                 "process_window": process_window,
                 "pw_corner_count": len(pw_corners) if process_window else 0,
             },

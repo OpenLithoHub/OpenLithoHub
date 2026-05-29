@@ -1,5 +1,6 @@
 """Internal shared utilities."""
 
+from openlithohub._utils.helmholtz_filter import apply_helmholtz_filter
 from openlithohub._utils.hopkins import (
     HopkinsParams,
     clear_kernel_cache,
@@ -22,6 +23,7 @@ from openlithohub._utils.tensor_ops import ensure_2d
 
 __all__ = [
     "HopkinsParams",
+    "apply_helmholtz_filter",
     "binary_dilation",
     "binary_erosion",
     "clear_kernel_cache",

@@ -126,3 +126,5 @@ def register_builtin_models() -> None:
     import openlithohub.models.neural_ilt  # noqa: F401
     import openlithohub.models.openilt  # noqa: F401
     import openlithohub.models.rule_based_opc  # noqa: F401
+    import openlithohub.models.surrogate_ilt  # noqa: F401
+    import openlithohub.models.vae_ilt  # noqa: F401
