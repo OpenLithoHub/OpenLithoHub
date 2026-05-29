@@ -26,6 +26,8 @@
 OpenLithoHub provides a unified evaluation and workflow framework for computational lithography research. It bridges the gap between academic tensor-based optimization and industrial mask manufacturing by offering:
 
 - **Unified dataset access** — single interface to LithoBench, LithoSim, GAN-OPC, ICCAD'16 hotspot, ASAP7, FreePDK45 + NanGate OCL, and ORFS-routed RISC-V layouts; OASIS / GDSII / DEF / LEF ingestion via `workflow.parse_layout`
+
+> **Note on baselines:** The built-in baseline models are evaluated on **synthetic 64×64 toy layouts** (square, line, T, cross, etc.) to demonstrate framework correctness. They are not industrial-grade results — see [Baselines](#baselines) for methodology.
 - **Standardized metrics** — EPE (mask-vs-mask or wafer-level via forward sim), L2 wafer error (Neural-ILT canonical), PV Band, shot count, EUV stochastic robustness + imec-style per-class defect rates, hotspot detection (recall / precision / F1), plus differentiable training-time losses (SRAF non-printing penalty, curvilinear MRC)
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
 - **OASIS / GDSII workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear); ICCAD'13 contest gauge IO + Calibre `.gg` / CSV gauge parsers; ONNX / TorchScript export with onnxruntime CI smoke test
@@ -394,6 +396,8 @@ ruff format src/ tests/
 - [x] Milestone 9: PDK-aware synthetic layout generator, vendor-neutral simulator hook API, EUV 3D-mask shadow proxy, Monte Carlo failure metric, Mini-Hackathon (2026-Q3), RFC 0001 (Layout-MAE) + RFC 0002 (Layout Tokens)
 - [x] Milestone 10: Real PDK rollout — ASAP7 standard cells, FreePDK45 + NanGate OCL, ORFS-routed RISC-V mock-alu (issue [#4](https://github.com/OpenLithoHub/OpenLithoHub/issues/4))
 - [x] Milestone 11: Standard MRC rule-deck schema (RFC 0003), measured-source / Zernike-pupil I/O, Calibre/CSV gauge parser, `openlithohub export` CLI (ONNX / TorchScript / TensorRT-ready), `--compile` on by default, first PyPI release (`openlithohub-0.1.0a2`)
+
+> **Note:** Milestones above reflect feature integration completeness (adapters, CLI commands, CI pipelines), not industrial validation. The alpha version (`0.1.0a2`) runs on synthetic layouts — real industrial-scale benchmarking is planned for the v1.0 milestone.
 
 ---
 
