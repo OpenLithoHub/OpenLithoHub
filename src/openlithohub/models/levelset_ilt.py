@@ -272,7 +272,8 @@ class LevelSetILTModel(LithographyModel):
             mask_continuous = torch.sigmoid(mask_logit)
             if helmholtz_radius > 0.0:
                 mask_continuous = apply_helmholtz_filter(
-                    mask_continuous, radius=helmholtz_radius,
+                    mask_continuous,
+                    radius=helmholtz_radius,
                 )
             if forward_model == "hopkins":
                 assert hopkins_fn is not None  # narrowed by forward_model == "hopkins" branch
