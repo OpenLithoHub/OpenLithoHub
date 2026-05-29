@@ -34,24 +34,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 import torch.nn as nn
-
-try:
-    from diff_surrogate import CorrectionPolicy
-except ImportError:
-    from dataclasses import dataclass
-
-    @dataclass
-    class CorrectionPolicy:  # type: ignore[no-redef]
-        correction_interval: int = 10
-        warmup_steps: int = 0
-
-        def should_correct(self, step: int) -> bool:
-            if step < self.warmup_steps:
-                return False
-            if self.correction_interval <= 0:
-                return False
-            return step % self.correction_interval == 0
-
+from diff_surrogate import CorrectionPolicy
 
 from openlithohub._utils.forward_model import simulate_aerial_image
 from openlithohub._utils.hopkins import (
