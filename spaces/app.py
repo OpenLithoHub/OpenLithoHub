@@ -414,6 +414,7 @@ def load_leaderboard():
                 e.get("dataset", ""),
                 e.get("process_node", ""),
                 e.get("mask_topology", ""),
+                e.get("l2_error_pixels"),
                 e.get("epe_mean_nm"),
                 e.get("epe_max_nm"),
                 e.get("pvband_mean_nm"),
@@ -423,7 +424,7 @@ def load_leaderboard():
             ]
         )
     rows.sort(key=lambda r: (r[4] is None, r[4]))
-    status = f"_{len(rows)} submission(s) — sorted by EPE mean (lower is better)._"
+    status = f"_{len(rows)} submission(s) — sorted by L2 wafer error (lower is better)._"
     return rows, status
 
 
@@ -571,7 +572,7 @@ with gr.Blocks(
                 """
                 ## Community SOTA Leaderboard
 
-                Snapshot of community-submitted benchmark results, sorted by mean EPE.
+                Snapshot of community-submitted benchmark results, sorted by L2 wafer error.
                 Submissions go through `openlithohub submit` against the published
                 LithoBench / LithoSim splits — see the
                 [submission guide](https://github.com/OpenLithoHub/OpenLithoHub#leaderboard).
@@ -584,6 +585,7 @@ with gr.Blocks(
                     "Dataset",
                     "Node",
                     "Topology",
+                    "L2 error (px)",
                     "EPE mean (nm)",
                     "EPE max (nm)",
                     "PV band mean (nm)",
@@ -596,6 +598,7 @@ with gr.Blocks(
                     "str",
                     "str",
                     "str",
+                    "number",
                     "number",
                     "number",
                     "number",

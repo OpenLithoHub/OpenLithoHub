@@ -254,8 +254,8 @@ class LithoSimDataset(DatasetAdapter):
         if isinstance(value, dict) and "bytes" in value:
             import io
 
-            img = Image.open(io.BytesIO(value["bytes"]))
-            return LithoSimDataset._array_to_tensor(np.array(img))
+            with Image.open(io.BytesIO(value["bytes"])) as img:
+                return LithoSimDataset._array_to_tensor(np.array(img))
 
         raise TypeError(f"Cannot convert {type(value)} to tensor")
 

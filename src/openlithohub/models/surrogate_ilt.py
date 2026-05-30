@@ -34,7 +34,6 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 import torch.nn as nn
-from diff_surrogate import CorrectionPolicy
 
 from openlithohub._utils.forward_model import simulate_aerial_image
 from openlithohub._utils.hopkins import (
@@ -136,7 +135,16 @@ class SurrogateILTModel(LithographyModel):
         self._forward_model = forward_model
         self._hopkins_params = hopkins_params or HopkinsParams()
         self._correction_interval = correction_interval
-        self._correction_policy = CorrectionPolicy(correction_interval=correction_interval)
+        try:
+            from diff_surrogate import CorrectionPolicy
+
+            self._correction_policy = CorrectionPolicy(correction_interval=correction_interval)
+        except ImportError:
+            raise ImportError(
+                "surrogate-ilt requires the 'diff-surrogate' package. "
+                "Install it with: pip install openlithohub[data] or "
+                "pip install git+https://github.com/telleroutlook/diff-surrogate.git"
+            ) from None
         self._surrogate_train_samples = surrogate_train_samples
         self._surrogate_epochs = surrogate_epochs
         self._surrogate_lr = surrogate_lr
@@ -254,10 +262,12 @@ class SurrogateILTModel(LithographyModel):
         weights: torch.Tensor | None = None
         if forward_model == "hopkins":
             if hopkins_params != self._hopkins_params:
-                self._hopkins_params = hopkins_params
-                self._cached_kernels = None
-                self._cached_weights = None
-                self._cached_grid = None
+                with self._cache_lock:
+                    if hopkins_params != self._hopkins_params:
+                        self._hopkins_params = hopkins_params
+                        self._cached_kernels = None
+                        self._cached_weights = None
+                        self._cached_grid = None
             kernels, weights = self._ensure_hopkins_kernels(grid_size, device)
 
         # --- Phase 1: train surrogate ---

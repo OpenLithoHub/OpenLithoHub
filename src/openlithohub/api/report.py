@@ -7,7 +7,7 @@ results are kept on the dataclass for power users who want every field.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -55,8 +55,11 @@ class Report:
     raw_curvilinear_mrc: CurvilinearMRCResult | None = field(default=None)
 
     def to_dict(self) -> dict[str, Any]:
-        """JSON-serializable view. Raw payloads are recursively flattened."""
-        return asdict(self)
+        """JSON-serializable view. Passes raw payloads by reference."""
+        out: dict[str, Any] = {}
+        for f in fields(self):
+            out[f.name] = getattr(self, f.name)
+        return out
 
     def __repr__(self) -> str:
         return (

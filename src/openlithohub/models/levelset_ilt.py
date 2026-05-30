@@ -204,10 +204,12 @@ class LevelSetILTModel(LithographyModel):
 
         if forward_model == "hopkins":
             if hopkins_params != self._hopkins_params:
-                self._hopkins_params = hopkins_params
-                self._cached_kernels = None
-                self._cached_weights = None
-                self._cached_grid = None
+                with self._cache_lock:
+                    if hopkins_params != self._hopkins_params:
+                        self._hopkins_params = hopkins_params
+                        self._cached_kernels = None
+                        self._cached_weights = None
+                        self._cached_grid = None
             kernels, weights = self._ensure_hopkins_kernels(target.shape[0], target.device)
             hopkins_fn: Callable[..., torch.Tensor] | None = simulate_aerial_image_hopkins
             if compile_forward:

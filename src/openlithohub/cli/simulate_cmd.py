@@ -47,6 +47,12 @@ def run(
 
     if not mask_path.exists():
         raise typer.BadParameter(f"mask not found: {mask_path}")
+    if pixel_size_nm <= 0:
+        raise typer.BadParameter("pixel_size_nm must be positive")
+    if wavelength_nm <= 0:
+        raise typer.BadParameter("wavelength_nm must be positive")
+    if na <= 0:
+        raise typer.BadParameter("na must be positive")
 
     mask = _load_mask(mask_path)
     config = SimulatorConfig(
@@ -111,5 +117,6 @@ def _load_mask(path: Path) -> torch.Tensor:
     else:
         from PIL import Image
 
-        arr = np.asarray(Image.open(path).convert("L"), dtype=np.float32) / 255.0
+        with Image.open(path) as img:
+            arr = np.asarray(img.convert("L"), dtype=np.float32) / 255.0
     return torch.from_numpy(arr.astype(np.float32))

@@ -27,6 +27,7 @@ the rest of OpenLithoHub.
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Literal
 
 import torch
@@ -164,6 +165,7 @@ class VAEILTModel(LithographyModel):
         self._cached_kernels: torch.Tensor | None = None
         self._cached_weights: torch.Tensor | None = None
         self._cached_grid: int | None = None
+        self._cache_lock = threading.Lock()
 
     def _build_vae(self, grid_size: int, device: torch.device) -> tuple[_Encoder, _Decoder]:
         encoder = _Encoder(self._latent_dim, self._hidden).to(device)
@@ -222,6 +224,8 @@ class VAEILTModel(LithographyModel):
         if device is not None:
             target = target.to(device)
         device = target.device
+        if target.shape[0] != target.shape[1]:
+            raise ValueError(f"VAE-ILT requires square inputs, got shape {tuple(target.shape)}")
         grid_size = target.shape[0]
 
         # --- Phase 1: train VAE ---
@@ -232,7 +236,19 @@ class VAEILTModel(LithographyModel):
         kernels: torch.Tensor | None = None
         weights: torch.Tensor | None = None
         if forward_model == "hopkins":
-            kernels, weights = compute_socs_kernels(hopkins_params, grid_size, device)
+            with self._cache_lock:
+                if (
+                    self._cached_kernels is None
+                    or self._cached_weights is None
+                    or self._cached_grid != grid_size
+                    or self._cached_kernels.device != device
+                ):
+                    k, w = compute_socs_kernels(hopkins_params, grid_size, device)
+                    self._cached_kernels = k
+                    self._cached_weights = w
+                    self._cached_grid = grid_size
+                kernels = self._cached_kernels
+                weights = self._cached_weights
 
         # Encode target as starting latent vector
         with torch.no_grad():

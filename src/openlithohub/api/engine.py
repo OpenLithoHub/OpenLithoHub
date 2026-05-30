@@ -216,6 +216,10 @@ class LitheEngine:
         # Same forward-sim path as wafer_epe, different aggregation:
         # |wafer - target|.sum() instead of edge-distance.
         l2 = compute_l2_error(pred.tensor, tgt.tensor, pixel_size_nm=pixel_nm, simulator=simulator)
+        # Free GPU intermediates from forward-sim metrics before computing
+        # purely-structural metrics to avoid cumulative VRAM pressure.
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         pvband = compute_pvband(pred.tensor, pixel_size_nm=pixel_nm)
         drc = check_drc(pred.tensor, pixel_size_nm=pixel_nm)
         mrc = check_mrc(pred.tensor, pixel_size_nm=pixel_nm)

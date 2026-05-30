@@ -4,8 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _set_random_seeds() -> None:
+    torch.manual_seed(42)
+    np.random.seed(42)
 
 
 @pytest.fixture

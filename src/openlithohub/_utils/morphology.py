@@ -131,7 +131,6 @@ def connected_components(mask: torch.Tensor, connectivity: int = 8) -> tuple[tor
         # explicit shift-and-pad rather than float32 max_pool2d — float32's
         # 24-bit mantissa would silently collide for masks larger than ~16
         # megapixels.
-        prev_sum = labels.sum().item() + 1
         while True:
             up = functional.pad(labels[1:, :], (0, 0, 0, 1), value=sentinel)
             down = functional.pad(labels[:-1, :], (0, 0, 1, 0), value=sentinel)
@@ -140,16 +139,13 @@ def connected_components(mask: torch.Tensor, connectivity: int = 8) -> tuple[tor
             stacked = torch.stack([labels, up, down, left, right], dim=0)
             new_labels = stacked.amin(dim=0)
             new_labels = torch.where(fg, new_labels, torch.full_like(new_labels, sentinel))
-            curr_sum = int(new_labels.sum().item())
-            labels = new_labels
-            if curr_sum == prev_sum:
+            if torch.equal(new_labels, labels):
                 break
-            prev_sum = curr_sum
+            labels = new_labels
     elif connectivity == 8:
         # 8-connectivity = 3x3 min over neighborhood. Computed on int64 via
         # nine shifted copies stacked along dim 0 — avoids float32 max_pool2d
         # mantissa collisions on >~16 megapixel masks.
-        prev_sum = labels.sum().item() + 1
         while True:
             shifts = []
             for dy in (-1, 0, 1):
@@ -177,11 +173,9 @@ def connected_components(mask: torch.Tensor, connectivity: int = 8) -> tuple[tor
             stacked = torch.stack(shifts, dim=0)
             new_labels = stacked.amin(dim=0)
             new_labels = torch.where(fg, new_labels, torch.full_like(new_labels, sentinel))
-            curr_sum = int(new_labels.sum().item())
-            labels = new_labels
-            if curr_sum == prev_sum:
+            if torch.equal(new_labels, labels):
                 break
-            prev_sum = curr_sum
+            labels = new_labels
     else:
         raise ValueError(f"connectivity must be 4 or 8, got {connectivity}")
 

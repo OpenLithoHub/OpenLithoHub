@@ -277,6 +277,15 @@ def compute_socs_kernels(
     n_src = src_shifts.shape[0]
 
     n_freq = grid_size * grid_size
+    # SVD matrix is (n_src, n_freq) complex64 — warn on large grids where
+    # memory and compute time grow as O(n_src * grid_size^2).
+    mem_gb = n_src * n_freq * 8 / 1e9
+    if mem_gb > 4.0:
+        warnings.warn(
+            f"SOCS kernel computation for grid_size={grid_size} allocates ~{mem_gb:.1f} GB. "
+            f"Consider using a smaller grid or reducing num_kernels.",
+            stacklevel=2,
+        )
 
     yy, xx = torch.meshgrid(
         torch.arange(grid_size, device=dev),
@@ -312,6 +321,9 @@ def compute_socs_kernels(
         open_frame = open_frame + weights[k_idx] * (coherent_dc.real**2 + coherent_dc.imag**2)
     if float(open_frame) > 0.0:
         weights = weights / open_frame
+        # Clamp rescaled weights to prevent overflow in downstream aerial
+        # accumulation (extremely small open_frame values can produce huge weights).
+        weights = weights.clamp(max=1e6)
 
     kernels_spatial = kernels_spatial.to(dtype)
     _KERNEL_CACHE[cache_key] = (kernels_spatial.detach(), weights.detach())

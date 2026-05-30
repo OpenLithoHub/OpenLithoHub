@@ -315,6 +315,8 @@ def create_app() -> FastAPI:
                 raise HTTPException(status_code=404, detail=f"unknown model: {e}") from None
             except (FileNotFoundError, ValueError) as e:
                 raise HTTPException(status_code=400, detail=str(e)) from None
+            except RuntimeError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from None
             except ImportError as e:
                 raise HTTPException(
                     status_code=503,

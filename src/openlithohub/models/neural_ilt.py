@@ -118,16 +118,25 @@ class NeuralILTModel(LithographyModel):
         assert self._net is not None
 
         inp = design.detach().float()
+        original_ndim = inp.ndim
         if inp.ndim == 2:
             inp = inp.unsqueeze(0).unsqueeze(0)
         elif inp.ndim == 3:
             inp = inp.unsqueeze(0)
+        elif inp.ndim == 4:
+            pass  # already (B, C, H, W)
+        else:
+            raise ValueError(f"expected 2D–4D input, got {inp.ndim}D")
 
         inp = inp.to(self._device)
 
         with torch.no_grad():
             logits = self._net(inp)
-            mask = torch.sigmoid(logits).squeeze()
+            mask = torch.sigmoid(logits)
+
+        # Preserve the original dimensionality contract: 2D/3D input → 2D output.
+        if original_ndim <= 3:
+            mask = mask.squeeze()
 
         mask_binary = (mask > 0.5).float()
         return PredictionResult(

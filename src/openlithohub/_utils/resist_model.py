@@ -134,6 +134,16 @@ def apply_differentiable_resist(
 class ResistCalibration:
     """Least-squares resist parameter calibration from SEM CD anchors.
 
+    .. deprecated::
+        The scalar CD model used by :meth:`fit` is a placeholder — it reduces
+        the full 2D resist simulation to a single binary check per anchor,
+        making the calibration trivially satisfiable (any threshold below the
+        minimum aerial intensity scores zero error regardless of real resist
+        behaviour). Do not rely on the returned parameters for production
+        resist modelling. A full image-level calibration (simulate resist on
+        the 2D aerial image, measure printed CD from the binary contour, compare
+        against ``target_cd``) will replace this stub in a future release.
+
     Given one or more ``(aerial_intensity, measured_cd_nm)`` pairs, find
     ``(threshold, resist_diffusion_nm, quencher)`` that minimises the
     squared CD error. This is a brute-force grid search — fast enough for
@@ -159,6 +169,10 @@ class ResistCalibration:
     ) -> tuple[float, float, float]:
         """Find (threshold, resist_diffusion_nm, quencher) minimizing CD error.
 
+        .. warning::
+            The underlying CD model is a scalar placeholder, not a physically
+            meaningful simulation. See class docstring for details.
+
         Args:
             anchors: ``[(aerial_intensity, measured_cd_nm), ...]``.
             pixel_size_nm: Physical pixel size.
@@ -169,7 +183,17 @@ class ResistCalibration:
         Returns:
             ``(threshold, resist_diffusion_nm, quencher)`` with lowest error.
         """
+        import warnings
+
         import numpy as np
+
+        warnings.warn(
+            "ResistCalibration.fit uses a scalar CD placeholder model. "
+            "Returned parameters are not physically meaningful. "
+            "See ResistCalibration class docstring for details.",
+            UserWarning,
+            stacklevel=2,
+        )
 
         best_params = (0.225, 0.0, 0.0)
         best_error = float("inf")

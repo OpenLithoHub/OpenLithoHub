@@ -411,8 +411,8 @@ class GanOpcDataset(DatasetAdapter):
         # Pillow for users who only touch other adapters.
         from PIL import Image
 
-        img = Image.open(path).convert("L")
-        arr = np.asarray(img, dtype=np.uint8)
+        with Image.open(path) as img:
+            arr = np.asarray(img.convert("L"), dtype=np.uint8)
         return (arr > self.threshold).astype(np.float32)
 
     def download(self, root: str) -> None:

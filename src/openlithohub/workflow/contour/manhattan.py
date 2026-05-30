@@ -73,6 +73,7 @@ def extract_manhattan_contour(
     # Trace closed loops
     remaining = set(all_edges)
     polygons: list[list[tuple[float, float]]] = []
+    max_total_iters = 2 * len(all_edges)
 
     while remaining:
         start_edge = next(iter(remaining))
@@ -83,8 +84,12 @@ def extract_manhattan_contour(
         current_vertex = (x2, y2)
         in_dir = (x2 - x1, y2 - y1)
         remaining.discard(start_edge)
+        inner_iters = 0
 
         while current_vertex != (x1, y1):
+            inner_iters += 1
+            if inner_iters > max_total_iters:
+                break
             polygon_vertices.append(current_vertex)
             candidates = vertex_to_edges.get(current_vertex, [])
             next_edge = _pick_next_edge(current_vertex, in_dir, candidates, remaining)

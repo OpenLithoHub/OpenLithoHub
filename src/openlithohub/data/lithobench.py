@@ -223,9 +223,9 @@ class LithoBenchDataset(DatasetAdapter):
                 verify_sha256(target, pin)
                 self._extract_tarball(target, dest_root)
                 return
-            except Exception:
-                # Stale or corrupt; re-download below.
-                target.unlink()
+            except (RuntimeError, OSError):
+                # IntegrityError (subclass of RuntimeError) or I/O failure; re-download below.
+                target.unlink(missing_ok=True)
 
         url = f"https://drive.google.com/uc?id={_GDRIVE_FILE_IDS[artifact]}"
         # ``resume=True`` is the gdown analogue of ``--continue``: a partial

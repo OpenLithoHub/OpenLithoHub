@@ -150,4 +150,13 @@ class GanOpcModel(LithographyModel):
         if self._net is None:
             self.setup()
         assert self._net is not None
-        return self._net.eval()
+
+        class _GanOpcExportWrapper(torch.nn.Module):
+            def __init__(self, net: torch.nn.Module) -> None:
+                super().__init__()
+                self.net = net
+
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
+                return torch.sigmoid(self.net(x))
+
+        return _GanOpcExportWrapper(self._net).eval()

@@ -112,13 +112,21 @@ def test_get_or_load_model_returns_per_key_lock() -> None:
 
     from openlithohub.server.app import _MODEL_CACHE, _MODEL_LOCKS, _get_or_load_model
 
+    saved_cache = dict(_MODEL_CACHE)
+    saved_locks = dict(_MODEL_LOCKS)
     _MODEL_CACHE.clear()
     _MODEL_LOCKS.clear()
-    model_a, lock_a = _get_or_load_model("dummy-identity", {})
-    model_b, lock_b = _get_or_load_model("dummy-identity", {})
-    assert model_a is model_b
-    assert lock_a is lock_b
-    assert isinstance(lock_a, type(threading.Lock()))
+    try:
+        model_a, lock_a = _get_or_load_model("dummy-identity", {})
+        model_b, lock_b = _get_or_load_model("dummy-identity", {})
+        assert model_a is model_b
+        assert lock_a is lock_b
+        assert isinstance(lock_a, type(threading.Lock()))
+    finally:
+        _MODEL_CACHE.clear()
+        _MODEL_LOCKS.clear()
+        _MODEL_CACHE.update(saved_cache)
+        _MODEL_LOCKS.update(saved_locks)
 
 
 def test_get_or_load_model_concurrent_requests_load_once() -> None:
@@ -128,19 +136,27 @@ def test_get_or_load_model_concurrent_requests_load_once() -> None:
 
     from openlithohub.server.app import _MODEL_CACHE, _MODEL_LOCKS, _get_or_load_model
 
+    saved_cache = dict(_MODEL_CACHE)
+    saved_locks = dict(_MODEL_LOCKS)
     _MODEL_CACHE.clear()
     _MODEL_LOCKS.clear()
-    results: list[tuple[object, object]] = []
-    barrier = threading.Barrier(4)
+    try:
+        results: list[tuple[object, object]] = []
+        barrier = threading.Barrier(4)
 
-    def worker() -> None:
-        barrier.wait()
-        results.append(_get_or_load_model("dummy-identity", {}))
+        def worker() -> None:
+            barrier.wait()
+            results.append(_get_or_load_model("dummy-identity", {}))
 
-    threads = [threading.Thread(target=worker) for _ in range(4)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    assert len({id(m) for m, _ in results}) == 1
-    assert len({id(lock) for _, lock in results}) == 1
+        threads = [threading.Thread(target=worker) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert len({id(m) for m, _ in results}) == 1
+        assert len({id(lock) for _, lock in results}) == 1
+    finally:
+        _MODEL_CACHE.clear()
+        _MODEL_LOCKS.clear()
+        _MODEL_CACHE.update(saved_cache)
+        _MODEL_LOCKS.update(saved_locks)
