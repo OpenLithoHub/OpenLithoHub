@@ -233,6 +233,9 @@ def main() -> int:
     ap.add_argument("--samples", type=int, default=100)
     args = ap.parse_args()
 
+    if args.samples < 2:
+        ap.error("--samples must be >= 2 (percentile computation requires at least 2 data points)")
+
     env = get_env()
     print("=" * 65)
     print(f"  Python : {env.python}")

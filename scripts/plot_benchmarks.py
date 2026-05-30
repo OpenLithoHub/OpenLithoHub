@@ -42,7 +42,7 @@ def _style_ax(ax: plt.Axes, title: str, ylabel: str) -> None:
 
 def plot_model_quality(records: list[dict], output_dir: Path) -> list[Path]:
     metrics = [
-        ("epe_mean_nm", "EPE mean (nm)", "model_quality_epe.svg"),
+        ("epe_wafer_mean_nm", "Wafer EPE (nm)", "model_quality_epe.svg"),
         ("pvband_mean_nm", "PV Band mean (nm)", "model_quality_pvb.svg"),
         ("l2_error_pixels", "L2 wafer error (px)", "model_quality_l2.svg"),
     ]
@@ -108,7 +108,7 @@ def plot_model_quality_grouped(records: list[dict], output_dir: Path) -> Path:
         data[key] = []
         for rec in records:
             v = rec.get("metrics", {}).get(key)
-            data[key].append(float(v) if v is not None else 0.0)
+            data[key].append(float(v) if v is not None else float("nan"))
 
     n_models = len(models)
     n_metrics = len(metric_keys)

@@ -66,7 +66,7 @@ def parallel_tile_inference(
         # Convert tensors to numpy arrays so pickle never needs to share
         # storage file descriptors across the spawn boundary — FD sharing
         # breaks on some Linux configs (EOFError in rebuild_storage_fd).
-        payload = [(idx, tiles[idx].tensor.numpy()) for idx in indices]
+        payload = [(idx, tiles[idx].tensor.detach().cpu().numpy()) for idx in indices]
         p = ctx.Process(
             target=_worker,
             args=(rank, effective, model_name, model_kwargs, base_perf_kwargs, payload, queue),
@@ -83,13 +83,14 @@ def parallel_tile_inference(
                 item = queue.get(timeout=_DEFAULT_TIMEOUT_SECONDS)
             except queue_mod.Empty:
                 if any(not p.is_alive() for p in processes) and queue.empty():
-                    dead = [p for p in processes if not p.is_alive() and p.exitcode != 0]
+                    dead = [p for p in processes if not p.is_alive()]
                     if dead:
                         codes = ", ".join(
-                            f"rank={i} exit={p.exitcode}" for i, p in enumerate(processes)
+                            f"rank={i} exit={p.exitcode}" for i, p in enumerate(processes) if not p.is_alive()
                         )
                         raise RuntimeError(
-                            f"parallel_tile_inference: worker died ({codes})"
+                            f"parallel_tile_inference: worker(s) exited ({codes}), "
+                            f"received {len(results)}/{expected} results"
                         ) from None
                 continue
 
