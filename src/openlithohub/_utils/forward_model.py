@@ -245,3 +245,183 @@ def simulate_aerial_image_born(
     if squeezed:
         aerial = aerial.squeeze(0).squeeze(0)
     return aerial
+
+
+def simulate_aerial_image_thick_mask(
+    mask: torch.Tensor,
+    sigma_px: float,
+    dose: float = 1.0,
+    *,
+    thickness_nm: float = 70.0,
+    refractive_index_n: float = 1.0,
+    refractive_index_k: float = 0.5,
+    wavelength_nm: float = 193.0,
+) -> torch.Tensor:
+    """Simulate aerial image with thick-mask amplitude/phase perturbation.
+
+    Applies a complex-valued perturbation to the mask before Hopkins
+    convolution. The perturbation models the amplitude attenuation and phase
+    shift that light accumulates traversing mask material of finite thickness:
+
+        phase_shift  = 2π · t · (n − 1) / λ
+        amplitude    = exp(−4π · k · t / λ)
+        mask_perturbed = amplitude · mask · exp(j · phase_shift · mask)
+
+    The real part of the convolved complex aerial image is returned.
+    Setting *thickness_nm = 0* recovers :func:`simulate_aerial_image`.
+
+    Uses circular padding consistent with the rest of this module.
+
+    Args:
+        mask: Layout mask ``(H, W)`` or ``(B, 1, H, W)``.
+        sigma_px: Gaussian PSF width in pixels.
+        dose: Exposure dose multiplier.
+        thickness_nm: Mask material thickness in nanometres.
+        refractive_index_n: Real part of the refractive index (phase).
+        refractive_index_k: Imaginary part of the refractive index (absorption).
+        wavelength_nm: Illumination wavelength in nanometres.
+
+    Returns:
+        Aerial image tensor matching input rank.
+    """
+    if sigma_px < 1e-6:
+        return mask.float() * dose
+
+    kernel = _build_gaussian_kernel(sigma_px, mask.device)
+    padding = kernel.shape[-1] // 2
+
+    squeezed = False
+    if mask.ndim == 2:
+        inp = mask.float().unsqueeze(0).unsqueeze(0)
+        squeezed = True
+    elif mask.ndim == 4 and mask.shape[1] == 1:
+        inp = mask.float()
+    else:
+        raise ValueError(f"Expected mask shape (H,W) or (B,1,H,W); got {tuple(mask.shape)}")
+
+    phase_shift = 2.0 * math.pi * thickness_nm * (refractive_index_n - 1.0) / wavelength_nm
+    amplitude = math.exp(-4.0 * math.pi * refractive_index_k * thickness_nm / wavelength_nm)
+
+    mask_complex = amplitude * inp * torch.exp(1j * phase_shift * inp)
+
+    mask_real = mask_complex.real
+
+    aerial = functional.conv2d(_circular_pad_clamped(mask_real, padding), kernel) * dose
+
+    if squeezed:
+        aerial = aerial.squeeze(0).squeeze(0)
+    return aerial
+
+
+def simulate_aerial_image_abbe(
+    mask: torch.Tensor,
+    sigma_px: float,
+    dose: float = 1.0,
+    *,
+    n_source_points: int = 16,
+    partial_coherence: float = 0.7,
+) -> torch.Tensor:
+    """Abbe partial-coherence forward model (reference implementation).
+
+    Sums contributions from multiple coherent source points distributed
+    over the illumination pupil. Each source point produces a shifted PSF
+    that is convolved with the mask; the intensity contributions are summed.
+
+    This is the high-accuracy reference for thick-mask simulation but is
+    **not optimised for production** — it runs O(n_source_points)
+    convolutions per forward pass.
+
+    Uses circular padding consistent with the rest of this module.
+
+    Args:
+        mask: Layout mask ``(H, W)`` or ``(B, 1, H, W)``.
+        sigma_px: Gaussian PSF width in pixels.
+        dose: Exposure dose multiplier.
+        n_source_points: Number of source points (powers of 2 recommended).
+        partial_coherence: Partial coherence factor σ (0 = coherent, 1 =
+            fully incoherent).
+
+    Returns:
+        Aerial image tensor matching input rank.
+    """
+    if sigma_px < 1e-6:
+        return mask.float() * dose
+
+    kernel_base = _build_gaussian_kernel(sigma_px, mask.device)
+
+    squeezed = False
+    if mask.ndim == 2:
+        inp = mask.float().unsqueeze(0).unsqueeze(0)
+        squeezed = True
+    elif mask.ndim == 4 and mask.shape[1] == 1:
+        inp = mask.float()
+    else:
+        raise ValueError(f"Expected mask shape (H,W) or (B,1,H,W); got {tuple(mask.shape)}")
+
+    h, w = inp.shape[-2], inp.shape[-1]
+    aerial_total = torch.zeros_like(inp)
+
+    angles = torch.linspace(0, 2 * math.pi, n_source_points + 1, device=inp.device)[:-1]
+    for i in range(n_source_points):
+        shift_r = partial_coherence * math.cos(angles[i].item())
+        shift_c = partial_coherence * math.sin(angles[i].item())
+
+        shift_px_r = shift_r * sigma_px * 0.5
+        shift_px_c = shift_c * sigma_px * 0.5
+
+        shifted_kernel = _shift_kernel(kernel_base, shift_px_r, shift_px_c, h, w)
+        padding = shifted_kernel.shape[-1] // 2
+
+        field = functional.conv2d(_circular_pad_clamped(inp, padding), shifted_kernel)
+        aerial_total = aerial_total + field.pow(2)
+
+    aerial_total = aerial_total / n_source_points * dose
+
+    if squeezed:
+        aerial_total = aerial_total.squeeze(0).squeeze(0)
+    return aerial_total
+
+
+def _shift_kernel(
+    kernel: torch.Tensor,
+    shift_r: float,
+    shift_c: float,
+    target_h: int,
+    target_w: int,
+) -> torch.Tensor:
+    """Shift a PSF kernel by fractional pixel offsets via phase multiplication.
+
+    Applies a linear phase ramp in Fourier space to shift the kernel
+    sub-pixel, then crops back to the original support size.
+    """
+    k = kernel.squeeze(0).squeeze(0)
+    kh, kw = k.shape
+
+    padded = torch.zeros(target_h, target_w, device=kernel.device, dtype=kernel.dtype)
+    r_center = target_h // 2
+    c_center = target_w // 2
+    half_h = kh // 2
+    half_w = kw // 2
+    r_lo = max(0, r_center - half_h)
+    c_lo = max(0, c_center - half_w)
+    r_hi = min(target_h, r_center + kh - half_h)
+    c_hi = min(target_w, c_center + kw - half_w)
+    kr_lo = r_lo - (r_center - half_h)
+    kc_lo = c_lo - (c_center - half_w)
+    kr_hi = kr_lo + (r_hi - r_lo)
+    kc_hi = kc_lo + (c_hi - c_lo)
+    padded[r_lo:r_hi, c_lo:c_hi] = k[kr_lo:kr_hi, kc_lo:kc_hi]
+
+    padded_complex = torch.fft.fft2(padded)
+    rows = torch.arange(target_h, device=kernel.device, dtype=torch.float32)
+    cols = torch.arange(target_w, device=kernel.device, dtype=torch.float32)
+    phase_r = torch.exp(-2j * math.pi * shift_r * rows / target_h)
+    phase_c = torch.exp(-2j * math.pi * shift_c * cols / target_w)
+    phase = phase_r.unsqueeze(1) * phase_c.unsqueeze(0)
+    shifted_fft = padded_complex * phase
+
+    shifted_full = torch.fft.ifft2(shifted_fft).real
+
+    cropped = shifted_full[r_lo:r_hi, c_lo:c_hi]
+
+    return cropped.unsqueeze(0).unsqueeze(0)
