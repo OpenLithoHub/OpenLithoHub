@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 import torch
 import torch.nn.functional as functional
@@ -186,3 +187,65 @@ def stitch_tiles(
     nonzero = weight_map > 0
     output[nonzero] /= weight_map[nonzero]
     return output
+
+
+def tiled_ilt_with_consistency(
+    mask: torch.Tensor,
+    tile_size: int,
+    ilt_fn: Callable[[torch.Tensor], torch.Tensor],
+    overlap: int = 16,
+    n_iterations: int = 10,
+) -> dict:
+    """Run tiled ILT and measure cross-tile consistency.
+
+    Partitions ``mask`` into tiles, applies ``ilt_fn`` independently to each
+    tile for ``n_iterations``, stitches the results back together, and
+    evaluates boundary consistency metrics.
+
+    Args:
+        mask: Full-chip mask tensor ``(H, W)``.
+        tile_size: Tile size in pixels.
+        ilt_fn: Callable that takes a tile mask ``(H_tile, W_tile)`` and
+            returns an optimised mask of the same shape. Called once per tile
+            (not iteratively — ``n_iterations`` controls a simple iterative
+            refinement loop if the caller passes a stateless function).
+        overlap: Overlap between adjacent tiles.
+        n_iterations: Number of refinement iterations per tile. Each iteration
+            applies ``ilt_fn`` to the current tile result.
+
+    Returns:
+        Dictionary with:
+
+        - ``'mask'``: stitched optimised mask ``(H, W)``.
+        - ``'tiles'``: list of original ``Tile`` objects.
+        - ``'tile_results'``: list of per-tile optimised tensors.
+        - ``'consistency'``: output of :func:`tile_boundary_consistency`.
+    """
+    from openlithohub.benchmark.metrics.tiling_consistency import tile_boundary_consistency
+
+    if mask.ndim > 2:
+        mask = mask.squeeze()
+
+    h, w = mask.shape
+    tiles = tile_layout(mask, tile_size=tile_size, overlap=overlap)
+
+    tile_results: list[torch.Tensor] = []
+    for tile in tiles:
+        current = tile.tensor.clone()
+        for _ in range(n_iterations):
+            current = ilt_fn(current)
+        tile_results.append(current)
+
+    stitched = stitch_tiles(
+        [(t, r) for t, r in zip(tiles, tile_results)],
+        (h, w),
+    )
+
+    consistency = tile_boundary_consistency(tiles, tile_results, overlap=overlap)
+
+    return {
+        "mask": stitched,
+        "tiles": tiles,
+        "tile_results": tile_results,
+        "consistency": consistency,
+    }

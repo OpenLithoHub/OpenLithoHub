@@ -8,6 +8,10 @@ from openlithohub.benchmark.metrics.euv_3d import (
 )
 from openlithohub.benchmark.metrics.hotspot import compute_hotspot_detection
 from openlithohub.benchmark.metrics.l2_error import compute_l2_error
+from openlithohub.benchmark.metrics.manhattanization import (
+    curvilinear_to_manhattan,
+    manhattanization_degradation,
+)
 from openlithohub.benchmark.metrics.monte_carlo import (
     MonteCarloFailureResult,
     monte_carlo_failure_probability,
@@ -20,6 +24,10 @@ from openlithohub.benchmark.metrics.stochastic import (
     StochasticDefectRates,
     compute_stochastic_defect_classes,
     compute_stochastic_robustness,
+)
+from openlithohub.benchmark.metrics.tiling_consistency import (
+    cross_tile_sraf_consistency,
+    tile_boundary_consistency,
 )
 
 __all__ = [
@@ -35,8 +43,12 @@ __all__ = [
     "compute_stochastic_defect_classes",
     "compute_stochastic_robustness",
     "compute_wafer_epe",
+    "cross_tile_sraf_consistency",
     "curvilinear_mrc_loss",
+    "curvilinear_to_manhattan",
     "estimate_shot_count",
+    "manhattanization_degradation",
     "monte_carlo_failure_probability",
     "sraf_print_penalty",
+    "tile_boundary_consistency",
 ]

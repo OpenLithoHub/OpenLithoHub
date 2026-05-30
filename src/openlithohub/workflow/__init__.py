@@ -31,7 +31,7 @@ from openlithohub.workflow.process_window import (
     pw_aerial_images,
     pw_fidelity_loss,
 )
-from openlithohub.workflow.tiling import stitch_tiles, tile_layout
+from openlithohub.workflow.tiling import stitch_tiles, tile_layout, tiled_ilt_with_consistency
 
 __all__ = [
     "parse_layout",
@@ -42,6 +42,7 @@ __all__ = [
     "GaugeTable",
     "tile_layout",
     "stitch_tiles",
+    "tiled_ilt_with_consistency",
     "export_oasis",
     "export_gds",
     "ProcessNodeConfig",
