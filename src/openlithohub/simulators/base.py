@@ -28,6 +28,11 @@ class SimulatorConfig:
         threshold: Resist intensity threshold for binarization (0–1
             relative to ``dose``). Backends that do not expose a
             threshold knob round at the model's nominal value.
+        resist_backend: Select resist model. ``"ctr"`` = built-in CTR
+            (bit-identical legacy), ``"diffnano"`` = DiffNano high-precision
+            resist plugin.  Plugin backends raise
+            :class:`~openlithohub.plugins.OptionalPluginError` when not
+            installed.
         extra: Backend-specific options. Treated as opaque by the ABC.
     """
 
@@ -49,6 +54,8 @@ class SimulatorConfig:
     # Base quencher concentration subtracted from acid field after
     # diffusion. 0.0 disables quencher neutralization.
     quencher: float = 0.0
+    # Resist model selector. "ctr" = built-in, "diffnano" = plugin.
+    resist_backend: str = "ctr"
     extra: dict[str, Any] = field(default_factory=dict)
 
 

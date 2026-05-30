@@ -107,7 +107,13 @@ class HopkinsSimulator(BaseSimulator):
             if sigma_px > 0.1:
                 aerial = _gaussian_diffuse(aerial, sigma_px)
             aerial = (aerial - self.config.quencher).clamp(min=0.0)
-        resist = (aerial >= threshold).to(aerial.dtype)
+
+        # Resist backend dispatch: "ctr" = built-in, "diffnano" = plugin.
+        if self.config.resist_backend == "diffnano":
+            resist = self._apply_diffnano_resist(aerial)
+        else:
+            resist = (aerial >= threshold).to(aerial.dtype)
+
         return SimulatorResult(
             aerial=aerial,
             resist=resist,
@@ -116,5 +122,17 @@ class HopkinsSimulator(BaseSimulator):
                 "illumination": self._hparams.illumination,
                 "num_kernels": self._hparams.num_kernels,
                 "differentiable": True,
+                "resist_backend": self.config.resist_backend,
             },
         )
+
+    def _apply_diffnano_resist(self, aerial: torch.Tensor) -> torch.Tensor:
+        from openlithohub.plugins.diffnano_resist import DiffNanoResistAdapter
+
+        adapter = DiffNanoResistAdapter(
+            acid_diffusion_length_nm=self.config.resist_diffusion_nm or 20.0,
+            threshold_dose=self.config.threshold,
+            pixel_size_nm=self.config.pixel_size_nm,
+        )
+        result = adapter(aerial)
+        return (result >= 0.5).to(aerial.dtype)

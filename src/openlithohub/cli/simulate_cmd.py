@@ -12,6 +12,7 @@ from openlithohub.simulators import (
     SimulatorConfig,
     describe_simulators,
     get_simulator,
+    list_available_backends,
     list_simulators,
 )
 
@@ -78,16 +79,30 @@ def list_backends_cmd(
     Without ``--verbose`` this prints one name per line (script-friendly).
     With ``--verbose`` it adds the implementing class so users can locate
     the source without reading ``simulators/registry.py`` directly.
+    Plugin backends that are available but not yet installed are shown
+    with their install extra.
     """
 
     names = list_simulators()
+    plugin_backends = list_available_backends()
+
     if not verbose:
         for name in names:
             typer.echo(name)
+        for info in plugin_backends:
+            if info["status"] == "available":
+                typer.echo(f"{info['name']}  (install with [{info['extra']}])")
         return
-    width = max((len(n) for n in names), default=0)
+
+    width = max(
+        max((len(n) for n in names), default=0),
+        max((len(info["name"]) for info in plugin_backends), default=0),
+    )
     for name, cls in describe_simulators():
         typer.echo(f"{name.ljust(width)}  {cls.__module__}.{cls.__qualname__}")
+    for info in plugin_backends:
+        if info["status"] == "available":
+            typer.echo(f"{info['name'].ljust(width)}  available via [{info['extra']}]")
 
 
 def _load_mask(path: Path) -> torch.Tensor:

@@ -92,7 +92,18 @@ export = [
     # exporter cannot ship green just because torch.onnx.export() returned.
     "onnxruntime>=1.17",
 ]
-all = ["openlithohub[data,workflow,freepdk45-sram,models,dev,docs,jupyter,server,export]"]
+diffnano = [
+    # DiffNano — differentiable nanophotonics (high-precision resist, RCWA/FDTD EM).
+    # Early-stage research code; opt-in to keep core lightweight.
+    "diffnano @ git+https://github.com/OpenLithoHub/DiffNano.git@2ec61b8",
+]
+diffcfd = [
+    # DiffCFD — differentiable CFD (spin coating, Dill/Mack lithography, joint opt).
+    # Early-stage research code; opt-in to keep core lightweight.
+    "diffcfd @ git+https://github.com/OpenLithoHub/DiffCFD.git@a95b64e",
+]
+plugins = ["openlithohub[diffnano]", "openlithohub[diffcfd]"]
+all = ["openlithohub[data,workflow,freepdk45-sram,models,dev,docs,jupyter,server,export,plugins]"]
 
 [project.urls]
 Homepage = "https://openlithohub.com"

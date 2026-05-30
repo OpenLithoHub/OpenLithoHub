@@ -41,6 +41,7 @@ from openlithohub.simulators.hopkins_sim import HopkinsSimulator
 from openlithohub.simulators.registry import (
     describe_simulators,
     get_simulator,
+    list_available_backends,
     list_simulators,
     register_simulator,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "TachyonSimulator",
     "describe_simulators",
     "get_simulator",
+    "list_available_backends",
     "list_simulators",
     "load_source_intensity",
     "load_zernike_coefficients",

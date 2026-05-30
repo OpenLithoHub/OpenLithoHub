@@ -233,3 +233,66 @@ The leaderboard system uses a JSON-backed store with Pydantic validation:
 - **Schema** — `BenchmarkResult` model with typed fields for all metrics
 - **Tracker** — file-backed store with atomic writes and query filtering
 - **CLI integration** — `openlithohub leaderboard view/submit/export` commands
+
+## Optional Physics Plugins
+
+OpenLithoHub supports optional physics plugins via `pip install` extras and
+lazy imports. Plugins are **opt-in** — the core package installs and tests
+with zero plugins.
+
+### Installation
+
+```bash
+pip install openlithohub                    # core only (lightweight)
+pip install openlithohub[diffnano]          # + DiffNano EM / resist
+pip install openlithohub[diffcfd]           # + DiffCFD spin coating / litho
+pip install openlithohub[plugins]           # + all plugins
+```
+
+### Plugin Architecture
+
+| Component | Location | Role |
+|-----------|----------|------|
+| Plugin manifest | `openlithohub.plugins` | Describes known plugins, extras, modules |
+| `optional_import()` | `openlithohub.plugins` | Lazy import with actionable error messages |
+| `LithoPlugin` protocol | `openlithohub.plugins` | `register()` method all plugins must implement |
+| Adapter modules | `openlithohub.plugins.*` | Wrap external solvers as `BaseSimulator` subclasses |
+| Registry integration | `simulators.registry` | Lazy-loads plugin backends on first `get_simulator()` call |
+
+### Available Plugins
+
+| Plugin | Extra | Capabilities | Status |
+|--------|-------|-------------|--------|
+| **DiffNano** | `[diffnano]` | High-precision resist (PEB diffusion + calibration), RCWA / FDTD / FDFD EM solvers for 3D mask effects | Research, not third-party verified |
+| **DiffCFD** | `[diffcfd]` | Dill/Mack lithography, Meyerhofer spin coating, joint spin-litho optimization | Research, not third-party verified |
+
+### Resist Backend Selection
+
+`SimulatorConfig.resist_backend` selects the resist model:
+
+- `"ctr"` (default) — built-in constant-threshold resist, bit-identical to legacy
+- `"diffnano"` — DiffNano `DifferentiableResistModel` with PEB diffusion and
+  node-specific calibration
+
+Plugin backends raise `OptionalPluginError` with a `pip install` hint when not
+installed.
+
+### Verification & Reproducibility
+
+Both DiffNano and DiffCFD are early-stage research projects that have **not**
+been independently verified by third parties. Plugin-based backends:
+
+- Are **disabled by default** and must be explicitly selected
+- Are **incompatible with leaderboard submission** — non-CTR backends are
+  rejected at submit time
+- May change numerical results — users must document which backend they use
+
+### Simulator Backends Added by Plugins
+
+| Backend name | Plugin | Class |
+|-------------|--------|-------|
+| `diffnano_rcwa` | DiffNano | `DiffNanoRCWA` |
+| `diffnano_fdtd2d` | DiffNano | `DiffNanoFDTD2D` |
+| `diffnano_fdfd2d` | DiffNano | `DiffNanoFDFD2D` |
+| `diffcfd_litho` | DiffCFD | `DiffCFDLithoSimulator` |
+| `diffcfd_spin_coat` | DiffCFD | `DiffCFDSpinCoatSimulator` |

@@ -13,6 +13,41 @@ _REGISTRY: dict[str, type[BaseSimulator]] = {
     "tachyon": TachyonSimulator,
 }
 
+# Plugin-provided backends that are available via extras but not yet loaded.
+# Maps backend name → (extra, package_to_check, module_path, class_name).
+_PLUGIN_BACKENDS: dict[str, tuple[str, str, str, str]] = {
+    "diffnano_rcwa": (
+        "diffnano",
+        "diffnano",
+        "openlithohub.plugins.diffnano_em",
+        "DiffNanoRCWA",
+    ),
+    "diffnano_fdtd2d": (
+        "diffnano",
+        "diffnano",
+        "openlithohub.plugins.diffnano_em",
+        "DiffNanoFDTD2D",
+    ),
+    "diffnano_fdfd2d": (
+        "diffnano",
+        "diffnano",
+        "openlithohub.plugins.diffnano_em",
+        "DiffNanoFDFD2D",
+    ),
+    "diffcfd_litho": (
+        "diffcfd",
+        "diffcfd",
+        "openlithohub.plugins.diffcfd_process",
+        "DiffCFDLithoSimulator",
+    ),
+    "diffcfd_spin_coat": (
+        "diffcfd",
+        "diffcfd",
+        "openlithohub.plugins.diffcfd_process",
+        "DiffCFDSpinCoatSimulator",
+    ),
+}
+
 
 def register_simulator(name: str, cls: type[BaseSimulator]) -> None:
     """Register a simulator class under ``name``.
@@ -24,10 +59,55 @@ def register_simulator(name: str, cls: type[BaseSimulator]) -> None:
     _REGISTRY[name] = cls
 
 
+def _try_load_plugin_backend(name: str) -> bool:
+    """Attempt to lazy-load a plugin backend into the registry.
+
+    Checks that the actual plugin package is importable before loading
+    the adapter. Returns ``True`` if the backend was loaded and registered.
+    """
+    entry = _PLUGIN_BACKENDS.get(name)
+    if entry is None:
+        return False
+
+    extra, pkg, module_path, class_name = entry
+    try:
+        import importlib
+
+        importlib.import_module(pkg)
+    except ImportError:
+        return False
+
+    try:
+        import importlib
+
+        mod = importlib.import_module(module_path)
+        cls = getattr(mod, class_name)
+        _REGISTRY[name] = cls
+        return True
+    except Exception:
+        return False
+
+
 def list_simulators() -> list[str]:
     """Return the names of all registered simulator backends, sorted."""
 
     return sorted(_REGISTRY)
+
+
+def list_available_backends() -> list[dict[str, str]]:
+    """Return info dicts for plugin backends not yet loaded.
+
+    Each dict has keys ``name``, ``extra``, ``status`` (``"loaded"`` or
+    ``"available"``).
+    """
+    from openlithohub.plugins import list_plugins
+
+    list_plugins()  # ensure plugin status is computed
+    result: list[dict[str, str]] = []
+    for name, (extra, _pkg, _mod, _cls) in sorted(_PLUGIN_BACKENDS.items()):
+        status = "loaded" if name in _REGISTRY else "available"
+        result.append({"name": name, "extra": extra, "status": status})
+    return result
 
 
 def describe_simulators() -> list[tuple[str, type[BaseSimulator]]]:
@@ -51,8 +131,19 @@ def get_simulator(
         config: Optional :class:`SimulatorConfig`.
 
     Raises:
-        KeyError: If ``name`` is not registered.
+        KeyError: If ``name`` is not registered and not a known plugin backend.
     """
+
+    # Try plugin lazy-load first
+    if name not in _REGISTRY and name in _PLUGIN_BACKENDS:
+        extra = _PLUGIN_BACKENDS[name][0]
+        if _try_load_plugin_backend(name):
+            cls = _REGISTRY[name]
+            return cls(config)
+        raise KeyError(
+            f"Backend {name!r} requires the [{extra}] extra.  "
+            f"Install with:  pip install openlithohub[{extra}]"
+        )
 
     try:
         cls = _REGISTRY[name]

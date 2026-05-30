@@ -228,7 +228,8 @@ openlithohub simulate run [OPTIONS] MASK_PATH
 
 Print registered simulator backends. With `--verbose` (`-v`), each line
 also includes the backing class path so you can locate the source
-without grepping `simulators/registry.py`.
+without grepping `simulators/registry.py`. Plugin backends that are
+available but not yet installed show their install extra.
 
 ```bash
 openlithohub simulate list-backends
@@ -238,6 +239,18 @@ openlithohub simulate list-backends --verbose
 | Argument | Type | Description | Default |
 |----------|------|-------------|---------|
 | `--verbose`, `-v` | FLAG | Also print the implementing `module.ClassName`. | off |
+
+**Core backends:** `hopkins`, `calibre`, `tachyon`
+
+**Plugin backends (opt-in):**
+
+| Backend | Extra | Description |
+|---------|-------|-------------|
+| `diffnano_rcwa` | `[diffnano]` | RCWA rigorous EM solver |
+| `diffnano_fdtd2d` | `[diffnano]` | 2D FDTD time-domain EM solver |
+| `diffnano_fdfd2d` | `[diffnano]` | 2D FDFD frequency-domain EM solver |
+| `diffcfd_litho` | `[diffcfd]` | Dill exposure + Mack development |
+| `diffcfd_spin_coat` | `[diffcfd]` | Meyerhofer spin coating solver |
 
 ---
 
