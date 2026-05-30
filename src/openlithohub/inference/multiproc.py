@@ -82,7 +82,7 @@ class SharedStateDictServer:
     # -- internals ----------------------------------------------------------
 
     def _shm_name(self, key: str) -> str:
-        safe = hashlib.md5(key.encode()).hexdigest()[:12]
+        safe = hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()[:12]
         return f"{self._prefix}_{safe}"
 
     def _load(self, model: nn.Module) -> None:
@@ -189,15 +189,15 @@ def _worker_fn(
     import multiprocessing.shared_memory  # ensure submodule loaded in spawn
 
     # Reconstruct meta
-    meta: dict[str, tuple[tuple[int, ...], torch.dtype]] = pickle.loads(meta_serialized)
+    meta: dict[str, tuple[tuple[int, ...], torch.dtype]] = pickle.loads(meta_serialized)  # nosec B301
 
     # Reconstruct model from pickled bytes
-    model: nn.Module = pickle.loads(model_bytes)
+    model: nn.Module = pickle.loads(model_bytes)  # nosec B301
 
     # Load shared weights into the model
     sd: dict[str, torch.Tensor] = {}
     for key, (shape, dtype) in meta.items():
-        shm_name = f"{prefix}_{hashlib.md5(key.encode()).hexdigest()[:12]}"
+        shm_name = f"{prefix}_{hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()[:12]}"
         shm = mp.shared_memory.SharedMemory(name=shm_name, create=False)
         arr = np.ndarray(shape, dtype=_dtype_to_numpy(dtype), buffer=shm.buf)
         sd[key] = torch.from_numpy(np.array(arr)).to(dtype)
@@ -209,7 +209,7 @@ def _worker_fn(
     results: list[tuple[int, bytes]] = []
     with torch.no_grad():
         for idx, np_bytes in input_chunks:
-            arr = pickle.loads(np_bytes)
+            arr = pickle.loads(np_bytes)  # nosec B301
             tensor = torch.from_numpy(arr).float()
             out = model(tensor.to(device))
             results.append((idx, pickle.dumps(out.detach().cpu().numpy())))
@@ -292,7 +292,7 @@ def multiproc_predict(
     outputs: dict[int, torch.Tensor] = {}
     for _ in range(n_workers):
         for idx, out_bytes in result_queue.get():
-            outputs[idx] = torch.from_numpy(pickle.loads(out_bytes))
+            outputs[idx] = torch.from_numpy(pickle.loads(out_bytes))  # nosec B301
 
     for p in workers:
         p.join(timeout=30)
