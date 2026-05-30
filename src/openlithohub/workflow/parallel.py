@@ -89,18 +89,12 @@ def parallel_tile_inference(
     num_gpus: int,
     base_perf_kwargs: dict[str, Any],
     progress_cb: Callable[[], None] | None = None,
-    shared_weights: bool = True,
 ) -> list[tuple[Tile, torch.Tensor]]:
     """Shard tiles round-robin across ``num_gpus`` worker processes.
 
-    When ``shared_weights=True`` (default), the parent loads the model
-    weights into CPU shared memory before spawning. Workers memory-map
-    these weights instead of re-instantiating the model independently,
-    reducing peak memory from O(N × model_size) to approximately
-    O(model_size + N × activation_size).
-
-    When ``shared_weights=False`` or weight sharing fails, falls back to
-    the per-worker re-instantiation path (backward compatible).
+    The parent loads model weights into CPU shared memory before spawning.
+    Workers memory-map these weights, reducing peak memory from
+    O(N x model_size) to approximately O(model_size + N x activation_size).
 
     Falls back to CPU dispatch when fewer than ``num_gpus`` CUDA devices
     are visible — this is what makes CPU-only CI exercise the dispatch
@@ -117,10 +111,8 @@ def parallel_tile_inference(
     # Set up compile cache if torch.compile is active
     compile_cache_dir = _setup_compile_cache()
 
-    # Attempt shared-weight path
-    weight_state: dict[str, torch.Tensor] | None = None
-    if shared_weights:
-        weight_state = _share_weights(model_name, model_kwargs)
+    # Load weights into CPU shared memory
+    weight_state = _share_weights(model_name, model_kwargs)
 
     ctx = mp.get_context("spawn")
     queue: mp.Queue[Any] = ctx.Queue()

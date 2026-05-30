@@ -266,31 +266,21 @@ def test_setup_compile_cache_creates_dir():
 
 
 @_skip_spawn_in_ci
-def test_parallel_shared_weights_matches_no_shared():
-    """Shared-weight path produces identical results to the no-shared path."""
+def test_parallel_shared_weights_correct():
+    """Shared-weight path produces correct results matching sequential."""
     layout = _layout()
     tiles = tile_layout(layout, tile_size=32, overlap=0)
 
-    results_no_shared = parallel_tile_inference(
+    results = parallel_tile_inference(
         model_name="dummy-identity",
         model_kwargs={},
         tiles=tiles,
         num_gpus=2,
         base_perf_kwargs={"device": "cpu", "dtype": torch.float32, "compile_forward": False},
-        shared_weights=False,
     )
 
-    results_shared = parallel_tile_inference(
-        model_name="dummy-identity",
-        model_kwargs={},
-        tiles=tiles,
-        num_gpus=2,
-        base_perf_kwargs={"device": "cpu", "dtype": torch.float32, "compile_forward": False},
-        shared_weights=True,
-    )
-
-    for (_, mask_a), (_, mask_b) in zip(results_no_shared, results_shared, strict=True):
-        assert torch.equal(mask_a, mask_b)
+    for tile, mask in results:
+        assert torch.equal(mask, tile.tensor)
 
 
 def test_parallel_empty_tiles_returns_early():
