@@ -24,7 +24,7 @@ try:
 except ImportError:
     raise SystemExit(
         "matplotlib is required. Install with: pip install matplotlib"
-    )
+    ) from None
 
 NEUTRAL_GRAY = "#888888"
 PALETTE = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B3", "#CCB974", "#64B5CD"]
@@ -64,7 +64,7 @@ def plot_model_quality(records: list[dict], output_dir: Path) -> list[Path]:
         fig.patch.set_alpha(0)
         bars = ax.bar(models, values, color=PALETTE[: len(models)], edgecolor="none", width=0.6)
 
-        for bar, val in zip(bars, values):
+        for bar, val in zip(bars, values, strict=True):
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
                 bar.get_height(),
@@ -111,7 +111,6 @@ def plot_model_quality_grouped(records: list[dict], output_dir: Path) -> Path:
             data[key].append(float(v) if v is not None else float("nan"))
 
     n_models = len(models)
-    n_metrics = len(metric_keys)
     x = list(range(n_models))
     width = 0.25
 
@@ -120,7 +119,7 @@ def plot_model_quality_grouped(records: list[dict], output_dir: Path) -> Path:
 
     for i, (key, label) in enumerate(metric_keys):
         offset = (i - 1) * width
-        bars = ax.bar(
+        ax.bar(
             [xi + offset for xi in x],
             data[key],
             width=width,
@@ -226,7 +225,6 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     is_timing = isinstance(data, dict) and "environment" in data
-    is_quality = isinstance(data, list) or (isinstance(data, dict) and "results" in data and not is_timing)
 
     chart_type = args.type
     if chart_type == "auto":

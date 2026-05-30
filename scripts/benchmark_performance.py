@@ -17,10 +17,10 @@ import gc
 import json
 import platform
 import statistics
-import sys
 import time
-from dataclasses import asdict, dataclass, field
-from typing import Any, Callable
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
+from typing import Any
 
 import torch
 
@@ -112,7 +112,7 @@ def bench_forward_models(sizes: list[int], samples: int) -> list[TimingResult]:
         mask = make_mask(size)
         results.append(
             measure(
-                lambda: simulate_aerial_image(mask, sigma_px=2.0),
+                lambda m=mask: simulate_aerial_image(m, sigma_px=2.0),
                 "forward_gaussian",
                 f"{size}x{size}",
                 warmup=max(3, 20 - size // 64),
@@ -143,7 +143,7 @@ def bench_hopkins(sizes: list[int], samples: int) -> list[TimingResult]:
         )
         results.append(
             measure(
-                lambda: simulate_aerial_image_hopkins(mask, params),
+                lambda m=mask, p=params: simulate_aerial_image_hopkins(m, p),
                 "forward_hopkins",
                 f"{size}x{size}",
                 warmup=max(2, 10 - size // 128),
@@ -165,7 +165,7 @@ def bench_metrics(sizes: list[int], samples: int) -> list[TimingResult]:
 
         results.append(
             measure(
-                lambda: compute_epe(pred, target, pixel_size_nm=8.0),
+                lambda p=pred, t=target: compute_epe(p, t, pixel_size_nm=8.0),
                 "metric_epe",
                 f"{size}x{size}",
                 warmup=5,
@@ -174,7 +174,7 @@ def bench_metrics(sizes: list[int], samples: int) -> list[TimingResult]:
         )
         results.append(
             measure(
-                lambda: compute_pvband(pred, pixel_size_nm=8.0),
+                lambda p=pred: compute_pvband(p, pixel_size_nm=8.0),
                 "metric_pvband",
                 f"{size}x{size}",
                 warmup=3,
@@ -189,8 +189,7 @@ def bench_models(samples: int) -> list[TimingResult]:
     import openlithohub.models.levelset_ilt  # noqa: F401
     import openlithohub.models.neural_ilt  # noqa: F401
     import openlithohub.models.rule_based_opc  # noqa: F401
-
-    from openlithohub.models.registry import registry
+    from openlithohub.models.registry import registry  # noqa: F401
 
     design = make_mask(64)
     configs = [
@@ -205,10 +204,10 @@ def bench_models(samples: int) -> list[TimingResult]:
         try:
             model = registry.get(name, **kwargs)
             model.setup()
-        except Exception:
+        except Exception:  # noqa: S112
             continue
         r = measure(
-            lambda: model.predict(design),
+            lambda m=model: m.predict(design),
             f"model_{name}",
             "64x64",
             warmup=2,

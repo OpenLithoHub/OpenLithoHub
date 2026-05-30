@@ -91,13 +91,14 @@ def run(
     # Resolve layer number from layer name
     layer_tuple = getattr(pdk_layers, layer, None)
     if layer_tuple is None:
-        available = [
+        available_layers = [
             f.name
             for f in pdk_layers.__dataclass_fields__.values()
             if getattr(pdk_layers, f.name, None) is not None
         ]
         console.print(
-            f"[red]Error:[/red] Layer '{layer}' not in PDK. Available: {', '.join(available)}"
+            f"[red]Error:[/red] Layer '{layer}' not in PDK. "
+            f"Available: {', '.join(available_layers)}"
         )
         raise typer.Exit(1)
 

@@ -149,8 +149,6 @@ class ResistCalibration:
         # params.threshold, params.resist_diffusion_nm, params.quencher
     """
 
-    from dataclasses import dataclass as _dataclass
-
     @staticmethod
     def fit(
         anchors: list[tuple[float, float]],
@@ -188,8 +186,8 @@ class ResistCalibration:
                         acid = aerial_val
                         if df > 0.0:
                             sigma_px = df / max(pixel_size_nm, 1e-6)
-                            acid = acid * min(1.0, 1.0 / (1.0 + sigma_px * 0.1))
-                        acid = max(0.0, acid - qu)
+                            acid = float(acid * min(1.0, 1.0 / (1.0 + sigma_px * 0.1)))
+                        acid = float(max(0.0, acid - qu))
                         resist = 1.0 if acid >= th else 0.0
                         cd_nm = resist * target_cd
                         error += (cd_nm - target_cd) ** 2
