@@ -135,7 +135,7 @@ ignore = ["B008", "B027", "A002"]
 [tool.ruff.lint.per-file-ignores]
 # Tests legitimately use `assert`, hard-coded localhost URLs, and tmp_path —
 # silence S101 / S104 / S105 / S106 / S108 / S311 in the test tree.
-"tests/**" = ["S101", "S104", "S105", "S106", "S108", "S311"]
+"tests/**" = ["S101", "S104", "S105", "S106", "S108", "S311", "S603", "S607"]
 # Scripts may legitimately spawn subprocesses with shell-style strings the
 # user explicitly authored.
 "scripts/**" = ["S101", "S603", "S607", "S404"]

@@ -99,9 +99,7 @@ class CalibreSimulator(BaseSimulator):
 
         status = self.preflight()
         if not status.ok:
-            raise ToolchainError(
-                "Calibre preflight failed: " + "; ".join(status.messages)
-            )
+            raise ToolchainError("Calibre preflight failed: " + "; ".join(status.messages))
 
         with tempfile.TemporaryDirectory(prefix="calibre_") as tmpdir:
             mask_file = Path(tmpdir) / "mask.txt"
@@ -111,8 +109,7 @@ class CalibreSimulator(BaseSimulator):
             run_subprocess(cmd, cwd=tmpdir)
             if not output_file.exists():
                 raise ToolchainError(
-                    "Calibre completed but produced no output file. "
-                    "Check runset configuration."
+                    "Calibre completed but produced no output file. Check runset configuration."
                 )
             aerial = read_aerial_image(output_file, spatial_shape)
 
@@ -133,14 +130,17 @@ class CalibreSimulator(BaseSimulator):
         return [
             binary,
             "-batch",
-            "-runset", runset,
-            "-mask", str(mask_file),
-            "-output", str(output_file),
+            "-runset",
+            runset,
+            "-mask",
+            str(mask_file),
+            "-output",
+            str(output_file),
         ]
 
     def _mock_simulate(self, mask: torch.Tensor) -> SimulatorResult:
         """Produce a synthetic aerial image using blur + edge erosion."""
-        import torch.nn.functional as F
+        import torch.nn.functional as functional
 
         mask_2d = mask.detach().cpu().float()
         if mask_2d.ndim == 4:
@@ -151,13 +151,13 @@ class CalibreSimulator(BaseSimulator):
         kernel_size = 7
         sigma = 1.5
         coords = torch.arange(kernel_size, dtype=torch.float32) - kernel_size // 2
-        gauss_1d = torch.exp(-coords**2 / (2 * sigma**2))
+        gauss_1d = torch.exp(-(coords**2) / (2 * sigma**2))
         gauss_1d = gauss_1d / gauss_1d.sum()
         kernel = gauss_1d[:, None] * gauss_1d[None, :]
         kernel = kernel.unsqueeze(0).unsqueeze(0)
 
         padded = mask_2d.unsqueeze(0).unsqueeze(0)
-        aerial = F.conv2d(padded, kernel, padding=kernel_size // 2).squeeze(0).squeeze(0)
+        aerial = functional.conv2d(padded, kernel, padding=kernel_size // 2).squeeze(0).squeeze(0)
 
         aerial = aerial * self.config.dose
         aerial = aerial.clamp(0.0, 1.0)

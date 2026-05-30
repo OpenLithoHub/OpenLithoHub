@@ -1,3 +1,4 @@
+# ruff: noqa: S603
 """Commercial simulator adapter protocol and shared utilities.
 
 Defines :class:`CommercialSimulatorAdapter`, the protocol that every
@@ -11,15 +12,13 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import tempfile
-from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import torch
 
-from openlithohub.simulators.base import BaseSimulator, SimulatorConfig, SimulatorResult
+from openlithohub.simulators.base import SimulatorResult
 
 
 class ToolchainError(RuntimeError):
@@ -50,8 +49,7 @@ class CommercialSimulatorAdapter(Protocol):
         """Check that the toolchain binary exists and a license is reachable."""
         ...
 
-    def simulate(self, mask: torch.Tensor) -> SimulatorResult:
-        ...
+    def simulate(self, mask: torch.Tensor) -> SimulatorResult: ...
 
 
 def _find_binary(name: str, search_dirs: tuple[str, ...] = ()) -> str | None:
@@ -141,6 +139,4 @@ def run_subprocess(
     except subprocess.TimeoutExpired as exc:
         raise ToolchainError(f"Simulator timed out after {timeout}s: {cmd[0]}") from exc
     except subprocess.CalledProcessError as exc:
-        raise ToolchainError(
-            f"Simulator exited with code {exc.returncode}:\n{exc.stderr}"
-        ) from exc
+        raise ToolchainError(f"Simulator exited with code {exc.returncode}:\n{exc.stderr}") from exc

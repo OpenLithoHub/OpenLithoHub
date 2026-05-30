@@ -10,9 +10,7 @@ Verifies that:
 
 from __future__ import annotations
 
-import ast
 import subprocess
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -34,9 +32,6 @@ class TestPluginGatewayAccessibility:
 
     def test_plugin_init_exports(self):
         from openlithohub.plugins import (
-            LithoPlugin,
-            OptionalPluginError,
-            PluginManifest,
             list_plugins,
             optional_import,
             register_plugin,
@@ -91,8 +86,8 @@ class TestPluginGatewayAccessibility:
 
     def test_hopkins_simulator_uses_plugin_for_diffnano_resist(self):
         """Verify HopkinsSimulator delegates to the plugin for diffnano resist."""
-        from openlithohub.simulators.hopkins_sim import HopkinsSimulator
         from openlithohub.simulators.base import SimulatorConfig
+        from openlithohub.simulators.hopkins_sim import HopkinsSimulator
 
         cfg = SimulatorConfig(resist_backend="diffnano")
         sim = HopkinsSimulator(cfg)
@@ -187,7 +182,11 @@ class TestConstantsSingleSource:
         assert p.pixel_size_nm == const.PIXEL_SIZE_NM_DEFAULT
 
     def test_plugin_defaults_match_constants(self):
-        from openlithohub.plugins.diffcfd_process import LITHO_DEFAULTS, SPIN_COAT_DEFAULTS, PROCESS_DEFAULTS
+        from openlithohub.plugins.diffcfd_process import (
+            LITHO_DEFAULTS,
+            PROCESS_DEFAULTS,
+            SPIN_COAT_DEFAULTS,
+        )
 
         assert LITHO_DEFAULTS is const.DIFFCFD_LITHO_DEFAULTS
         assert SPIN_COAT_DEFAULTS is const.DIFFCFD_SPIN_COAT_DEFAULTS
@@ -206,9 +205,8 @@ class TestConstantsSingleSource:
             text=True,
             cwd=str(_SRC.parent.parent),
         )
-        hits = [line for line in result.stdout.strip().splitlines()
-                if "_constants.py" not in line]
-        assert hits == [], f"Hardcoded 193.0 found outside _constants.py:\n" + "\n".join(hits)
+        hits = [line for line in result.stdout.strip().splitlines() if "_constants.py" not in line]
+        assert hits == [], "Hardcoded 193.0 found outside _constants.py:\n" + "\n".join(hits)
 
     def test_no_bare_wavelength_13_5_in_source(self):
         """Grep source files for hardcoded 13.5 wavelength literals."""
@@ -218,9 +216,8 @@ class TestConstantsSingleSource:
             text=True,
             cwd=str(_SRC.parent.parent),
         )
-        hits = [line for line in result.stdout.strip().splitlines()
-                if "_constants.py" not in line]
-        assert hits == [], f"Hardcoded 13.5 found outside _constants.py:\n" + "\n".join(hits)
+        hits = [line for line in result.stdout.strip().splitlines() if "_constants.py" not in line]
+        assert hits == [], "Hardcoded 13.5 found outside _constants.py:\n" + "\n".join(hits)
 
     def test_no_bare_na_1_35_in_source(self):
         """Grep source files for hardcoded NA=1.35 literals."""
@@ -230,9 +227,8 @@ class TestConstantsSingleSource:
             text=True,
             cwd=str(_SRC.parent.parent),
         )
-        hits = [line for line in result.stdout.strip().splitlines()
-                if "_constants.py" not in line]
-        assert hits == [], f"Hardcoded 1.35 found outside _constants.py:\n" + "\n".join(hits)
+        hits = [line for line in result.stdout.strip().splitlines() if "_constants.py" not in line]
+        assert hits == [], "Hardcoded 1.35 found outside _constants.py:\n" + "\n".join(hits)
 
     def test_no_bare_threshold_0_225_in_source(self):
         """Grep source files for hardcoded threshold=0.225 literals (not comments)."""
@@ -242,22 +238,16 @@ class TestConstantsSingleSource:
             text=True,
             cwd=str(_SRC.parent.parent),
         )
-        hits = [
-            line for line in result.stdout.strip().splitlines()
-            if "_constants.py" not in line
-            and "# " not in line.split("= 0.225")[0].split("#")[0]
-            or ("= 0.225" in line and not line.strip().startswith("#"))
-        ]
-        # Re-filter: only lines where the assignment is in actual code, not a comment
         code_hits = []
         for line in result.stdout.strip().splitlines():
             if "_constants.py" in line:
                 continue
-            # Get the part before any # comment
             code_part = line.split("#")[0] if "#" in line else line
             if "= 0.225" in code_part:
                 code_hits.append(line)
-        assert code_hits == [], f"Hardcoded 0.225 found outside _constants.py:\n" + "\n".join(code_hits)
+        assert code_hits == [], "Hardcoded 0.225 found outside _constants.py:\n" + "\n".join(
+            code_hits
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -271,9 +261,12 @@ class TestPluginLazyLoading:
     def test_plugin_backends_not_in_base_registry(self):
         from openlithohub.simulators.registry import _REGISTRY
 
-        plugin_names = {
-            "diffnano_rcwa", "diffnano_fdtd2d", "diffnano_fdfd2d",
-            "diffcfd_litho", "diffcfd_spin_coat",
+        _plugin_names = {
+            "diffnano_rcwa",
+            "diffnano_fdtd2d",
+            "diffnano_fdfd2d",
+            "diffcfd_litho",
+            "diffcfd_spin_coat",
         }
         # Plugin backends should not be in the core registry at import time
         # (unless they were previously loaded by another test).
@@ -343,7 +336,8 @@ class TestNoDirectCrossDomainImports:
     def test_no_direct_imports_outside_plugins(self, pkg: str):
         result = subprocess.run(
             [
-                "grep", "-rn",
+                "grep",
+                "-rn",
                 f"from {pkg}",
                 "src/openlithohub/",
                 "--include=*.py",
@@ -352,16 +346,8 @@ class TestNoDirectCrossDomainImports:
             text=True,
             cwd=str(_SRC.parent.parent),
         )
-        hits = [
-            line for line in result.stdout.strip().splitlines()
-            if "plugins/" in line or f"plugins{chr(92)}" in line
-        ]
         # Only plugin modules should have direct imports of diffcfd/diffnano
-        non_plugin = [
-            line for line in result.stdout.strip().splitlines()
-            if "plugins/" not in line
-        ]
+        non_plugin = [line for line in result.stdout.strip().splitlines() if "plugins/" not in line]
         assert non_plugin == [], (
-            f"Direct `from {pkg}` import found outside plugins/:\n"
-            + "\n".join(non_plugin)
+            f"Direct `from {pkg}` import found outside plugins/:\n" + "\n".join(non_plugin)
         )

@@ -100,9 +100,7 @@ class TachyonSimulator(BaseSimulator):
 
         status = self.preflight()
         if not status.ok:
-            raise ToolchainError(
-                "Tachyon preflight failed: " + "; ".join(status.messages)
-            )
+            raise ToolchainError("Tachyon preflight failed: " + "; ".join(status.messages))
 
         with tempfile.TemporaryDirectory(prefix="tachyon_") as tmpdir:
             mask_file = Path(tmpdir) / "mask.txt"
@@ -112,8 +110,7 @@ class TachyonSimulator(BaseSimulator):
             run_subprocess(cmd, cwd=tmpdir)
             if not output_file.exists():
                 raise ToolchainError(
-                    "Tachyon completed but produced no output file. "
-                    "Check recipe configuration."
+                    "Tachyon completed but produced no output file. Check recipe configuration."
                 )
             aerial = read_aerial_image(output_file, spatial_shape)
 
@@ -133,14 +130,17 @@ class TachyonSimulator(BaseSimulator):
         recipe = extra["recipe"]
         return [
             binary,
-            "-recipe", recipe,
-            "-mask", str(mask_file),
-            "-output", str(output_file),
+            "-recipe",
+            recipe,
+            "-mask",
+            str(mask_file),
+            "-output",
+            str(output_file),
         ]
 
     def _mock_simulate(self, mask: torch.Tensor) -> SimulatorResult:
         """Produce a synthetic aerial image using a simple Gaussian blur."""
-        import torch.nn.functional as F
+        import torch.nn.functional as functional
 
         mask_2d = mask.detach().cpu().float()
         if mask_2d.ndim == 4:
@@ -151,13 +151,13 @@ class TachyonSimulator(BaseSimulator):
         kernel_size = 9
         sigma = 2.0
         coords = torch.arange(kernel_size, dtype=torch.float32) - kernel_size // 2
-        gauss_1d = torch.exp(-coords**2 / (2 * sigma**2))
+        gauss_1d = torch.exp(-(coords**2) / (2 * sigma**2))
         gauss_1d = gauss_1d / gauss_1d.sum()
         kernel = gauss_1d[:, None] * gauss_1d[None, :]
         kernel = kernel.unsqueeze(0).unsqueeze(0)
 
         padded = mask_2d.unsqueeze(0).unsqueeze(0)
-        aerial = F.conv2d(padded, kernel, padding=kernel_size // 2).squeeze(0).squeeze(0)
+        aerial = functional.conv2d(padded, kernel, padding=kernel_size // 2).squeeze(0).squeeze(0)
 
         # Clamp to [0, 1] and apply dose
         aerial = aerial * self.config.dose

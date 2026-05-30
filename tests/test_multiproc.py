@@ -15,8 +15,8 @@ from openlithohub.inference.multiproc import (
     multiproc_predict,
 )
 
-
 # -- tiny model for testing ------------------------------------------------
+
 
 class _TinyModel(nn.Module):
     def __init__(self) -> None:
@@ -29,6 +29,7 @@ class _TinyModel(nn.Module):
 
 # -- SharedStateDictServer tests -------------------------------------------
 
+
 class TestSharedStateDictServer:
     def test_shared_memory_matches_original(self) -> None:
         model = _TinyModel()
@@ -38,9 +39,7 @@ class TestSharedStateDictServer:
         shared_sd = server.state_dict_for_worker()
 
         for key in original_sd:
-            assert torch.allclose(original_sd[key], shared_sd[key]), (
-                f"Mismatch for {key}"
-            )
+            assert torch.allclose(original_sd[key], shared_sd[key]), f"Mismatch for {key}"
         server.cleanup()
 
     def test_cleanup_removes_shared_memory(self) -> None:
@@ -50,6 +49,7 @@ class TestSharedStateDictServer:
         server.cleanup()
         # After cleanup, shared memory blocks should be gone
         import multiprocessing.shared_memory as sm
+
         for name in shm_names:
             with pytest.raises(FileNotFoundError):
                 sm.SharedMemory(name=name)
@@ -57,19 +57,20 @@ class TestSharedStateDictServer:
 
 # -- CompiledCache tests ---------------------------------------------------
 
+
 class TestCompiledCache:
     def test_cache_hit_on_second_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             cache = CompiledCache(cache_dir=tmp)
             model1 = _TinyModel()
-            compiled1 = cache.get_or_compile(model1)
+            cache.get_or_compile(model1)
             meta_path = Path(tmp) / cache._model_hash(model1) / "meta.json"
             assert meta_path.exists(), "Cache entry should exist after first compile"
 
             # Second call with same weights should be a cache hit
             model2 = _TinyModel()
             model2.load_state_dict(model1.state_dict())
-            compiled2 = cache.get_or_compile(model2)
+            cache.get_or_compile(model2)
             assert cache._model_hash(model1) == cache._model_hash(model2)
 
     def test_cache_miss_for_different_weights(self) -> None:
@@ -98,6 +99,7 @@ class TestCompiledCache:
 
 # -- multiproc_predict tests -----------------------------------------------
 
+
 class TestMultiprocPredict:
     def test_single_worker_matches_serial(self) -> None:
         """Single-worker output must match serial execution."""
@@ -114,7 +116,7 @@ class TestMultiprocPredict:
         mp_out = multiproc_predict(model, inputs, n_workers=1)
 
         assert len(mp_out) == len(serial_out)
-        for s, m in zip(serial_out, mp_out):
+        for s, m in zip(serial_out, mp_out, strict=True):
             assert torch.allclose(s, m, atol=1e-5), (
                 f"Single-worker output diverged: max diff={torch.max(torch.abs(s - m))}"
             )
@@ -148,5 +150,5 @@ class TestMultiprocPredict:
         out_3 = multiproc_predict(model, inputs, n_workers=3)
 
         assert len(out_1) == len(out_3) == 6
-        for i, (a, b) in enumerate(zip(out_1, out_3)):
+        for i, (a, b) in enumerate(zip(out_1, out_3, strict=True)):
             assert torch.allclose(a, b, atol=1e-5), f"Output {i} mismatch"

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import torch
 
-from openlithohub._constants import ACID_DIFFUSION_LENGTH_NM, NUM_KERNELS_DEFAULT, POLE_OPENING_DEG_DEFAULT
+from openlithohub._constants import (
+    ACID_DIFFUSION_LENGTH_NM,
+    NUM_KERNELS_DEFAULT,
+    POLE_OPENING_DEG_DEFAULT,
+)
 from openlithohub._utils.forward_model import _gaussian_diffuse
 from openlithohub._utils.hopkins import HopkinsParams, simulate_aerial_image_hopkins
 from openlithohub.simulators.base import BaseSimulator, SimulatorConfig, SimulatorResult

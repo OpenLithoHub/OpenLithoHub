@@ -283,44 +283,38 @@ class TestMockMode:
         assert result.resist is not None
 
     def test_mock_aerial_values_in_range(self) -> None:
-        sim = TachyonSimulator(
-            SimulatorConfig(extra={"mock_mode": True})
-        )
+        sim = TachyonSimulator(SimulatorConfig(extra={"mock_mode": True}))
         result = sim.simulate(_make_mask())
         assert result.aerial.min() >= 0.0
         assert result.aerial.max() <= 1.0
 
     def test_mock_resist_is_binary(self) -> None:
-        sim = CalibreSimulator(
-            SimulatorConfig(extra={"mock_mode": True})
-        )
+        sim = CalibreSimulator(SimulatorConfig(extra={"mock_mode": True}))
         result = sim.simulate(_make_mask())
         assert torch.all((result.resist == 0) | (result.resist == 1))
 
 
 class TestPreflight:
     def test_tachyon_mock_preflight_passes(self) -> None:
-        sim = TachyonSimulator(
-            SimulatorConfig(extra={"mock_mode": True})
-        )
+        sim = TachyonSimulator(SimulatorConfig(extra={"mock_mode": True}))
         status = sim.preflight()
         assert status.ok is True
         assert status.tool_found is True
         assert status.license_ok is True
 
     def test_calibre_mock_preflight_passes(self) -> None:
-        sim = CalibreSimulator(
-            SimulatorConfig(extra={"mock_mode": True})
-        )
+        sim = CalibreSimulator(SimulatorConfig(extra={"mock_mode": True}))
         status = sim.preflight()
         assert status.ok is True
 
     def test_tachyon_real_preflight_fails_without_tool(self) -> None:
         sim = TachyonSimulator(
-            SimulatorConfig(extra={
-                "tachyon_home": "/nonexistent/tachyon",
-                "recipe": "x.tcl",
-            })
+            SimulatorConfig(
+                extra={
+                    "tachyon_home": "/nonexistent/tachyon",
+                    "recipe": "x.tcl",
+                }
+            )
         )
         status = sim.preflight()
         assert status.ok is False
@@ -328,10 +322,12 @@ class TestPreflight:
 
     def test_calibre_real_preflight_fails_without_tool(self) -> None:
         sim = CalibreSimulator(
-            SimulatorConfig(extra={
-                "calibre_home": "/nonexistent/calibre",
-                "runset": "x.svrf",
-            })
+            SimulatorConfig(
+                extra={
+                    "calibre_home": "/nonexistent/calibre",
+                    "runset": "x.svrf",
+                }
+            )
         )
         status = sim.preflight()
         assert status.ok is False
@@ -341,11 +337,13 @@ class TestPreflight:
 class TestProtocolConformance:
     def test_tachyon_satisfies_protocol(self) -> None:
         from openlithohub.simulators.commercial import CommercialSimulatorAdapter
+
         sim = TachyonSimulator(SimulatorConfig(extra={"mock_mode": True}))
         assert isinstance(sim, CommercialSimulatorAdapter)
 
     def test_calibre_satisfies_protocol(self) -> None:
         from openlithohub.simulators.commercial import CommercialSimulatorAdapter
+
         sim = CalibreSimulator(SimulatorConfig(extra={"mock_mode": True}))
         assert isinstance(sim, CommercialSimulatorAdapter)
 

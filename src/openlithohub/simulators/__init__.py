@@ -37,6 +37,11 @@ from openlithohub.simulators.base import (
     SimulatorResult,
 )
 from openlithohub.simulators.calibre import CalibreSimulator
+from openlithohub.simulators.commercial import (
+    CommercialSimulatorAdapter,
+    PreflightStatus,
+    ToolchainError,
+)
 from openlithohub.simulators.hopkins_sim import HopkinsSimulator
 from openlithohub.simulators.registry import (
     describe_simulators,
@@ -44,11 +49,6 @@ from openlithohub.simulators.registry import (
     list_available_backends,
     list_simulators,
     register_simulator,
-)
-from openlithohub.simulators.commercial import (
-    CommercialSimulatorAdapter,
-    PreflightStatus,
-    ToolchainError,
 )
 from openlithohub.simulators.tachyon import TachyonSimulator
 

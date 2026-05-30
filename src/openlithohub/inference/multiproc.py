@@ -18,8 +18,9 @@ import os
 import pickle
 import shutil
 import time
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -31,6 +32,7 @@ __all__ = ["SharedStateDictServer", "CompiledCache", "multiproc_predict"]
 # ---------------------------------------------------------------------------
 # Shared memory state dict server
 # ---------------------------------------------------------------------------
+
 
 class SharedStateDictServer:
     """Load an ``nn.Module`` state dict into POSIX shared memory.
@@ -91,7 +93,9 @@ class SharedStateDictServer:
             np_arr = tensor.detach().cpu().numpy()
             nbytes = int(np_arr.nbytes)
             shm = mp.shared_memory.SharedMemory(
-                name=self._shm_name(key), create=True, size=nbytes,
+                name=self._shm_name(key),
+                create=True,
+                size=nbytes,
             )
             dest = np.ndarray(np_arr.shape, dtype=np_arr.dtype, buffer=shm.buf)
             dest[:] = np_arr
@@ -109,6 +113,7 @@ def _dtype_to_numpy(dtype: torch.dtype) -> np.dtype:
 # ---------------------------------------------------------------------------
 # Compiled model cache
 # ---------------------------------------------------------------------------
+
 
 class CompiledCache:
     """Disk cache for ``torch.compile`` artifacts.
@@ -176,6 +181,7 @@ class CompiledCache:
 # Worker & dispatch
 # ---------------------------------------------------------------------------
 
+
 def _worker_fn(
     worker_id: int,
     prefix: str,
@@ -186,13 +192,12 @@ def _worker_fn(
     device: str,
 ) -> None:
     """Worker process: reconstruct model from shared memory, run inference."""
-    import multiprocessing.shared_memory  # ensure submodule loaded in spawn
 
     # Reconstruct meta
-    meta: dict[str, tuple[tuple[int, ...], torch.dtype]] = pickle.loads(meta_serialized)  # nosec B301
+    meta: dict[str, tuple[tuple[int, ...], torch.dtype]] = pickle.loads(meta_serialized)  # noqa: S301  # nosec B301
 
     # Reconstruct model from pickled bytes
-    model: nn.Module = pickle.loads(model_bytes)  # nosec B301
+    model: nn.Module = pickle.loads(model_bytes)  # noqa: S301  # nosec B301
 
     # Load shared weights into the model
     sd: dict[str, torch.Tensor] = {}
@@ -209,7 +214,7 @@ def _worker_fn(
     results: list[tuple[int, bytes]] = []
     with torch.no_grad():
         for idx, np_bytes in input_chunks:
-            arr = pickle.loads(np_bytes)  # nosec B301
+            arr = pickle.loads(np_bytes)  # noqa: S301  # nosec B301
             tensor = torch.from_numpy(arr).float()
             out = model(tensor.to(device))
             results.append((idx, pickle.dumps(out.detach().cpu().numpy())))
@@ -246,11 +251,7 @@ def multiproc_predict(
     if n_workers < 1:
         raise ValueError("n_workers must be >= 1")
 
-    # Accept either a model instance or a factory
-    if isinstance(model_fn, nn.Module):
-        model = model_fn
-    else:
-        model = model_fn()
+    model = model_fn if isinstance(model_fn, nn.Module) else model_fn()
 
     # For single worker, just run in-process
     if n_workers == 1:
@@ -268,9 +269,7 @@ def multiproc_predict(
 
     # Distribute inputs across workers -- serialize as numpy bytes
     # to avoid pickling torch tensors through multiprocessing Queue
-    chunks: list[list[tuple[int, bytes]]] = [
-        [] for _ in range(n_workers)
-    ]
+    chunks: list[list[tuple[int, bytes]]] = [[] for _ in range(n_workers)]
     for i, t in enumerate(inputs):
         chunks[i % n_workers].append((i, pickle.dumps(t.detach().cpu().numpy())))
 
@@ -292,7 +291,7 @@ def multiproc_predict(
     outputs: dict[int, torch.Tensor] = {}
     for _ in range(n_workers):
         for idx, out_bytes in result_queue.get():
-            outputs[idx] = torch.from_numpy(pickle.loads(out_bytes))  # nosec B301
+            outputs[idx] = torch.from_numpy(pickle.loads(out_bytes))  # noqa: S301  # nosec B301
 
     for p in workers:
         p.join(timeout=30)
