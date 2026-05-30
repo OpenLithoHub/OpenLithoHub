@@ -123,8 +123,11 @@ class TestApplyResistThresholdDiffusion:
         aerial = torch.rand(64, 64)
         legacy = (aerial >= 0.5).float()
         with_diffusion = apply_resist_threshold(
-            aerial, threshold=0.5,
-            resist_diffusion_nm=0.0, pixel_size_nm=1.0, quencher=0.0,
+            aerial,
+            threshold=0.5,
+            resist_diffusion_nm=0.0,
+            pixel_size_nm=1.0,
+            quencher=0.0,
         )
         assert torch.equal(legacy, with_diffusion)
 
@@ -133,8 +136,10 @@ class TestApplyResistThresholdDiffusion:
         aerial[20:44, 20:44] = 1.0
         no_diff = apply_resist_threshold(aerial, threshold=0.5)
         with_diff = apply_resist_threshold(
-            aerial, threshold=0.5,
-            resist_diffusion_nm=3.0, pixel_size_nm=1.0,
+            aerial,
+            threshold=0.5,
+            resist_diffusion_nm=3.0,
+            pixel_size_nm=1.0,
         )
         assert not torch.equal(no_diff, with_diff)
 
@@ -147,12 +152,16 @@ class TestApplyResistThresholdDiffusion:
     def test_deterministic_reproducibility(self) -> None:
         aerial = torch.rand(64, 64)
         r1 = apply_resist_threshold(
-            aerial, threshold=0.5,
-            resist_diffusion_nm=5.0, pixel_size_nm=1.0,
+            aerial,
+            threshold=0.5,
+            resist_diffusion_nm=5.0,
+            pixel_size_nm=1.0,
         )
         r2 = apply_resist_threshold(
-            aerial, threshold=0.5,
-            resist_diffusion_nm=5.0, pixel_size_nm=1.0,
+            aerial,
+            threshold=0.5,
+            resist_diffusion_nm=5.0,
+            pixel_size_nm=1.0,
         )
         assert torch.equal(r1, r2)
 
@@ -161,8 +170,10 @@ class TestApplyResistThresholdDiffusion:
         aerial[20:44, 20:44] = 1.0
         resist_no_diff = apply_resist_threshold(aerial, threshold=0.5)
         resist_with_diff = apply_resist_threshold(
-            aerial, threshold=0.5,
-            resist_diffusion_nm=5.0, pixel_size_nm=1.0,
+            aerial,
+            threshold=0.5,
+            resist_diffusion_nm=5.0,
+            pixel_size_nm=1.0,
         )
         # Diffusion spreads energy, so a sharp block loses foreground at
         # edges — the resist area changes (shrinks in this case).
@@ -171,8 +182,10 @@ class TestApplyResistThresholdDiffusion:
     def test_output_is_binary(self) -> None:
         aerial = torch.rand(32, 32)
         resist = apply_resist_threshold(
-            aerial, threshold=0.5,
-            resist_diffusion_nm=3.0, pixel_size_nm=1.0,
+            aerial,
+            threshold=0.5,
+            resist_diffusion_nm=3.0,
+            pixel_size_nm=1.0,
         )
         unique_vals = resist.unique()
         assert all(v in [0.0, 1.0] for v in unique_vals)

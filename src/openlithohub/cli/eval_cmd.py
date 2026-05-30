@@ -308,7 +308,8 @@ def run(
 
             if pvband_check:
                 pv = compute_pvband(
-                    result.mask, pixel_size_nm=pixel_nm,
+                    result.mask,
+                    pixel_size_nm=pixel_nm,
                     resist_diffusion_nm=resist_diffusion_nm,
                     quencher=quencher,
                 )
@@ -561,7 +562,8 @@ def _is_unweighted_metric(key: str) -> bool:
 
 
 def _build_forward_simulator(
-    node: str, pixel_nm: float,
+    node: str,
+    pixel_nm: float,
     resist_diffusion_nm: float = 0.0,
     quencher: float = 0.0,
 ) -> Any:
@@ -592,11 +594,13 @@ def _build_forward_simulator(
             quencher=quencher,
         )
         return HopkinsSimulator(cfg)
-    return HopkinsSimulator(SimulatorConfig(
-        pixel_size_nm=pixel_nm,
-        resist_diffusion_nm=resist_diffusion_nm,
-        quencher=quencher,
-    ))
+    return HopkinsSimulator(
+        SimulatorConfig(
+            pixel_size_nm=pixel_nm,
+            resist_diffusion_nm=resist_diffusion_nm,
+            quencher=quencher,
+        )
+    )
 
 
 def _build_perf_kwargs(device: str, dtype: str, compile_forward: bool) -> dict[str, Any]:

@@ -15,8 +15,8 @@ from openlithohub.data import asap7, freepdk45, orfs
 from openlithohub.data._layers import (
     LAYERS,
     PdkLayers,
-    load_layermap,
     list_pkds,
+    load_layermap,
     register_layermap,
 )
 

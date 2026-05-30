@@ -74,13 +74,23 @@ def compute_pvband(
 
     if simulator is None:
         outer_envelope, inner_envelope = _gaussian_pw_envelopes(
-            binary, nominal_dose, dose_variation, defocus_range_nm, pixel_size_nm,
-            resist_diffusion_nm=resist_diffusion_nm, quencher=quencher,
+            binary,
+            nominal_dose,
+            dose_variation,
+            defocus_range_nm,
+            pixel_size_nm,
+            resist_diffusion_nm=resist_diffusion_nm,
+            quencher=quencher,
         )
     else:
         outer_envelope, inner_envelope = _simulator_pw_envelopes(
-            binary, simulator, nominal_dose, dose_variation, defocus_range_nm,
-            resist_diffusion_nm=resist_diffusion_nm, quencher=quencher,
+            binary,
+            simulator,
+            nominal_dose,
+            dose_variation,
+            defocus_range_nm,
+            resist_diffusion_nm=resist_diffusion_nm,
+            quencher=quencher,
         )
 
     band = (outer_envelope - inner_envelope).clamp(min=0.0)
@@ -130,7 +140,8 @@ def _gaussian_pw_envelopes(
     for dose, sigma in corners:
         aerial = simulate_aerial_image(binary, sigma_px=sigma, dose=dose)
         resist = apply_resist_threshold(
-            aerial, threshold=0.5,
+            aerial,
+            threshold=0.5,
             resist_diffusion_nm=resist_diffusion_nm,
             pixel_size_nm=pixel_size_nm,
             quencher=quencher,
@@ -186,7 +197,8 @@ def _simulator_pw_envelopes(
         else:
             threshold = corner_cfg.threshold
             resist = apply_resist_threshold(
-                result.aerial, threshold=threshold,
+                result.aerial,
+                threshold=threshold,
                 resist_diffusion_nm=resist_diffusion_nm,
                 pixel_size_nm=simulator.config.pixel_size_nm,
                 quencher=quencher,

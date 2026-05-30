@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import torch
 
-from openlithohub._utils.hopkins import HopkinsParams, simulate_aerial_image_hopkins
 from openlithohub._utils.forward_model import _gaussian_diffuse
+from openlithohub._utils.hopkins import HopkinsParams, simulate_aerial_image_hopkins
 from openlithohub.simulators.base import BaseSimulator, SimulatorConfig, SimulatorResult
 
 

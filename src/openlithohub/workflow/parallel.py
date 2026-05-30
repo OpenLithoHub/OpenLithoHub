@@ -86,7 +86,9 @@ def parallel_tile_inference(
                     dead = [p for p in processes if not p.is_alive()]
                     if dead:
                         codes = ", ".join(
-                            f"rank={i} exit={p.exitcode}" for i, p in enumerate(processes) if not p.is_alive()
+                            f"rank={i} exit={p.exitcode}"
+                            for i, p in enumerate(processes)
+                            if not p.is_alive()
                         )
                         raise RuntimeError(
                             f"parallel_tile_inference: worker(s) exited ({codes}), "

@@ -292,19 +292,28 @@ class OpenILTModel(LithographyModel):
             )
 
             resist_nom = apply_differentiable_resist(
-                aerial_nom.float(), threshold=0.5, steepness=self._resist_steepness,
+                aerial_nom.float(),
+                threshold=0.5,
+                steepness=self._resist_steepness,
                 resist_diffusion_nm=self._resist_diffusion_nm,
-                pixel_size_nm=self._pixel_size_nm, quencher=self._quencher,
+                pixel_size_nm=self._pixel_size_nm,
+                quencher=self._quencher,
             )
             resist_max = apply_differentiable_resist(
-                aerial_max.float(), threshold=0.5, steepness=self._resist_steepness,
+                aerial_max.float(),
+                threshold=0.5,
+                steepness=self._resist_steepness,
                 resist_diffusion_nm=self._resist_diffusion_nm,
-                pixel_size_nm=self._pixel_size_nm, quencher=self._quencher,
+                pixel_size_nm=self._pixel_size_nm,
+                quencher=self._quencher,
             )
             resist_min = apply_differentiable_resist(
-                aerial_min.float(), threshold=0.5, steepness=self._resist_steepness,
+                aerial_min.float(),
+                threshold=0.5,
+                steepness=self._resist_steepness,
                 resist_diffusion_nm=self._resist_diffusion_nm,
-                pixel_size_nm=self._pixel_size_nm, quencher=self._quencher,
+                pixel_size_nm=self._pixel_size_nm,
+                quencher=self._quencher,
             )
 
             l2_nom = functional.mse_loss(resist_nom, target)

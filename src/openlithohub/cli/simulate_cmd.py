@@ -32,11 +32,13 @@ def run(
     threshold: float = typer.Option(0.225, help="Resist threshold."),
     dose: float = typer.Option(1.0, help="Dose multiplier."),
     resist_diffusion_nm: float = typer.Option(
-        0.0, "--resist-diffusion-nm",
+        0.0,
+        "--resist-diffusion-nm",
         help="Acid diffusion length in nm. 0.0 (default) = legacy CTR.",
     ),
     quencher: float = typer.Option(
-        0.0, "--quencher",
+        0.0,
+        "--quencher",
         help="Quencher concentration subtracted after diffusion. 0.0 = disabled.",
     ),
 ) -> None:

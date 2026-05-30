@@ -296,7 +296,9 @@ class LevelSetILTModel(LithographyModel):
                 aerial = aerial.float()
 
             resist = apply_differentiable_resist(
-                aerial, threshold=0.5, steepness=self._resist_steepness,
+                aerial,
+                threshold=0.5,
+                steepness=self._resist_steepness,
                 resist_diffusion_nm=self._resist_diffusion_nm,
                 pixel_size_nm=self._pixel_size_nm,
                 quencher=self._quencher,

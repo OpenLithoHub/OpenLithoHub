@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import torch
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -32,7 +31,10 @@ def run(
     pdk: str = typer.Option(
         "orfs_asap7",
         "--pdk",
-        help="PDK layer mapping name (asap7, freepdk45, orfs_asap7, sky130, or a path to a custom JSON layermap).",
+        help=(
+            "PDK layer mapping name (asap7, freepdk45, orfs_asap7, sky130) "
+            "or a path to a custom JSON layermap."
+        ),
     ),
     layer: str = typer.Option(
         "metal1",
@@ -43,18 +45,27 @@ def run(
     tile_nm: float = typer.Option(2000.0, "--tile-nm", help="Tile edge length in nm."),
     node: str = typer.Option("45nm", "--node", "-n", help="Process node for litho params."),
     resist_diffusion_nm: float = typer.Option(
-        0.0, "--resist-diffusion-nm", help="Acid diffusion length in nm (0 = legacy CTR).",
+        0.0,
+        "--resist-diffusion-nm",
+        help="Acid diffusion length in nm (0 = legacy CTR).",
     ),
     quencher: float = typer.Option(
-        0.0, "--quencher", help="Quencher concentration (0 = disabled).",
+        0.0,
+        "--quencher",
+        help="Quencher concentration (0 = disabled).",
     ),
     drc_check: bool = typer.Option(True, "--drc/--no-drc", help="Run DRC compliance."),
     mrc_check: bool = typer.Option(True, "--mrc/--no-mrc", help="Run MRC compliance."),
     output: Path | None = typer.Option(
-        None, "--output", "-o", help="Path to save JSON report.",
+        None,
+        "--output",
+        "-o",
+        help="Path to save JSON report.",
     ),
     deterministic: bool = typer.Option(
-        False, "--deterministic/--no-deterministic", help="Force bit-reproducible backends.",
+        False,
+        "--deterministic/--no-deterministic",
+        help="Force bit-reproducible backends.",
     ),
 ) -> None:
     """Run the design→litho→manufacturability pipeline on a layout."""
@@ -62,10 +73,11 @@ def run(
 
     if deterministic:
         from openlithohub._utils.determinism import set_deterministic
+
         set_deterministic()
 
     # Resolve PDK layer mapping
-    from openlithohub.data._layers import LAYERS, load_layermap, PdkLayers
+    from openlithohub.data._layers import LAYERS, load_layermap
 
     if Path(pdk).exists() and Path(pdk).suffix == ".json":
         pdk_layers = load_layermap(pdk)
@@ -79,9 +91,14 @@ def run(
     # Resolve layer number from layer name
     layer_tuple = getattr(pdk_layers, layer, None)
     if layer_tuple is None:
-        available = [f.name for f in pdk_layers.__dataclass_fields__.values()
-                     if getattr(pdk_layers, f.name, None) is not None]
-        console.print(f"[red]Error:[/red] Layer '{layer}' not in PDK. Available: {', '.join(available)}")
+        available = [
+            f.name
+            for f in pdk_layers.__dataclass_fields__.values()
+            if getattr(pdk_layers, f.name, None) is not None
+        ]
+        console.print(
+            f"[red]Error:[/red] Layer '{layer}' not in PDK. Available: {', '.join(available)}"
+        )
         raise typer.Exit(1)
 
     console.print(f"[bold]Flow[/bold] input={input_path} pdk={pdk} layer={layer}={layer_tuple}")
@@ -93,6 +110,7 @@ def run(
 
     # Load and tile
     from openlithohub.data.orfs import OrfsArtifactDataset
+
     dataset = OrfsArtifactDataset(
         gds_path=gds_path,
         design_layer=layer_tuple,
@@ -127,10 +145,10 @@ def run(
     simulator = HopkinsSimulator(cfg)
 
     # Run metrics on each tile
-    from openlithohub.benchmark.metrics.epe import compute_epe
-    from openlithohub.benchmark.metrics.pvband import compute_pvband
     from openlithohub.benchmark.compliance.drc import check_drc
     from openlithohub.benchmark.compliance.mrc import check_mrc
+    from openlithohub.benchmark.metrics.epe import compute_epe
+    from openlithohub.benchmark.metrics.pvband import compute_pvband
 
     all_metrics: list[dict[str, float]] = []
     n_tiles = len(dataset)
@@ -150,15 +168,17 @@ def run(
             tile_metrics["epe_mean_nm"] = epe["epe_mean_nm"]
 
         pv = compute_pvband(
-            sample.design, pixel_size_nm=pixel_nm,
+            sample.design,
+            pixel_size_nm=pixel_nm,
             resist_diffusion_nm=resist_diffusion_nm,
             quencher=quencher,
         )
         tile_metrics.update(pv)
 
         if mrc_check:
-            mrc_result = check_mrc(result.aerial if result.resist is None else result.resist,
-                                   pixel_size_nm=pixel_nm)
+            mrc_result = check_mrc(
+                result.aerial if result.resist is None else result.resist, pixel_size_nm=pixel_nm
+            )
             tile_metrics["mrc_violation_rate"] = mrc_result.violation_rate
 
         if drc_check:
@@ -195,7 +215,9 @@ def _resolve_input(path: Path, console: Console) -> Path | None:
             console.print(f"[red]Error:[/red] No GDS/OAS files found under {path}")
             return None
         if len(gds_files) > 1:
-            console.print(f"[yellow]Warning:[/yellow] Multiple GDS files found; using {gds_files[0]}")
+            console.print(
+                f"[yellow]Warning:[/yellow] Multiple GDS files found; using {gds_files[0]}"
+            )
         return gds_files[0]
     console.print(f"[red]Error:[/red] {path} does not exist")
     return None

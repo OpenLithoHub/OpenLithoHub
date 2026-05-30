@@ -46,7 +46,8 @@ def _nominal_state(
     binary = (m > 0.5).float()
     aerial_nominal = simulate_aerial_image(binary, sigma_px=sigma_px, dose=1.0)
     resist_nominal = apply_resist_threshold(
-        aerial_nominal, threshold=resist_threshold,
+        aerial_nominal,
+        threshold=resist_threshold,
         resist_diffusion_nm=resist_diffusion_nm,
         pixel_size_nm=pixel_size_nm,
         quencher=quencher,
@@ -94,8 +95,12 @@ def compute_stochastic_robustness(
     different resist contour than the metrics it is reported alongside.
     """
     state = _nominal_state(
-        mask, dose_photons_per_nm2, pixel_size_nm, resist_threshold=resist_threshold,
-        resist_diffusion_nm=resist_diffusion_nm, quencher=quencher,
+        mask,
+        dose_photons_per_nm2,
+        pixel_size_nm,
+        resist_threshold=resist_threshold,
+        resist_diffusion_nm=resist_diffusion_nm,
+        quencher=quencher,
     )
     resist_nominal = state.resist_nominal
     fg_labels = state.fg_labels
@@ -119,7 +124,8 @@ def compute_stochastic_robustness(
         photons = torch.poisson(state.lambda_map, generator=generator)
         noisy_intensity = photons / max(state.dose_scale, 1e-12)
         noisy_resist = apply_resist_threshold(
-            noisy_intensity, threshold=resist_threshold,
+            noisy_intensity,
+            threshold=resist_threshold,
             resist_diffusion_nm=resist_diffusion_nm,
             pixel_size_nm=pixel_size_nm,
             quencher=quencher,
@@ -347,8 +353,12 @@ def compute_stochastic_defect_classes(
         StochasticDefectRates with per-class and total failure rates.
     """
     state = _nominal_state(
-        mask, dose_photons_per_nm2, pixel_size_nm, resist_threshold=resist_threshold,
-        resist_diffusion_nm=resist_diffusion_nm, quencher=quencher,
+        mask,
+        dose_photons_per_nm2,
+        pixel_size_nm,
+        resist_threshold=resist_threshold,
+        resist_diffusion_nm=resist_diffusion_nm,
+        quencher=quencher,
     )
     resist_nominal = state.resist_nominal
     nominal_fg_labels = state.fg_labels
@@ -387,7 +397,8 @@ def compute_stochastic_defect_classes(
         photons = torch.poisson(state.lambda_map, generator=generator)
         noisy_intensity = photons / max(state.dose_scale, 1e-12)
         noisy_resist = apply_resist_threshold(
-            noisy_intensity, threshold=resist_threshold,
+            noisy_intensity,
+            threshold=resist_threshold,
             resist_diffusion_nm=resist_diffusion_nm,
             pixel_size_nm=pixel_size_nm,
             quencher=quencher,

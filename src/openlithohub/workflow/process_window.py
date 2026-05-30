@@ -127,9 +127,12 @@ def pw_fidelity_loss(
     for corner in corners:
         aerial = simulate_aerial_image(mask, sigma_px=corner.sigma_px, dose=corner.dose)
         resist = apply_differentiable_resist(
-            aerial, threshold=threshold, steepness=steepness,
+            aerial,
+            threshold=threshold,
+            steepness=steepness,
             resist_diffusion_nm=resist_diffusion_nm,
-            pixel_size_nm=pixel_size_nm, quencher=quencher,
+            pixel_size_nm=pixel_size_nm,
+            quencher=quencher,
         )
         total = total + corner.weight * functional.mse_loss(resist, target)
         weight_sum += corner.weight
