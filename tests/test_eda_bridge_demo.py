@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import torch
-
 from examples.eda_bridge_demo import (
     cross_check_tachyon,
     export_to_eda,

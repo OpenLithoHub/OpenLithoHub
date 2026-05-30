@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import torch
-
 from examples.commercial_sim_demo import (
     demo_co_design_workflow,
     demo_mock_mode,
