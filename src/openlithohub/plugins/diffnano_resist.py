@@ -14,6 +14,22 @@ from openlithohub.plugins import optional_import
 
 __all__ = ["DiffNanoResistAdapter"]
 
+# ---------------------------------------------------------------------------
+# Single source of truth for plugin parameter defaults (WS-B centralization)
+# ---------------------------------------------------------------------------
+# These values define the canonical defaults for the DiffNano resist plugin.
+# When users do not explicitly provide parameters, the adapter falls back to
+# these values.  If you need to change a default, change it HERE.
+# ---------------------------------------------------------------------------
+
+RESIST_DEFAULTS: dict[str, float] = {
+    "acid_diffusion_length_nm": 20.0,   # nm — acid diffusion length during PEB
+    "development_contrast": 10.0,       # dimensionless — higher = sharper development
+    "threshold_dose": 0.5,              # normalized — clearing threshold
+    "peb_diffusion_nm": 10.0,           # nm — post-exposure bake diffusion length
+    "pixel_size_nm": 1.0,               # nm — grid spacing for nm-to-pixel conversion
+}
+
 
 class DiffNanoResistAdapter:
     """Adapter that bridges DiffNano's ``DifferentiableResistModel`` to
@@ -41,20 +57,25 @@ class DiffNanoResistAdapter:
     def __init__(
         self,
         *,
-        acid_diffusion_length_nm: float = 20.0,
-        development_contrast: float = 10.0,
-        threshold_dose: float = 0.5,
-        peb_diffusion_nm: float = 10.0,
-        pixel_size_nm: float = 1.0,
+        acid_diffusion_length_nm: float | None = None,
+        development_contrast: float | None = None,
+        threshold_dose: float | None = None,
+        peb_diffusion_nm: float | None = None,
+        pixel_size_nm: float | None = None,
     ) -> None:
         mod = optional_import("diffnano.solvers.resist", plugin="diffnano")
+        _acid = acid_diffusion_length_nm if acid_diffusion_length_nm is not None else RESIST_DEFAULTS["acid_diffusion_length_nm"]
+        _contrast = development_contrast if development_contrast is not None else RESIST_DEFAULTS["development_contrast"]
+        _threshold = threshold_dose if threshold_dose is not None else RESIST_DEFAULTS["threshold_dose"]
+        _peb = peb_diffusion_nm if peb_diffusion_nm is not None else RESIST_DEFAULTS["peb_diffusion_nm"]
+        _pixel = pixel_size_nm if pixel_size_nm is not None else RESIST_DEFAULTS["pixel_size_nm"]
         self._model = mod.DifferentiableResistModel(
-            acid_diffusion_length_nm=acid_diffusion_length_nm,
-            development_contrast=development_contrast,
-            threshold_dose=threshold_dose,
-            peb_diffusion_nm=peb_diffusion_nm,
+            acid_diffusion_length_nm=_acid,
+            development_contrast=_contrast,
+            threshold_dose=_threshold,
+            peb_diffusion_nm=_peb,
         )
-        self.pixel_size_nm = pixel_size_nm
+        self.pixel_size_nm = _pixel
 
     def __call__(self, aerial_image: torch.Tensor) -> torch.Tensor:
         """Apply DiffNano resist to *aerial_image*.

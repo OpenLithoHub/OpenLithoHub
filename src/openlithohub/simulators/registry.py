@@ -1,4 +1,37 @@
-"""Open registry of simulator backends, keyed by string name."""
+"""Open registry of simulator backends, keyed by string name.
+
+Resist / Lithography Backend Selection Guide
+=============================================
+
+This registry dispatches to several fidelity tiers of lithography simulation:
+
+**Lightweight built-in (default)**
+    :func:`~openlithohub._utils.resist_model.apply_differentiable_resist`
+    provides a fast sigmoid-threshold resist with optional Gaussian acid diffusion.
+    This is the default path when ``config.resist_backend == "ctr"``.
+
+**High-fidelity Dill/Mack exposure + development**
+    Available via the ``diffcfd_litho`` backend, which uses
+    :class:`~openlithohub.plugins.diffcfd_process.DiffCFDLithoSimulator`.
+    Requires the ``[diffcfd]`` extra.  Models Beer-Lambert exposure with PAC
+    bleaching (Dill) and solvent-dependent dissolution (Mack).
+
+**High-fidelity CAR/PEB resist**
+    Available via the ``diffnano`` resist backend, which uses
+    :class:`~openlithohub.plugins.diffnano_resist.DiffNanoResistAdapter`.
+    Requires the ``[diffnano]`` extra.  Models acid diffusion, PEB diffusion,
+    and sigmoid development with calibratable contrast.
+
+**Hopkins forward model**
+    The bundled :class:`~openlithohub.simulators.hopkins_sim.HopkinsSimulator`
+    provides the core Hopkins/SOCS aerial-image simulation.  DiffNano also ships
+    ``diffnano.solvers.litho.HopkinsLithoModel`` (a simplified PSF model that
+    is functionally equivalent to the Hopkins path here).  For new work, prefer
+    the core ``HopkinsSimulator`` which supports multiple illumination types and
+    SOCS kernel caching.
+
+See ``docs/resist_capability_matrix.md`` for the full capability comparison.
+"""
 
 from __future__ import annotations
 
