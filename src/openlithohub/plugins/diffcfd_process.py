@@ -48,6 +48,7 @@ class DiffCFDLithoSimulator(BaseSimulator):
     def simulate(self, mask: torch.Tensor) -> SimulatorResult:
         if self._solver is None:
             self.prepare()
+        assert self._solver is not None
 
         extra = self.config.extra
         thickness = extra.get("thickness_m", torch.tensor(8e-6))
@@ -110,6 +111,7 @@ class DiffCFDSpinCoatSimulator(BaseSimulator):
     def simulate(self, mask: torch.Tensor) -> SimulatorResult:
         if self._solver is None:
             self.prepare()
+        assert self._solver is not None
 
         extra = self.config.extra
         omega_profile = extra.get("omega_profile")

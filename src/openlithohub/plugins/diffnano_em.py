@@ -46,6 +46,7 @@ class DiffNanoRCWA(BaseSimulator):
     def simulate(self, mask: torch.Tensor) -> SimulatorResult:
         if self._solver is None:
             self.prepare()
+        assert self._solver is not None
 
         geometry = mask.unsqueeze(0) if mask.ndim == 2 else mask
         result = self._solver.forward(geometry)
@@ -81,6 +82,7 @@ class DiffNanoFDTD2D(BaseSimulator):
     def simulate(self, mask: torch.Tensor) -> SimulatorResult:
         if self._solver is None:
             self.prepare()
+        assert self._solver is not None
 
         geometry = mask.unsqueeze(0) if mask.ndim == 2 else mask
         result = self._solver.forward(geometry)
@@ -116,6 +118,7 @@ class DiffNanoFDFD2D(BaseSimulator):
     def simulate(self, mask: torch.Tensor) -> SimulatorResult:
         if self._solver is None:
             self.prepare()
+        assert self._solver is not None
 
         geometry = mask.unsqueeze(0) if mask.ndim == 2 else mask
         result = self._solver.forward(geometry)
