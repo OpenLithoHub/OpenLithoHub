@@ -26,7 +26,7 @@ optimized.to_oasis("optimized.oas")
 
 | Concept                          | Class           | Wraps                                                  |
 | -------------------------------- | --------------- | ------------------------------------------------------ |
-| `(tensor, pixel_size_nm, layer)` | `Mask`          | `_load_layout_as_tensor`, `workflow.export.export_oasis` |
+| `(tensor, pixel_size_nm, layer)` | `Mask`          | `data.io.load_layout`, `workflow.export.export_oasis`, `workflow.export.export_gds` |
 | Run a model on a layout          | `LitheEngine`   | `models.registry`, `workflow.tiling`, `workflow.halo`  |
 | Aggregate metric & compliance    | `Report`        | `benchmark.metrics.*`, `benchmark.compliance.*`        |
 
@@ -40,6 +40,7 @@ Mask.from_pt("design.pt")
 Mask.from_npy("design.npy")
 Mask.from_oasis("design.oas", layer="1:0")
 Mask.from_gds("design.gds", layer="1:0")
+Mask.from_def("routed.def", layer="1:0", lef_files=["stdcells.lef"])
 Mask.load("design.oas", layer="1:0")    # dispatches by file suffix
 ```
 

@@ -12,11 +12,12 @@ Two concrete adapters are provided:
 * :class:`HopkinsSimulator` — wraps the bundled
   :func:`openlithohub._utils.hopkins.simulate_aerial_image_hopkins` and
   is the reference implementation. Differentiable end-to-end.
-* :class:`CalibreSimulator`, :class:`TachyonSimulator` — config schemas
-  and executable stubs. They raise :class:`NotImplementedError` with a
-  pointer to the integration RFC. Real adapters require the respective
-  vendor toolchain on ``PATH`` and a license file; we deliberately do
-  not bundle either.
+* :class:`CalibreSimulator`, :class:`TachyonSimulator` — vendor adapters
+  that require the respective commercial toolchain on ``PATH`` and a
+  license file. When the toolchain is unavailable, they support a
+  ``mock_mode`` (via ``config.extra["mock_mode"] = True``) that produces
+  synthetic aerial images for testing and CI. We deliberately do not
+  bundle any vendor toolchain or license.
 
 Use :func:`get_simulator` to construct one by string name; the registry
 is open for users to register their own via :func:`register_simulator`.

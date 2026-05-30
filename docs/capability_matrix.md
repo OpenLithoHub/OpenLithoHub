@@ -22,6 +22,8 @@ work, and -- critically -- what is **not** provided.
 | Gaussian PSF forward model | `openlithohub._utils.forward_model` | Single-Gaussian convolution | Yes (PyTorch autograd) |
 | Hopkins SOCS forward model | `openlithohub._utils.hopkins` | Partial-coherent imaging via SVD-truncated SOCS | Yes (PyTorch autograd) |
 | CTR resist | `openlithohub._utils.resist_model` | Sigmoid threshold with optional Gaussian acid diffusion | Yes |
+| Calibre nmOPC adapter | `openlithohub.simulators.calibre` | Siemens EDA Calibre forward sim (requires toolchain + license; mock mode available) | No |
+| Tachyon adapter | `openlithohub.simulators.tachyon` | ASML Brion Tachyon forward sim (requires toolchain + license; mock mode available) | No |
 | LevelSet ILT | `openlithohub.models.levelset_ilt` | Gradient-descent mask optimization | Yes |
 | Neural-ILT (U-Net) | `openlithohub.models.neural_ilt` | Learned mask optimization | Yes |
 | OpenILT (MOSAIC) | `openlithohub.models.openilt` | L2 + PVB SGD | Yes |
@@ -119,9 +121,10 @@ leaderboard default remains built-in Hopkins + CTR (threshold `0.225`) without d
   decisions.
 - **No foundry-confidential parameters.** Per-node CTR/Dill/Mack/PEB parameters are
   foundry-confidential and cannot ship in open-source repos. Users must self-calibrate.
-- **No commercial EDA tool integration.** Calibre and Tachyon adapters are config-validated
-  stubs that activate only when the toolchain is on `PATH` and licensed. OpenLithoHub does
-  not ship these tools.
+- **No commercial EDA tool integration in core.** Calibre (`CalibreSimulator`) and Tachyon
+  (`TachyonSimulator`) adapters exist as config-validated stubs with `mock_mode` for
+  testing. Real simulations require the respective vendor toolchain on `PATH` and a
+  license. OpenLithoHub does not ship these tools.
 
 ### OpenLithoHub
 

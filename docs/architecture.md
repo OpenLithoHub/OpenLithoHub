@@ -6,16 +6,20 @@ OpenLithoHub uses a layered architecture designed for extensibility and separati
 
 | Layer | Module | Responsibility |
 |-------|--------|----------------|
-| **API façade** | `openlithohub.api` | Object-oriented entry points (`Mask`, `LitheEngine`, `Report`) re-exported at the package root for fab-/EDA-shaped callers |
+| **API facade** | `openlithohub.api` | Object-oriented entry points (`Mask`, `LitheEngine`, `Report`) re-exported at the package root for fab-/EDA-shaped callers |
 | **Data** | `openlithohub.data` | Dataset loading, format conversion, resolution alignment, dummy layout generation |
 | **Benchmark** | `openlithohub.benchmark` | Metrics computation, compliance checking, reporting |
 | **Models** | `openlithohub.models` | Abstract model interface, registry, example implementations, model hub |
-| **Workflow** | `openlithohub.workflow` | Layout parsing, tiling, contour extraction, OASIS export, EDA bridge templates |
+| **Simulators** | `openlithohub.simulators` | Vendor-neutral forward-simulation ABC (`BaseSimulator`), Hopkins reference adapter, commercial adapter protocol (Calibre, Tachyon), backend registry |
+| **Workflow** | `openlithohub.workflow` | Layout parsing, tiling, contour extraction, OASIS export, EDA bridge templates, process-window OPC |
+| **Inference** | `openlithohub.inference` | Shared-weight multi-process inference (`multiproc_predict`), `CompiledCache` for `torch.compile` artifacts |
+| **Plugins** | `openlithohub.plugins` | Optional physics plugin infrastructure (`optional_import`, `LithoPlugin` protocol, manifest registry) |
 | **Vis** | `openlithohub.vis` | Paper-publication matplotlib helpers (IEEE / SPIE styles, contour overlays, PV-band plots) |
 | **Jupyter** | `openlithohub.jupyter` | IPython display helpers and `%load_ext` magics |
 | **CLI** | `openlithohub.cli` | User-facing commands via Typer |
 | **Leaderboard** | `openlithohub.leaderboard` | SOTA tracking, submission, querying |
-| **Forward models** | `openlithohub._utils` | Differentiable Hopkins SOCS imaging, resist simulation, morphology |
+| **Constants** | `openlithohub._constants` | Single source of truth for optical, resist, EUV 3D-mask, and plugin defaults |
+| **Forward models** | `openlithohub._utils` | Differentiable Hopkins SOCS imaging, resist simulation, morphology, optics I/O |
 
 ## Data Flow
 
@@ -93,19 +97,15 @@ Models implement the `LithographyModel` abstract class:
 
 ```python
 class LithographyModel(ABC):
-    @property
-    @abstractmethod
-    def name(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def supports_curvilinear(self) -> bool: ...
+    NAME: ClassVar[str]
+    SUPPORTS_CURVILINEAR: ClassVar[bool] = False
+    RECEPTIVE_FIELD_PX: ClassVar[int] = 0
 
     @abstractmethod
     def predict(self, design: Tensor, **kwargs) -> PredictionResult: ...
 ```
 
-The `ModelRegistry` provides decorator-based registration and lookup by name.
+The module-level `registry` singleton provides decorator-based registration and lookup by name. Models define a `NAME: ClassVar[str]` attribute; the registry reads it without instantiation via `vars(model_cls).get("NAME")`.
 
 ## Workflow Layer
 
@@ -225,6 +225,62 @@ The SOCS kernel cache key includes the requested dtype, so flipping between
 fp32 and bf16 in a long-running service does not corrupt cached tensors.
 Cache keys also include the device, so the cache is safe across mixed CPU /
 CUDA workloads.
+
+## Multi-Process Inference
+
+`openlithohub.inference` provides shared-weight multi-process inference
+utilities so large-batch workloads can shard across CPU cores or GPUs without
+per-process memory copies:
+
+- **`multiproc_predict(model_fn, inputs, n_workers, device)`** — distributes
+  input tensors across `n_workers` processes. Model weights are loaded into
+  POSIX shared memory once; each worker attaches without copying. Returns
+  outputs in input order. For `n_workers=1`, falls back to in-process
+  evaluation.
+- **`SharedStateDictServer`** — loads an `nn.Module` state dict into
+  `multiprocessing.shared_memory.SharedMemory` blocks. Workers call
+  `state_dict_for_worker()` to reconstruct the dict from shared memory.
+- **`CompiledCache`** — disk-backed cache for `torch.compile` artifacts keyed
+  by model content hash. Avoids the 30-120 s recompilation penalty on
+  subsequent runs.
+
+See [Self-Hosted Deployment](self_hosted_deployment.md) for throughput and
+memory benchmarks using this infrastructure.
+
+## Constants
+
+`openlithohub._constants` is the single source of truth for physical defaults.
+Every other module imports from this file rather than duplicating magic numbers.
+The module is organized into sections:
+
+| Section | Example constants |
+|---------|------------------|
+| Optical / imaging | `WAVELENGTH_ARF_NM` (193.0), `WAVELENGTH_EUV_NM` (13.5), `NA_IMMERSION` (1.35), `NA_EUV_STANDARD` (0.33), `NA_EUV_HIGH` (0.55), `SIGMA_OUTER_DEFAULT` (0.7), `NUM_KERNELS_DEFAULT` (24), `PIXEL_SIZE_NM_DEFAULT` (1.0) |
+| Resist | `THRESHOLD_ICCAD16` (0.225), `THRESHOLD_GENERIC` (0.5), `RESIST_DIFFUSION_NM_DEFAULT` (0.0), `QUENCHER_DEFAULT` (0.0), `STEEPNESS_DEFAULT` (50.0) |
+| EUV 3D mask | `ABSORBER_THICKNESS_NM_DEFAULT` (70.0), `CHIEF_RAY_ANGLE_DEG_DEFAULT` (6.0) |
+| DiffCFD plugin | `DIFFCFD_LITHO_DEFAULTS` (Dill A/B/C, Mack r_max/r_min/n/a, gamma_solvent), `DIFFCFD_SPIN_COAT_DEFAULTS`, `DIFFCFD_PROCESS_DEFAULTS` |
+| DiffNano plugin | `DIFFNANO_RESIST_DEFAULTS` (acid_diffusion_length_nm, development_contrast, threshold_dose, peb_diffusion_nm) |
+
+## Simulator Backends
+
+`openlithohub.simulators` provides a vendor-neutral forward-simulation interface
+built on a registry pattern:
+
+- **`BaseSimulator`** ABC — defines `simulate(mask) -> SimulatorResult` with
+  optional `prepare()` for eager setup and `with_config()` for cheap cloning.
+- **`SimulatorConfig`** — frozen dataclass with optical parameters
+  (wavelength, NA, sigma, pixel_size_nm, defocus, dose, threshold) plus
+  `resist_backend` selector and `extra` dict for backend-specific options.
+- **`HopkinsSimulator`** — bundled differentiable Hopkins/SOCS reference
+  backend with kernel caching and multiple illumination types.
+- **`CalibreSimulator` / `TachyonSimulator`** — commercial adapter stubs with
+  `preflight()` checks for binary + license availability and `mock_mode`
+  for testing without the real toolchain.
+- **`CommercialSimulatorAdapter`** — protocol shared by commercial adapters;
+  provides `PreflightStatus`, `ToolchainError`, `write_mask_gdsii`,
+  `read_aerial_image`, and `run_subprocess` helpers.
+- **Registry** — `get_simulator(name, config)` constructs by string name;
+  plugin backends lazy-load on first access.
 
 ## Leaderboard
 

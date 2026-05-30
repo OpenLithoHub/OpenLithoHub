@@ -2,9 +2,10 @@
 
 `openlithohub.simulators` is the vendor-neutral interface for lithography
 forward simulation. The bundled `HopkinsSimulator` is the reference
-implementation; `CalibreSimulator` and `TachyonSimulator` are
-config-validated stubs that activate when the corresponding toolchain is
-on `PATH` and licensed.
+implementation; `CalibreSimulator` and `TachyonSimulator` are commercial
+adapters that require the respective vendor toolchain on `PATH` and a
+license. Both support `mock_mode` (`config.extra["mock_mode"] = True`)
+for testing and CI without the commercial binary.
 
 The module also re-exports `load_source_intensity`,
 `load_zernike_coefficients`, and `zernike_phase_map` so callers can drive
@@ -43,7 +44,16 @@ aberrations without reaching into `_utils.optics`.
       members:
         - HopkinsSimulator
 
-## Vendor stubs
+## Commercial adapters
+
+::: openlithohub.simulators.commercial
+    options:
+      show_root_heading: true
+      members_order: source
+      members:
+        - CommercialSimulatorAdapter
+        - PreflightStatus
+        - ToolchainError
 
 ::: openlithohub.simulators.calibre
     options:

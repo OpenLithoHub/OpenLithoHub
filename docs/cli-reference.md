@@ -223,6 +223,8 @@ openlithohub simulate run [OPTIONS] MASK_PATH
 | `--sigma` | FLOAT | Outer partial-coherence factor. | `0.7` |
 | `--threshold` | FLOAT | Resist threshold. | `0.225` |
 | `--dose` | FLOAT | Dose multiplier. | `1.0` |
+| `--resist-diffusion-nm` | FLOAT | Acid diffusion length in nm. `0.0` (default) = legacy CTR without diffusion. | `0.0` |
+| `--quencher` | FLOAT | Quencher concentration subtracted after diffusion. `0.0` = disabled. | `0.0` |
 
 #### `simulate list-backends`
 

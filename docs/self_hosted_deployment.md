@@ -14,7 +14,7 @@ pip install openlithohub[torch]
 python -c "import torch; print(f'GPUs: {torch.cuda.device_count()}')"
 
 # Run a single optimization on GPU 0
-olh optimize --model neural-ilt --input design.png --device cuda:0
+openlithohub optimize run --input design.png --model neural-ilt --device cuda:0
 
 # Run multi-process inference with shared weights
 python -c "

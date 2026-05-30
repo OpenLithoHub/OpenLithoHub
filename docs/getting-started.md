@@ -115,13 +115,8 @@ from openlithohub.models.registry import registry
 
 @registry.register
 class MyOPCModel(LithographyModel):
-    @property
-    def name(self) -> str:
-        return "my-opc"
-
-    @property
-    def supports_curvilinear(self) -> bool:
-        return True
+    NAME = "my-opc"
+    SUPPORTS_CURVILINEAR = True
 
     def predict(self, design: torch.Tensor, **kwargs) -> PredictionResult:
         # Your optimization algorithm here

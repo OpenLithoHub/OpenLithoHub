@@ -106,7 +106,7 @@ docker run --rm -v "$PWD":/data ghcr.io/openlithohub/openlithohub:latest \
 
 # GPU (requires nvidia-container-toolkit on the host)
 docker run --rm --gpus all -v "$PWD":/data ghcr.io/openlithohub/openlithohub:latest \
-  optimize run --input /data/design.oas --output /data/optimized.oas
+  optimize run --input /data/design.oas --model neural-ilt --output /data/optimized.oas
 ```
 
 Tagged versions are also available (e.g. `ghcr.io/openlithohub/openlithohub:0.1`).
@@ -119,13 +119,14 @@ OpenLithoHub's forward lithography model serves as the coupling layer that conne
 
 ```python
 from diff_surrogate import CoDesignWorkflow, CoupledLoss
+from openlithohub.simulators import HopkinsSimulator, SimulatorConfig
 
 # Lithography forward function feeds printability gradients back to design
 def litho_coupling(merged_outputs):
     design_mask = merged_outputs["design"]["mask"]
-    from openlithohub.simulators import forward_sim
-    aerial = forward_sim(design_mask)
-    merged_outputs["litho"] = {"epe": aerial["epe"], "pv_band": aerial["pv_band"]}
+    sim = HopkinsSimulator(SimulatorConfig(pixel_size_nm=1.0))
+    result = sim.simulate(design_mask)
+    merged_outputs["litho"] = {"aerial": result.aerial}
     return merged_outputs
 
 wf = CoDesignWorkflow(
@@ -193,10 +194,10 @@ MRC into a single JSON summary.
 
 ```bash
 # Default: CTR (constant-threshold resist), threshold=0.225 — comparable numbers
-openlithohub simulate run --input mask.npy --resist-diffusion-nm 0.0
+openlithohub simulate run mask.npy --resist-diffusion-nm 0.0
 
 # Opt-in: CAR with Gaussian acid diffusion — more realistic but NON-COMPARABLE
-openlithohub simulate run --input mask.npy --resist-diffusion-nm 20.0
+openlithohub simulate run mask.npy --resist-diffusion-nm 20.0
 ```
 
 > The scored default remains **CTR without diffusion, threshold = 0.225**.
@@ -267,18 +268,14 @@ print(f"MRC passed: {mrc.passed} ({mrc.violation_count} violations)")
 ### Register a custom model
 
 ```python
+import torch
 from openlithohub.models.base import LithographyModel, PredictionResult
 from openlithohub.models.registry import registry
 
 @registry.register
 class MyOPCModel(LithographyModel):
-    @property
-    def name(self) -> str:
-        return "my-opc"
-
-    @property
-    def supports_curvilinear(self) -> bool:
-        return True
+    NAME = "my-opc"
+    SUPPORTS_CURVILINEAR = True
 
     def predict(self, design: torch.Tensor, **kwargs) -> PredictionResult:
         mask = my_optimization_algorithm(design)
@@ -336,13 +333,15 @@ suite, and formatting a leaderboard submission.
 
 | Layer | Module | Description |
 |-------|--------|-------------|
-| **API façade** | `openlithohub.api` | OO entry points (`Mask`, `LitheEngine`, `Report`) re-exported at the package root |
+| **API facade** | `openlithohub.api` | OO entry points (`Mask`, `LitheEngine`, `Report`) re-exported at the package root |
 | **Data** | `openlithohub.data` | Unified adapters for LithoBench (.npy), LithoSim (HuggingFace), GAN-OPC (paired PNGs), ICCAD'16 hotspot (OASIS via klayout) |
 | **Benchmark** | `openlithohub.benchmark` | EPE (mask & wafer-sim), L2 wafer error, PV Band, shot count, stochastic robustness + per-class defect rates, hotspot detection, MRC/DRC compliance |
-| **Models** | `openlithohub.models` | Abstract `LithographyModel` interface + decorator-based registry |
-| **Workflow** | `openlithohub.workflow` | Layout parsing (OASIS / GDSII / DEF / LEF), tiling, contour extraction (manhattan/curvilinear), OASIS / GDSII export, OpenAccess layer-purpose helper |
-| **Simulators** | `openlithohub.simulators` | Forward model registry (`register_simulator`), Hopkins/Gaussian built-ins, plugin EM backends (RCWA/FDTD/FDFD) |
+| **Models** | `openlithohub.models` | Abstract `LithographyModel` interface (`NAME` class variable) + decorator-based registry |
+| **Simulators** | `openlithohub.simulators` | Forward model registry (`register_simulator`), Hopkins/SOCS built-in, Calibre/Tachyon commercial adapters (with mock mode), plugin EM backends (RCWA/FDTD/FDFD) |
+| **Workflow** | `openlithohub.workflow` | Layout parsing (OASIS / GDSII / DEF / LEF), tiling, contour extraction (manhattan/curvilinear), OASIS / GDSII export, process-window OPC, OpenAccess layer-purpose helper |
+| **Inference** | `openlithohub.inference` | Shared-weight multi-process inference (`multiproc_predict`), `CompiledCache` for `torch.compile` artifacts |
 | **Plugins** | `openlithohub.plugins` | Optional DiffNano (EM + resist) and DiffCFD (litho + spin-coat + joint optimisation) backends |
+| **Constants** | `openlithohub._constants` | Single source of truth for optical, resist, EUV 3D-mask, and plugin default values |
 | **CLI** | `openlithohub.cli` | `eval`, `optimize`, `leaderboard`, `simulate`, `flow`, `synth`, `hackathon`, `export` command groups via Typer |
 
 ## Optional Physics Plugins
@@ -569,7 +568,7 @@ PyTorch so the entire ILT loop is end-to-end auto-differentiable:
 | Model | Module | Notes |
 |---|---|---|
 | Gaussian PSF | `openlithohub._utils.forward_model.simulate_aerial_image` | Single-Gaussian convolution; cheap default for tests and small grids |
-| Hopkins SOCS | `openlithohub._utils.simulate_aerial_image_hopkins` | Partial-coherent imaging via SVD-truncated Sum-Of-Coherent-Systems; supports circular / annular / dipole illumination |
+| Hopkins SOCS | `openlithohub._utils.hopkins.simulate_aerial_image_hopkins` | Partial-coherent imaging via SVD-truncated Sum-Of-Coherent-Systems; supports circular / annular / dipole illumination |
 | DiffNano RCWA/FDTD/FDFD | `openlithohub.plugins.diffnano_em` (opt-in) | Rigorous EM solvers via the DiffNano plugin; registered as `diffnano_rcwa`, `diffnano_fdtd2d`, `diffnano_fdfd2d` backends |
 
 Built-in Hopkins remains the default and the only comparable path for leaderboard
