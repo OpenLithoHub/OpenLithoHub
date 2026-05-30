@@ -69,7 +69,7 @@ def _setup_compile_cache() -> str | None:
 
     Returns the cache directory path, or None if torch.compile is not active.
     """
-    if not os.environ.get("TORCH_COMPILE", "").lower() in ("1", "true", "yes"):
+    if os.environ.get("TORCH_COMPILE", "").lower() not in ("1", "true", "yes"):
         return None
 
     cache_dir = os.environ.get(

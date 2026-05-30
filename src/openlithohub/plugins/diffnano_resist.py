@@ -23,11 +23,11 @@ __all__ = ["DiffNanoResistAdapter"]
 # ---------------------------------------------------------------------------
 
 RESIST_DEFAULTS: dict[str, float] = {
-    "acid_diffusion_length_nm": 20.0,   # nm — acid diffusion length during PEB
-    "development_contrast": 10.0,       # dimensionless — higher = sharper development
-    "threshold_dose": 0.5,              # normalized — clearing threshold
-    "peb_diffusion_nm": 10.0,           # nm — post-exposure bake diffusion length
-    "pixel_size_nm": 1.0,               # nm — grid spacing for nm-to-pixel conversion
+    "acid_diffusion_length_nm": 20.0,  # nm — acid diffusion length during PEB
+    "development_contrast": 10.0,  # dimensionless — higher = sharper development
+    "threshold_dose": 0.5,  # normalized — clearing threshold
+    "peb_diffusion_nm": 10.0,  # nm — post-exposure bake diffusion length
+    "pixel_size_nm": 1.0,  # nm — grid spacing for nm-to-pixel conversion
 }
 
 
@@ -64,10 +64,24 @@ class DiffNanoResistAdapter:
         pixel_size_nm: float | None = None,
     ) -> None:
         mod = optional_import("diffnano.solvers.resist", plugin="diffnano")
-        _acid = acid_diffusion_length_nm if acid_diffusion_length_nm is not None else RESIST_DEFAULTS["acid_diffusion_length_nm"]
-        _contrast = development_contrast if development_contrast is not None else RESIST_DEFAULTS["development_contrast"]
-        _threshold = threshold_dose if threshold_dose is not None else RESIST_DEFAULTS["threshold_dose"]
-        _peb = peb_diffusion_nm if peb_diffusion_nm is not None else RESIST_DEFAULTS["peb_diffusion_nm"]
+        _acid = (
+            acid_diffusion_length_nm
+            if acid_diffusion_length_nm is not None
+            else RESIST_DEFAULTS["acid_diffusion_length_nm"]
+        )
+        _contrast = (
+            development_contrast
+            if development_contrast is not None
+            else RESIST_DEFAULTS["development_contrast"]
+        )
+        _threshold = (
+            threshold_dose if threshold_dose is not None else RESIST_DEFAULTS["threshold_dose"]
+        )
+        _peb = (
+            peb_diffusion_nm
+            if peb_diffusion_nm is not None
+            else RESIST_DEFAULTS["peb_diffusion_nm"]
+        )
         _pixel = pixel_size_nm if pixel_size_nm is not None else RESIST_DEFAULTS["pixel_size_nm"]
         self._model = mod.DifferentiableResistModel(
             acid_diffusion_length_nm=_acid,
