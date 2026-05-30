@@ -8,6 +8,19 @@ from typing import Any
 
 import torch
 
+from openlithohub._constants import (
+    DEFOCUS_NM_DEFAULT,
+    DOSE_DEFAULT,
+    NA_IMMERSION,
+    PIXEL_SIZE_NM_DEFAULT,
+    QUENCHER_DEFAULT,
+    RESIST_DIFFUSION_NM_DEFAULT,
+    SIGMA_INNER_DEFAULT,
+    SIGMA_OUTER_DEFAULT,
+    THRESHOLD_ICCAD16,
+    WAVELENGTH_ARF_NM,
+)
+
 
 @dataclass(frozen=True)
 class SimulatorConfig:
@@ -36,24 +49,24 @@ class SimulatorConfig:
         extra: Backend-specific options. Treated as opaque by the ABC.
     """
 
-    wavelength_nm: float = 193.0
-    na: float = 1.35
-    sigma: float = 0.7
-    sigma_inner: float = 0.0
-    pixel_size_nm: float = 1.0
-    defocus_nm: float = 0.0
-    dose: float = 1.0
+    wavelength_nm: float = WAVELENGTH_ARF_NM
+    na: float = NA_IMMERSION
+    sigma: float = SIGMA_OUTER_DEFAULT
+    sigma_inner: float = SIGMA_INNER_DEFAULT
+    pixel_size_nm: float = PIXEL_SIZE_NM_DEFAULT
+    defocus_nm: float = DEFOCUS_NM_DEFAULT
+    dose: float = DOSE_DEFAULT
     # Per Yang2023_LithoBench §3.2 (NeurIPS 2023),
     # threshold = 0.225 is the canonical resist cutoff used to score
     # ICCAD16 mask layouts on the simulated wafer image. Confidence A.
-    threshold: float = 0.225
+    threshold: float = THRESHOLD_ICCAD16
     # Acid diffusion length in nm. 0.0 (default) produces bit-identical
     # results to the legacy hard-threshold CTR model; positive values
     # enable gaussian acid diffusion before binarization.
-    resist_diffusion_nm: float = 0.0
+    resist_diffusion_nm: float = RESIST_DIFFUSION_NM_DEFAULT
     # Base quencher concentration subtracted from acid field after
     # diffusion. 0.0 disables quencher neutralization.
-    quencher: float = 0.0
+    quencher: float = QUENCHER_DEFAULT
     # Resist model selector. "ctr" = built-in, "diffnano" = plugin.
     resist_backend: str = "ctr"
     extra: dict[str, Any] = field(default_factory=dict)

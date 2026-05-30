@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from openlithohub._constants import (
+    NA_EUV_HIGH,
+    NA_EUV_STANDARD,
+    NA_IMMERSION,
+    WAVELENGTH_ARF_NM,
+    WAVELENGTH_EUV_NM,
+)
+
 
 @dataclass(frozen=True)
 class ProcessNodeConfig:
@@ -90,8 +98,8 @@ class ProcessNodeConfig:
 PROCESS_NODES: dict[str, ProcessNodeConfig] = {
     "2nm-euv": ProcessNodeConfig(
         name="2nm-euv",
-        wavelength_nm=13.5,
-        numerical_aperture=0.55,
+        wavelength_nm=WAVELENGTH_EUV_NM,
+        numerical_aperture=NA_EUV_HIGH,
         sigma_inner=0.2,
         sigma_outer=0.9,
         pixel_size_nm=0.5,
@@ -104,8 +112,8 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
     ),
     "3nm-euv": ProcessNodeConfig(
         name="3nm-euv",
-        wavelength_nm=13.5,
-        numerical_aperture=0.55,
+        wavelength_nm=WAVELENGTH_EUV_NM,
+        numerical_aperture=NA_EUV_HIGH,
         sigma_inner=0.2,
         sigma_outer=0.9,
         pixel_size_nm=0.5,
@@ -118,8 +126,8 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
     ),
     "5nm-euv": ProcessNodeConfig(
         name="5nm-euv",
-        wavelength_nm=13.5,
-        numerical_aperture=0.33,
+        wavelength_nm=WAVELENGTH_EUV_NM,
+        numerical_aperture=NA_EUV_STANDARD,
         sigma_inner=0.3,
         sigma_outer=0.8,
         pixel_size_nm=1.0,
@@ -130,8 +138,8 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
     ),
     "7nm": ProcessNodeConfig(
         name="7nm",
-        wavelength_nm=13.5,
-        numerical_aperture=0.33,
+        wavelength_nm=WAVELENGTH_EUV_NM,
+        numerical_aperture=NA_EUV_STANDARD,
         sigma_inner=0.4,
         sigma_outer=0.8,
         pixel_size_nm=1.0,
@@ -142,8 +150,8 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
     ),
     "28nm": ProcessNodeConfig(
         name="28nm",
-        wavelength_nm=193.0,
-        numerical_aperture=1.35,
+        wavelength_nm=WAVELENGTH_ARF_NM,
+        numerical_aperture=NA_IMMERSION,
         sigma_inner=0.5,
         sigma_outer=0.8,
         pixel_size_nm=1.0,
@@ -159,8 +167,8 @@ PROCESS_NODES: dict[str, ProcessNodeConfig] = {
     ),
     "45nm": ProcessNodeConfig(
         name="45nm",
-        wavelength_nm=193.0,
-        numerical_aperture=1.35,
+        wavelength_nm=WAVELENGTH_ARF_NM,
+        numerical_aperture=NA_IMMERSION,
         sigma_inner=0.5,
         sigma_outer=0.8,
         pixel_size_nm=1.0,

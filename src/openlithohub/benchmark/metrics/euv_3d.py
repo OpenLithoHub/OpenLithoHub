@@ -39,6 +39,16 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as functional
 
+from openlithohub._constants import (
+    ABSORBER_THICKNESS_NM_DEFAULT,
+    CHIEF_RAY_ANGLE_DEG_DEFAULT,
+    CHIEF_RAY_AZIMUTH_DEG_DEFAULT,
+    NA_EUV_STANDARD,
+    PIXEL_SIZE_NM_DEFAULT,
+    SIGMA_OUTER_DEFAULT,
+    THRESHOLD_GENERIC,
+    WAVELENGTH_EUV_NM,
+)
 from openlithohub._utils.tensor_ops import ensure_2d
 from openlithohub.simulators import HopkinsSimulator, SimulatorConfig
 
@@ -57,10 +67,10 @@ class Mask3DParams:
         pixel_size_nm: Mask-side pixel pitch.
     """
 
-    absorber_thickness_nm: float = 70.0
-    chief_ray_angle_deg: float = 6.0
-    chief_ray_azimuth_deg: float = 0.0
-    pixel_size_nm: float = 1.0
+    absorber_thickness_nm: float = ABSORBER_THICKNESS_NM_DEFAULT
+    chief_ray_angle_deg: float = CHIEF_RAY_ANGLE_DEG_DEFAULT
+    chief_ray_azimuth_deg: float = CHIEF_RAY_AZIMUTH_DEG_DEFAULT
+    pixel_size_nm: float = PIXEL_SIZE_NM_DEFAULT
 
 
 def _shadow_kernel(params: Mask3DParams, device: torch.device) -> torch.Tensor:
@@ -123,7 +133,7 @@ def _hv_cd_bias_nm(
     shadowed_v: torch.Tensor,
     mask: torch.Tensor,
     pixel_size_nm: float,
-    threshold: float = 0.5,
+    threshold: float = THRESHOLD_GENERIC,
 ) -> float:
     """Estimate H-vs-V CD bias in nanometres from two shadowed *masks*.
 
@@ -210,9 +220,9 @@ def compute_3d_mask_residual(
 
     p = params or Mask3DParams()
     cfg = sim_config or SimulatorConfig(
-        wavelength_nm=13.5,
-        na=0.33,
-        sigma=0.7,
+        wavelength_nm=WAVELENGTH_EUV_NM,
+        na=NA_EUV_STANDARD,
+        sigma=SIGMA_OUTER_DEFAULT,
         pixel_size_nm=p.pixel_size_nm,
     )
     sim = HopkinsSimulator(cfg)

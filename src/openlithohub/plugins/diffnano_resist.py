@@ -10,25 +10,13 @@ from __future__ import annotations
 
 import torch
 
+from openlithohub._constants import DIFFNANO_RESIST_DEFAULTS
 from openlithohub.plugins import optional_import
 
 __all__ = ["DiffNanoResistAdapter"]
 
-# ---------------------------------------------------------------------------
-# Single source of truth for plugin parameter defaults (WS-B centralization)
-# ---------------------------------------------------------------------------
-# These values define the canonical defaults for the DiffNano resist plugin.
-# When users do not explicitly provide parameters, the adapter falls back to
-# these values.  If you need to change a default, change it HERE.
-# ---------------------------------------------------------------------------
-
-RESIST_DEFAULTS: dict[str, float] = {
-    "acid_diffusion_length_nm": 20.0,  # nm — acid diffusion length during PEB
-    "development_contrast": 10.0,  # dimensionless — higher = sharper development
-    "threshold_dose": 0.5,  # normalized — clearing threshold
-    "peb_diffusion_nm": 10.0,  # nm — post-exposure bake diffusion length
-    "pixel_size_nm": 1.0,  # nm — grid spacing for nm-to-pixel conversion
-}
+# Re-export for backward compat with tests
+RESIST_DEFAULTS = DIFFNANO_RESIST_DEFAULTS
 
 
 class DiffNanoResistAdapter:

@@ -9,53 +9,19 @@ from __future__ import annotations
 
 import torch
 
+from openlithohub._constants import (
+    DIFFCFD_LITHO_DEFAULTS,
+    DIFFCFD_PROCESS_DEFAULTS,
+    DIFFCFD_SPIN_COAT_DEFAULTS,
+)
 from openlithohub.simulators.base import BaseSimulator, SimulatorConfig, SimulatorResult
 
 __all__ = ["DiffCFDLithoSimulator", "DiffCFDSpinCoatSimulator"]
 
-# ---------------------------------------------------------------------------
-# Single source of truth for plugin parameter defaults (WS-B centralization)
-# ---------------------------------------------------------------------------
-# These dicts define the canonical default values for all physical constants
-# used by the DiffCFD plugin adapters.  When users do not explicitly provide
-# parameters via SimulatorConfig.extra, the adapters fall back to these values.
-# If you need to change a default, change it HERE -- not in the adapter bodies.
-# ---------------------------------------------------------------------------
-
-LITHO_DEFAULTS: dict[str, float] = {
-    # Dill exposure parameters (typical 193nm chemically amplified resist)
-    "dill_A": 0.55,  # cm^(-1) / (mJ/cm^2)  — bleachable absorption
-    "dill_B": 0.05,  # cm^(-1)               — non-bleachable absorption
-    "dill_C": 0.014,  # cm^2 / mJ             — PAC quantum efficiency
-    # Mack development parameters
-    "r_max": 150.0,  # nm/s                  — max dissolution rate
-    "r_min": 0.1,  # nm/s                  — min dissolution rate
-    "mack_n": 5.0,  # dimensionless         — development selectivity
-    "mack_a": 0.5,  # dimensionless         — Mack threshold parameter
-    # Solvent coupling
-    "gamma_solvent": 3.0,  # dimensionless         — solvent plasticization coeff
-}
-
-SPIN_COAT_DEFAULTS: dict[str, float] = {
-    "rho": 1000.0,  # kg/m^3                — resist solution density
-    "mu_solvent": 1e-3,  # Pa*s                  — solvent dynamic viscosity
-    "alpha_visc": 4.5,  # dimensionless         — viscosity-concentration exponent
-    "beta_visc": 1.5,  # dimensionless         — viscosity-concentration exponent
-    "c_evap": 1.2e-6,  # m/s                   — evaporation rate constant
-    "c_solid": 0.15,  # mass fraction         — solid content in resist
-}
-
-# Process-condition defaults used during simulate()
-PROCESS_DEFAULTS: dict[str, float] = {
-    "thickness_m": 8e-6,  # m   — dry film thickness
-    "residual_solvent": 0.15,  # fraction — residual solvent after spin
-    "dev_time_s": 30.0,  # s   — development time
-    # Spin-coating initial conditions
-    "spin_dt": 0.001,  # s   — time step
-    "h0_m": 8e-6,  # m   — initial film thickness
-    "c0": 0.85,  # fraction — initial solvent concentration
-    "omega_rpm": 2500.0,  # RPM — spin speed
-}
+# Re-export dicts for backward compat with tests that import these names
+LITHO_DEFAULTS = DIFFCFD_LITHO_DEFAULTS
+SPIN_COAT_DEFAULTS = DIFFCFD_SPIN_COAT_DEFAULTS
+PROCESS_DEFAULTS = DIFFCFD_PROCESS_DEFAULTS
 
 
 class DiffCFDLithoSimulator(BaseSimulator):

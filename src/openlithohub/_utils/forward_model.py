@@ -19,6 +19,8 @@ import math
 import torch
 import torch.nn.functional as functional
 
+from openlithohub._constants import THRESHOLD_GENERIC
+
 
 def _build_gaussian_kernel(sigma: float, device: torch.device) -> torch.Tensor:
     radius = max(1, int(math.ceil(3.0 * sigma)))
@@ -126,7 +128,7 @@ def _gaussian_diffuse(image: torch.Tensor, sigma_px: float) -> torch.Tensor:
 
 def apply_resist_threshold(
     aerial_image: torch.Tensor,
-    threshold: float = 0.5,
+    threshold: float = THRESHOLD_GENERIC,
     *,
     resist_diffusion_nm: float = 0.0,
     pixel_size_nm: float = 1.0,

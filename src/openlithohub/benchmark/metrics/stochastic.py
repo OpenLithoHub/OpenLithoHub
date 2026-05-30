@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import torch
 
+from openlithohub._constants import THRESHOLD_ICCAD16
 from openlithohub._utils.forward_model import apply_resist_threshold, simulate_aerial_image
 from openlithohub._utils.morphology import binary_dilation, connected_components, distance_transform
 from openlithohub._utils.tensor_ops import ensure_2d
@@ -37,7 +38,7 @@ def _nominal_state(
     dose_photons_per_nm2: float,
     pixel_size_nm: float,
     sigma_px: float = 2.0,
-    resist_threshold: float = 0.225,
+    resist_threshold: float = THRESHOLD_ICCAD16,
     resist_diffusion_nm: float = 0.0,
     quencher: float = 0.0,
 ) -> _NominalState:
@@ -76,7 +77,7 @@ def compute_stochastic_robustness(
     dose_photons_per_nm2: float = 30.0,
     pixel_size_nm: float = 1.0,
     seed: int | None = 0,
-    resist_threshold: float = 0.225,
+    resist_threshold: float = THRESHOLD_ICCAD16,
     resist_diffusion_nm: float = 0.0,
     quencher: float = 0.0,
 ) -> dict[str, float]:
@@ -252,7 +253,7 @@ def _trial_defect_classes(
     nominal_contacts: set[int],
     nominal_lines: set[int],
     nominal_bg_holes: set[int],
-    resist_threshold: float = 0.225,
+    resist_threshold: float = THRESHOLD_ICCAD16,
 ) -> tuple[int, int, int, int]:
     """Count microbridge / broken-line / missing-contact / merged-contact in one trial.
 
@@ -322,7 +323,7 @@ def compute_stochastic_defect_classes(
     seed: int | None = 0,
     contact_aspect_max: float = 1.5,
     contact_area_max: int = 64,
-    resist_threshold: float = 0.225,
+    resist_threshold: float = THRESHOLD_ICCAD16,
     resist_diffusion_nm: float = 0.0,
     quencher: float = 0.0,
 ) -> StochasticDefectRates:

@@ -8,6 +8,16 @@ import numpy as np
 import torch
 import typer
 
+from openlithohub._constants import (
+    DOSE_DEFAULT,
+    NA_IMMERSION,
+    PIXEL_SIZE_NM_DEFAULT,
+    QUENCHER_DEFAULT,
+    RESIST_DIFFUSION_NM_DEFAULT,
+    SIGMA_OUTER_DEFAULT,
+    THRESHOLD_ICCAD16,
+    WAVELENGTH_ARF_NM,
+)
 from openlithohub.simulators import (
     SimulatorConfig,
     describe_simulators,
@@ -26,19 +36,19 @@ def run(
     out_path: Path = typer.Option(
         Path("aerial.npy"), "--out", "-o", help="Where to write the aerial image."
     ),
-    pixel_size_nm: float = typer.Option(1.0, help="Pixel size in nm."),
-    wavelength_nm: float = typer.Option(193.0, help="Exposure wavelength in nm."),
-    na: float = typer.Option(1.35, help="Numerical aperture."),
-    sigma: float = typer.Option(0.7, help="Outer partial-coherence factor."),
-    threshold: float = typer.Option(0.225, help="Resist threshold."),
-    dose: float = typer.Option(1.0, help="Dose multiplier."),
+    pixel_size_nm: float = typer.Option(PIXEL_SIZE_NM_DEFAULT, help="Pixel size in nm."),
+    wavelength_nm: float = typer.Option(WAVELENGTH_ARF_NM, help="Exposure wavelength in nm."),
+    na: float = typer.Option(NA_IMMERSION, help="Numerical aperture."),
+    sigma: float = typer.Option(SIGMA_OUTER_DEFAULT, help="Outer partial-coherence factor."),
+    threshold: float = typer.Option(THRESHOLD_ICCAD16, help="Resist threshold."),
+    dose: float = typer.Option(DOSE_DEFAULT, help="Dose multiplier."),
     resist_diffusion_nm: float = typer.Option(
-        0.0,
+        RESIST_DIFFUSION_NM_DEFAULT,
         "--resist-diffusion-nm",
         help="Acid diffusion length in nm. 0.0 (default) = legacy CTR.",
     ),
     quencher: float = typer.Option(
-        0.0,
+        QUENCHER_DEFAULT,
         "--quencher",
         help="Quencher concentration subtracted after diffusion. 0.0 = disabled.",
     ),

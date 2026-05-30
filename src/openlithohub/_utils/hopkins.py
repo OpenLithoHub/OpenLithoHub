@@ -34,6 +34,17 @@ from typing import Literal
 
 import torch
 
+from openlithohub._constants import (
+    DEFOCUS_NM_DEFAULT,
+    NA_IMMERSION,
+    NUM_KERNELS_DEFAULT,
+    PIXEL_SIZE_NM_DEFAULT,
+    POLE_OPENING_DEG_DEFAULT,
+    SIGMA_INNER_DEFAULT,
+    SIGMA_OUTER_DEFAULT,
+    WAVELENGTH_ARF_NM,
+)
+
 IlluminationKind = Literal["circular", "annular", "dipole", "quasar"]
 
 
@@ -63,16 +74,16 @@ class HopkinsParams:
         defocus_nm: Defocus offset; affects the pupil phase only.
     """
 
-    wavelength_nm: float = 193.0
-    na: float = 1.35
-    sigma: float = 0.7
-    sigma_inner: float = 0.0
-    pixel_size_nm: float = 1.0
-    num_kernels: int = 24
+    wavelength_nm: float = WAVELENGTH_ARF_NM
+    na: float = NA_IMMERSION
+    sigma: float = SIGMA_OUTER_DEFAULT
+    sigma_inner: float = SIGMA_INNER_DEFAULT
+    pixel_size_nm: float = PIXEL_SIZE_NM_DEFAULT
+    num_kernels: int = NUM_KERNELS_DEFAULT
     illumination: IlluminationKind = "circular"
     dipole_angle_deg: float = 0.0
-    pole_opening_deg: float = 30.0
-    defocus_nm: float = 0.0
+    pole_opening_deg: float = POLE_OPENING_DEG_DEFAULT
+    defocus_nm: float = DEFOCUS_NM_DEFAULT
 
     def cache_key(self, grid_size: int, device: str, kernel_dtype: str) -> Hashable:
         return (

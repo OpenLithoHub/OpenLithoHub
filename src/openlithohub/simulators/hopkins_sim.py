@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import torch
 
+from openlithohub._constants import ACID_DIFFUSION_LENGTH_NM, NUM_KERNELS_DEFAULT, POLE_OPENING_DEG_DEFAULT
 from openlithohub._utils.forward_model import _gaussian_diffuse
 from openlithohub._utils.hopkins import HopkinsParams, simulate_aerial_image_hopkins
 from openlithohub.simulators.base import BaseSimulator, SimulatorConfig, SimulatorResult
@@ -75,10 +76,10 @@ class HopkinsSimulator(BaseSimulator):
             sigma=config.sigma,
             sigma_inner=config.sigma_inner,
             pixel_size_nm=config.pixel_size_nm,
-            num_kernels=int(extra.get("num_kernels", 24)),
+            num_kernels=int(extra.get("num_kernels", NUM_KERNELS_DEFAULT)),
             illumination=extra.get("illumination", "circular"),
             dipole_angle_deg=float(extra.get("dipole_angle_deg", 0.0)),
-            pole_opening_deg=float(extra.get("pole_opening_deg", 30.0)),
+            pole_opening_deg=float(extra.get("pole_opening_deg", POLE_OPENING_DEG_DEFAULT)),
             defocus_nm=config.defocus_nm,
         )
 
@@ -130,7 +131,7 @@ class HopkinsSimulator(BaseSimulator):
         from openlithohub.plugins.diffnano_resist import DiffNanoResistAdapter
 
         adapter = DiffNanoResistAdapter(
-            acid_diffusion_length_nm=self.config.resist_diffusion_nm or 20.0,
+            acid_diffusion_length_nm=self.config.resist_diffusion_nm or ACID_DIFFUSION_LENGTH_NM,
             threshold_dose=self.config.threshold,
             pixel_size_nm=self.config.pixel_size_nm,
         )

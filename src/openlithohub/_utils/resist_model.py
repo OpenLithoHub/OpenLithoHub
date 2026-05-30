@@ -5,13 +5,14 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as functional
 
+from openlithohub._constants import STEEPNESS_DEFAULT, THRESHOLD_GENERIC
 from openlithohub._utils.forward_model import _build_gaussian_kernel, _circular_pad_clamped
 
 
 def differentiable_threshold(
     aerial_image: torch.Tensor,
-    threshold: float = 0.5,
-    steepness: float = 50.0,
+    threshold: float = THRESHOLD_GENERIC,
+    steepness: float = STEEPNESS_DEFAULT,
 ) -> torch.Tensor:
     """Smooth, differentiable substitute for a hard resist threshold.
 
@@ -41,7 +42,7 @@ def simulate_resist(
     aerial_image: torch.Tensor,
     acid_diffusion_length_nm: float = 5.0,
     pixel_size_nm: float = 1.0,
-    threshold: float = 0.5,
+    threshold: float = THRESHOLD_GENERIC,
     quencher_concentration: float = 0.1,
 ) -> torch.Tensor:
     """Simulate chemically-amplified resist response with acid diffusion.
@@ -83,9 +84,9 @@ def simulate_resist_soft(
     aerial_image: torch.Tensor,
     acid_diffusion_length_nm: float = 5.0,
     pixel_size_nm: float = 1.0,
-    threshold: float = 0.5,
+    threshold: float = THRESHOLD_GENERIC,
     quencher_concentration: float = 0.1,
-    steepness: float = 50.0,
+    steepness: float = STEEPNESS_DEFAULT,
 ) -> torch.Tensor:
     """Differentiable resist simulation using sigmoid instead of hard threshold.
 
@@ -104,8 +105,8 @@ def simulate_resist_soft(
 
 def apply_differentiable_resist(
     aerial_image: torch.Tensor,
-    threshold: float = 0.5,
-    steepness: float = 50.0,
+    threshold: float = THRESHOLD_GENERIC,
+    steepness: float = STEEPNESS_DEFAULT,
     resist_diffusion_nm: float = 0.0,
     pixel_size_nm: float = 1.0,
     quencher: float = 0.0,
