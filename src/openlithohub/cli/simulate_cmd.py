@@ -31,6 +31,14 @@ def run(
     sigma: float = typer.Option(0.7, help="Outer partial-coherence factor."),
     threshold: float = typer.Option(0.225, help="Resist threshold."),
     dose: float = typer.Option(1.0, help="Dose multiplier."),
+    resist_diffusion_nm: float = typer.Option(
+        0.0, "--resist-diffusion-nm",
+        help="Acid diffusion length in nm. 0.0 (default) = legacy CTR.",
+    ),
+    quencher: float = typer.Option(
+        0.0, "--quencher",
+        help="Quencher concentration subtracted after diffusion. 0.0 = disabled.",
+    ),
 ) -> None:
     """Forward-simulate ``mask_path`` with the chosen ``backend``."""
 
@@ -45,6 +53,8 @@ def run(
         pixel_size_nm=pixel_size_nm,
         dose=dose,
         threshold=threshold,
+        resist_diffusion_nm=resist_diffusion_nm,
+        quencher=quencher,
     )
     sim = get_simulator(backend, config)
     sim.prepare()

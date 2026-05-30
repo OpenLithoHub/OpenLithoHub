@@ -109,9 +109,28 @@ def _circular_pad_clamped(inp: torch.Tensor, padding: int) -> torch.Tensor:
     return out
 
 
+def _gaussian_diffuse(image: torch.Tensor, sigma_px: float) -> torch.Tensor:
+    """Apply Gaussian diffusion blur with circular padding.
+
+    Used by both the aerial-image forward model and the resist diffusion
+    step — sharing this helper keeps the periodic-boundary contract
+    consistent. Callers requiring strict bit-reproducibility should
+    ensure ``set_deterministic()`` has been called.
+    """
+    kernel = _build_gaussian_kernel(sigma_px, image.device)
+    padding = kernel.shape[-1] // 2
+    inp = image.unsqueeze(0).unsqueeze(0)
+    inp_padded = _circular_pad_clamped(inp, padding)
+    return functional.conv2d(inp_padded, kernel).squeeze(0).squeeze(0)
+
+
 def apply_resist_threshold(
     aerial_image: torch.Tensor,
     threshold: float = 0.5,
+    *,
+    resist_diffusion_nm: float = 0.0,
+    pixel_size_nm: float = 1.0,
+    quencher: float = 0.0,
 ) -> torch.Tensor:
     """Apply a hard resist threshold to produce a binary resist pattern.
 
@@ -120,12 +139,20 @@ def apply_resist_threshold(
     [Yang2023_LithoBench, §3.2, p.5] and ``SimulatorConfig.threshold``).
     Pass ``threshold=0.225`` when reproducing benchmark numbers.
 
-    This is **constant threshold resist (CTR) without diffusion** — the
+    With ``resist_diffusion_nm=0.0`` and ``quencher=0.0`` (default) this
+    is **constant threshold resist (CTR) without diffusion** — the
     sigmoid-on-aerial simplification documented in
-    ``docs/architecture.md → Resist Model Simplification``. Real per-node
-    CTR parameters are foundry-confidential and cannot ship in an
-    open-source repo; benchmark-relative comparison is unaffected, but
-    absolute wafer prediction is not in scope.
+    ``docs/architecture.md → Resist Model Simplification``. The output is
+    bit-identical to the legacy ``(aerial >= threshold).float()`` path.
+
+    With a positive ``resist_diffusion_nm`` the aerial image is first
+    blurred by a Gaussian whose sigma matches the acid diffusion length,
+    then quencher is subtracted, and finally the hard threshold is
+    applied. This models a simplified chemically-amplified resist (CAR).
+
+    Real per-node CTR parameters are foundry-confidential and cannot ship
+    in an open-source repo; benchmark-relative comparison is unaffected,
+    but absolute wafer prediction is not in scope.
 
     Returns a hard 0/1 tensor — gradients do **not** flow back through
     this function. The README's "end-to-end differentiable" claim refers
@@ -136,4 +163,12 @@ def apply_resist_threshold(
     measurement / scoring code (PVB envelopes, stochastic comparisons,
     leaderboard pass/fail).
     """
-    return (aerial_image >= threshold).float()
+    if resist_diffusion_nm <= 0.0 and quencher <= 0.0:
+        return (aerial_image >= threshold).float()
+
+    acid = aerial_image.clone()
+    sigma_px = resist_diffusion_nm / max(pixel_size_nm, 1e-6)
+    if sigma_px > 0.1:
+        acid = _gaussian_diffuse(acid, sigma_px)
+    acid = (acid - quencher).clamp(min=0.0)
+    return (acid >= threshold).float()

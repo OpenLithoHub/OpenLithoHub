@@ -164,6 +164,7 @@ class LeaderboardStore:
 
     def submit(self, result: BenchmarkResult) -> str:
         _require_forward_simulation(result)
+        _require_no_diffusion(result)
         with _file_lock(self._lock_path):
             entries = self._read_entries()
             submission_id = _generate_id(result.model_name)
@@ -230,6 +231,23 @@ def _require_forward_simulation(result: BenchmarkResult) -> None:
             "against a forward-simulated aerial/resist image. Run the "
             "model through `openlithohub.simulators` (Hopkins backend is "
             "bundled and differentiable) before populating this field."
+        )
+
+
+def _require_no_diffusion(result: BenchmarkResult) -> None:
+    """Reject submissions that used non-zero acid diffusion.
+
+    The canonical leaderboard baseline uses a hard-threshold CTR model
+    (diffusion = 0). Positive diffusion lengths produce non-comparable
+    resist contours, so submissions with ``resist_diffusion_nm > 0`` are
+    rejected to preserve leaderboard integrity.
+    """
+    if result.resist_diffusion_nm is not None and result.resist_diffusion_nm > 0.0:
+        raise ValueError(
+            "Submission rejected: resist_diffusion_nm > 0 is not allowed for "
+            "leaderboard submissions. The canonical baseline uses a hard-threshold "
+            "CTR model (diffusion = 0). Re-run with --resist-diffusion-nm 0.0 "
+            "to produce a comparable score."
         )
 
 

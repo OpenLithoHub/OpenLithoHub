@@ -42,6 +42,13 @@ class SimulatorConfig:
     # threshold = 0.225 is the canonical resist cutoff used to score
     # ICCAD16 mask layouts on the simulated wafer image. Confidence A.
     threshold: float = 0.225
+    # Acid diffusion length in nm. 0.0 (default) produces bit-identical
+    # results to the legacy hard-threshold CTR model; positive values
+    # enable gaussian acid diffusion before binarization.
+    resist_diffusion_nm: float = 0.0
+    # Base quencher concentration subtracted from acid field after
+    # diffusion. 0.0 disables quencher neutralization.
+    quencher: float = 0.0
     extra: dict[str, Any] = field(default_factory=dict)
 
 

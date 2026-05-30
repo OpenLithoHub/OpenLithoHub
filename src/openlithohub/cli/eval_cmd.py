@@ -115,6 +115,25 @@ def run(
             "must produce the same score."
         ),
     ),
+    resist_diffusion_nm: float = typer.Option(
+        0.0,
+        "--resist-diffusion-nm",
+        help=(
+            "Acid diffusion length in nm. 0.0 (default) uses the legacy "
+            "hard-threshold CTR model; positive values enable gaussian acid "
+            "diffusion before binarization in the scoring path. Incompatible "
+            "with --submit."
+        ),
+    ),
+    quencher: float = typer.Option(
+        0.0,
+        "--quencher",
+        help=(
+            "Base quencher concentration. Subtracted from the acid field "
+            "after diffusion. 0.0 (default) disables quencher neutralization. "
+            "Incompatible with --submit."
+        ),
+    ),
 ) -> None:
     """Run evaluation of a lithography model on a benchmark dataset."""
     console = Console()
@@ -123,6 +142,13 @@ def run(
         from openlithohub._utils.determinism import set_deterministic
 
         set_deterministic()
+
+    if submit_to_leaderboard and resist_diffusion_nm > 0.0:
+        console.print(
+            "[red]Error:[/red] --resist-diffusion-nm > 0 is incompatible with "
+            "--submit. The leaderboard requires a hard-threshold CTR baseline."
+        )
+        raise typer.Exit(1)
 
     import openlithohub.models.examples.dummy_model  # noqa: F401 — register built-in models
     import openlithohub.models.levelset_ilt  # noqa: F401
@@ -184,7 +210,7 @@ def run(
     # ``HopkinsSimulator()`` (wavelength=193, pixel=1.0, …) and the two
     # "wafer" numbers can disagree because each used a different forward
     # model — neither matching the configured node.
-    forward_sim = _build_forward_simulator(node, pixel_nm)
+    forward_sim = _build_forward_simulator(node, pixel_nm, resist_diffusion_nm, quencher)
 
     try:
         try:
@@ -281,7 +307,11 @@ def run(
                 drc_pass_flags.append(drc_result.passed)
 
             if pvband_check:
-                pv = compute_pvband(result.mask, pixel_size_nm=pixel_nm)
+                pv = compute_pvband(
+                    result.mask, pixel_size_nm=pixel_nm,
+                    resist_diffusion_nm=resist_diffusion_nm,
+                    quencher=quencher,
+                )
                 sample_metrics.update(pv)
 
             if sample_metrics:
@@ -352,6 +382,7 @@ def run(
                 dropped_nonfinite=dropped or None,
                 paper_url=paper_url,
                 code_url=code_url,
+                resist_diffusion_nm=resist_diffusion_nm if resist_diffusion_nm > 0.0 else None,
             )
             sub_id = lb_submit(result_entry)
             console.print(f"[green]Submitted to leaderboard![/green] ID: {sub_id}")
@@ -529,7 +560,11 @@ def _is_unweighted_metric(key: str) -> bool:
     return any(key.startswith(p) or key == p.rstrip("_") for p in _UNWEIGHTED_KEY_PREFIXES)
 
 
-def _build_forward_simulator(node: str, pixel_nm: float) -> Any:
+def _build_forward_simulator(
+    node: str, pixel_nm: float,
+    resist_diffusion_nm: float = 0.0,
+    quencher: float = 0.0,
+) -> Any:
     """Build a single ``HopkinsSimulator`` from the resolved node config.
 
     Both ``compute_wafer_epe`` and ``compute_l2_error`` accept an optional
@@ -553,9 +588,15 @@ def _build_forward_simulator(node: str, pixel_nm: float) -> Any:
             na=nc.numerical_aperture,
             pixel_size_nm=pixel_nm,
             threshold=nc.resist_threshold,
+            resist_diffusion_nm=resist_diffusion_nm,
+            quencher=quencher,
         )
         return HopkinsSimulator(cfg)
-    return HopkinsSimulator(SimulatorConfig(pixel_size_nm=pixel_nm))
+    return HopkinsSimulator(SimulatorConfig(
+        pixel_size_nm=pixel_nm,
+        resist_diffusion_nm=resist_diffusion_nm,
+        quencher=quencher,
+    ))
 
 
 def _build_perf_kwargs(device: str, dtype: str, compile_forward: bool) -> dict[str, Any]:

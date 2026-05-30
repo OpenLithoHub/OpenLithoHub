@@ -48,6 +48,8 @@ def compute_pvband(
     defocus_range_nm: float = 20.0,
     pixel_size_nm: float = 1.0,
     simulator: BaseSimulator | None = None,
+    resist_diffusion_nm: float = 0.0,
+    quencher: float = 0.0,
 ) -> dict[str, float]:
     """Compute Process Variation Band width for a given mask.
 
@@ -72,11 +74,13 @@ def compute_pvband(
 
     if simulator is None:
         outer_envelope, inner_envelope = _gaussian_pw_envelopes(
-            binary, nominal_dose, dose_variation, defocus_range_nm, pixel_size_nm
+            binary, nominal_dose, dose_variation, defocus_range_nm, pixel_size_nm,
+            resist_diffusion_nm=resist_diffusion_nm, quencher=quencher,
         )
     else:
         outer_envelope, inner_envelope = _simulator_pw_envelopes(
-            binary, simulator, nominal_dose, dose_variation, defocus_range_nm
+            binary, simulator, nominal_dose, dose_variation, defocus_range_nm,
+            resist_diffusion_nm=resist_diffusion_nm, quencher=quencher,
         )
 
     band = (outer_envelope - inner_envelope).clamp(min=0.0)
@@ -103,6 +107,8 @@ def _gaussian_pw_envelopes(
     dose_variation: float,
     defocus_range_nm: float,
     pixel_size_nm: float,
+    resist_diffusion_nm: float = 0.0,
+    quencher: float = 0.0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     sigma_nominal = 2.0
     sigma_defocus = defocus_range_nm / (2.0 * pixel_size_nm)
@@ -123,7 +129,12 @@ def _gaussian_pw_envelopes(
     inner_envelope = torch.ones_like(binary)
     for dose, sigma in corners:
         aerial = simulate_aerial_image(binary, sigma_px=sigma, dose=dose)
-        resist = apply_resist_threshold(aerial, threshold=0.5)
+        resist = apply_resist_threshold(
+            aerial, threshold=0.5,
+            resist_diffusion_nm=resist_diffusion_nm,
+            pixel_size_nm=pixel_size_nm,
+            quencher=quencher,
+        )
         outer_envelope = torch.maximum(outer_envelope, resist)
         inner_envelope = torch.minimum(inner_envelope, resist)
     return outer_envelope, inner_envelope
@@ -135,6 +146,8 @@ def _simulator_pw_envelopes(
     nominal_dose: float,
     dose_variation: float,
     defocus_range_nm: float,
+    resist_diffusion_nm: float = 0.0,
+    quencher: float = 0.0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Drive ``simulator`` at four PW corners and aggregate resist contours.
 
@@ -172,7 +185,12 @@ def _simulator_pw_envelopes(
             resist = result.resist.to(binary.dtype)
         else:
             threshold = corner_cfg.threshold
-            resist = (result.aerial >= threshold).to(binary.dtype)
+            resist = apply_resist_threshold(
+                result.aerial, threshold=threshold,
+                resist_diffusion_nm=resist_diffusion_nm,
+                pixel_size_nm=simulator.config.pixel_size_nm,
+                quencher=quencher,
+            ).to(binary.dtype)
         outer_envelope = torch.maximum(outer_envelope, resist)
         inner_envelope = torch.minimum(inner_envelope, resist)
     return outer_envelope, inner_envelope

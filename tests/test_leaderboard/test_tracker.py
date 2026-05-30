@@ -221,6 +221,39 @@ def test_submission_without_l2_error_is_rejected(tmp_store: LeaderboardStore) ->
         tmp_store.submit(bare_mask_only)
 
 
+def test_submission_with_diffusion_is_rejected(tmp_store: LeaderboardStore) -> None:
+    """Non-zero acid diffusion produces non-comparable resist contours and
+    must be rejected to preserve leaderboard integrity."""
+    diff_result = BenchmarkResult(
+        model_name="diffusion-model",
+        dataset="lithobench",
+        process_node=ProcessNode.N7,
+        mask_topology=MaskTopology.MANHATTAN,
+        epe_mean_nm=2.0,
+        epe_max_nm=5.0,
+        l2_error_pixels=42.0,
+        resist_diffusion_nm=5.0,
+    )
+    with pytest.raises(ValueError, match="resist_diffusion_nm"):
+        tmp_store.submit(diff_result)
+
+
+def test_submission_with_zero_diffusion_accepted(tmp_store: LeaderboardStore) -> None:
+    """resist_diffusion_nm=0.0 is the canonical baseline and must be accepted."""
+    result = BenchmarkResult(
+        model_name="baseline-model",
+        dataset="lithobench",
+        process_node=ProcessNode.N7,
+        mask_topology=MaskTopology.MANHATTAN,
+        epe_mean_nm=2.0,
+        epe_max_nm=5.0,
+        l2_error_pixels=42.0,
+        resist_diffusion_nm=0.0,
+    )
+    sub_id = tmp_store.submit(result)
+    assert sub_id.startswith("baseline-model-")
+
+
 def test_combined_filters(tmp_store: LeaderboardStore) -> None:
     entries = [
         ("a", "lithobench", ProcessNode.N7),

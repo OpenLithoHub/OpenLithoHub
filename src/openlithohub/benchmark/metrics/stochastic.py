@@ -38,12 +38,19 @@ def _nominal_state(
     pixel_size_nm: float,
     sigma_px: float = 2.0,
     resist_threshold: float = 0.225,
+    resist_diffusion_nm: float = 0.0,
+    quencher: float = 0.0,
 ) -> _NominalState:
     """Compute the per-mask nominal quantities reused across stochastic trials."""
     m = ensure_2d(mask)
     binary = (m > 0.5).float()
     aerial_nominal = simulate_aerial_image(binary, sigma_px=sigma_px, dose=1.0)
-    resist_nominal = apply_resist_threshold(aerial_nominal, threshold=resist_threshold)
+    resist_nominal = apply_resist_threshold(
+        aerial_nominal, threshold=resist_threshold,
+        resist_diffusion_nm=resist_diffusion_nm,
+        pixel_size_nm=pixel_size_nm,
+        quencher=quencher,
+    )
     fg_labels, _ = connected_components(resist_nominal, connectivity=8)
     nominal_bg = 1.0 - resist_nominal
     bg_labels, _ = connected_components(nominal_bg, connectivity=8)
@@ -69,6 +76,8 @@ def compute_stochastic_robustness(
     pixel_size_nm: float = 1.0,
     seed: int | None = 0,
     resist_threshold: float = 0.225,
+    resist_diffusion_nm: float = 0.0,
+    quencher: float = 0.0,
 ) -> dict[str, float]:
     """Evaluate mask robustness against EUV photon shot noise.
 
@@ -85,7 +94,8 @@ def compute_stochastic_robustness(
     different resist contour than the metrics it is reported alongside.
     """
     state = _nominal_state(
-        mask, dose_photons_per_nm2, pixel_size_nm, resist_threshold=resist_threshold
+        mask, dose_photons_per_nm2, pixel_size_nm, resist_threshold=resist_threshold,
+        resist_diffusion_nm=resist_diffusion_nm, quencher=quencher,
     )
     resist_nominal = state.resist_nominal
     fg_labels = state.fg_labels
@@ -108,7 +118,12 @@ def compute_stochastic_robustness(
     for _ in range(num_trials):
         photons = torch.poisson(state.lambda_map, generator=generator)
         noisy_intensity = photons / max(state.dose_scale, 1e-12)
-        noisy_resist = apply_resist_threshold(noisy_intensity, threshold=resist_threshold)
+        noisy_resist = apply_resist_threshold(
+            noisy_intensity, threshold=resist_threshold,
+            resist_diffusion_nm=resist_diffusion_nm,
+            pixel_size_nm=pixel_size_nm,
+            quencher=quencher,
+        )
 
         # Per-component matching: a trial may simultaneously merge some
         # nominal lines and break others. The previous net-component-count
@@ -302,6 +317,8 @@ def compute_stochastic_defect_classes(
     contact_aspect_max: float = 1.5,
     contact_area_max: int = 64,
     resist_threshold: float = 0.225,
+    resist_diffusion_nm: float = 0.0,
+    quencher: float = 0.0,
 ) -> StochasticDefectRates:
     """Per-class EUV stochastic defect rates in failures/cm^2.
 
@@ -330,7 +347,8 @@ def compute_stochastic_defect_classes(
         StochasticDefectRates with per-class and total failure rates.
     """
     state = _nominal_state(
-        mask, dose_photons_per_nm2, pixel_size_nm, resist_threshold=resist_threshold
+        mask, dose_photons_per_nm2, pixel_size_nm, resist_threshold=resist_threshold,
+        resist_diffusion_nm=resist_diffusion_nm, quencher=quencher,
     )
     resist_nominal = state.resist_nominal
     nominal_fg_labels = state.fg_labels
@@ -368,7 +386,12 @@ def compute_stochastic_defect_classes(
     for _ in range(num_trials):
         photons = torch.poisson(state.lambda_map, generator=generator)
         noisy_intensity = photons / max(state.dose_scale, 1e-12)
-        noisy_resist = apply_resist_threshold(noisy_intensity, threshold=resist_threshold)
+        noisy_resist = apply_resist_threshold(
+            noisy_intensity, threshold=resist_threshold,
+            resist_diffusion_nm=resist_diffusion_nm,
+            pixel_size_nm=pixel_size_nm,
+            quencher=quencher,
+        )
 
         mb, bl, mc, mr = _trial_defect_classes(
             nominal_resist=resist_nominal,

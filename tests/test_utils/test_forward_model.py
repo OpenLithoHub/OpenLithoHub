@@ -6,6 +6,7 @@ import torch
 from openlithohub._utils.forward_model import (
     _build_gaussian_kernel,
     _circular_pad_clamped,
+    _gaussian_diffuse,
     apply_resist_threshold,
     simulate_aerial_image,
 )
@@ -112,3 +113,84 @@ class TestCircularPadClamped:
         inp = torch.rand(1, 1, 1, 1)
         with pytest.raises(ValueError, match="1-pixel-wide axis"):
             _circular_pad_clamped(inp, padding=1)
+
+
+class TestApplyResistThresholdDiffusion:
+    """Opt-in acid diffusion: resist_diffusion_nm=0 and quencher=0 (default)
+    must be bit-identical to the legacy ``(aerial >= threshold).float()`` path."""
+
+    def test_zero_diffusion_bit_identical_to_legacy(self) -> None:
+        aerial = torch.rand(64, 64)
+        legacy = (aerial >= 0.5).float()
+        with_diffusion = apply_resist_threshold(
+            aerial, threshold=0.5,
+            resist_diffusion_nm=0.0, pixel_size_nm=1.0, quencher=0.0,
+        )
+        assert torch.equal(legacy, with_diffusion)
+
+    def test_positive_diffusion_changes_output(self) -> None:
+        aerial = torch.zeros(64, 64)
+        aerial[20:44, 20:44] = 1.0
+        no_diff = apply_resist_threshold(aerial, threshold=0.5)
+        with_diff = apply_resist_threshold(
+            aerial, threshold=0.5,
+            resist_diffusion_nm=3.0, pixel_size_nm=1.0,
+        )
+        assert not torch.equal(no_diff, with_diff)
+
+    def test_quencher_alone_changes_output(self) -> None:
+        aerial = torch.rand(32, 32) * 0.6
+        no_q = apply_resist_threshold(aerial, threshold=0.5, quencher=0.0)
+        with_q = apply_resist_threshold(aerial, threshold=0.5, quencher=0.2)
+        assert not torch.equal(no_q, with_q)
+
+    def test_deterministic_reproducibility(self) -> None:
+        aerial = torch.rand(64, 64)
+        r1 = apply_resist_threshold(
+            aerial, threshold=0.5,
+            resist_diffusion_nm=5.0, pixel_size_nm=1.0,
+        )
+        r2 = apply_resist_threshold(
+            aerial, threshold=0.5,
+            resist_diffusion_nm=5.0, pixel_size_nm=1.0,
+        )
+        assert torch.equal(r1, r2)
+
+    def test_diffusion_changes_area(self) -> None:
+        aerial = torch.zeros(64, 64)
+        aerial[20:44, 20:44] = 1.0
+        resist_no_diff = apply_resist_threshold(aerial, threshold=0.5)
+        resist_with_diff = apply_resist_threshold(
+            aerial, threshold=0.5,
+            resist_diffusion_nm=5.0, pixel_size_nm=1.0,
+        )
+        # Diffusion spreads energy, so a sharp block loses foreground at
+        # edges — the resist area changes (shrinks in this case).
+        assert resist_with_diff.sum() != resist_no_diff.sum()
+
+    def test_output_is_binary(self) -> None:
+        aerial = torch.rand(32, 32)
+        resist = apply_resist_threshold(
+            aerial, threshold=0.5,
+            resist_diffusion_nm=3.0, pixel_size_nm=1.0,
+        )
+        unique_vals = resist.unique()
+        assert all(v in [0.0, 1.0] for v in unique_vals)
+
+
+class TestGaussianDiffuse:
+    def test_output_shape_matches_input(self) -> None:
+        image = torch.rand(32, 32)
+        result = _gaussian_diffuse(image, sigma_px=3.0)
+        assert result.shape == image.shape
+
+    def test_uniform_input_unchanged(self) -> None:
+        image = torch.ones(32, 32)
+        result = _gaussian_diffuse(image, sigma_px=3.0)
+        assert torch.allclose(result, image, atol=1e-5)
+
+    def test_diffusion_preserves_total(self) -> None:
+        image = torch.zeros(32, 32)
+        image[14:18, 14:18] = 1.0
+        result = _gaussian_diffuse(image, sigma_px=2.0)
+        assert abs(result.sum().item() - image.sum().item()) < 1e-3

@@ -102,6 +102,15 @@ class BenchmarkResult(BaseModel):
     drc_pass: bool | None = None
     shot_count: int | None = Field(None, ge=0)
     stochastic_robustness: float | None = Field(None, ge=0, le=1)
+    resist_diffusion_nm: float | None = Field(
+        None,
+        ge=0,
+        description=(
+            "Acid diffusion length used during evaluation. Must be 0.0 (or "
+            "None) for leaderboard-eligible submissions; positive values are "
+            "non-comparable with the canonical CTR baseline."
+        ),
+    )
 
     # Number of samples behind the aggregated metrics. Recorded so future
     # migrations can detect (and if needed re-normalize) entries written

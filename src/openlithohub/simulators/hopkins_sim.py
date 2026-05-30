@@ -5,6 +5,7 @@ from __future__ import annotations
 import torch
 
 from openlithohub._utils.hopkins import HopkinsParams, simulate_aerial_image_hopkins
+from openlithohub._utils.forward_model import _gaussian_diffuse
 from openlithohub.simulators.base import BaseSimulator, SimulatorConfig, SimulatorResult
 
 
@@ -97,6 +98,15 @@ class HopkinsSimulator(BaseSimulator):
         # invariant. PW dose corners, stochastic / Monte-Carlo dose jitter, and
         # PVB dose-axis variation all relied on this.
         threshold = self.config.threshold
+        # Opt-in acid diffusion: when resist_diffusion_nm > 0 or quencher > 0,
+        # blur the aerial image (proportional to photoacid concentration) and
+        # subtract quencher before binarization. Both default to 0.0, which
+        # skips this block entirely for bit-identical legacy behavior.
+        if self.config.resist_diffusion_nm > 0.0 or self.config.quencher > 0.0:
+            sigma_px = self.config.resist_diffusion_nm / max(self.config.pixel_size_nm, 1e-6)
+            if sigma_px > 0.1:
+                aerial = _gaussian_diffuse(aerial, sigma_px)
+            aerial = (aerial - self.config.quencher).clamp(min=0.0)
         resist = (aerial >= threshold).to(aerial.dtype)
         return SimulatorResult(
             aerial=aerial,
