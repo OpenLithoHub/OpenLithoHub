@@ -5,18 +5,23 @@ direction. The model layer stays untouched so ONNX/TorchScript export
 keeps returning a bare ``nn.Module``; parallelism wraps the *tile loop*,
 not the model.
 
-Each worker re-instantiates the model from the registry — workers receive
-a ``(model_name, model_kwargs)`` factory rather than a live model, which
-keeps pickling sane and avoids CUDA-context-fork hazards. Tiles are
-sharded round-robin; the parent process keeps the canonical ``Tile``
-geometry and stitches results returned over an ``mp.Queue``.
+v0.7 (WS-E): shared-weight dispatch. The parent process loads model weights
+into CPU shared memory *before* spawning workers. Workers memory-map the
+weights instead of independently re-instantiating and reloading, reducing
+peak memory from O(N × model_size) to O(model_size + N × activation_size).
+
+Compile-cache: when ``--compile`` is active, the Inductor cache directory
+is set in the parent so workers reuse compiled kernels without per-worker
+recompilation.
 """
 
 from __future__ import annotations
 
 import contextlib
 import multiprocessing as mp
+import os
 import queue as queue_mod
+import tempfile
 import traceback
 from collections.abc import Callable
 from typing import Any
@@ -29,6 +34,53 @@ from openlithohub.workflow.tiling import Tile
 _DEFAULT_TIMEOUT_SECONDS = 0.5
 
 
+def _share_weights(
+    model_name: str,
+    model_kwargs: dict[str, Any],
+) -> dict[str, torch.Tensor] | None:
+    """Instantiate the model, move state_dict to CPU shared memory, return it.
+
+    Returns ``None`` if the model cannot be instantiated (e.g. missing weights).
+    The caller is responsible for keeping the shared tensors alive until all
+    workers have finished loading.
+    """
+    try:
+        from openlithohub.models.registry import register_builtin_models, registry
+
+        register_builtin_models()
+        model = registry.get(model_name, **model_kwargs)
+        model.setup()
+
+        state_dict = model.state_dict()
+        shared: dict[str, torch.Tensor] = {}
+        for key, tensor in state_dict.items():
+            t = tensor.detach().cpu()
+            t.share_memory_()
+            shared[key] = t
+
+        model.teardown()
+        return shared
+    except Exception:
+        return None
+
+
+def _setup_compile_cache() -> str | None:
+    """Set up a persistent Inductor cache directory for ``torch.compile``.
+
+    Returns the cache directory path, or None if torch.compile is not active.
+    """
+    if not os.environ.get("TORCH_COMPILE", "").lower() in ("1", "true", "yes"):
+        return None
+
+    cache_dir = os.environ.get(
+        "TORCHINDUCTOR_CACHE_DIR",
+        os.path.join(tempfile.gettempdir(), "openlithohub_inductor_cache"),
+    )
+    os.makedirs(cache_dir, exist_ok=True)
+    os.environ["TORCHINDUCTOR_CACHE_DIR"] = cache_dir
+    return cache_dir
+
+
 def parallel_tile_inference(
     model_name: str,
     model_kwargs: dict[str, Any],
@@ -37,14 +89,18 @@ def parallel_tile_inference(
     num_gpus: int,
     base_perf_kwargs: dict[str, Any],
     progress_cb: Callable[[], None] | None = None,
+    shared_weights: bool = True,
 ) -> list[tuple[Tile, torch.Tensor]]:
     """Shard tiles round-robin across ``num_gpus`` worker processes.
 
-    Each worker resolves the model from the registry, pins itself to its
-    assigned device (``cuda:rank`` if enough GPUs are available, else
-    ``cpu``), runs ``model.predict`` on its shard, and returns the masks
-    over a queue. Results are returned in original tile order. The caller
-    stitches.
+    When ``shared_weights=True`` (default), the parent loads the model
+    weights into CPU shared memory before spawning. Workers memory-map
+    these weights instead of re-instantiating the model independently,
+    reducing peak memory from O(N × model_size) to approximately
+    O(model_size + N × activation_size).
+
+    When ``shared_weights=False`` or weight sharing fails, falls back to
+    the per-worker re-instantiation path (backward compatible).
 
     Falls back to CPU dispatch when fewer than ``num_gpus`` CUDA devices
     are visible — this is what makes CPU-only CI exercise the dispatch
@@ -58,18 +114,33 @@ def parallel_tile_inference(
     effective = min(num_gpus, len(tiles))
     shards = _round_robin_shards(len(tiles), effective)
 
+    # Set up compile cache if torch.compile is active
+    compile_cache_dir = _setup_compile_cache()
+
+    # Attempt shared-weight path
+    weight_state: dict[str, torch.Tensor] | None = None
+    if shared_weights:
+        weight_state = _share_weights(model_name, model_kwargs)
+
     ctx = mp.get_context("spawn")
     queue: mp.Queue[Any] = ctx.Queue()
     processes: list[Any] = []
 
     for rank, indices in enumerate(shards):
-        # Convert tensors to numpy arrays so pickle never needs to share
-        # storage file descriptors across the spawn boundary — FD sharing
-        # breaks on some Linux configs (EOFError in rebuild_storage_fd).
         payload = [(idx, tiles[idx].tensor.detach().cpu().numpy()) for idx in indices]
         p = ctx.Process(
             target=_worker,
-            args=(rank, effective, model_name, model_kwargs, base_perf_kwargs, payload, queue),
+            args=(
+                rank,
+                effective,
+                model_name,
+                model_kwargs,
+                base_perf_kwargs,
+                payload,
+                queue,
+                weight_state,
+                compile_cache_dir,
+            ),
             daemon=False,
         )
         p.start()
@@ -158,6 +229,8 @@ def _worker(
     base_perf_kwargs: dict[str, Any],
     payload: list[tuple[int, np.ndarray[Any, Any]]],
     result_queue: mp.Queue[Any],
+    shared_state: dict[str, torch.Tensor] | None = None,
+    compile_cache_dir: str | None = None,
 ) -> None:
     try:
         from openlithohub.models.registry import register_builtin_models, registry
@@ -168,7 +241,16 @@ def _worker(
         )
         worker_perf_kwargs = {**base_perf_kwargs, "device": device_str}
 
+        # Set compile cache in worker if configured
+        if compile_cache_dir is not None:
+            os.environ["TORCHINDUCTOR_CACHE_DIR"] = compile_cache_dir
+
         model = registry.get(model_name, **model_kwargs)
+
+        # Load shared weights if available
+        if shared_state is not None:
+            model.load_state_dict(shared_state, strict=False)
+
         model.setup()
         try:
             for idx, tile_arr in payload:

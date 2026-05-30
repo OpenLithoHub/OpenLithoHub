@@ -223,3 +223,83 @@ def test_optimize_run_num_gpus_default_unchanged():
 # context.
 def test_parallel_module_imports_clean():
     assert "openlithohub.workflow.parallel" in sys.modules
+
+
+# --- WS-E: shared-weight and compile-cache tests ---
+
+
+def test_share_weights_returns_none_for_missing_model():
+    """_share_weights returns None when model cannot be instantiated."""
+    from openlithohub.workflow.parallel import _share_weights
+
+    result = _share_weights("nonexistent-model-xyz", {})
+    assert result is None
+
+
+def test_setup_compile_cache_inactive_by_default():
+    """Compile cache returns None when TORCH_COMPILE is not set."""
+    from openlithohub.workflow.parallel import _setup_compile_cache
+
+    env_backup = os.environ.pop("TORCH_COMPILE", None)
+    try:
+        assert _setup_compile_cache() is None
+    finally:
+        if env_backup is not None:
+            os.environ["TORCH_COMPILE"] = env_backup
+
+
+def test_setup_compile_cache_creates_dir():
+    """Compile cache creates the directory when TORCH_COMPILE is set."""
+    from openlithohub.workflow.parallel import _setup_compile_cache
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache_dir = os.path.join(tmpdir, "inductor_cache")
+        os.environ["TORCH_COMPILE"] = "1"
+        os.environ["TORCHINDUCTOR_CACHE_DIR"] = cache_dir
+        try:
+            result = _setup_compile_cache()
+            assert result == cache_dir
+            assert os.path.isdir(cache_dir)
+        finally:
+            os.environ.pop("TORCH_COMPILE", None)
+            os.environ.pop("TORCHINDUCTOR_CACHE_DIR", None)
+
+
+@_skip_spawn_in_ci
+def test_parallel_shared_weights_matches_no_shared():
+    """Shared-weight path produces identical results to the no-shared path."""
+    layout = _layout()
+    tiles = tile_layout(layout, tile_size=32, overlap=0)
+
+    results_no_shared = parallel_tile_inference(
+        model_name="dummy-identity",
+        model_kwargs={},
+        tiles=tiles,
+        num_gpus=2,
+        base_perf_kwargs={"device": "cpu", "dtype": torch.float32, "compile_forward": False},
+        shared_weights=False,
+    )
+
+    results_shared = parallel_tile_inference(
+        model_name="dummy-identity",
+        model_kwargs={},
+        tiles=tiles,
+        num_gpus=2,
+        base_perf_kwargs={"device": "cpu", "dtype": torch.float32, "compile_forward": False},
+        shared_weights=True,
+    )
+
+    for (_, mask_a), (_, mask_b) in zip(results_no_shared, results_shared, strict=True):
+        assert torch.equal(mask_a, mask_b)
+
+
+def test_parallel_empty_tiles_returns_early():
+    """Empty tile list returns immediately without spawning processes."""
+    results = parallel_tile_inference(
+        model_name="dummy-identity",
+        model_kwargs={},
+        tiles=[],
+        num_gpus=2,
+        base_perf_kwargs={"device": "cpu"},
+    )
+    assert results == []
