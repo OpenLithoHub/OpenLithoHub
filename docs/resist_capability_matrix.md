@@ -12,7 +12,20 @@ cases so that contributors can choose the right backend and avoid accidental dup
 | `DiffNanoResistAdapter` (CAR/PEB) | `openlithohub/plugins/diffnano_resist.py` | High | `acid_diffusion_length_nm`, `development_contrast`, `threshold_dose`, `peb_diffusion_nm`, `pixel_size_nm` | High-fidelity chemically-amplified resist with acid diffusion + PEB via `diffnano` plugin. Requires `[diffnano]` extra. |
 | `HopkinsLithoModel` | `diffnano/solvers/litho.py` | Medium | `wavelength_nm`, `na`, `sigma_source`, `n_kernels`, `pixel_size_nm`, `resist_threshold`, `resist_beta` | Hopkins PSF model in DiffNano. Functionally equivalent to OpenLithoHub's `HopkinsSimulator` for the PSF convolution + sigmoid resist path. See dedup note below. |
 | `LithoSolver` (Dill + Mack) | `diffcfd/solvers/litho.py` | High | `dill_A`, `dill_B`, `dill_C`, `r_max`, `r_min`, `mack_n`, `mack_a`, `gamma_solvent` | Dill exposure + Mack development solver in DiffCFD. Wrapped by `DiffCFDLithoSimulator` in OpenLithoHub. |
-| `DifferentiableResistModel` | `diffnano/solvers/resist.py` | High | `acid_diffusion_length_nm`, `development_contrast`, `threshold_dose`, `peb_diffusion_nm` | Full CAR/PEB analytical model in DiffNano. Wrapped by `DiffNanoResistAdapter` in OpenLithoHub. |
+| `DifferentiableResistModel` | `diffnano/solvers/resist.py` | High | `grid_shape`, `dl`, `acid_diffusion_length_nm`, `development_contrast`, `threshold_dose`, `peb_diffusion_nm` | Full CAR/PEB analytical model in DiffNano. Takes `(H, W)` grid shape and grid spacing `dl` (nm). Wrapped by `DiffNanoResistAdapter` in OpenLithoHub, which adds `pixel_size_nm` for nm-to-pixel conversion. |
+
+## Which Model Should I Use?
+
+| Scenario | Recommended Model | Rationale |
+|---|---|---|
+| ILT gradient descent on 64x64 synthetic tiles | `apply_differentiable_resist` (Light) | Fast, differentiable, no external dependencies. The scored leaderboard path uses this. |
+| Mask optimization with realistic aerial images | `HopkinsSimulator` (Medium) | Full SOCS decomposition with partial coherence. Still uses simple threshold resist. |
+| Process-window analysis, CD prediction | `DiffCFDLithoSimulator` via `[diffcfd]` (High) | Physics-based Dill exposure + Mack development. Models PAC bleaching, dissolution rate, residual solvent. Requires calibrated Dill/Mack parameters from the target process. |
+| Chemically-amplified resist modeling | `DiffNanoResistAdapter` via `[diffnano]` (High) | CAR acid diffusion + post-exposure bake + development contrast. Suitable for EUV CAR resists where acid diffusion dominates print fidelity. Parameters calibratable to SEM CD data. |
+| Joint spin-coating + lithography co-optimization | `DiffCFDLithoSimulator` + DiffCFD spin-coating solver | The only path that couples film thickness variation (from spin coating) into the exposure/development chain. |
+| DiffNano-internal metalens with litho DFM | `HopkinsLithoModel` in DiffNano | Uses simplified Gaussian PSF rather than full SOCS. Retained for DiffNano standalone workflows; prefer OpenLithoHub's `HopkinsSimulator` for ILT/OPC work. |
+
+**Important:** Plugin backends (DiffCFD, DiffNano) produce **non-comparable** metric values. The scored leaderboard default remains `HopkinsSimulator` + CTR (threshold `0.225`) without diffusion.
 
 ## Fidelity Levels
 
