@@ -7,6 +7,7 @@ import typer
 from openlithohub.cli.data_cmd import data_app
 from openlithohub.cli.eval_cmd import eval_app
 from openlithohub.cli.export_cmd import export_app
+from openlithohub.cli.flow_cmd import flow_app
 from openlithohub.cli.hackathon_cmd import hackathon_app
 from openlithohub.cli.leaderboard_cmd import leaderboard_app
 from openlithohub.cli.optimize_cmd import optimize_app
@@ -31,6 +32,7 @@ app.add_typer(synth_app, name="synth", help="Generate synthetic PDK-aware layout
 app.add_typer(hackathon_app, name="hackathon", help="Inspect the current hackathon contract.")
 app.add_typer(export_app, name="export", help="Export a model to ONNX / TorchScript.")
 app.add_typer(serve_app, name="serve", help="Run the HTTP micro-service engine (FastAPI).")
+app.add_typer(flow_app, name="flow", help="End-to-end design→litho→manufacturability pipeline.")
 
 
 @app.callback(invoke_without_command=True)
