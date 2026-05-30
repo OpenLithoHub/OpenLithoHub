@@ -112,7 +112,7 @@ class TachyonSimulator(BaseSimulator):
                 raise ToolchainError(
                     "Tachyon completed but produced no output file. Check recipe configuration."
                 )
-            aerial = read_aerial_image(output_file, spatial_shape)
+            aerial = read_aerial_image(output_file, (int(spatial_shape[0]), int(spatial_shape[1])))
 
         return SimulatorResult(
             aerial=aerial,

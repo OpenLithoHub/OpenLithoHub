@@ -111,7 +111,7 @@ class CalibreSimulator(BaseSimulator):
                 raise ToolchainError(
                     "Calibre completed but produced no output file. Check runset configuration."
                 )
-            aerial = read_aerial_image(output_file, spatial_shape)
+            aerial = read_aerial_image(output_file, (int(spatial_shape[0]), int(spatial_shape[1])))
 
         return SimulatorResult(
             aerial=aerial,

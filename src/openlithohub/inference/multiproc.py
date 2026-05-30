@@ -159,7 +159,7 @@ class CompiledCache:
             # torch.compile caches on disk by default. We just call
             # torch.compile again; the Dynamo cache serves the cached result.
             compiled = torch.compile(model, **(compile_kwargs or {}))
-            return compiled
+            return compiled  # type: ignore[return-value]
 
         # Cache miss -- compile and record metadata
         compiled = torch.compile(model, **(compile_kwargs or {}))
@@ -170,7 +170,7 @@ class CompiledCache:
             "created_at": time.time(),
         }
         (cache_path / "meta.json").write_text(json.dumps(meta, indent=2))
-        return compiled
+        return compiled  # type: ignore[return-value]
 
     def clear(self) -> None:
         if self._root.exists():
@@ -188,7 +188,7 @@ def _worker_fn(
     meta_serialized: bytes,
     model_bytes: bytes,
     input_chunks: list[tuple[int, bytes]],  # (index, numpy_bytes)
-    result_queue: mp.Queue,
+    result_queue: mp.Queue[list[tuple[int, bytes]]],  # type: ignore[type-arg]
     device: str,
 ) -> None:
     """Worker process: reconstruct model from shared memory, run inference."""
@@ -273,14 +273,14 @@ def multiproc_predict(
     for i, t in enumerate(inputs):
         chunks[i % n_workers].append((i, pickle.dumps(t.detach().cpu().numpy())))
 
-    result_queue: mp.Queue = mp.Queue()
+    result_queue: mp.Queue[list[tuple[int, bytes]]] = mp.Queue()  # type: ignore[type-arg]
     workers: list[mp.Process] = []
 
     # Use "fork" on CPU for speed and pickling simplicity; "spawn" for CUDA
     method = "spawn" if device.startswith("cuda") else "fork"
     ctx = mp.get_context(method)
     for wid in range(n_workers):
-        p = ctx.Process(
+        p = ctx.Process(  # type: ignore[attr-defined]
             target=_worker_fn,
             args=(wid, prefix, meta_serialized, model_bytes, chunks[wid], result_queue, device),
         )
