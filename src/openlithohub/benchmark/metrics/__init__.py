@@ -25,6 +25,15 @@ from openlithohub.benchmark.metrics.stochastic import (
     compute_stochastic_defect_classes,
     compute_stochastic_robustness,
 )
+from openlithohub.benchmark.metrics.stochastic_loss import (
+    StochasticAwareLoss,
+    StochasticProcessWindow,
+    StochasticProcessWindowResult,
+    cvar_loss,
+    differentiable_edge_error,
+    differentiable_lcdu,
+    quantile_loss,
+)
 from openlithohub.benchmark.metrics.tiling_consistency import (
     cross_tile_contour_residual,
     cross_tile_epe_residual,
@@ -37,8 +46,12 @@ from openlithohub.benchmark.metrics.tiling_consistency import (
 __all__ = [
     "Mask3DParams",
     "MonteCarloFailureResult",
+    "StochasticAwareLoss",
     "StochasticDefectRates",
+    "StochasticProcessWindow",
+    "StochasticProcessWindowResult",
     "apply_3d_shadow",
+    "cvar_loss",
     "compute_3d_mask_residual",
     "compute_epe",
     "compute_hotspot_detection",
@@ -52,9 +65,12 @@ __all__ = [
     "cross_tile_sraf_consistency",
     "curvilinear_mrc_loss",
     "curvilinear_to_manhattan",
+    "differentiable_edge_error",
+    "differentiable_lcdu",
     "estimate_shot_count",
     "manhattanization_degradation",
     "monte_carlo_failure_probability",
+    "quantile_loss",
     "schwarz_vs_naive_comparison",
     "sraf_print_penalty",
     "sweep_overlap_convergence",
