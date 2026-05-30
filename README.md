@@ -32,6 +32,9 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
 - **OASIS / GDSII workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear); ICCAD'13 contest gauge IO + Calibre `.gg` / CSV gauge parsers; ONNX / TorchScript export with onnxruntime CI smoke test
 - **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface
+- **Opt-in diffusion resist** — CAR (chemically amplified resist) with Gaussian acid diffusion, controlled by `--resist-diffusion-nm` (default `0.0` = legacy CTR). Improves EPE/PVB realism but produces **non-comparable** numbers; disabled for leaderboard submission
+- **Design→litho→DFM closed-loop CLI** — `openlithohub flow run` ingests DEF/GDS/OAS or an ORFS product directory, tiles, runs litho forward sim, and produces an aggregated manufacturability report (EPE, PV Band, DRC, MRC) with configurable per-PDK layer maps
+- **Optional physics plugins** — DiffNano (rigorous EM: RCWA / FDTD / FDFD + calibratable resist) and DiffCFD (Dill/Mack lithography solver + spin-coating solver + joint process optimization) as opt-in `[diffnano]` / `[diffcfd]` extras; core install needs none of them
 - **JIT-accelerated forward model** — Hopkins/SOCS forward is wrapped with `torch.compile` by default, for free kernel-fusion speedups on PyTorch 2.x (use `--no-compile` to disable)
 
 ```text
@@ -69,8 +72,20 @@ pip install --pre 'openlithohub[all]'
 ```
 
 Available extras: `data`, `workflow`, `models`, `jupyter`, `export`,
-`docs`, `dev`, and the aggregate `all`. Combine with comma syntax, e.g.
-`'openlithohub[data,workflow,jupyter]'`.
+`docs`, `dev`, `diffnano`, `diffcfd`, `plugins` (= both), and the aggregate
+`all`. Combine with comma syntax, e.g. `'openlithohub[data,workflow,jupyter]'`.
+
+```bash
+# Optional physics plugins (early-stage research, not third-party validated)
+pip install --pre 'openlithohub[diffnano]'   # nanophotonics EM solvers + resist
+pip install --pre 'openlithohub[diffcfd]'    # CFD-based litho + spin-coat solvers
+pip install --pre 'openlithohub[plugins]'    # both
+```
+
+> **Caveat:** DiffNano and DiffCFD are optional plugins providing research-grade
+> physics backends. Both self-describe as early-stage personal projects with no
+> external users, no third-party validation, and no production readiness claim.
+> Installing neither keeps the core lightweight.
 
 **From source (development):**
 
@@ -133,6 +148,35 @@ openlithohub optimize run \
   --drc-check \
   --output optimized.oas
 ```
+
+### Closed-loop design→litho→DFM report
+
+```bash
+openlithohub flow run design.gds \
+  --pdk asap7 --layer metal1 \
+  --node 45nm --tile-nm 2000 \
+  --drc --mrc \
+  --output report.json
+```
+
+Accepts a standalone GDS / OAS / DEF file or an ORFS product directory.
+Per-PDK layer maps are configurable (asap7, freepdk45, orfs_asap7, sky130, or
+a custom JSON file). The report aggregates tile-level EPE, PV Band, DRC, and
+MRC into a single JSON summary.
+
+### Enable diffusion resist (opt-in)
+
+```bash
+# Default: CTR (constant-threshold resist), threshold=0.225 — comparable numbers
+openlithohub simulate run --input mask.npy --resist-diffusion-nm 0.0
+
+# Opt-in: CAR with Gaussian acid diffusion — more realistic but NON-COMPARABLE
+openlithohub simulate run --input mask.npy --resist-diffusion-nm 20.0
+```
+
+> The scored default remains **CTR without diffusion, threshold = 0.225**.
+> Enabling acid diffusion (or any plugin EM/resist backend) produces
+> **non-comparable** numbers and is **disabled for leaderboard submission**.
 
 ### Run as an HTTP micro-service
 
@@ -272,7 +316,32 @@ suite, and formatting a leaderboard submission.
 | **Benchmark** | `openlithohub.benchmark` | EPE (mask & wafer-sim), L2 wafer error, PV Band, shot count, stochastic robustness + per-class defect rates, hotspot detection, MRC/DRC compliance |
 | **Models** | `openlithohub.models` | Abstract `LithographyModel` interface + decorator-based registry |
 | **Workflow** | `openlithohub.workflow` | Layout parsing (OASIS / GDSII / DEF / LEF), tiling, contour extraction (manhattan/curvilinear), OASIS / GDSII export, OpenAccess layer-purpose helper |
-| **CLI** | `openlithohub.cli` | `eval`, `optimize`, `leaderboard`, `simulate`, `synth`, `hackathon`, `export` command groups via Typer |
+| **Simulators** | `openlithohub.simulators` | Forward model registry (`register_simulator`), Hopkins/Gaussian built-ins, plugin EM backends (RCWA/FDTD/FDFD) |
+| **Plugins** | `openlithohub.plugins` | Optional DiffNano (EM + resist) and DiffCFD (litho + spin-coat + joint optimisation) backends |
+| **CLI** | `openlithohub.cli` | `eval`, `optimize`, `leaderboard`, `simulate`, `flow`, `synth`, `hackathon`, `export` command groups via Typer |
+
+## Optional Physics Plugins
+
+OpenLithoHub supports optional physics backends via the plugin system. None are
+required for the core install.
+
+| Plugin | What it adds | Install extra |
+|--------|-------------|---------------|
+| **DiffNano** | Rigorous EM simulators (RCWA / FDTD / FDFD) + calibratable resist model (acid diffusion, PEB, development contrast) — registered as `diffnano_rcwa`, `diffnano_fdtd2d`, `diffnano_fdfd2d` backends | `[diffnano]` |
+| **DiffCFD** | Differentiable steady-state CFD — Dill/Mack lithography solver, Meyerhofer spin-coating solver, and joint process optimization (`optimize_joint_process`) | `[diffcfd]` |
+
+```bash
+pip install --pre 'openlithohub[plugins]'   # installs both
+```
+
+**Caveats:**
+- Both plugins are early-stage research with no external users or third-party
+  validation. Do not use for production decisions.
+- Plugin EM/resist backends produce **non-comparable** metric values. Built-in
+  Hopkins + CTR (threshold `0.225`) remains the only path for leaderboard
+  submission.
+- Optionality is justified by unvalidated status, install footprint, and
+  independent iteration cadence — not by dependency weight (all are PyTorch-native).
 
 ---
 
@@ -287,6 +356,12 @@ suite, and formatting a leaderboard submission.
 | **MRC** | Minimum width/spacing rule check (hard-fail) | EasyMRC |
 | **Curvilinear MRC** | Minimum curvature radius + minimum feature area for post-ILT curvilinear shapes (MBMW writability) | EUV-specific |
 | **DRC** | Design Rule Check: area, notch, width, spacing | OpenDRC |
+
+> **Diffusion resist:** EPE and PV Band can optionally run through the CAR acid-diffusion
+> model (`--resist-diffusion-nm`). The scored default remains CTR at threshold `0.225`;
+> enabling diffusion produces **non-comparable** numbers and is disabled for leaderboard
+> submission. Absolute wafer prediction still needs user-calibrated, foundry-confidential
+> parameters — the framework is benchmark-relative, not absolute-predictive.
 
 ---
 
@@ -470,6 +545,10 @@ PyTorch so the entire ILT loop is end-to-end auto-differentiable:
 |---|---|---|
 | Gaussian PSF | `openlithohub._utils.forward_model.simulate_aerial_image` | Single-Gaussian convolution; cheap default for tests and small grids |
 | Hopkins SOCS | `openlithohub._utils.simulate_aerial_image_hopkins` | Partial-coherent imaging via SVD-truncated Sum-Of-Coherent-Systems; supports circular / annular / dipole illumination |
+| DiffNano RCWA/FDTD/FDFD | `openlithohub.plugins.diffnano_em` (opt-in) | Rigorous EM solvers via the DiffNano plugin; registered as `diffnano_rcwa`, `diffnano_fdtd2d`, `diffnano_fdfd2d` backends |
+
+Built-in Hopkins remains the default and the only comparable path for leaderboard
+numbers. Plugin EM backends are opt-in and produce non-comparable scores.
 
 Switch `LevelSetILTModel` to Hopkins:
 
@@ -519,6 +598,7 @@ ruff format src/ tests/
 - [x] Milestone 9: PDK-aware synthetic layout generator, vendor-neutral simulator hook API, EUV 3D-mask shadow proxy, Monte Carlo failure metric, Mini-Hackathon (2026-Q3), RFC 0001 (Layout-MAE) + RFC 0002 (Layout Tokens)
 - [x] Milestone 10: Real PDK rollout — ASAP7 standard cells, FreePDK45 + NanGate OCL, ORFS-routed RISC-V mock-alu (issue [#4](https://github.com/OpenLithoHub/OpenLithoHub/issues/4))
 - [x] Milestone 11: Standard MRC rule-deck schema (RFC 0003), measured-source / Zernike-pupil I/O, Calibre/CSV gauge parser, `openlithohub export` CLI (ONNX / TorchScript / TensorRT-ready), `--compile` on by default, first PyPI release (`openlithohub-0.1.0a2`)
+- [x] Milestone 12: Opt-in diffusion resist (`--resist-diffusion-nm`), `openlithohub flow run` closed-loop CLI (design→litho→DFM), configurable per-PDK layer maps, optional DiffNano/DiffCFD plugin ecosystem
 
 > **Note:** Milestones above reflect feature integration completeness (adapters, CLI commands, CI pipelines), not industrial validation. The alpha version (`0.1.0a2`) runs on synthetic layouts — real industrial-scale benchmarking is planned for the v1.0 milestone.
 
@@ -533,6 +613,8 @@ ruff format src/ tests/
 | TorchLitho 2.0 | ASICON'25 | Differentiable lithography simulator |
 | [curvyILT](https://github.com/phdyang007/curvyILT) | NVIDIA arXiv'24 | GPU-accelerated curvilinear ILT |
 | EasyMRC | TODAES'25 | MRC reference implementation |
+| [DiffNano](https://github.com/OpenLithoHub/DiffNano) | — | Optional plugin: PyTorch-native nanophotonics (RCWA / FDTD / FDFD + calibratable resist). Early-stage research, no third-party validation. |
+| [DiffCFD](https://github.com/OpenLithoHub/DiffCFD) | — | Optional plugin: PyTorch-native steady-state CFD for lithography (Dill/Mack solver, spin-coating solver, joint process optimization). Early-stage research, no third-party validation. |
 
 ---
 
@@ -568,6 +650,15 @@ hard MRC/DRC gate, separate leaderboard track.
 ## Disclaimer
 
 **OpenLithoHub is a purely academic, open-source project for fundamental research in computational physics and machine learning. It relies solely on publicly available datasets and published algorithms. It does not contain, nor does it seek to reverse-engineer, any proprietary commercial EDA tools or export-controlled manufacturing processes.**
+
+**Plugin validation:** DiffNano and DiffCFD are optional plugins that self-describe
+as early-stage personal research projects with no external users and no third-party
+validation. Do not rely on them for production decisions.
+
+**Leaderboard comparability:** The scored default is CTR (constant-threshold resist)
+without diffusion, at threshold `0.225`. Enabling acid diffusion (`--resist-diffusion-nm > 0`)
+or switching to a plugin EM/resist backend produces **non-comparable** metric values
+and is disabled for leaderboard submission.
 
 ## License
 
