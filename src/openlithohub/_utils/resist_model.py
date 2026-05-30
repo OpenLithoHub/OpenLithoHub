@@ -1,4 +1,10 @@
-"""Chemically-amplified resist simulation with acid diffusion."""
+"""Chemically-amplified resist simulation with acid diffusion.
+
+PLACEHOLDER / UNIMPLEMENTED — ``ResistCalibration.fit`` uses a scalar CD
+placeholder model that reduces 2D resist simulation to a single binary
+check per anchor. Do not rely on returned parameters for production resist
+modelling.
+"""
 
 from __future__ import annotations
 
@@ -135,6 +141,11 @@ def apply_differentiable_resist(
 class ResistCalibration:
     """Least-squares resist parameter calibration from SEM CD anchors.
 
+    PLACEHOLDER / UNIMPLEMENTED — ``ResistCalibration.fit`` uses a scalar
+    CD placeholder model that reduces the full 2D resist simulation to a
+    single binary check per anchor, making the calibration trivially
+    satisfiable. Do not use for evaluation or production resist modelling.
+
     .. deprecated::
         The scalar CD model used by :meth:`fit` is a placeholder — it reduces
         the full 2D resist simulation to a single binary check per anchor,
@@ -160,6 +171,8 @@ class ResistCalibration:
         # params.threshold, params.resist_diffusion_nm, params.quencher
     """
 
+    # NOTE: Placeholder implementation — not functional, do not use for evaluation
+
     @staticmethod
     def fit(
         anchors: list[tuple[float, float]],
@@ -169,6 +182,9 @@ class ResistCalibration:
         quencher_range: tuple[float, float, float] = (0.0, 0.2, 0.05),
     ) -> tuple[float, float, float]:
         """Find (threshold, resist_diffusion_nm, quencher) minimizing CD error.
+
+        PLACEHOLDER / UNIMPLEMENTED — The underlying CD model is a scalar
+        placeholder, not a physically meaningful simulation.
 
         .. warning::
             The underlying CD model is a scalar placeholder, not a physically

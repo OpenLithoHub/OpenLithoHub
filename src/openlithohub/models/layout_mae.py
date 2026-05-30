@@ -1,5 +1,9 @@
 """Layout-MAE — masked autoencoder for rasterised PDK layouts (RFC 0001 prototype).
 
+PLACEHOLDER / UNIMPLEMENTED — No pretrained weights, no fine-tune adapter
+API, no Hub release. This is a training-runnable recipe, not a production
+model. Do not use for evaluation.
+
 Minimal, training-runnable ViT-S MAE in pure PyTorch. Implements the
 architecture and pretraining loop described in
 ``docs/rfcs/0001-base-model.md`` with one purpose: validate the recipe on
@@ -85,7 +89,13 @@ class _Block(nn.Module):
 
 
 class LayoutMAE(nn.Module):
-    """Masked-autoencoder over rasterised layout patches."""
+    """Masked-autoencoder over rasterised layout patches.
+
+    PLACEHOLDER / UNIMPLEMENTED — No pretrained weights available. This is
+    a prototype recipe, not a trained model. Do not use for evaluation.
+    """
+
+    # NOTE: Placeholder implementation — not functional, do not use for evaluation
 
     def __init__(self, config: LayoutMAEConfig | None = None):
         super().__init__()

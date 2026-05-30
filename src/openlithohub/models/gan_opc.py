@@ -1,5 +1,10 @@
 """GAN-OPC baseline — generator-only inference of the Yang2018_GANOPC model.
 
+PLACEHOLDER / UNIMPLEMENTED — Without trained weights this model emits
+near-random masks. Even with weights, the GAN discriminator and
+lithography-guided training loop are NOT implemented (generator-only
+inference). Do not use for evaluation without pretrained weights.
+
 Architecture follows Yang et al., *GAN-OPC: Mask Optimization with
 Lithography-guided Generative Adversarial Nets*, DAC 2018
 ([doi:10.1145/3195970.3196056](https://doi.org/10.1145/3195970.3196056)) §IV.A — the
@@ -38,6 +43,10 @@ from openlithohub.models.registry import registry
 class GanOpcModel(LithographyModel):
     """GAN-OPC generator baseline (Yang2018_GANOPC, DAC 2018).
 
+    PLACEHOLDER / UNIMPLEMENTED — Generator-only inference without the
+    GAN discriminator or lithography-guided training loop. Without
+    pretrained weights, predictions are near-random.
+
     Args:
         weights: Optional path to a state-dict ``.pt`` file. Takes
             precedence over ``pretrained``.
@@ -51,6 +60,8 @@ class GanOpcModel(LithographyModel):
         url_sha256: Optional SHA-256 to verify against the downloaded
             weights file.
     """
+
+    # NOTE: Placeholder implementation — not functional, do not use for evaluation
 
     NAME = "gan-opc"
     SUPPORTS_CURVILINEAR = True

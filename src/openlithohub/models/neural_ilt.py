@@ -1,4 +1,11 @@
-"""Neural-ILT: U-Net based mask prediction model."""
+"""Neural-ILT: U-Net based mask prediction model.
+
+PLACEHOLDER / UNIMPLEMENTED — This is NOT a paper-faithful re-implementation
+of Neural-ILT (Jiang et al., ICCAD 2020). The key differentiable ILT correction
+layer is NOT implemented. Without pretrained weights, predictions are meaningless.
+Do not use for evaluation without pretrained weights and awareness of the
+architecture divergences documented in the class docstring.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +22,10 @@ from openlithohub.models.registry import registry
 @registry.register
 class NeuralILTModel(LithographyModel):
     """U-Net mask predictor (Neural-ILT-style — see audit caveats below).
+
+    PLACEHOLDER / UNIMPLEMENTED — The headline contribution of Jiang2020
+    (differentiable ILT correction layer) is NOT implemented. Without
+    pretrained weights, predictions are meaningless random noise.
 
     Predicts an optimised mask directly from the design layout in a single
     forward pass. Much faster than iterative methods at inference time,
@@ -48,6 +59,8 @@ class NeuralILTModel(LithographyModel):
     instead of implementing the correction layer), and re-audit
     triggers.
     """
+
+    # NOTE: Placeholder implementation — not functional, do not use for evaluation
 
     NAME = "neural-ilt"
     SUPPORTS_CURVILINEAR = True

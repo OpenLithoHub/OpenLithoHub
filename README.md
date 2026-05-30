@@ -34,6 +34,12 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 - No third-party experimental validation. Framework correctness is verified against published algorithm reimplementations, not foundry data.
 - CPU-only benchmark timing; no GPU timing is reported.
 - **Standardized metrics** — EPE (mask-vs-mask or wafer-level via forward sim), L2 wafer error (Neural-ILT canonical), PV Band, shot count, EUV stochastic robustness + imec-style per-class defect rates, hotspot detection (recall / precision / F1), plus differentiable training-time losses (SRAF non-printing penalty, curvilinear MRC)
+
+**Known stubs / unimplemented:**
+- `openlithohub.models.gan_opc.GanOpcModel` — generator-only inference without the GAN discriminator or lithography-guided training loop. Without pretrained weights, predictions are near-random.
+- `openlithohub.models.neural_ilt.NeuralILTModel` — NOT a paper-faithful re-implementation of Jiang2020. The differentiable ILT correction layer is not implemented. Without pretrained weights, predictions are meaningless.
+- `openlithohub.models.layout_mae.LayoutMAE` — training-runnable ViT-S MAE prototype with no pretrained weights, no fine-tune adapter API, no Hub release.
+- `openlithohub._utils.resist_model.ResistCalibration.fit` — uses a scalar CD placeholder model that reduces 2D resist simulation to a single binary check per anchor. Not physically meaningful.
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
 - **OASIS / GDSII workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear); ICCAD'13 contest gauge IO + Calibre `.gg` / CSV gauge parsers; ONNX / TorchScript export with onnxruntime CI smoke test
 - **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface
@@ -681,6 +687,8 @@ results = multiproc_predict(model, tiles, n_workers=2)
 | EasyMRC | TODAES'25 | MRC reference implementation |
 | ILT challenges survey | Light: Sci. Appl. 2025 | Comprehensive survey of ILT challenges and solutions |
 | B-spline + Delaunay curvilinear mask | arXiv:2504.11962, 2025 | Curvilinear mask optimization via B-spline and Delaunay triangulation |
+| Full-chip EUV curvilinear mask optimization | Light: Advanced Manufacturing, 2026, doi:10.37188/lam.2026.049 | Full-chip EUV curvilinear mask optimization |
+| Schwarz Neural Inference | arXiv:2504.00510 v2, 2026-02 | Local→global domain decomposition operator learning — applicable to ILT solver acceleration |
 | ML4PS optical diffraction convolution | NeurIPS 2025 | ML for physical simulation: optical diffraction convolution |
 | [DiffNano](https://github.com/OpenLithoHub/DiffNano) | — | Optional plugin: PyTorch-native nanophotonics (RCWA / FDTD / FDFD + calibratable resist). Early-stage research, no third-party validation. |
 | [DiffCFD](https://github.com/OpenLithoHub/DiffCFD) | — | Optional plugin: PyTorch-native steady-state CFD for lithography (Dill/Mack solver, spin-coating solver, joint process optimization). Early-stage research, no third-party validation. |
