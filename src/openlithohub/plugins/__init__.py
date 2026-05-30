@@ -29,6 +29,7 @@ __all__ = [
 # Plugin manifest — describes an available-but-maybe-not-installed plugin
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class PluginManifest:
     """Static metadata about a physics plugin.
@@ -74,6 +75,7 @@ _KNOWN_PLUGINS: dict[str, PluginManifest] = {
 # Error type — actionable message for missing optional deps
 # ---------------------------------------------------------------------------
 
+
 class OptionalPluginError(ImportError):
     """Raised when an optional plugin is requested but not installed.
 
@@ -85,10 +87,7 @@ class OptionalPluginError(ImportError):
         manifest = _KNOWN_PLUGINS.get(plugin_name)
         if manifest is not None:
             cmd = f"pip install openlithohub[{manifest.extra}]"
-            msg = (
-                f"Optional plugin {plugin_name!r} is not installed.  "
-                f"Install it with:  {cmd}"
-            )
+            msg = f"Optional plugin {plugin_name!r} is not installed.  Install it with:  {cmd}"
         else:
             msg = f"Optional plugin {plugin_name!r} is not installed."
         super().__init__(msg)
@@ -98,6 +97,7 @@ class OptionalPluginError(ImportError):
 # ---------------------------------------------------------------------------
 # Lazy import helper
 # ---------------------------------------------------------------------------
+
 
 def optional_import(
     module_name: str,
@@ -135,6 +135,7 @@ def optional_import(
 # ---------------------------------------------------------------------------
 # Plugin protocol — what every plugin must implement
 # ---------------------------------------------------------------------------
+
 
 @runtime_checkable
 class LithoPlugin(Protocol):

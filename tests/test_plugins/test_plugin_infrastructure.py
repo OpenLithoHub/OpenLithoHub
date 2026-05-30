@@ -21,6 +21,7 @@ from openlithohub.simulators.registry import (
 # optional_import
 # ---------------------------------------------------------------------------
 
+
 class TestOptionalImport:
     def test_missing_plugin_raises_with_plugin_hint(self):
         with pytest.raises(OptionalPluginError, match=r"\[diffnano\]"):
@@ -39,6 +40,7 @@ class TestOptionalImport:
 # OptionalPluginError message
 # ---------------------------------------------------------------------------
 
+
 class TestOptionalPluginError:
     def test_message_includes_pip_install_command(self):
         err = OptionalPluginError("diffnano")
@@ -53,6 +55,7 @@ class TestOptionalPluginError:
 # ---------------------------------------------------------------------------
 # list_plugins
 # ---------------------------------------------------------------------------
+
 
 class TestListPlugins:
     def test_returns_known_plugins(self):
@@ -71,6 +74,7 @@ class TestListPlugins:
 # SimulatorConfig resist_backend field
 # ---------------------------------------------------------------------------
 
+
 class TestSimulatorConfigResistBackend:
     def test_default_is_ctr(self):
         cfg = SimulatorConfig()
@@ -84,6 +88,7 @@ class TestSimulatorConfigResistBackend:
 # ---------------------------------------------------------------------------
 # Registry plugin backend discovery
 # ---------------------------------------------------------------------------
+
 
 class TestRegistryPluginDiscovery:
     def test_core_backends_always_registered(self):
@@ -115,6 +120,7 @@ class TestRegistryPluginDiscovery:
 # ---------------------------------------------------------------------------
 # LithoPlugin protocol
 # ---------------------------------------------------------------------------
+
 
 class TestLithoPluginProtocol:
     def test_protocol_is_runtime_checkable(self):

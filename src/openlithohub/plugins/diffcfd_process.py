@@ -115,6 +115,7 @@ class DiffCFDSpinCoatSimulator(BaseSimulator):
         omega_profile = extra.get("omega_profile")
         if omega_profile is None:
             import math
+
             omega_profile = torch.full((10000,), 2500.0 * 2.0 * math.pi / 60.0)
 
         dt = extra.get("spin_dt", 0.001)
