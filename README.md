@@ -42,6 +42,8 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 - `openlithohub._utils.resist_model.ResistCalibration.fit` — uses a scalar CD placeholder model that reduces 2D resist simulation to a single binary check per anchor. Not physically meaningful.
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
 - **OASIS / GDSII workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear); ICCAD'13 contest gauge IO + Calibre `.gg` / CSV gauge parsers; ONNX / TorchScript export with onnxruntime CI smoke test
+- **Schwarz domain decomposition** — implemented in `openlithohub._utils.tiling.schwarz_tiled_ilt()`
+- **Born scattering forward correction** — implemented in `openlithohub._utils.forward_model.simulate_aerial_image_born()`
 - **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface
 - **Opt-in diffusion resist** — CAR (chemically amplified resist) with Gaussian acid diffusion, controlled by `--resist-diffusion-nm` (default `0.0` = legacy CTR). Improves EPE/PVB realism but produces **non-comparable** numbers; disabled for leaderboard submission
 - **Design→litho→DFM closed-loop CLI** — `openlithohub flow run` ingests DEF/GDS/OAS or an ORFS product directory, tiles, runs litho forward sim, and produces an aggregated manufacturability report (EPE, PV Band, DRC, MRC) with configurable per-PDK layer maps
@@ -584,6 +586,30 @@ PyTorch so the entire ILT loop is end-to-end auto-differentiable:
 
 Built-in Hopkins remains the default and the only comparable path for leaderboard
 numbers. Plugin EM backends are opt-in and produce non-comparable scores.
+
+### Schwarz Domain Decomposition (Tiling)
+
+`schwarz_tiled_ilt()` in `openlithohub._utils.tiling` implements alternating Schwarz domain decomposition for large-layout ILT. Adjacent tiles exchange overlap boundary data at each iteration, with convergence monitoring (residual norm). This replaces naive independent tiling with a solver that enforces inter-tile consistency:
+
+```python
+from openlithohub._utils.tiling import schwarz_tiled_ilt
+
+result = schwarz_tiled_ilt(
+    mask, tile_size=512, overlap=64, max_schwarz_iter=10, tol=1e-4,
+)
+```
+
+### Born Scattering Forward Correction
+
+`simulate_aerial_image_born()` in `openlithohub._utils.forward_model` extends the Hopkins Gaussian PSF forward model with higher-order Born scattering terms for thick-mask effects. This captures edge diffraction and sidewall scattering that the thin-mask (Hopkins-only) model misses:
+
+```python
+from openlithohub._utils.forward_model import simulate_aerial_image_born
+
+aerial = simulate_aerial_image_born(
+    mask, sigma_nm=20.0, born_order=2,  # Hopkins + 2nd-order correction
+)
+```
 
 Switch `LevelSetILTModel` to Hopkins:
 
