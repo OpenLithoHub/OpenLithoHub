@@ -45,12 +45,20 @@ from openlithohub.simulators.registry import (
     list_simulators,
     register_simulator,
 )
+from openlithohub.simulators.commercial import (
+    CommercialSimulatorAdapter,
+    PreflightStatus,
+    ToolchainError,
+)
 from openlithohub.simulators.tachyon import TachyonSimulator
 
 __all__ = [
     "BaseSimulator",
     "CalibreSimulator",
+    "CommercialSimulatorAdapter",
     "HopkinsSimulator",
+    "PreflightStatus",
+    "ToolchainError",
     "SimulatorConfig",
     "SimulatorResult",
     "TachyonSimulator",

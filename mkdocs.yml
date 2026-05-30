@@ -48,6 +48,7 @@ nav:
   - CLI Reference: cli-reference.md
   - Halo and Tiling: halo-and-tiling.md
   - Networking & Proxies: networking.md
+  - Self-Hosted Deployment: self_hosted_deployment.md
   - HuggingFace Authentication: hf-auth.md
   - References: references.md
   - Citation Map: citations.md

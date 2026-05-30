@@ -83,7 +83,7 @@ def pw_aerial_images(
     mask: torch.Tensor,
     corners: Sequence[ProcessWindowCorner] = DEFAULT_PW_CORNERS,
 ) -> list[torch.Tensor]:
-    """Simulate the aerial image at every corner.
+    """Simulate the aerial image at every corner.  :stable:
 
     Returned tensors share rank with ``mask`` (``(H,W)`` in, ``(H,W)`` out).
     Autograd-connected — gradients flow back to ``mask``.
@@ -102,7 +102,7 @@ def pw_fidelity_loss(
     pixel_size_nm: float = 1.0,
     quencher: float = 0.0,
 ) -> torch.Tensor:
-    """Weighted-mean MSE between simulated resist and target across PW corners.
+    """Weighted-mean MSE between simulated resist and target across PW corners.  :stable:
 
     Each corner contributes ``weight * MSE(resist_corner, target)``; the result
     is divided by the sum of weights so the scalar magnitude stays comparable

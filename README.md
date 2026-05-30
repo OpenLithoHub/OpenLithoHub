@@ -113,7 +113,32 @@ Tagged versions are also available (e.g. `ghcr.io/openlithohub/openlithohub:0.1`
 
 ---
 
-## Quick Start
+## Co-Design: Lithography as Coupling Layer
+
+OpenLithoHub's forward lithography model serves as the coupling layer that connects upstream design solvers (EM, CFD) to downstream manufacturability:
+
+```python
+from diff_surrogate import CoDesignWorkflow, CoupledLoss
+
+# Lithography forward function feeds printability gradients back to design
+def litho_coupling(merged_outputs):
+    design_mask = merged_outputs["design"]["mask"]
+    from openlithohub.simulators import forward_sim
+    aerial = forward_sim(design_mask)
+    merged_outputs["litho"] = {"epe": aerial["epe"], "pv_band": aerial["pv_band"]}
+    return merged_outputs
+
+wf = CoDesignWorkflow(
+    design_params=torch.rand(64, 64),
+    forward_fns={"design": design_forward},
+    loss_fn=combined_loss,
+    coupling_fn=litho_coupling,
+)
+```
+
+Install `openlithohub[plugins]` to use DiffNano/DiffCFD solvers as co-design partners.
+
+---
 
 ### Evaluate a model
 
