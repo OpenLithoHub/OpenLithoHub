@@ -188,7 +188,7 @@ def _worker_fn(
     meta_serialized: bytes,
     model_bytes: bytes,
     input_chunks: list[tuple[int, bytes]],  # (index, numpy_bytes)
-    result_queue: mp.Queue[list[tuple[int, bytes]]],  # type: ignore[type-arg]
+    result_queue: mp.Queue[list[tuple[int, bytes]]],
     device: str,
 ) -> None:
     """Worker process: reconstruct model from shared memory, run inference."""
@@ -273,7 +273,7 @@ def multiproc_predict(
     for i, t in enumerate(inputs):
         chunks[i % n_workers].append((i, pickle.dumps(t.detach().cpu().numpy())))
 
-    result_queue: mp.Queue[list[tuple[int, bytes]]] = mp.Queue()  # type: ignore[type-arg]
+    result_queue: mp.Queue[list[tuple[int, bytes]]] = mp.Queue()
     workers: list[mp.Process] = []
 
     # Use "fork" on CPU for speed and pickling simplicity; "spawn" for CUDA
