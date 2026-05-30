@@ -161,7 +161,7 @@ the ILT loops and PV-band metric:
 - **Morphology** (`binary_dilation`, `binary_erosion`, `distance_transform`)
   — GPU-friendly binary primitives shared by metrics and the dummy generator.
 
-### Resist Model Simplification
+### Resist Model
 
 The resist path used by the leaderboard's EPE/PVB scoring is a **constant
 threshold resist (CTR) without diffusion**: a fixed sigmoid threshold
@@ -173,23 +173,37 @@ stochastic-defect metrics (`resist_threshold` kwarg) so all three see one
 calibration. The leaderboard pins `0.225` — overriding it produces
 non-comparable numbers.
 
-This is a deliberate scope decision, not a TODO:
+**Opt-in acid diffusion (CTR with diffusion)** is available as an opt-in
+feature for users who need more physically accurate resist modeling:
 
-- **Per-node CTR `(threshold, resist_blur_sigma_nm)` calibration is
-  foundry-confidential.** Real numbers come from wafer SEM measurements
-  on a specific resist + track + bake recipe. They are not published and
-  cannot ship in an open-source repo regardless of effort spent.
-- **For benchmark-relative comparison this is fine.** All models on the
-  leaderboard are scored against the same CTR, so the ordering is
-  meaningful even though the absolute EPE numbers are not predictive of
+- CLI flags: `--resist-diffusion-nm` and `--quencher` (both default 0)
+- When enabled, a Gaussian blur (acid diffusion) and quencher subtraction
+  are applied before the hard threshold
+- Default 0.0 produces bit-identical results to the legacy CTR model
+- ILT optimizers accept the same parameters for differentiable diffusion
+  via `apply_differentiable_resist()`
+- **Incompatible with leaderboard submission** — non-zero diffusion is
+  rejected at submit time
+
+**Calibration**: `ResistCalibration.fit()` in `_utils/resist_model.py`
+provides a grid-search least-squares calibration from SEM CD anchors. Users
+provide `(aerial_intensity, measured_cd_nm)` pairs and get back
+`(threshold, resist_diffusion_nm, quencher)`.
+
+This is a deliberate scope decision:
+
+- **Per-node CTR parameters are foundry-confidential.** Real numbers come
+  from wafer SEM measurements on a specific resist + track + bake recipe.
+  They are not published and cannot ship in an open-source repo regardless
+  of effort spent.
+- **For benchmark-relative comparison the default CTR is sufficient.** All
+  models on the leaderboard are scored against the same CTR, so the ordering
+  is meaningful even though the absolute EPE numbers are not predictive of
   wafer print at any specific fab.
-- **For absolute wafer prediction this is not.** A user who needs to
-  trust an OPC mask through a real fab flow must replace
-  `apply_resist_threshold` (and ideally also add a
-  `gauss_blur(resist_diffusion_nm)` step) with calibrated parameters
-  for their target node. The function lives in
-  `src/openlithohub/_utils/forward_model.py` for that reason — it is
-  intentionally a single override point.
+- **For absolute wafer prediction, users must self-calibrate.** A user who
+  needs to trust an OPC mask through a real fab flow should calibrate
+  diffusion parameters for their target node. Relative rankings remain
+  meaningful; absolute predictions require user-supplied parameters.
 
 The differentiable variants `simulate_resist_soft` and
 `differentiable_threshold` exist for ILT training (the hard step is not

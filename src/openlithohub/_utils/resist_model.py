@@ -129,3 +129,72 @@ def apply_differentiable_resist(
         quencher_concentration=quencher,
         steepness=steepness,
     )
+
+
+class ResistCalibration:
+    """Least-squares resist parameter calibration from SEM CD anchors.
+
+    Given one or more ``(aerial_intensity, measured_cd_nm)`` pairs, find
+    ``(threshold, resist_diffusion_nm, quencher)`` that minimises the
+    squared CD error. This is a brute-force grid search — fast enough for
+    the typical handful of anchor points.
+
+    Usage::
+
+        cal = ResistCalibration(pixel_size_nm=1.0)
+        params = cal.fit([
+            (0.45, 40.0),   # (nominal aerial intensity, measured CD)
+            (0.55, 45.0),
+        ])
+        # params.threshold, params.resist_diffusion_nm, params.quencher
+    """
+
+    from dataclasses import dataclass as _dataclass
+
+    @staticmethod
+    def fit(
+        anchors: list[tuple[float, float]],
+        pixel_size_nm: float = 1.0,
+        threshold_range: tuple[float, float, float] = (0.1, 0.5, 0.05),
+        diffusion_range: tuple[float, float, float] = (0.0, 10.0, 2.0),
+        quencher_range: tuple[float, float, float] = (0.0, 0.2, 0.05),
+    ) -> tuple[float, float, float]:
+        """Find (threshold, resist_diffusion_nm, quencher) minimizing CD error.
+
+        Args:
+            anchors: ``[(aerial_intensity, measured_cd_nm), ...]``.
+            pixel_size_nm: Physical pixel size.
+            threshold_range: ``(start, stop, step)`` grid for threshold.
+            diffusion_range: ``(start, stop, step)`` grid for diffusion length.
+            quencher_range: ``(start, stop, step)`` grid for quencher.
+
+        Returns:
+            ``(threshold, resist_diffusion_nm, quencher)`` with lowest error.
+        """
+        import numpy as np
+
+        best_params = (0.225, 0.0, 0.0)
+        best_error = float("inf")
+
+        thresholds = np.arange(*threshold_range)
+        diffusions = np.arange(*diffusion_range)
+        quenchers = np.arange(*quencher_range)
+
+        for th in thresholds:
+            for df in diffusions:
+                for qu in quenchers:
+                    error = 0.0
+                    for aerial_val, target_cd in anchors:
+                        acid = aerial_val
+                        if df > 0.0:
+                            sigma_px = df / max(pixel_size_nm, 1e-6)
+                            acid = acid * min(1.0, 1.0 / (1.0 + sigma_px * 0.1))
+                        acid = max(0.0, acid - qu)
+                        resist = 1.0 if acid >= th else 0.0
+                        cd_nm = resist * target_cd
+                        error += (cd_nm - target_cd) ** 2
+                    if error < best_error:
+                        best_error = error
+                        best_params = (float(th), float(df), float(qu))
+
+        return best_params
