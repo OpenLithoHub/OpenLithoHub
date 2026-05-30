@@ -51,7 +51,7 @@ def _share_weights(
         model = registry.get(model_name, **model_kwargs)
         model.setup()
 
-        state_dict = model.state_dict()
+        state_dict = model.state_dict()  # type: ignore[attr-defined]
         shared: dict[str, torch.Tensor] = {}
         for key, tensor in state_dict.items():
             t = tensor.detach().cpu()
@@ -241,7 +241,7 @@ def _worker(
 
         # Load shared weights if available
         if shared_state is not None:
-            model.load_state_dict(shared_state, strict=False)
+            model.load_state_dict(shared_state, strict=False)  # type: ignore[attr-defined]
 
         model.setup()
         try:
