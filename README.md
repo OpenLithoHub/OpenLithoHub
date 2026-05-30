@@ -626,6 +626,28 @@ model = LevelSetILTModel(
 )
 ```
 
+### Flagship Evidence Status
+
+| Claim | Code | Tests | Data | Status |
+|:------|:-----|:------|:-----|:-------|
+| Schwarz domain decomposition tiling (`schwarz_tiled_ilt`) | `openlithohub/workflow/tiling.py` | `tests/test_workflow/test_schwarz_born.py` (5 tests) | Internal | Verified |
+| Born scattering forward correction (`simulate_aerial_image_born`) | `openlithohub/_utils/forward_model.py` | `tests/test_workflow/test_schwarz_born.py` (4 tests) | Internal | Verified |
+| Hopkins SOCS forward model | `openlithohub/_utils/hopkins.py` | `tests/test_utils/test_hopkins.py` | `docs/benchmarks.md` (measured timing) | Verified |
+| EPE / PV Band / MRC / DRC metrics | `openlithohub/benchmark/metrics/` | `tests/test_benchmark/test_metrics.py` | Baseline tables in README | Verified |
+| LevelSet-ILT model | `openlithohub/models/levelset_ilt.py` | `tests/test_models/test_levelset_ilt.py` | Synthetic-8 and ICCAD16 tables | Verified |
+| GAN-OPC model (`GanOpcModel`) | `openlithohub/models/gan_opc.py` | `tests/test_models/test_gan_opc.py` | ICCAD16 table | **Aspirational** — generator-only, no GAN discriminator, predictions near-random without pretrained weights |
+| Neural-ILT model (`NeuralILTModel`) | `openlithohub/models/neural_ilt.py` | `tests/test_models/test_neural_ilt.py` | ICCAD16 table | **Aspirational** — NOT paper-faithful re-implementation of Jiang2020; differentiable ILT correction layer unimplemented; degenerate on out-of-distribution inputs |
+| Layout-MAE (`LayoutMAE`) | `openlithohub/models/layout_mae.py` | `tests/test_models/test_layout_mae.py` | N/A | **Aspirational** — ViT-S MAE prototype with no pretrained weights, no fine-tune adapter, no Hub release |
+
+### Compatibility
+
+| Dependency | Version |
+|:-----------|:--------|
+| Python | 3.10+ (< 3.13) |
+| PyTorch | 2.12+ |
+
+**Sister projects:** [DiffCFD](https://github.com/OpenLithoHub/DiffCFD) (differentiable CFD, optional plugin), [DiffNano](https://github.com/OpenLithoHub/DiffNano) (nanophotonics, optional plugin), [diff-surrogate](https://github.com/telleroutlook/diff-surrogate) (shared surrogate framework).
+
 ### Commercial simulator adapters
 
 OpenLithoHub ships adapters for Calibre nmOPC and ASML Brion Tachyon.
