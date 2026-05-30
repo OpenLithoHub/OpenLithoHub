@@ -19,6 +19,8 @@ import math
 import torch
 import torch.nn.functional as functional
 
+from openlithohub._constants import WAVELENGTH_ARF_NM
+
 from openlithohub._constants import THRESHOLD_GENERIC
 
 
@@ -255,7 +257,7 @@ def simulate_aerial_image_thick_mask(
     thickness_nm: float = 70.0,
     refractive_index_n: float = 1.0,
     refractive_index_k: float = 0.5,
-    wavelength_nm: float = 193.0,
+    wavelength_nm: float | None = None,
 ) -> torch.Tensor:
     """Simulate aerial image with thick-mask amplitude/phase perturbation.
 
@@ -284,6 +286,8 @@ def simulate_aerial_image_thick_mask(
     Returns:
         Aerial image tensor matching input rank.
     """
+    if wavelength_nm is None:
+        wavelength_nm = WAVELENGTH_ARF_NM
     if sigma_px < 1e-6:
         return mask.float() * dose
 
