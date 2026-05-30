@@ -22,9 +22,7 @@ try:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 except ImportError:
-    raise SystemExit(
-        "matplotlib is required. Install with: pip install matplotlib"
-    ) from None
+    raise SystemExit("matplotlib is required. Install with: pip install matplotlib") from None
 
 NEUTRAL_GRAY = "#888888"
 PALETTE = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B3", "#CCB974", "#64B5CD"]
@@ -191,9 +189,13 @@ def plot_timing(payload: dict, output_dir: Path) -> list[Path]:
 
         device = payload.get("environment", {}).get("device_name", "CPU")
         fig.text(
-            0.5, -0.02,
+            0.5,
+            -0.02,
             f"Device: {device}",
-            ha="center", fontsize=7, color=NEUTRAL_GRAY, alpha=0.6,
+            ha="center",
+            fontsize=7,
+            color=NEUTRAL_GRAY,
+            alpha=0.6,
         )
 
         safe_name = bench_name.replace("/", "_")

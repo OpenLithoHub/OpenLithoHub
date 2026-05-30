@@ -253,13 +253,17 @@ def main() -> int:
 
     for r in bench_forward_models(sizes, args.samples):
         all_results.append(r)
-        print(f"{r.benchmark:<30} {r.grid_size:<10} {fmt_ms(r.median_ms):>12} "
-              f"{fmt_ms(r.p95_ms):>12} {fmt_ms(r.p99_ms):>12}")
+        print(
+            f"{r.benchmark:<30} {r.grid_size:<10} {fmt_ms(r.median_ms):>12} "
+            f"{fmt_ms(r.p95_ms):>12} {fmt_ms(r.p99_ms):>12}"
+        )
 
     for r in bench_hopkins(sizes, args.samples):
         all_results.append(r)
-        print(f"{r.benchmark:<30} {r.grid_size:<10} {fmt_ms(r.median_ms):>12} "
-              f"{fmt_ms(r.p95_ms):>12} {fmt_ms(r.p99_ms):>12}")
+        print(
+            f"{r.benchmark:<30} {r.grid_size:<10} {fmt_ms(r.median_ms):>12} "
+            f"{fmt_ms(r.p95_ms):>12} {fmt_ms(r.p99_ms):>12}"
+        )
 
     print("\n── Metrics ──")
     print(f"{'Benchmark':<30} {'Grid':<10} {'Median':>12} {'P95':>12} {'P99':>12}")
@@ -267,8 +271,10 @@ def main() -> int:
 
     for r in bench_metrics(sizes, args.samples):
         all_results.append(r)
-        print(f"{r.benchmark:<30} {r.grid_size:<10} {fmt_ms(r.median_ms):>12} "
-              f"{fmt_ms(r.p95_ms):>12} {fmt_ms(r.p99_ms):>12}")
+        print(
+            f"{r.benchmark:<30} {r.grid_size:<10} {fmt_ms(r.median_ms):>12} "
+            f"{fmt_ms(r.p95_ms):>12} {fmt_ms(r.p99_ms):>12}"
+        )
 
     print("\n── Models ──")
     print(f"{'Benchmark':<30} {'Grid':<10} {'Median':>12} {'P95':>12} {'P99':>12}")
@@ -276,8 +282,10 @@ def main() -> int:
 
     for r in bench_models(args.samples):
         all_results.append(r)
-        print(f"{r.benchmark:<30} {r.grid_size:<10} {fmt_ms(r.median_ms):>12} "
-              f"{fmt_ms(r.p95_ms):>12} {fmt_ms(r.p99_ms):>12}")
+        print(
+            f"{r.benchmark:<30} {r.grid_size:<10} {fmt_ms(r.median_ms):>12} "
+            f"{fmt_ms(r.p95_ms):>12} {fmt_ms(r.p99_ms):>12}"
+        )
 
     if args.json:
         payload = {
