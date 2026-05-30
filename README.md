@@ -589,6 +589,25 @@ model = LevelSetILTModel(
 )
 ```
 
+### Commercial simulator adapters
+
+OpenLithoHub ships adapters for Calibre nmOPC and ASML Brion Tachyon.
+Both fall back to a deterministic mock when the commercial toolchain is
+not installed, so tests pass on any machine:
+
+```python
+from openlithohub.simulators import CalibreSimulator, TachyonSimulator
+from openlithohub.simulators import SimulatorConfig
+
+# Calibre nmOPC (requires calibre on PATH; mock_mode=True otherwise)
+calibre = CalibreSimulator(SimulatorConfig(pixel_size_nm=4.0, mock_mode=True))
+result = calibre.simulate(mask_tensor)
+
+# ASML Brion Tachyon (requires TACHYON_HOME; mock_mode=True otherwise)
+tachyon = TachyonSimulator(SimulatorConfig(pixel_size_nm=4.0, mock_mode=True))
+result = tachyon.simulate(mask_tensor)
+```
+
 ---
 
 ## Development
@@ -605,6 +624,24 @@ mypy src/
 
 # Format
 ruff format src/ tests/
+
+# Check plugin infrastructure health
+make check-plugins
+```
+
+### Multi-worker batch inference
+
+For production-scale scoring, `multiproc_predict` distributes tiles across
+worker processes with shared model weights via `SharedMemory`:
+
+```python
+from openlithohub.inference import multiproc_predict
+from openlithohub.models import get_model
+
+model = get_model("neural-ilt")
+tiles = [mask_tile_1, mask_tile_2, mask_tile_3, mask_tile_4]
+
+results = multiproc_predict(model, tiles, n_workers=2)
 ```
 
 ---
