@@ -271,3 +271,44 @@ def _ensure_2d(t: torch.Tensor) -> torch.Tensor:
         else:
             break
     return t
+
+
+def schwarz_convergence_metrics(
+    history: list[float],
+) -> dict[str, float | bool]:
+    """Summarize Schwarz iteration convergence from boundary MSE history.
+
+    Args:
+        history: Per-iteration boundary MSE values returned by
+            :func:`openlithohub.workflow.tiling.schwarz_tiled_ilt`.
+
+    Returns:
+        Dict with:
+
+        - ``'initial_mse'``: boundary MSE at Schwarz iteration 0.
+        - ``'final_mse'``: boundary MSE at the last iteration.
+        - ``'reduction_ratio'``: ``final_mse / initial_mse`` (``1.0`` if
+          history is empty or ``initial_mse`` is zero).
+        - ``'converged_monotone'``: ``True`` if the MSE decreased at every
+          step (no oscillation).
+    """
+    if not history:
+        return {
+            "initial_mse": 0.0,
+            "final_mse": 0.0,
+            "reduction_ratio": 1.0,
+            "converged_monotone": True,
+        }
+
+    initial = history[0]
+    final = history[-1]
+    ratio = final / initial if initial > 0 else 1.0
+
+    monotone = all(history[i] <= history[i - 1] + 1e-12 for i in range(1, len(history)))
+
+    return {
+        "initial_mse": initial,
+        "final_mse": final,
+        "reduction_ratio": ratio,
+        "converged_monotone": monotone,
+    }

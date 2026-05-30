@@ -249,3 +249,124 @@ def tiled_ilt_with_consistency(
         "tile_results": tile_results,
         "consistency": consistency,
     }
+
+
+def schwarz_tiled_ilt(
+    mask: torch.Tensor,
+    tile_size: int,
+    ilt_fn: Callable[[torch.Tensor], torch.Tensor],
+    overlap: int = 64,
+    n_schwarz_iters: int = 3,
+    n_inner_iters: int = 5,
+    convergence_tol: float = 1e-3,
+) -> dict:
+    """Schwarz alternating iteration for tiled ILT.
+
+    After each round of per-tile ILT optimization, the overlap regions are
+    exchanged between adjacent tiles (multiplicative Schwarz), providing
+    boundary conditions from the latest neighbouring solutions.  This reduces
+    the boundary inconsistency that arises from fully independent tile
+    optimization.
+
+    Convergence is measured by the max boundary MSE across adjacent tile pairs.
+    The loop terminates early when this drops below *convergence_tol*.
+
+    Args:
+        mask: Full-chip mask ``(H, W)``.
+        tile_size: Square tile size in pixels.
+        ilt_fn: Per-tile ILT callable ``(H_t, W_t) → (H_t, W_t)``.
+        overlap: Overlap width in pixels.
+        n_schwarz_iters: Maximum Schwarz exchange iterations.
+        n_inner_iters: ILT steps per tile per Schwarz iteration.
+        convergence_tol: Stop early when boundary MSE < this value.
+
+    Returns:
+        Dict with ``'mask'``, ``'tiles'``, ``'tile_results'``,
+        ``'consistency'``, and ``'schwarz_history'`` (boundary MSE per round).
+    """
+    from openlithohub.benchmark.metrics.tiling_consistency import tile_boundary_consistency
+
+    if mask.ndim > 2:
+        mask = mask.squeeze()
+
+    h, w = mask.shape
+    tiles = tile_layout(mask, tile_size=tile_size, overlap=overlap)
+    tile_results = [t.tensor.clone() for t in tiles]
+
+    history: list[float] = []
+
+    for schwarz_it in range(n_schwarz_iters):
+        new_results: list[torch.Tensor] = []
+        for idx, tile in enumerate(tiles):
+            current = _inject_boundary_data(tile, tile_results, idx, tiles, overlap)
+            for _ in range(n_inner_iters):
+                current = ilt_fn(current)
+            new_results.append(current)
+
+        tile_results = new_results
+
+        metrics = tile_boundary_consistency(tiles, tile_results, overlap=overlap)
+        mse = metrics["boundary_mse"]
+        history.append(mse)
+
+        if mse < convergence_tol:
+            break
+
+    stitched = stitch_tiles(
+        [(t, r) for t, r in zip(tiles, tile_results)],
+        (h, w),
+    )
+
+    return {
+        "mask": stitched,
+        "tiles": tiles,
+        "tile_results": tile_results,
+        "consistency": tile_boundary_consistency(tiles, tile_results, overlap=overlap),
+        "schwarz_history": history,
+    }
+
+
+def _inject_boundary_data(
+    tile: Tile,
+    all_results: list[torch.Tensor],
+    idx: int,
+    all_tiles: list[Tile],
+    overlap: int,
+) -> torch.Tensor:
+    """Copy overlap-region data from neighbours into the current tile.
+
+    For each adjacent tile whose overlap region intersects this tile's extent,
+    overwrite the corresponding overlap strip in the current tile's tensor
+    with data from the neighbour's most recent result.  This implements the
+    multiplicative Schwarz information exchange.
+    """
+    current = tile.tensor.clone()
+    th, tw = current.shape[-2], current.shape[-1]
+
+    for jdx, other in enumerate(all_tiles):
+        if jdx == idx:
+            continue
+
+        # Horizontal adjacency: same row band, columns overlap
+        if tile.origin_y == other.origin_y:
+            # neighbour is to the right
+            if other.origin_x == tile.origin_x + tw - overlap:
+                patch = all_results[jdx][..., :, :overlap]
+                current[..., :, -overlap:] = patch
+            # neighbour is to the left
+            elif tile.origin_x == other.origin_x + other.width - overlap:
+                patch = all_results[jdx][..., :, -overlap:]
+                current[..., :, :overlap] = patch
+
+        # Vertical adjacency: same column band, rows overlap
+        if tile.origin_x == other.origin_x:
+            # neighbour is below
+            if other.origin_y == tile.origin_y + th - overlap:
+                patch = all_results[jdx][..., :overlap, :]
+                current[..., -overlap:, :] = patch
+            # neighbour is above
+            elif tile.origin_y == other.origin_y + other.height - overlap:
+                patch = all_results[jdx][..., -overlap:, :]
+                current[..., :overlap, :] = patch
+
+    return current

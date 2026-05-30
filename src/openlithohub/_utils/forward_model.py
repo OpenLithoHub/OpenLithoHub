@@ -174,3 +174,74 @@ def apply_resist_threshold(
         acid = _gaussian_diffuse(acid, sigma_px)
     acid = (acid - quencher).clamp(min=0.0)
     return (acid >= threshold).float()
+
+
+def simulate_aerial_image_born(
+    mask: torch.Tensor,
+    sigma_px: float,
+    dose: float = 1.0,
+    n_born_terms: int = 2,
+    reflectivity: float = 0.1,
+) -> torch.Tensor:
+    """Simulate aerial image with Born-series scattering correction.
+
+    Extends the single-convolution Hopkins approximation with higher-order
+    scattering terms that model thick-mask (3-D EM) effects.  Each Born term
+    convolves the residual (difference between mask and previous-order aerial)
+    with the same PSF, weighted by *reflectivity*^n:
+
+        I ≈ PSF ⊛ mask + r · PSF ⊛ (mask − PSF ⊛ mask)
+            + r² · PSF ⊛ (mask − PSF ⊛ mask − r · PSF ⊛ (…))
+
+    Setting *n_born_terms=1* recovers :func:`simulate_aerial_image`.
+    Typical values: *n_born_terms=2* for 193i, *n_born_terms=3* for EUV
+    where thick-mask scattering is pronounced.
+
+    Uses circular padding consistent with the rest of this module.
+
+    Args:
+        mask: Layout mask ``(H, W)`` or ``(B, 1, H, W)``.
+        sigma_px: Gaussian PSF width in pixels.
+        dose: Exposure dose multiplier.
+        n_born_terms: Number of Born scattering terms (>= 1).
+        reflectivity: Coupling strength per scattering order (0–1).
+
+    Returns:
+        Aerial image tensor matching input rank.
+    """
+    if n_born_terms < 1:
+        raise ValueError(f"n_born_terms must be >= 1, got {n_born_terms}")
+
+    if sigma_px < 1e-6:
+        return mask.float() * dose
+
+    kernel = _build_gaussian_kernel(sigma_px, mask.device)
+    padding = kernel.shape[-1] // 2
+
+    squeezed = False
+    if mask.ndim == 2:
+        inp = mask.float().unsqueeze(0).unsqueeze(0)
+        squeezed = True
+    elif mask.ndim == 4 and mask.shape[1] == 1:
+        inp = mask.float()
+    else:
+        raise ValueError(f"Expected mask shape (H,W) or (B,1,H,W); got {tuple(mask.shape)}")
+
+    def _conv(x: torch.Tensor) -> torch.Tensor:
+        return functional.conv2d(_circular_pad_clamped(x, padding), kernel)
+
+    # First Born term: standard convolution
+    aerial = _conv(inp) * dose
+
+    # Higher-order Born corrections
+    residual = inp - aerial / dose
+    r_power = reflectivity
+    for _ in range(1, n_born_terms):
+        correction = _conv(residual) * dose * r_power
+        aerial = aerial + correction
+        residual = inp - aerial / dose
+        r_power *= reflectivity
+
+    if squeezed:
+        aerial = aerial.squeeze(0).squeeze(0)
+    return aerial
