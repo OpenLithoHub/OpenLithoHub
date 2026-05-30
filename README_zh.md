@@ -618,7 +618,7 @@ OpenLithoHub 采用分层许可模型：
 - **第三方组件** — 参见 [NOTICE](NOTICE)。
 
 你可以在开源许可证下自由地将 OpenLithoHub 用于商业用途
-（仅需保留署名与 `NOTICE` 文件）。如果需要无署名的商业授权、专利保障
+（仅需保留署名与 `NOTICE` 文件）。如果需要无署名的商业授权
 或带 SLA 的支持服务，参见 [COMMERCIAL-USE.md](COMMERCIAL-USE.md)。
 
 学术引用方式见 [CITATION.cff](CITATION.cff)。

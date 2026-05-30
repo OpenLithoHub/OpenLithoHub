@@ -733,7 +733,7 @@ OpenLithoHub uses a layered licensing model:
 
 You may freely use OpenLithoHub commercially under the open-source license
 (attribution and the `NOTICE` file are the only requirements). For commercial
-licensing options without attribution, with patent indemnification, or with
+licensing options without attribution or with
 SLA-backed support, see [COMMERCIAL-USE.md](COMMERCIAL-USE.md).
 
 To cite OpenLithoHub in academic work, see [CITATION.cff](CITATION.cff).

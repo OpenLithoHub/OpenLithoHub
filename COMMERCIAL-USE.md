@@ -35,8 +35,8 @@ We offer an optional commercial license for organizations that prefer:
 
 - **No attribution requirement** — embed OpenLithoHub without referencing
   this project in user-facing surfaces.
-- **Patent indemnification and legal certainty** — relevant for fabs, IDMs,
-  and EDA vendors operating in patent-dense areas (EUV, ILT, curvilinear).
+- **Legal certainty and indemnification** — relevant for fabs, IDMs,
+  and EDA vendors.
 - **Commercial-grade support with SLA guarantees**.
 - **Access to proprietary components** — closed-source pretrained model
   weights, packaged commercial benchmark sets, and on-prem deployment
@@ -77,11 +77,11 @@ A: No. Apache 2.0 is permissive — you may keep modifications proprietary.
 You must retain copyright notices and the NOTICE file.
 
 **Q: Can my fab / mask-shop run OpenLithoHub on production tapeout flows?**
-A: Yes, under the open-source license. For SLA-backed support and patent
+A: Yes, under the open-source license. For SLA-backed support and
 indemnification, contact us about a commercial license.
 
 **Q: When would I need a commercial license?**
-A: Only if you want to remove the attribution requirement, need patent
+A: Only if you want to remove the attribution requirement, need
 indemnification, require SLA-backed support, or need access to proprietary
 components. The open-source version is fully functional without a commercial
 license.
