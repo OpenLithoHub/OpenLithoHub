@@ -26,7 +26,11 @@ from openlithohub.benchmark.metrics.stochastic import (
     compute_stochastic_robustness,
 )
 from openlithohub.benchmark.metrics.tiling_consistency import (
+    cross_tile_contour_residual,
+    cross_tile_epe_residual,
     cross_tile_sraf_consistency,
+    schwarz_vs_naive_comparison,
+    sweep_overlap_convergence,
     tile_boundary_consistency,
 )
 
@@ -43,12 +47,16 @@ __all__ = [
     "compute_stochastic_defect_classes",
     "compute_stochastic_robustness",
     "compute_wafer_epe",
+    "cross_tile_contour_residual",
+    "cross_tile_epe_residual",
     "cross_tile_sraf_consistency",
     "curvilinear_mrc_loss",
     "curvilinear_to_manhattan",
     "estimate_shot_count",
     "manhattanization_degradation",
     "monte_carlo_failure_probability",
+    "schwarz_vs_naive_comparison",
     "sraf_print_penalty",
+    "sweep_overlap_convergence",
     "tile_boundary_consistency",
 ]
