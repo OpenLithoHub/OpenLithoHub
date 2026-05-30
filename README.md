@@ -582,6 +582,7 @@ PyTorch so the entire ILT loop is end-to-end auto-differentiable:
 |---|---|---|
 | Gaussian PSF | `openlithohub._utils.forward_model.simulate_aerial_image` | Single-Gaussian convolution; cheap default for tests and small grids |
 | Hopkins SOCS | `openlithohub._utils.hopkins.simulate_aerial_image_hopkins` | Partial-coherent imaging via SVD-truncated Sum-Of-Coherent-Systems; supports circular / annular / dipole illumination |
+| Thick mask forward model | `openlithohub._utils.forward_model.simulate_aerial_image_thick_mask` | Multi-layer thick-mask diffraction model for 3D mask effects (O7.1) |
 | DiffNano RCWA/FDTD/FDFD | `openlithohub.plugins.diffnano_em` (opt-in) | Rigorous EM solvers via the DiffNano plugin; registered as `diffnano_rcwa`, `diffnano_fdtd2d`, `diffnano_fdfd2d` backends |
 
 Built-in Hopkins remains the default and the only comparable path for leaderboard
@@ -597,6 +598,44 @@ from openlithohub._utils.tiling import schwarz_tiled_ilt
 result = schwarz_tiled_ilt(
     mask, tile_size=512, overlap=64, max_schwarz_iter=10, tol=1e-4,
 )
+```
+
+### Differentiable Morphological Operators (O7.2)
+
+Differentiable dilate/erode/open/close via structured-element max-pool soft approximations, usable as differentiable MRC/DRC proxies in the ILT autograd graph:
+
+```python
+from openlithohub._utils.morphology import soft_dilate, soft_erode, soft_opening, soft_closing
+
+# Differentiable morphological operations
+opened = soft_opening(mask, kernel_size=3, temperature=0.1)
+width_violation = soft_erode(mask, kernel_size=3).clamp(min=0).mean()  # proxy for min-width penalty
+```
+
+### Warm-Start ILT Interface (O7.3)
+
+The `LevelSetILTModel` and `warm_start_ilt()` support initializing ILT from a prior OPC result (rule-based, neural, or external), avoiding cold-start convergence issues:
+
+```python
+from openlithohub._utils.warm_start import warm_start_ilt
+
+result = warm_start_ilt(
+    initial_mask=prior_opc_mask,   # from rule-based or neural OPC
+    target=target_mask,
+    iterations=100,
+    forward_model="hopkins",
+)
+```
+
+### Tiling Residual Quantification (O7.4)
+
+`tiling_residual_report()` quantifies inter-tile boundary consistency after tiling/stitching, reporting overlap L2 norm, max discontinuity, and per-tile residual maps:
+
+```python
+from openlithohub._utils.tiling import tiling_residual_report
+
+report = tiling_residual_report(stitched_mask, tile_size=512, overlap=64)
+print(f"Overlap L2: {report['overlap_l2']:.4f}, Max discontinuity: {report['max_disc']:.2f} nm")
 ```
 
 ### Born Scattering Forward Correction
@@ -719,6 +758,7 @@ results = multiproc_predict(model, tiles, n_workers=2)
 - [x] Milestone 10: Real PDK rollout — ASAP7 standard cells, FreePDK45 + NanGate OCL, ORFS-routed RISC-V mock-alu (issue [#4](https://github.com/OpenLithoHub/OpenLithoHub/issues/4))
 - [x] Milestone 11: Standard MRC rule-deck schema (RFC 0003), measured-source / Zernike-pupil I/O, Calibre/CSV gauge parser, `openlithohub export` CLI (ONNX / TorchScript / TensorRT-ready), `--compile` on by default, first PyPI release (`openlithohub-0.1.0a2`)
 - [x] Milestone 12: Opt-in diffusion resist (`--resist-diffusion-nm`), `openlithohub flow run` closed-loop CLI (design→litho→DFM), configurable per-PDK layer maps, optional DiffNano/DiffCFD plugin ecosystem
+- [x] Milestone 13: Thick mask forward model (O7.1), differentiable morphological operators (O7.2), warm-start ILT interface (O7.3), tiling residual quantification (O7.4)
 
 > **Note:** Milestones above reflect feature integration completeness (adapters, CLI commands, CI pipelines), not industrial validation. The alpha version (`0.1.0a2`) runs on synthetic layouts — real industrial-scale benchmarking is planned for the v1.0 milestone.
 
