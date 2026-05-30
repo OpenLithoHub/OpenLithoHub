@@ -53,7 +53,7 @@ import torch
 import torch.nn.functional as functional
 
 from openlithohub._utils.forward_model import simulate_aerial_image
-from openlithohub._utils.resist_model import differentiable_threshold
+from openlithohub._utils.resist_model import apply_differentiable_resist
 
 
 @dataclass(frozen=True)
@@ -98,6 +98,9 @@ def pw_fidelity_loss(
     corners: Sequence[ProcessWindowCorner] = DEFAULT_PW_CORNERS,
     threshold: float = 0.5,
     steepness: float = 50.0,
+    resist_diffusion_nm: float = 0.0,
+    pixel_size_nm: float = 1.0,
+    quencher: float = 0.0,
 ) -> torch.Tensor:
     """Weighted-mean MSE between simulated resist and target across PW corners.
 
@@ -123,7 +126,11 @@ def pw_fidelity_loss(
     weight_sum = 0.0
     for corner in corners:
         aerial = simulate_aerial_image(mask, sigma_px=corner.sigma_px, dose=corner.dose)
-        resist = differentiable_threshold(aerial, threshold=threshold, steepness=steepness)
+        resist = apply_differentiable_resist(
+            aerial, threshold=threshold, steepness=steepness,
+            resist_diffusion_nm=resist_diffusion_nm,
+            pixel_size_nm=pixel_size_nm, quencher=quencher,
+        )
         total = total + corner.weight * functional.mse_loss(resist, target)
         weight_sum += corner.weight
 

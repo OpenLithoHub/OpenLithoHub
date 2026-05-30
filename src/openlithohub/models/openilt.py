@@ -50,7 +50,7 @@ from openlithohub._utils.hopkins import (
     compute_socs_kernels,
     simulate_aerial_image_hopkins,
 )
-from openlithohub._utils.resist_model import differentiable_threshold
+from openlithohub._utils.resist_model import apply_differentiable_resist
 from openlithohub.models.base import LithographyModel, PredictionResult
 from openlithohub.models.registry import registry
 
@@ -117,6 +117,9 @@ class OpenILTModel(LithographyModel):
         momentum: float = 0.9,
         pvb_weight: float = 0.5,
         resist_steepness: float = 50.0,
+        resist_diffusion_nm: float = 0.0,
+        quencher: float = 0.0,
+        pixel_size_nm: float = 1.0,
         forward_model: ForwardModelKind = "gaussian",
         corners: PVBandCorners | None = None,
         hopkins_params: HopkinsParams | None = None,
@@ -126,6 +129,9 @@ class OpenILTModel(LithographyModel):
         self._momentum = momentum
         self._pvb_weight = pvb_weight
         self._resist_steepness = resist_steepness
+        self._resist_diffusion_nm = resist_diffusion_nm
+        self._quencher = quencher
+        self._pixel_size_nm = pixel_size_nm
         self._forward_model = forward_model
         self._corners = corners or PVBandCorners()
         self._hopkins_params = hopkins_params or HopkinsParams()
@@ -285,14 +291,20 @@ class OpenILTModel(LithographyModel):
                 weights=weights_def,
             )
 
-            resist_nom = differentiable_threshold(
-                aerial_nom.float(), threshold=0.5, steepness=self._resist_steepness
+            resist_nom = apply_differentiable_resist(
+                aerial_nom.float(), threshold=0.5, steepness=self._resist_steepness,
+                resist_diffusion_nm=self._resist_diffusion_nm,
+                pixel_size_nm=self._pixel_size_nm, quencher=self._quencher,
             )
-            resist_max = differentiable_threshold(
-                aerial_max.float(), threshold=0.5, steepness=self._resist_steepness
+            resist_max = apply_differentiable_resist(
+                aerial_max.float(), threshold=0.5, steepness=self._resist_steepness,
+                resist_diffusion_nm=self._resist_diffusion_nm,
+                pixel_size_nm=self._pixel_size_nm, quencher=self._quencher,
             )
-            resist_min = differentiable_threshold(
-                aerial_min.float(), threshold=0.5, steepness=self._resist_steepness
+            resist_min = apply_differentiable_resist(
+                aerial_min.float(), threshold=0.5, steepness=self._resist_steepness,
+                resist_diffusion_nm=self._resist_diffusion_nm,
+                pixel_size_nm=self._pixel_size_nm, quencher=self._quencher,
             )
 
             l2_nom = functional.mse_loss(resist_nom, target)

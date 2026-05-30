@@ -100,3 +100,32 @@ def simulate_resist_soft(
 
     acid = (acid - quencher_concentration).clamp(min=0.0)
     return differentiable_threshold(acid, threshold=threshold, steepness=steepness)
+
+
+def apply_differentiable_resist(
+    aerial_image: torch.Tensor,
+    threshold: float = 0.5,
+    steepness: float = 50.0,
+    resist_diffusion_nm: float = 0.0,
+    pixel_size_nm: float = 1.0,
+    quencher: float = 0.0,
+) -> torch.Tensor:
+    """Apply differentiable resist with optional acid diffusion.
+
+    When ``resist_diffusion_nm`` and ``quencher`` are both zero (default),
+    falls through to :func:`differentiable_threshold` for bit-identical
+    behavior with the legacy path. When diffusion is enabled, delegates
+    to :func:`simulate_resist_soft`.
+
+    This is the single dispatch point ILT optimizers should use.
+    """
+    if resist_diffusion_nm <= 0.0 and quencher <= 0.0:
+        return differentiable_threshold(aerial_image, threshold, steepness)
+    return simulate_resist_soft(
+        aerial_image,
+        acid_diffusion_length_nm=resist_diffusion_nm,
+        pixel_size_nm=pixel_size_nm,
+        threshold=threshold,
+        quencher_concentration=quencher,
+        steepness=steepness,
+    )

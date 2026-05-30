@@ -38,7 +38,7 @@ from openlithohub._utils.hopkins import (
     compute_socs_kernels,
     simulate_aerial_image_hopkins,
 )
-from openlithohub._utils.resist_model import differentiable_threshold
+from openlithohub._utils.resist_model import apply_differentiable_resist
 from openlithohub.models.base import LithographyModel, PredictionResult
 from openlithohub.models.registry import registry
 
@@ -134,6 +134,9 @@ class VAEILTModel(LithographyModel):
         tv_weight: float = 0.01,
         dose: float = 1.0,
         resist_steepness: float = 50.0,
+        resist_diffusion_nm: float = 0.0,
+        quencher: float = 0.0,
+        pixel_size_nm: float = 1.0,
         forward_model: ForwardModelKind = "gaussian",
         hopkins_params: HopkinsParams | None = None,
         # VAE training
@@ -149,6 +152,9 @@ class VAEILTModel(LithographyModel):
         self._tv_weight = tv_weight
         self._dose = dose
         self._resist_steepness = resist_steepness
+        self._resist_diffusion_nm = resist_diffusion_nm
+        self._quencher = quencher
+        self._pixel_size_nm = pixel_size_nm
         self._forward_model = forward_model
         self._hopkins_params = hopkins_params or HopkinsParams()
         self._vae_train_masks = vae_train_masks
@@ -258,10 +264,13 @@ class VAEILTModel(LithographyModel):
             else:
                 aerial = simulate_aerial_image(mask_continuous, sigma_px=sigma_px, dose=self._dose)
 
-            resist = differentiable_threshold(
+            resist = apply_differentiable_resist(
                 aerial,
                 threshold=0.5,
                 steepness=self._resist_steepness,
+                resist_diffusion_nm=self._resist_diffusion_nm,
+                pixel_size_nm=self._pixel_size_nm,
+                quencher=self._quencher,
             )
             fidelity_loss = nn.functional.mse_loss(resist, target)
 
