@@ -1,0 +1,46 @@
+{
+  "timestamp": "2026-05-30T09:22:24.343676+00:00",
+  "model": {
+    "class": "BenchModel",
+    "params": 2497
+  },
+  "config": {
+    "n_inputs": 32,
+    "input_shape": [
+      1,
+      1,
+      64,
+      64
+    ],
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "device": "cpu",
+    "worker_counts": [
+      1
+    ]
+  },
+  "results": [
+    {
+      "n_workers": 1,
+      "n_inputs": 32,
+      "input_shape": [
+        1,
+        1,
+        64,
+        64
+      ],
+      "wall_time_avg_s": 0.010171,
+      "wall_time_min_s": 0.009774,
+      "peak_memory_mb": 0.014,
+      "throughput_items_per_sec": 3146.3,
+      "timed_runs": 3
+    }
+  ],
+  "consistency": [
+    {
+      "n_workers": 1,
+      "consistent": true,
+      "max_abs_diff": 0.0
+    }
+  ]
+}
