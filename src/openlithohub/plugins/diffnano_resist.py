@@ -70,7 +70,7 @@ class DiffNanoResistAdapter:
             Resist contour (soft, differentiable).
         """
         result = self._model.forward(aerial_image)
-        return result.field.squeeze(0).to(aerial_image.dtype)  # type: ignore[no-any-return,union-attr]
+        return result.field.squeeze(0).to(aerial_image.dtype)  # type: ignore[no-any-return]
 
     def calibrate(
         self,
