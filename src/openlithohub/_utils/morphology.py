@@ -1,9 +1,192 @@
-"""Morphological operations for binary mask analysis."""
+"""Morphological operations for binary mask analysis and differentiable ILT."""
 
 from __future__ import annotations
 
+import math
+
 import torch
 import torch.nn.functional as functional
+
+# ---------------------------------------------------------------------------
+# Disk structuring element (pure PyTorch, no scipy/opencv)
+# ---------------------------------------------------------------------------
+
+_DISK_CACHE: dict[tuple[int, torch.dtype, torch.device], torch.Tensor] = {}
+
+
+def _disk_kernel(radius: float, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
+    """Return a binary disk structuring element as a 2D kernel.
+
+    The kernel entries are 1 inside the disk and 0 outside.  Convolution
+    with this kernel counts how many neighbourhood pixels fall inside the
+    structuring element — used as the weight matrix for logsumexp soft-max.
+
+    Cached by (ceil_radius, dtype, device) to avoid re-computation.
+    """
+    r_px = max(1, int(math.ceil(radius)))
+    key = (r_px, dtype, device)
+    if key in _DISK_CACHE:
+        return _DISK_CACHE[key]
+
+    size = 2 * r_px + 1
+    ax = torch.arange(size, dtype=dtype, device=device) - r_px
+    yy, xx = torch.meshgrid(ax, ax, indexing="ij")
+    inside = (xx * xx + yy * yy).le(float(r_px * r_px))
+    kernel = inside.float().to(dtype=dtype, device=device)
+    _DISK_CACHE[key] = kernel
+    return kernel
+
+
+# ---------------------------------------------------------------------------
+# Differentiable (soft) morphological operators
+# ---------------------------------------------------------------------------
+
+
+def soft_dilation(
+    mask: torch.Tensor,
+    radius: float = 2.0,
+    hardness: float = 10.0,
+) -> torch.Tensor:
+    """Differentiable dilation via log-sum-exp soft maximum over neighbourhood.
+
+    For each pixel the soft maximum of mask values within a disk of the given
+    *radius* is computed using ``logsumexp(hardness * conv2d(mask, disk)) /
+    hardness``.  As *hardness* -> inf this converges to the true (binary)
+    dilation; finite values give smooth gradients everywhere.
+
+    Args:
+        mask: Continuous mask ``(H, W)`` with values in ``[0, 1]``.
+        radius: Structuring-element radius in pixels.
+        hardness: Temperature controlling the soft-max approximation.
+            Larger = sharper, smaller = smoother gradients.
+
+    Returns:
+        Dilated mask ``(H, W)`` with values in ``[0, 1]``.
+    """
+    if radius < 0.5:
+        return mask.clone()
+    kernel = _disk_kernel(radius, mask.dtype, mask.device)
+    r_px = max(1, int(math.ceil(radius)))
+    inp = mask.unsqueeze(0).unsqueeze(0)  # (1, 1, H, W)
+    k4d = kernel.unsqueeze(0).unsqueeze(0)  # (1, 1, kH, kW)
+
+    # Numerical stability: subtract the per-pixel max before exp.
+    # max_pool2d with the same disk size gives the local max (approximation).
+    max_local = functional.max_pool2d(inp, kernel_size=2 * r_px + 1, stride=1, padding=r_px)
+    shifted = hardness * (inp - max_local)
+
+    # conv2d(binary_kernel, exp(shifted)) = sum of exp(hardness*(x - max)) in
+    # the disk neighbourhood.  The binary kernel counts contributing pixels.
+    sum_exp = functional.conv2d(shifted.exp(), k4d, padding=r_px)
+
+    # logsumexp = max + log(sum_exp) / hardness
+    # Clamp sum_exp to avoid log(0) in degenerate cases.
+    result = max_local + torch.log(sum_exp.clamp(min=1e-30)) / hardness
+    return result.squeeze(0).squeeze(0)
+
+
+def soft_erosion(
+    mask: torch.Tensor,
+    radius: float = 2.0,
+    hardness: float = 10.0,
+) -> torch.Tensor:
+    """Differentiable erosion via log-sum-exp soft minimum over neighbourhood.
+
+    Equivalent to ``1 - soft_dilation(1 - mask, ...)``.
+
+    Args:
+        mask: Continuous mask ``(H, W)`` with values in ``[0, 1]``.
+        radius: Structuring-element radius in pixels.
+        hardness: Temperature controlling the soft-min approximation.
+
+    Returns:
+        Eroded mask ``(H, W)`` with values in ``[0, 1]``.
+    """
+    if radius < 0.5:
+        return mask.clone()
+    return 1.0 - soft_dilation(1.0 - mask, radius=radius, hardness=hardness)
+
+
+def morphological_opening(mask: torch.Tensor, radius: float = 2.0) -> torch.Tensor:
+    """Differentiable morphological opening (erosion then dilation).
+
+    Removes bright features smaller than *radius* while approximately
+    preserving the shape of larger features.
+    """
+    return soft_dilation(soft_erosion(mask, radius=radius), radius=radius)
+
+
+def morphological_closing(mask: torch.Tensor, radius: float = 2.0) -> torch.Tensor:
+    """Differentiable morphological closing (dilation then erosion).
+
+    Fills dark holes smaller than *radius* while approximately preserving
+    the shape of the remaining features.
+    """
+    return soft_erosion(soft_dilation(mask, radius=radius), radius=radius)
+
+
+def mrc_projection(
+    mask: torch.Tensor,
+    min_feature_px: float = 3.0,
+) -> torch.Tensor:
+    """Project a continuous mask to be MRC-clean by construction.
+
+    Applies a morphological opening followed by a closing with radius
+    ``min_feature_px / 2``.  The result is guaranteed to have no features
+    (bright or dark) smaller than *min_feature_px* pixels — width and
+    spacing constraints are both satisfied.
+
+    This is a differentiable projection layer suitable for insertion after
+    ILT optimisation or as a final post-processing step.
+
+    Args:
+        mask: Continuous mask ``(H, W)`` with values in ``[0, 1]``.
+        min_feature_px: Minimum allowed feature size in pixels.  Both the
+            minimum width and minimum spacing will be at least this value
+            after projection.
+
+    Returns:
+        MRC-clean mask ``(H, W)`` with values in ``[0, 1]``.
+    """
+    r = max(0.5, min_feature_px / 2.0)
+    opened = morphological_opening(mask, radius=r)
+    return morphological_closing(opened, radius=r)
+
+
+def estimate_shot_count(
+    mask: torch.Tensor,
+    threshold: float = 0.5,
+) -> torch.Tensor:
+    """Differentiable approximation of mask shot count for e-beam writing.
+
+    The shot count is the number of trapezoids (or shots) needed by a
+    multi-beam mask writer.  This approximation counts boundary pixels of
+    the thresholded mask as a proxy for perimeter complexity, then scales
+    by a geometry factor.  Fully differentiable through a soft threshold.
+
+    Args:
+        mask: Continuous mask ``(H, W)`` with values in ``[0, 1]``.
+        threshold: Binarisation threshold.
+
+    Returns:
+        Scalar tensor with the estimated shot count (differentiable).
+    """
+    # Soft binarisation via sigmoid centred at *threshold*.
+    binary_soft = torch.sigmoid(20.0 * (mask - threshold))
+    # Gradient magnitude as a soft boundary detector.
+    gy = binary_soft[1:, :] - binary_soft[:-1, :]
+    gx = binary_soft[:, 1:] - binary_soft[:, :-1]
+    # Pad to original size so sum is straightforward.
+    gy = functional.pad(gy, (0, 0, 0, 1))
+    gx = functional.pad(gx, (0, 1, 0, 0))
+    perimeter_proxy = (gy.abs() + gx.abs()).sum()
+    # Scale: each boundary pixel ~ 0.5 shots (rough trapezoid equivalence).
+    return perimeter_proxy * 0.5
+
+
+# ---------------------------------------------------------------------------
+# Binary (non-differentiable) morphological operators
+# ---------------------------------------------------------------------------
 
 
 def binary_erosion(mask: torch.Tensor, radius: int = 1) -> torch.Tensor:

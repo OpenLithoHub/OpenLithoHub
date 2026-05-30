@@ -18,6 +18,12 @@ from openlithohub._utils.morphology import (
     binary_erosion,
     connected_components,
     distance_transform,
+    estimate_shot_count,
+    morphological_closing,
+    morphological_opening,
+    mrc_projection,
+    soft_dilation,
+    soft_erosion,
 )
 from openlithohub._utils.resist_model import (
     differentiable_threshold,
@@ -42,8 +48,14 @@ __all__ = [
     "differentiable_threshold",
     "distance_transform",
     "ensure_2d",
+    "estimate_shot_count",
     "evenly_spaced_indices",
+    "morphological_closing",
+    "morphological_opening",
+    "mrc_projection",
     "simulate_aerial_image_hopkins",
     "simulate_resist",
     "simulate_resist_soft",
+    "soft_dilation",
+    "soft_erosion",
 ]
