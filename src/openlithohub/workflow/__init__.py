@@ -12,6 +12,13 @@ from openlithohub.workflow.full_chip_tiling import (
     TileBenchmarkReport,
     TileParallelProcessor,
 )
+from openlithohub.workflow.gpu_tiling_benchmark import (
+    GPUTileBatchProcessor,
+    ICCAD13Benchmark,
+    TileBatchConfig,
+    TileBatchResult,
+    TilingResidualRegression,
+)
 from openlithohub.workflow.gauges import (
     GaugePoint,
     GaugeTable,
@@ -53,6 +60,11 @@ __all__ = [
     "TileParallelProcessor",
     "SchwarzTilingSolver",
     "TileBenchmarkReport",
+    "GPUTileBatchProcessor",
+    "ICCAD13Benchmark",
+    "TileBatchConfig",
+    "TileBatchResult",
+    "TilingResidualRegression",
     "ProcessNodeConfig",
     "get_node",
     "list_nodes",
