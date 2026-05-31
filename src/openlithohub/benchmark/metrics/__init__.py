@@ -34,6 +34,13 @@ from openlithohub.benchmark.metrics.stochastic_loss import (
     differentiable_lcdu,
     quantile_loss,
 )
+from openlithohub.benchmark.metrics.coverage_gate import (
+    CoverageResult,
+    ProcessWindowPlotter,
+    StochasticAcceptanceGate,
+    StochasticSampler,
+    ThroughFocusCoverageCalibrator,
+)
 from openlithohub.benchmark.metrics.tiling_consistency import (
     cross_tile_contour_residual,
     cross_tile_epe_residual,
@@ -44,12 +51,17 @@ from openlithohub.benchmark.metrics.tiling_consistency import (
 )
 
 __all__ = [
+    "CoverageResult",
     "Mask3DParams",
     "MonteCarloFailureResult",
+    "ProcessWindowPlotter",
+    "StochasticAcceptanceGate",
     "StochasticAwareLoss",
     "StochasticDefectRates",
     "StochasticProcessWindow",
     "StochasticProcessWindowResult",
+    "StochasticSampler",
+    "ThroughFocusCoverageCalibrator",
     "apply_3d_shadow",
     "cvar_loss",
     "compute_3d_mask_residual",
