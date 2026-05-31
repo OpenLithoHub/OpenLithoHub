@@ -111,7 +111,33 @@ docker run --rm --gpus all -v "$PWD":/data ghcr.io/openlithohub/openlithohub:lat
 
 ---
 
-## 快速开始
+## 协同设计：光刻作为耦合层
+
+OpenLithoHub 的光刻前向模型充当耦合层，将上游设计求解器（EM、CFD）与下游可制造性连接起来：
+
+```python
+from diff_surrogate import CoDesignWorkflow, CoupledLoss
+from openlithohub.simulators import HopkinsSimulator, SimulatorConfig
+
+# 光刻前向函数将可打印性梯度回传给设计端
+def litho_coupling(merged_outputs):
+    design_mask = merged_outputs["design"]["mask"]
+    sim = HopkinsSimulator(SimulatorConfig(pixel_size_nm=1.0))
+    result = sim.simulate(design_mask)
+    merged_outputs["litho"] = {"aerial": result.aerial}
+    return merged_outputs
+
+wf = CoDesignWorkflow(
+    design_params=torch.rand(64, 64),
+    forward_fns={"design": design_forward},
+    loss_fn=combined_loss,
+    coupling_fn=litho_coupling,
+)
+```
+
+安装 `openlithohub[plugins]` 即可将 DiffNano/DiffCFD 求解器作为协同设计伙伴使用。
+
+### 评测模型
 
 ### 评测模型
 
@@ -546,6 +572,25 @@ ruff format src/ tests/
 - [x] 里程碑 10：真实 PDK 接入 — ASAP7 标准单元、FreePDK45 + NanGate OCL、ORFS 布线后的 RISC-V mock-alu（issue [#4](https://github.com/OpenLithoHub/OpenLithoHub/issues/4)）
 - [x] 里程碑 11：标准 MRC 规则集 schema（RFC 0003）、实测 source / Zernike-pupil I/O、Calibre/CSV gauge 解析器、`openlithohub export` CLI（ONNX / TorchScript / TensorRT-ready）、`--compile` 默认开启、首个 PyPI 版本（`openlithohub-0.1.0a2`）
 - [x] 里程碑 12：Opt-in 扩散光刻胶（`--resist-diffusion-nm`）、`openlithohub flow run` 闭环 CLI（design→litho→DFM）、可配置按 PDK 层映射、可选 DiffNano/DiffCFD 插件生态
+
+---
+
+## 竞争定位
+
+**定位：** 开源计算光刻评测与工作流工具集——ILT、OPC、掩膜优化与工艺窗口分析，内建诚实自评。
+
+**领先之处：**
+- **开放 ILT 评测与诚实基线：** 唯一提供标准化 ILT 基准（SARIF 导出、形态学 MRC、切片一致性指标、随机感知损失）的开源项目。商业工具（Calibre MML、cuLitho）闭源且无公开基准。
+- **变化感知 ILT：** CVaR 与分位数风险度量直接集成到 ILT 损失函数——超越确定性标称点优化的随机感知优化。
+- **全芯片 Schwarz 分解切片：** GPU 批量并行 Schwarz 切片用于全芯片 ILT，能量化切片一致性残差。
+- **物理光刻胶模型：** 酸生成 → 扩散 → 淬灭中和 → sigmoid 显影——全链可微，支持端到端掩膜到光刻胶优化。
+
+**不足之处（诚实评估）：**
+- **规模：** 基准子集、切片级、GPU 拼接。与 Calibre MML 和 cuLitho（全芯片、GPU 生产级）相差数个量级。
+- **验证：** 自测 + 对 LithoBench/ICCAD13 参考的数值交叉验证。无产线验证，无生产 tapeout。
+- **成熟度：** 研究原型。无代工厂集成，无 PDK sign-off 流程。
+
+**总结：** 作为诚实的开源光刻评测平台定位独特——规模上的不足由透明性、可复现性和方法论前瞻性（2024–2026 随机 ILT、保形 UQ、物理光刻胶）弥补。不能替代生产 OPC 工具，但提供了它们不提供的科研与基准评测平台。
 
 ---
 

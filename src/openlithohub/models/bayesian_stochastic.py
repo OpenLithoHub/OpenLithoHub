@@ -62,7 +62,8 @@ class _ConvBlock(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.conv(x)
+        out: torch.Tensor = self.conv(x)
+        return out
 
 
 class StochasticUNet(nn.Module):

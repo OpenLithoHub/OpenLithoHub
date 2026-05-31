@@ -122,7 +122,7 @@ class SRAFGenerator(nn.Module):
                     )
         if mask.ndim == 2:
             result = result.squeeze(0)
-        return cast(Tensor, result)
+        return result
 
 
 class LithographicImprovementScorer:
@@ -168,7 +168,7 @@ class LithographicImprovementScorer:
         slope = torch.sqrt(grad_x[:-1, :] ** 2 + grad_y[:, :-1] ** 2 + 1e-8)
         edge_crop = edge_mask[:-1, :-1]
         nils = (slope * edge_crop).sum() / (edge_crop.sum() + 1e-8)
-        return cast(Tensor, nils)
+        return nils
 
     def score(self, mask_with_sraf: Tensor, mask_without_sraf: Tensor, target: Tensor) -> float:
         """Return improvement score (positive = SRAFs helped)."""
@@ -267,7 +267,7 @@ class SRAFRLTrainer:
             total_improvement += mean_r.item()
 
         avg_loss = total_loss / max(n_pairs, 1)
-        avg_loss.backward()
+        avg_loss.backward()  # type: ignore[no-untyped-call]
         self.optimizer.step()
 
         return {

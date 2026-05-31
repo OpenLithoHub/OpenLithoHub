@@ -139,7 +139,7 @@ class ResistPINN(nn.Module):
         data_loss = nn.functional.mse_loss(prediction, target_resist) * self.data_weight
         phys_loss = self.physics_loss(dose, prediction) * self.physics_weight
         total = data_loss + phys_loss
-        total.backward()
+        total.backward()  # type: ignore[no-untyped-call]
         optimizer.step()
         return {
             "total": total.item(),
