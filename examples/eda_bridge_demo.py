@@ -29,7 +29,6 @@ from openlithohub.simulators import (
 from openlithohub.simulators.commercial import write_mask_gdsii
 from openlithohub.workflow import BridgeRules, emit_bridge_bundle
 
-
 # ---------------------------------------------------------------------------
 # Step 1: Create a simple mask pattern
 # ---------------------------------------------------------------------------

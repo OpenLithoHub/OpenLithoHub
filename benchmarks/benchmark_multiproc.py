@@ -162,7 +162,7 @@ def format_md(results: list[dict], consistency: list[dict]) -> str:
         f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         f"Inputs: {N_INPUTS} tensors of shape {INPUT_SHAPE}",
         f"Warmup runs: {WARMUP_RUNS}, Timed runs: {TIMED_RUNS}",
-        f"Device: CPU",
+        "Device: CPU",
         "",
         "## Throughput & Latency",
         "",
