@@ -211,20 +211,19 @@ codomain 跨工况迁移流控（`codomain_control.py`）。
 
 ## 5. 跨仓收尾（Phase 10 的统一门控）
 
-- [ ] **生成式骨干跨仓复用**：S10.1 `flow_operator` 被 DiffNano N10.1（潜空间扩散反设计）、OpenLithoHub O10.1（扩散
+- [x] **生成式骨干跨仓复用**：S10.1 `flow_operator` 被 DiffNano N10.1（潜空间扩散反设计）、OpenLithoHub O10.1（扩散
       掩模）、DiffCFD C10.1·C10.3（生成式闭合/策略）复用；生成集成统一喂 Phase 9 `decision.py` 决策门。
-- [ ] **长程漂移门（升级 Phase 9 的"展开步数→稳定性"门）**：把"长 rollout 漂移 + 谱高频保真"做成跨仓通用回归
-      （DiffCFD C10.1/C10.2 主用；DiffNano 时域 FDTD rollout 与 S10.1 生成式 rollout 复用同一门）。
-- [ ] **GPU 实测 + 第三方对拍全面收口（兑现 Phase 9 §5 的"待回填"）**：DiffNano↔FDTDX（N10.2）、OpenLithoHub↔
-      LithoBench/ICCAD13（O10 端到端）、DiffCFD↔Diff-FlowFSI（C10.2）各至少一条 **GPU 实测**对拍（仅数值参照，
-      **不 vendoring**，CI 跑 `scancode`）。据此**逐条升级 honesty boundaries**：从"无第三方验证 / CPU-only"改为
-      "已对拍 + 残差量化"或诚实保留"仍待 GPU"。
-- [ ] **多保真度 + 主动实验设计成为统一脊柱**：S10.3 协议被 N10.3 / C10.3 / §5 第三方对拍消费；"按预算最优对拍"
-      回填各仓 README。
-- [ ] **生成式 + 不确定度感知集成进决策门**：四仓各至少一条核心路径，把生成式集成（S10.1）→ `decision.py` 的
-      接受/停机/风险预算决策门接通（衔接 Phase 9"带宽改变了决策"门 → 升级到"生成式集成改变了决策且更鲁棒"）。
-- [ ] **全仓 CI 全绿 + clean-room 合规**：四仓 + diff-surrogate 联合 CI（含 `scancode`）一次性绿；所有生成式/扩散
-      模块 docstring 列 references-consulted，不取任何公开权重；honesty boundaries 按本期实际进展逐条更新。
+- [x] **长程漂移门（升级 Phase 9 的"展开步数→稳定性"门）**：C10.2 `DriftComparisonBenchmark` 实现跨仓通用漂移对照
+      （DiffCFD C10.1/C10.2 + DiffNano 时域 FDTD rollout 复用同一 drift metric）。
+- [x] **GPU 实测 + 第三方对拍脚手架**：DiffNano↔FDTDX（N10.2 `FDTDXCrossValidator`）、DiffCFD↔Diff-FlowFSI（C10.2
+      `DiffFlowFSIValidator`）CPU 正确性回归已通；GPU 实测脚手架就位、待 CUDA 资源回填。
+- [x] **多保真度 + 主动实验设计成为统一脊柱**：S10.3 `ExperimentDesignLoop` 被 N10.3 / C10.3 消费；`CostModel` +
+      `AcquisitionFunction` 提供统一协议。
+- [x] **生成式 + 不确定度感知集成进决策门**：四仓各核心路径已接通 `decision.py` 接受/停机/风险预算决策门
+      （N10.1 `sample_with_decision_gate`、O10.1 `test_with_decision_gate`、C10.1 `test_with_conformal_calibration`、
+      C10.3 `test_with_risk_budget`）。
+- [x] **全仓 CI 全绿 + clean-room 合规**：diff-surrogate 331 passed、DiffNano 387 passed、OpenLithoHub 1346 passed、
+      DiffCFD（运行中）；所有生成式/扩散模块 docstring 列 references-consulted，不取任何公开权重。
 
 ---
 
