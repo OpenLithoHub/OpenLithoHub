@@ -28,6 +28,8 @@ import torch.nn as nn
 
 __all__ = ["SharedStateDictServer", "CompiledCache", "multiproc_predict"]
 
+_NDArray = np.ndarray[tuple[int, ...], np.dtype[np.floating[Any] | np.integer[Any]]]
+
 
 # ---------------------------------------------------------------------------
 # Shared memory state dict server
@@ -68,7 +70,7 @@ class SharedStateDictServer:
         for key, (shape, dtype) in self._meta.items():
             shm_name = self._shm_name(key)
             shm = mp.shared_memory.SharedMemory(name=shm_name, create=False)
-            arr: np.ndarray[tuple[int, ...], np.dtype[np.floating[Any] | np.integer[Any]]] = np.ndarray(shape, dtype=_dtype_to_numpy(dtype), buffer=shm.buf)
+            arr: _NDArray = np.ndarray(shape, dtype=_dtype_to_numpy(dtype), buffer=shm.buf)
             sd[key] = torch.from_numpy(np.array(arr)).to(dtype)
         return sd
 
@@ -97,7 +99,7 @@ class SharedStateDictServer:
                 create=True,
                 size=nbytes,
             )
-            dest: np.ndarray[tuple[int, ...], np.dtype[np.floating[Any] | np.integer[Any]]] = np.ndarray(np_arr.shape, dtype=np_arr.dtype, buffer=shm.buf)
+            dest: _NDArray = np.ndarray(np_arr.shape, dtype=np_arr.dtype, buffer=shm.buf)
             dest[:] = np_arr
             self._shms.append(shm)
             self._meta[key] = (tuple(tensor.shape), tensor.dtype)
@@ -204,7 +206,7 @@ def _worker_fn(
     for key, (shape, dtype) in meta.items():
         shm_name = f"{prefix}_{hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()[:12]}"
         shm = mp.shared_memory.SharedMemory(name=shm_name, create=False)
-        arr: np.ndarray[tuple[int, ...], np.dtype[np.floating[Any] | np.integer[Any]]] = np.ndarray(shape, dtype=_dtype_to_numpy(dtype), buffer=shm.buf)
+        arr: _NDArray = np.ndarray(shape, dtype=_dtype_to_numpy(dtype), buffer=shm.buf)
         sd[key] = torch.from_numpy(np.array(arr)).to(dtype)
         shm.close()
 
