@@ -41,6 +41,8 @@ from typing import Any
 import torch
 import torch.nn.functional as functional
 
+from openlithohub._constants import WAVELENGTH_EUV_NM as _WAVELENGTH_EUV_NM
+
 from openlithohub.benchmark.metrics.shot_count import estimate_shot_count
 from openlithohub._utils.forward_model import simulate_aerial_image
 from openlithohub._utils.tensor_ops import ensure_2d
@@ -71,7 +73,7 @@ class AnamorphicParams:
     mag_x: float = 4.0
     mag_y: float = 8.0
     central_obscuration_ratio: float = 0.2
-    wavelength_nm: float = 13.5
+    wavelength_nm: float = _WAVELENGTH_EUV_NM
     pixel_size_nm: float = 1.0
 
 
