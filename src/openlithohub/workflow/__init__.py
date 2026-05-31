@@ -50,6 +50,13 @@ from openlithohub.workflow.semi_p39 import (
     P39Mapper,
 )
 from openlithohub.workflow.tiling import stitch_tiles, tile_layout, tiled_ilt_with_consistency
+from openlithohub.workflow.topology_simplification import (
+    CurvilinearSimplifier,
+    MBMWPostProcessor,
+    SimplificationConfig,
+    TopologyAnalyzer,
+    TopologyPipeline,
+)
 
 __all__ = [
     "parse_layout",
@@ -96,4 +103,9 @@ __all__ = [
     "P39Mapper",
     "apply_p39_to_oasis",
     "apply_p39_to_gds",
+    "TopologyAnalyzer",
+    "CurvilinearSimplifier",
+    "MBMWPostProcessor",
+    "TopologyPipeline",
+    "SimplificationConfig",
 ]
