@@ -109,7 +109,8 @@ class SharedStateDictServer:
 
 
 def _dtype_to_numpy(dtype: torch.dtype) -> np.dtype[np.generic]:
-    return torch.tensor([], dtype=dtype).numpy().dtype  # type: ignore[no-any-return]
+    result: np.dtype[np.generic] = torch.tensor([], dtype=dtype).numpy().dtype
+    return result
 
 
 # ---------------------------------------------------------------------------
