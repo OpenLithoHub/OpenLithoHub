@@ -31,6 +31,11 @@ from openlithohub.workflow.process_window import (
     pw_aerial_images,
     pw_fidelity_loss,
 )
+from openlithohub.workflow.full_chip_tiling import (
+    SchwarzTilingSolver,
+    TileBenchmarkReport,
+    TileParallelProcessor,
+)
 from openlithohub.workflow.tiling import stitch_tiles, tile_layout, tiled_ilt_with_consistency
 
 __all__ = [
@@ -45,6 +50,9 @@ __all__ = [
     "tiled_ilt_with_consistency",
     "export_oasis",
     "export_gds",
+    "TileParallelProcessor",
+    "SchwarzTilingSolver",
+    "TileBenchmarkReport",
     "ProcessNodeConfig",
     "get_node",
     "list_nodes",
