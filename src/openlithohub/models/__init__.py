@@ -6,6 +6,15 @@ from openlithohub.models.bayesian_stochastic import (
     StochasticUNet,
     generate_synthetic_ground_truth,
 )
+from openlithohub.models.diffusion_mask import (
+    DiffusionMaskBenchmark,
+    DiffusionMaskConfig,
+    DiffusionMaskSynthesis,
+    LithoGuidance,
+    MaskDiffusionUNet,
+    MaskLatentDecoder,
+    MaskLatentEncoder,
+)
 from openlithohub.models.generative_sraf import (
     LithographicImprovementScorer,
     SRAFConfig,
@@ -36,6 +45,13 @@ __all__ = [
     "BayesianStochasticModel",
     "StochasticUNet",
     "generate_synthetic_ground_truth",
+    "DiffusionMaskBenchmark",
+    "DiffusionMaskConfig",
+    "DiffusionMaskSynthesis",
+    "LithoGuidance",
+    "MaskDiffusionUNet",
+    "MaskLatentDecoder",
+    "MaskLatentEncoder",
     "GRPOWarmStart",
     "GRPOConfig",
     "StyleConditioning",
