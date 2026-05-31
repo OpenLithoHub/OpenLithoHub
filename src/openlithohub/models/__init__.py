@@ -39,6 +39,15 @@ from openlithohub.models.resist_pinn import (
     ResistPhysicsConstraints,
     ResistPINN,
 )
+from openlithohub.models.resist_stochastic_3d import (
+    BenchmarkResult3D,
+    ConformalCoverageGate3D,
+    CoverageMetrics,
+    ResistProfile3D,
+    SecondaryElectronKernel,
+    Stochastic3DBenchmark,
+    StochasticDefectModel3D,
+)
 from openlithohub.models.vae_benchmark import VAEBenchmark
 
 __all__ = [
@@ -76,4 +85,11 @@ __all__ = [
     "SRAFPipeline",
     "LithographicImprovementScorer",
     "SRAFConfig",
+    "SecondaryElectronKernel",
+    "ResistProfile3D",
+    "StochasticDefectModel3D",
+    "ConformalCoverageGate3D",
+    "Stochastic3DBenchmark",
+    "BenchmarkResult3D",
+    "CoverageMetrics",
 ]
