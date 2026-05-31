@@ -1,6 +1,11 @@
 """Layer 3: Model Integration — abstract interface and registry for lithography models."""
 
 from openlithohub.models.base import LithographyModel, PredictionResult
+from openlithohub.models.bayesian_stochastic import (
+    BayesianStochasticModel,
+    StochasticUNet,
+    generate_synthetic_ground_truth,
+)
 from openlithohub.models.generative_sraf import (
     LithographicImprovementScorer,
     SRAFConfig,
@@ -28,6 +33,9 @@ __all__ = [
     "LayoutMAE",
     "LayoutMAEConfig",
     "VAEBenchmark",
+    "BayesianStochasticModel",
+    "StochasticUNet",
+    "generate_synthetic_ground_truth",
     "GRPOWarmStart",
     "GRPOConfig",
     "StyleConditioning",

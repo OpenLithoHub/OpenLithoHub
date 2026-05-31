@@ -120,6 +120,7 @@ def register_builtin_models() -> None:
     are cheap. Both the optimize CLI and the multiprocessing workers call
     this so workers populate their registry the same way the parent does.
     """
+    import openlithohub.models.bayesian_stochastic  # noqa: F401
     import openlithohub.models.examples.dummy_model  # noqa: F401
     import openlithohub.models.gan_opc  # noqa: F401
     import openlithohub.models.levelset_ilt  # noqa: F401
