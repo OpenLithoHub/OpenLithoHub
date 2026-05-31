@@ -18,8 +18,12 @@ def _drc_result() -> DRCResult:
             {"rule": 0.0, "type": 0.0, "x_nm": 100.0, "y_nm": 200.0, "threshold_nm": 40.0},
             {"rule": 1.0, "type": 1.0, "x_nm": 300.0, "y_nm": 400.0, "threshold_nm": 40.0},
             {
-                "rule": 2.0, "type": 2.0, "x_nm": 500.0, "y_nm": 600.0,
-                "actual_nm2": 50.0, "required_nm2": 100.0,
+                "rule": 2.0,
+                "type": 2.0,
+                "x_nm": 500.0,
+                "y_nm": 600.0,
+                "actual_nm2": 50.0,
+                "required_nm2": 100.0,
             },
         ],
         rule_summary={"min_width": 1, "min_spacing": 1, "min_area": 1},
@@ -103,8 +107,12 @@ def test_sarif_zero_violations():
     sarif = to_sarif(
         drc_result=DRCResult(passed=True, violation_count=0, violations=[], rule_summary={}),
         mrc_result=MRCResult(
-            passed=True, violation_count=0, violation_rate=0.0, violations=[],
-            width_violation_count=0, spacing_violation_count=0,
+            passed=True,
+            violation_count=0,
+            violation_rate=0.0,
+            violations=[],
+            width_violation_count=0,
+            spacing_violation_count=0,
         ),
     )
     assert sarif["runs"][0]["results"] == []

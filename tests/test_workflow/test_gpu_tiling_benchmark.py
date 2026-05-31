@@ -66,9 +66,15 @@ class TestGPUTileBatchProcessor:
         result = proc.process_tiles(config=cfg)
 
         expected_fields = [
-            "tile_config", "total_tiles", "forward_time_ms",
-            "schwarz_time_ms", "total_time_ms", "peak_memory_mb",
-            "boundary_residual", "convergence_achieved", "device",
+            "tile_config",
+            "total_tiles",
+            "forward_time_ms",
+            "schwarz_time_ms",
+            "total_time_ms",
+            "peak_memory_mb",
+            "boundary_residual",
+            "convergence_achieved",
+            "device",
         ]
         for field in expected_fields:
             assert hasattr(result, field), f"Missing field: {field}"
@@ -212,7 +218,9 @@ class TestTilingResidualRegression:
         result_lo = proc_lo.process_tiles(
             mask_layout=mask,
             config=TileBatchConfig(
-                tile_size=32, overlap=4, n_schwarz_iterations=1,
+                tile_size=32,
+                overlap=4,
+                n_schwarz_iterations=1,
             ),
         )
 
@@ -220,7 +228,9 @@ class TestTilingResidualRegression:
         result_hi = proc_hi.process_tiles(
             mask_layout=mask,
             config=TileBatchConfig(
-                tile_size=32, overlap=4, n_schwarz_iterations=10,
+                tile_size=32,
+                overlap=4,
+                n_schwarz_iterations=10,
             ),
         )
 

@@ -137,10 +137,12 @@ def _build_tool_driver(
             rid = f"RULE-DECK/{rname.upper()}"
             if rid not in seen:
                 seen.add(rid)
-                rules.append({
-                    "id": rid,
-                    "shortDescription": {"text": f"{rname} (threshold: {threshold})"},
-                })
+                rules.append(
+                    {
+                        "id": rid,
+                        "shortDescription": {"text": f"{rname} (threshold: {threshold})"},
+                    }
+                )
 
     driver: dict[str, Any] = {
         "name": _TOOL_NAME,

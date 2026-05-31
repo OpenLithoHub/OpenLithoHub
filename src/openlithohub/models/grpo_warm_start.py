@@ -32,10 +32,21 @@ class StyleConditioning(nn.Module):
     """Embed layer-purpose pair info into a conditioning vector."""
 
     _PURPOSE_VOCAB = {
-        "drawing": 0, "net": 1, "pin": 2, "label": 3,
-        "boundary": 4, "blockage": 5, "fill": 6, "fillopc": 7,
-        "track": 8, "slot": 9, "annotation": 10, "warning": 11,
-        "redundant": 12, "notch": 13, "cutsom": 14,
+        "drawing": 0,
+        "net": 1,
+        "pin": 2,
+        "label": 3,
+        "boundary": 4,
+        "blockage": 5,
+        "fill": 6,
+        "fillopc": 7,
+        "track": 8,
+        "slot": 9,
+        "annotation": 10,
+        "warning": 11,
+        "redundant": 12,
+        "notch": 13,
+        "cutsom": 14,
     }
     _UNKNOWN_IDX = len(_PURPOSE_VOCAB)
 

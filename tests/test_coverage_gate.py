@@ -1,4 +1,5 @@
 """Tests for conformal coverage gate for stochastic ILT acceptance."""
+
 from __future__ import annotations
 
 import pytest
@@ -313,9 +314,7 @@ class TestEndToEnd:
         calibrator.calibrate([simple_mask], [simple_target], alpha=0.1)
 
         gate = StochasticAcceptanceGate(calibrator=calibrator)
-        accepted, result, reasons = gate.evaluate(
-            simple_mask, simple_target, min_coverage=0.5
-        )
+        accepted, result, reasons = gate.evaluate(simple_mask, simple_target, min_coverage=0.5)
 
         assert isinstance(accepted, bool)
         assert isinstance(result, CoverageResult)

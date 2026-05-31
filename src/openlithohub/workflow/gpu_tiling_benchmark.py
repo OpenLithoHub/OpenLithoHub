@@ -144,14 +144,20 @@ class GPUTileBatchProcessor:
             new_results: list[torch.Tensor] = []
             for idx, tile in enumerate(tiles):
                 updated = _inject_boundary_data(
-                    tile, tile_results, idx, tiles, config.overlap,
+                    tile,
+                    tile_results,
+                    idx,
+                    tiles,
+                    config.overlap,
                 )
                 updated = _forward(updated)
                 new_results.append(updated)
             tile_results = new_results
 
             consistency = tile_boundary_consistency(
-                tiles, tile_results, overlap=config.overlap,
+                tiles,
+                tile_results,
+                overlap=config.overlap,
             )
             mse = consistency["boundary_mse"]
             residual_history.append(mse)
@@ -242,13 +248,9 @@ class ICCAD13Benchmark:
     ) -> list[dict[str, float]]:
         if len(designs) != len(targets):
             raise ValueError(
-                f"designs ({len(designs)}) and targets ({len(targets)}) "
-                "must have the same length"
+                f"designs ({len(designs)}) and targets ({len(targets)}) must have the same length"
             )
-        return [
-            self.evaluate_design(d, t, metrics)
-            for d, t in zip(designs, targets, strict=True)
-        ]
+        return [self.evaluate_design(d, t, metrics) for d, t in zip(designs, targets, strict=True)]
 
     def compare_with_public(
         self,

@@ -6,6 +6,7 @@ coverage, producing process windows with guaranteed coverage rates.
 References:
     - Calibrated UQ for Operator Learning via Conformal Prediction, arXiv:2402.01960
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -52,9 +53,7 @@ class StochasticSampler:
         self.resist_threshold = resist_threshold
         self.steepness = steepness
 
-    def _aerial_with_defocus(
-        self, mask: torch.Tensor, defocus_nm: float
-    ) -> torch.Tensor:
+    def _aerial_with_defocus(self, mask: torch.Tensor, defocus_nm: float) -> torch.Tensor:
         if abs(defocus_nm) < 1e-6:
             return simulate_aerial_image(mask, sigma_px=self.sigma_px, dose=1.0)
         dof_nm = 100.0
@@ -216,9 +215,8 @@ class ThroughFocusCoverageCalibrator:
             )
 
         scores: list[float] = []
-        focus_step = (
-            (self.focus_range_nm[1] - self.focus_range_nm[0])
-            / max(1, self.n_focus_points - 1)
+        focus_step = (self.focus_range_nm[1] - self.focus_range_nm[0]) / max(
+            1, self.n_focus_points - 1
         )
 
         for mask in masks:
@@ -226,18 +224,14 @@ class ThroughFocusCoverageCalibrator:
             for fi in range(self.n_focus_points):
                 defocus_nm = self.focus_range_nm[0] + fi * focus_step
                 abs_defocus = abs(defocus_nm)
-                focus_range = (
-                    (-abs_defocus, abs_defocus) if abs_defocus > 0 else (-0.01, 0.01)
-                )
+                focus_range = (-abs_defocus, abs_defocus) if abs_defocus > 0 else (-0.01, 0.01)
 
                 epe_samples = self.sampler.sample_epe(
                     mask,
                     n_samples=self.n_calibration_samples,
                     focus_range=focus_range,
                 )
-                lcdu_samples = self.sampler.sample_lcdu(
-                    mask, n_samples=self.n_calibration_samples
-                )
+                lcdu_samples = self.sampler.sample_lcdu(mask, n_samples=self.n_calibration_samples)
                 score = self._compute_nonconformity(epe_samples, lcdu_samples)
                 max_score = max(max_score, score.item())
             scores.append(max_score)
@@ -256,9 +250,7 @@ class ThroughFocusCoverageCalibrator:
         self._alpha = alpha
         self._calibrated = True
 
-    def _apply_external_predictor(
-        self, scores: torch.Tensor, alpha: float
-    ) -> torch.Tensor:
+    def _apply_external_predictor(self, scores: torch.Tensor, alpha: float) -> torch.Tensor:
         """Delegate quantile computation to an external conformal predictor."""
         cp = self.conformal_predictor
         if hasattr(cp, "calibrate"):
@@ -407,9 +399,7 @@ class StochasticAcceptanceGate:
 
         coverage_ok = result.empirical_coverage >= min_coverage
         if not coverage_ok:
-            reasons.append(
-                f"Coverage {result.empirical_coverage:.3f} < min {min_coverage:.3f}"
-            )
+            reasons.append(f"Coverage {result.empirical_coverage:.3f} < min {min_coverage:.3f}")
 
         epe_ok = True
         if max_epe_band is not None:
