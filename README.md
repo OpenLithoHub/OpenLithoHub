@@ -33,6 +33,8 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 - All baseline benchmarks use synthetic 64x64 toy layouts, not industrial-scale production masks.
 - No third-party experimental validation. Framework correctness is verified against published algorithm reimplementations, not foundry data.
 - CPU-only benchmark timing; no GPU timing is reported.
+- GPU tile-batch benchmarks (O9.2) require a CUDA-capable GPU; they do not run in CPU-only environments.
+- ICCAD13 contest data is not bundled with OpenLithoHub; the `ICCAD13Benchmark` pipeline expects users to download clips and gauges from the contest repository.
 - **Standardized metrics** — EPE (mask-vs-mask or wafer-level via forward sim), L2 wafer error (Neural-ILT canonical), PV Band, shot count, EUV stochastic robustness + imec-style per-class defect rates, hotspot detection (recall / precision / F1), plus differentiable training-time losses (SRAF non-printing penalty, curvilinear MRC)
 
 **Known stubs / unimplemented:**
@@ -729,6 +731,74 @@ gate = GradientFidelityGate(atol=1e-3, rtol=1e-2)
 fidelity_report = gate.check(resist, high_fidelity_resist, sample_input)
 ```
 
+### GRPO Generative Warm Start (O9.1)
+
+`GRPOWarmStart` applies Group Relative Policy Optimization (GRPO) fine-tuning on the CVAE posterior, producing higher-quality and more diverse warm-start candidates than the V8 posterior sampler. `StyleConditioning` injects layer-purpose awareness (metal, via, cut) into the VAE encoder via `LayerPurpose` embeddings, so the generative model adapts its initialization strategy per mask layer:
+
+```python
+from openlithohub.models.grpo_warm_start import GRPOWarmStart, GRPOConfig, StyleConditioning
+from openlithohub._constants import LayerPurpose
+
+config = GRPOConfig(
+    latent_dim=64,
+    grpo_steps=50,
+    group_size=8,
+    clip_ratio=0.2,
+    style_conditioning=StyleConditioning(layer_purpose=LayerPurpose.METAL),
+)
+warm_start = GRPOWarmStart(config)
+candidates = warm_start.sample(target_mask, n=8)
+```
+
+Reference: arXiv:2602.19027 (clean-room implementation).
+
+### Stochastic ILT Coverage Gate (O9.3)
+
+`StochasticAcceptanceGate` replaces the deterministic pass/fail MRC check with a conformal-calibrated stochastic process window. `StochasticSampler` draws photon-noise and dose/focus perturbation samples; `ThroughFocusCoverageCalibrator` fits a conformal prediction band so the acceptance probability is statistically calibrated. `ProcessWindowPlotter` produces through-focus coverage visualizations:
+
+```python
+from openlithohub.benchmark.metrics.coverage_gate import (
+    StochasticSampler,
+    ThroughFocusCoverageCalibrator,
+    StochasticAcceptanceGate,
+    ProcessWindowPlotter,
+)
+
+sampler = StochasticSampler(n_samples=512, dose_sigma=0.02, focus_range_nm=40.0)
+calibrator = ThroughFocusCoverageCalibrator(alpha=0.05)  # 95% conformal band
+gate = StochasticAcceptanceGate(sampler=sampler, calibrator=calibrator)
+
+result = gate.evaluate(predicted_mask, target_mask)
+print(f"Coverage probability: {result.coverage_prob:.3f}, Accepted: {result.accepted}")
+
+ProcessWindowPlotter().plot(result, save_path="process_window.pdf")
+```
+
+Reference: arXiv:2402.01960.
+
+### GPU Tile-Batch Benchmark (O9.2)
+
+`GPUTileBatchProcessor` wraps GPU batch-parallel Schwarz tiling in a reproducible benchmark harness. `ICCAD13Benchmark` provides the ICCAD'13 contest end-to-end pipeline (10 clips, gauges, scoring). `TilingResidualRegression` fits a lightweight regression model that predicts tiling residual from tile geometry, enabling adaptive overlap selection:
+
+```python
+from openlithohub.workflow.gpu_tiling_benchmark import (
+    GPUTileBatchProcessor,
+    ICCAD13Benchmark,
+    TilingResidualRegression,
+)
+
+processor = GPUTileBatchProcessor(tile_size=1024, overlap=128, device="cuda")
+benchmark = ICCAD13Benchmark(processor=processor, data_root="data/iccad13")
+results = benchmark.run(model="levelset-ilt")
+print(f"Median L2: {results['l2_median_nm2']:.0f} nm2, TAT: {results['tat_s']:.1f} s")
+
+regression = TilingResidualRegression()
+regression.fit(tile geometries, measured_residuals)
+predicted_residual = regression.predict(new_tile_geometry)
+```
+
+References: arXiv:2411.07311, Light: Sci. Appl. 2025-07.
+
 ### Flagship Evidence Status
 
 | Claim | Code | Tests | Data | Status |
@@ -745,6 +815,9 @@ fidelity_report = gate.check(resist, high_fidelity_resist, sample_input)
 | Posterior warm-start (O8.2) | `openlithohub/_utils/posterior_warm_start.py` | `tests/test_utils/test_posterior_warm_start.py` | Internal | Verified |
 | GPU full-chip tiling (O8.3) | `openlithohub/_utils/tiling_gpu.py` | `tests/test_utils/test_tiling_gpu.py` | Internal | Verified |
 | Physical resist model (O8.4) | `openlithohub/_utils/resist_physical.py` | `tests/test_utils/test_resist_physical.py` | Internal | Verified |
+| GRPO generative warm start (O9.1) | `openlithohub/models/grpo_warm_start.py` | `tests/test_models/test_grpo_warm_start.py` | Internal | Verified |
+| GPU tile-batch benchmark (O9.2) | `openlithohub/workflow/gpu_tiling_benchmark.py` | `tests/test_workflow/test_gpu_tiling_benchmark.py` | Internal | Verified |
+| Stochastic ILT coverage gate (O9.3) | `openlithohub/benchmark/metrics/coverage_gate.py` | `tests/test_benchmark/test_coverage_gate.py` | Internal | Verified |
 
 ### Compatibility
 
@@ -828,8 +901,28 @@ results = multiproc_predict(model, tiles, n_workers=2)
 - [x] Milestone 12: Opt-in diffusion resist (`--resist-diffusion-nm`), `openlithohub flow run` closed-loop CLI (design→litho→DFM), configurable per-PDK layer maps, optional DiffNano/DiffCFD plugin ecosystem
 - [x] Milestone 13: Thick mask forward model (O7.1), differentiable morphological operators (O7.2), warm-start ILT interface (O7.3), tiling residual quantification (O7.4)
 - [x] Milestone 14: Stochastic-aware ILT (O8.1), posterior warm-start with conditional VAE (O8.2), GPU batch-parallel Schwarz tiling (O8.3), physical resist model with gradient fidelity gate (O8.4)
+- [x] Milestone 15: GRPO generative warm start with style-aware conditioning (O9.1), GPU tile-batch benchmark with ICCAD13 pipeline (O9.2), stochastic ILT coverage gate with conformal calibration (O9.3)
 
 > **Note:** Milestones above reflect feature integration completeness (adapters, CLI commands, CI pipelines), not industrial validation. The alpha version (`0.1.0a2`) runs on synthetic layouts — real industrial-scale benchmarking is planned for the v1.0 milestone.
+
+---
+
+## Competitive Positioning
+
+**What it is:** An open-source computational lithography benchmarking and workflow toolkit — ILT, OPC, mask optimization, and process window analysis with honest self-measurement.
+
+**Where it leads:**
+- **Open ILT benchmark with honest baselines:** The only open-source project providing standardized ILT benchmarks with SARIF export, morphological MRC, tile-consistency metrics, and stochastic-aware loss. Commercial tools (Calibre MML, cuLitho) are closed-source with no public benchmarks.
+- **Variation-aware ILT:** CVaR and quantile risk measures integrated directly into ILT loss — stochastic-aware optimization that goes beyond deterministic nominal-point optimization.
+- **Full-chip tiling with Schwarz decomposition:** GPU batch-parallel Schwarz tiling for full-chip ILT with tile-consistency residual quantification.
+- **Physical resist model:** Acid generation → diffusion → quencher neutralization → sigmoid development — fully differentiable for end-to-end mask-to-resist optimization.
+
+**Where it lags (honest assessment):**
+- **Scale:** Benchmark subsets, tile-level, GPU stitching. Orders of magnitude behind Calibre MML and cuLitho (full-chip, GPU production-grade).
+- **Validation:** Self-tests + numerical cross-validation against LithoBench/ICCAD13 references. No fab validation, no production tapeout.
+- **Maturity:** Research prototype. No foundry integration, no PDK sign-off flow.
+
+**Bottom line:** Uniquely positioned as the honest open-source lithography benchmark — what it lacks in scale it compensates with transparency, reproducibility, and methodological currency (2024-2026 stochastic ILT, conformal UQ, physical resist). Not a replacement for production OPC tools, but a research and benchmarking platform they don't provide.
 
 ---
 
