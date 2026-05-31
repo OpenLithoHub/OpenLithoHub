@@ -1,5 +1,12 @@
 """Layer 3: Model Integration — abstract interface and registry for lithography models."""
 
+from openlithohub.models.anamorphic_smo import (
+    AnamorphicImaging,
+    AnamorphicParams,
+    AnamorphicSMOBenchmark,
+    AnamorphicSMO,
+    ShotCountCost,
+)
 from openlithohub.models.base import LithographyModel, PredictionResult
 from openlithohub.models.bayesian_stochastic import (
     BayesianStochasticModel,
@@ -35,6 +42,11 @@ from openlithohub.models.resist_pinn import (
 from openlithohub.models.vae_benchmark import VAEBenchmark
 
 __all__ = [
+    "AnamorphicImaging",
+    "AnamorphicParams",
+    "AnamorphicSMOBenchmark",
+    "AnamorphicSMO",
+    "ShotCountCost",
     "LithographyModel",
     "PredictionResult",
     "ModelRegistry",
@@ -50,8 +62,8 @@ __all__ = [
     "DiffusionMaskSynthesis",
     "LithoGuidance",
     "MaskDiffusionUNet",
-    "MaskLatentDecoder",
     "MaskLatentEncoder",
+    "MaskLatentDecoder",
     "GRPOWarmStart",
     "GRPOConfig",
     "StyleConditioning",
