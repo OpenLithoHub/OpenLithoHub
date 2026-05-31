@@ -25,17 +25,32 @@
 
 ## 项目简介
 
-OpenLithoHub 为计算光刻研究提供统一的评测与工作流框架，打通从学术 Tensor 优化到工业掩膜制造的完整链路：
+OpenLithoHub 是开源计算光刻评测与工作流工具集——ILT、OPC、掩膜优化与 EUV 随机缺陷预测，内建诚实自评。
 
-- **统一数据接入** — 通过单一接口访问 LithoBench、LithoSim、GAN-OPC、ICCAD'16 hotspot、ASAP7、FreePDK45 + NanGate OCL，以及 ORFS 布线后的 RISC-V 版图；`workflow.parse_layout` 支持 OASIS / GDSII / DEF / LEF 输入
-- **标准化评估指标** — EPE（掩膜对掩膜或经前向仿真的 wafer 级）、L2 wafer error（Neural-ILT 标准）、PV Band、Shot Count、EUV 随机鲁棒性 + imec 风格的逐类缺陷率、Hotspot 检测（recall / precision / F1），以及可直接接入训练循环的可微损失（SRAF 非打印惩罚、曲线 MRC 损失）
+### 验证结果一览
+
+**EUV 随机缺陷预测** — `BayesianStochasticModel` 在 4 种图案 × 3 个工艺节点上完成闭环验证，与独立 MC 仿真交叉校验：
+
+| 图案 | EUV N3 FP | EUV N7 FP | ArF 45nm FP | 校准 MAE |
+|------|-----------|-----------|-------------|----------|
+| line/space | 11.4% | 2.9% | 0.07% | < 0.016 |
+| contact | 4.1% | 6.0% | 7.9% | < 0.014 |
+| elbow | 1.0% | 1.9% | 1.7% | < 0.003 |
+| dense logic | ~0% | 0% | 0% | < 0.001 |
+
+Dose 响应**单调递减**（10→100 ph/nm² 下降 19.4×），符合已发表的 √(1/dose) EUV shot-noise 标度律。完整数据与方法论：[BENCHMARKS.md](BENCHMARKS.md)。
+
+### 核心能力
+
+- **统一数据接入** — LithoBench、LithoSim、GAN-OPC、ICCAD'16、ASAP7、FreePDK45、ORFS 布线 RISC-V 版图
+- **标准化指标** — EPE、L2、PV Band、Shot Count、随机鲁棒性、imec 缺陷率、Hotspot 检测
+- **贝叶斯随机模型** — 逐像素失效概率、LER、LWR 热图（Poisson-MC 或 MC-Dropout）
 - **制造合规检查** — MRC/DRC 规则检查作为一票否决门槛
-- **OASIS / GDSII 工作流** — 从 Tensor 到 fab-ready 掩膜的端到端管线（Manhattan 与 Curvilinear）；ICCAD'13 contest gauge IO + Calibre `.gg` / CSV gauge 解析；ONNX / TorchScript 导出，CI 中含 onnxruntime 冒烟测试
-- **模型无关评测** — 任何 OPC/ILT 模型只需实现最小接口即可接入评测套件
-- **Opt-in 扩散光刻胶** — CAR（化学放大光刻胶）高斯酸扩散模型，通过 `--resist-diffusion-nm` 控制（默认 `0.0` = 传统 CTR）。提升 EPE/PVB 真实感但产生**不可比较**的数值；排行榜提交时禁用
-- **Design→litho→DFM 闭环 CLI** — `openlithohub flow run` 接收 DEF/GDS/OAS 或 ORFS 产品目录，自动切片、运行光刻前向仿真，输出聚合可制造性报告（EPE、PV Band、DRC、MRC），支持可配置的按 PDK 层映射
-- **可选物理插件** — DiffNano（严格 EM 求解器：RCWA / FDTD / FDFD + 可校准光刻胶模型）和 DiffCFD（Dill/Mack 光刻求解器 + 旋涂求解器 + 联合工艺优化）作为 opt-in `[diffnano]` / `[diffcfd]` extras 提供；核心安装不需要其中任何一个
-- **JIT 加速前向模型** — Hopkins/SOCS 前向模型默认用 `torch.compile` 包装，在 PyTorch 2.x 上免费获得 kernel-fusion 加速（如需关闭可使用 `--no-compile`）
+- **OASIS / GDSII 工作流** — 端到端 Tensor→fab-ready 掩膜（Manhattan 与 Curvilinear）
+- **模型无关评测** — 任何 OPC/ILT 模型只需实现最小接口
+- **可选物理插件** — DiffNano（EM 求解器）和 DiffCFD（光刻+旋涂）作为 opt-in 扩展
+
+**诚实边界：** 所有基准使用合成 64×64 版图，无产线验证，无生产 tapeout。CPU 计时。详见 [BENCHMARKS.md](BENCHMARKS.md)。
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -53,36 +68,24 @@ OpenLithoHub 为计算光刻研究提供统一的评测与工作流框架，打�
 
 ## 安装
 
-> OpenLithoHub 目前处于 **alpha 阶段**（PyPI 上为 `0.1.0a2`）。
-> 在正式版 `0.1.0` 发布之前，请加 `--pre` 让 pip 不要跳过预发布版本。
-
 ```bash
-# 核心（指标 + CLI）
-pip install --pre openlithohub
-
-# 含数据集支持（HuggingFace、Parquet）
-pip install --pre 'openlithohub[data]'
-
-# 含完整工作流（KLayout、scipy B 样条）
-pip install --pre 'openlithohub[workflow]'
-
-# 全部安装
-pip install --pre 'openlithohub[all]'
+pip install --pre openlithohub          # 核心（指标 + CLI）
+pip install --pre 'openlithohub[all]'   # 全部（数据、工作流、模型、Jupyter）
 ```
 
-可用的 extras：`data`、`workflow`、`models`、`jupyter`、`export`、
-`docs`、`dev`、`diffnano`、`diffcfd`、`plugins`（= 两者）以及聚合包 `all`。
-可使用逗号语法组合，例如 `'openlithohub[data,workflow,jupyter]'`。
+源码安装：`git clone https://github.com/OpenLithoHub/OpenLithoHub.git && pip install -e ".[dev]"`
 
-```bash
-# 可选物理插件（早期研究阶段，未经第三方验证）
-pip install --pre 'openlithohub[diffnano]'   # 纳米光子 EM 求解器 + 光刻胶
-pip install --pre 'openlithohub[diffcfd]'    # 基于 CFD 的光刻 + 旋涂求解器
-pip install --pre 'openlithohub[plugins]'    # 安装两者
-```
+Docker：`docker run --rm ghcr.io/openlithohub/openlithohub:latest eval run ...`
 
-> **注意：** DiffNano 和 DiffCFD 是可选插件，提供研究级物理后端。
-> 两者均自述为早期个人研究项目，无外部用户、无第三方验证、不声称生产就绪。
+<details>
+<summary>可用 extras</summary>
+
+`data`、`workflow`、`models`、`jupyter`、`export`、`docs`、`dev`、
+`diffnano`（EM 求解器）、`diffcfd`（光刻 + 旋涂）、`plugins`（= 两者）、
+`all`。组合：`'openlithohub[data,workflow]'`。
+
+> DiffNano 和 DiffCFD 为早期研究插件，无第三方验证。
+</details>
 > 不安装任何插件不影响核心功能。
 
 **从源码安装（开发模式）：**

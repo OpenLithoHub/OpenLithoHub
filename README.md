@@ -23,34 +23,32 @@
 
 ## What is OpenLithoHub?
 
-OpenLithoHub provides a unified evaluation and workflow framework for computational lithography research. It bridges the gap between academic tensor-based optimization and industrial mask manufacturing by offering:
+OpenLithoHub is an open-source computational lithography benchmarking and workflow toolkit — ILT, OPC, mask optimization, and EUV stochastic defect prediction with honest self-measurement.
 
-- **Unified dataset access** — single interface to LithoBench, LithoSim, GAN-OPC, ICCAD'16 hotspot, ASAP7, FreePDK45 + NanGate OCL, and ORFS-routed RISC-V layouts; OASIS / GDSII / DEF / LEF ingestion via `workflow.parse_layout`
+### Validated results at a glance
 
-> **Note on baselines:** The built-in baseline models are evaluated on **synthetic 64×64 toy layouts** (square, line, T, cross, etc.) to demonstrate framework correctness. They are not industrial-grade results — see [Baselines](#baselines) for methodology.
+**EUV Stochastic Defect Prediction** — `BayesianStochasticModel` validated across 4 pattern types × 3 nodes, cross-checked against independent MC simulation:
 
-**Honesty boundaries:**
-- All baseline benchmarks use synthetic 64x64 toy layouts, not industrial-scale production masks.
-- No third-party experimental validation. Framework correctness is verified against published algorithm reimplementations, not foundry data.
-- CPU-only benchmark timing; no GPU timing is reported.
-- GPU tile-batch benchmarks (O9.2) require a CUDA-capable GPU; they do not run in CPU-only environments.
-- ICCAD13 contest data is not bundled with OpenLithoHub; the `ICCAD13Benchmark` pipeline expects users to download clips and gauges from the contest repository.
-- **Standardized metrics** — EPE (mask-vs-mask or wafer-level via forward sim), L2 wafer error (Neural-ILT canonical), PV Band, shot count, EUV stochastic robustness + imec-style per-class defect rates, hotspot detection (recall / precision / F1), plus differentiable training-time losses (SRAF non-printing penalty, curvilinear MRC)
+| Pattern | EUV N3 FP | EUV N7 FP | ArF 45nm FP | Calibration MAE |
+|---------|-----------|-----------|-------------|-----------------|
+| line/space | 11.4% | 2.9% | 0.07% | < 0.016 |
+| contact | 4.1% | 6.0% | 7.9% | < 0.014 |
+| elbow | 1.0% | 1.9% | 1.7% | < 0.003 |
+| dense logic | ~0% | 0% | 0% | < 0.001 |
 
-**Known stubs / unimplemented:**
-- `openlithohub.models.gan_opc.GanOpcModel` — generator-only inference without the GAN discriminator or lithography-guided training loop. Without pretrained weights, predictions are near-random.
-- `openlithohub.models.neural_ilt.NeuralILTModel` — NOT a paper-faithful re-implementation of Jiang2020. The differentiable ILT correction layer is not implemented. Without pretrained weights, predictions are meaningless.
-- `openlithohub.models.layout_mae.LayoutMAE` — training-runnable ViT-S MAE prototype with no pretrained weights, no fine-tune adapter API, no Hub release.
-- `openlithohub._utils.resist_model.ResistCalibration.fit` — uses a scalar CD placeholder model that reduces 2D resist simulation to a single binary check per anchor. Not physically meaningful.
-- **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
-- **OASIS / GDSII workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear); ICCAD'13 contest gauge IO + Calibre `.gg` / CSV gauge parsers; ONNX / TorchScript export with onnxruntime CI smoke test
-- **Schwarz domain decomposition** — implemented in `openlithohub._utils.tiling.schwarz_tiled_ilt()`
-- **Born scattering forward correction** — implemented in `openlithohub._utils.forward_model.simulate_aerial_image_born()`
-- **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface
-- **Opt-in diffusion resist** — CAR (chemically amplified resist) with Gaussian acid diffusion, controlled by `--resist-diffusion-nm` (default `0.0` = legacy CTR). Improves EPE/PVB realism but produces **non-comparable** numbers; disabled for leaderboard submission
-- **Design→litho→DFM closed-loop CLI** — `openlithohub flow run` ingests DEF/GDS/OAS or an ORFS product directory, tiles, runs litho forward sim, and produces an aggregated manufacturability report (EPE, PV Band, DRC, MRC) with configurable per-PDK layer maps
-- **Optional physics plugins** — DiffNano (rigorous EM: RCWA / FDTD / FDFD + calibratable resist) and DiffCFD (Dill/Mack lithography solver + spin-coating solver + joint process optimization) as opt-in `[diffnano]` / `[diffcfd]` extras; core install needs none of them
-- **JIT-accelerated forward model** — Hopkins/SOCS forward is wrapped with `torch.compile` by default, for free kernel-fusion speedups on PyTorch 2.x (use `--no-compile` to disable)
+Dose-response is **monotonically decreasing** (19.4× from 10→100 ph/nm²), matching published √(1/dose) EUV shot-noise scaling. Full tables and methodology: [BENCHMARKS.md](BENCHMARKS.md).
+
+### Core capabilities
+
+- **Unified dataset access** — LithoBench, LithoSim, GAN-OPC, ICCAD'16, ASAP7, FreePDK45, ORFS-routed RISC-V layouts
+- **Standardized metrics** — EPE, L2, PV Band, shot count, stochastic robustness, imec defect rates, hotspot detection
+- **Bayesian stochastic model** — per-pixel failure probability, LER, LWR heatmaps via Poisson-MC or MC-Dropout
+- **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gates
+- **OASIS / GDSII workflow** — end-to-end tensor→fab-ready mask (manhattan & curvilinear)
+- **Model-agnostic evaluation** — plug any OPC/ILT model via minimal interface
+- **Optional physics plugins** — DiffNano (EM solvers) and DiffCFD (litho + spin-coat) as opt-in extras
+
+**Honesty boundaries:** All benchmarks use synthetic 64×64 layouts. No foundry validation, no production tapeout. CPU-only timing. See [BENCHMARKS.md](BENCHMARKS.md) for full methodology.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -68,39 +66,24 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 
 ## Installation
 
-> OpenLithoHub is currently in **alpha** (`0.1.0a2` on PyPI). Until a
-> stable `0.1.0` is cut, install with `--pre` so pip does not skip
-> pre-releases.
-
 ```bash
-# Core (metrics + CLI)
-pip install --pre openlithohub
-
-# With dataset support (HuggingFace, parquet)
-pip install --pre 'openlithohub[data]'
-
-# With full workflow (KLayout, scipy for B-spline)
-pip install --pre 'openlithohub[workflow]'
-
-# Everything
-pip install --pre 'openlithohub[all]'
+pip install --pre openlithohub          # Core (metrics + CLI)
+pip install --pre 'openlithohub[all]'   # Everything (data, workflow, models, jupyter)
 ```
 
-Available extras: `data`, `workflow`, `models`, `jupyter`, `export`,
-`docs`, `dev`, `diffnano`, `diffcfd`, `plugins` (= both), and the aggregate
-`all`. Combine with comma syntax, e.g. `'openlithohub[data,workflow,jupyter]'`.
+From source: `git clone https://github.com/OpenLithoHub/OpenLithoHub.git && pip install -e ".[dev]"`
 
-```bash
-# Optional physics plugins (early-stage research, not third-party validated)
-pip install --pre 'openlithohub[diffnano]'   # nanophotonics EM solvers + resist
-pip install --pre 'openlithohub[diffcfd]'    # CFD-based litho + spin-coat solvers
-pip install --pre 'openlithohub[plugins]'    # both
-```
+Docker: `docker run --rm ghcr.io/openlithohub/openlithohub:latest eval run ...`
 
-> **Caveat:** DiffNano and DiffCFD are optional plugins providing research-grade
-> physics backends. Both self-describe as early-stage personal projects with no
-> external users, no third-party validation, and no production readiness claim.
-> Installing neither keeps the core lightweight.
+<details>
+<summary>Available extras</summary>
+
+`data`, `workflow`, `models`, `jupyter`, `export`, `docs`, `dev`,
+`diffnano` (EM solvers), `diffcfd` (litho + spin-coat), `plugins` (= both),
+`all`. Combine: `'openlithohub[data,workflow]'`.
+
+> DiffNano and DiffCFD are early-stage research plugins with no third-party validation.
+</details>
 
 **From source (development):**
 
