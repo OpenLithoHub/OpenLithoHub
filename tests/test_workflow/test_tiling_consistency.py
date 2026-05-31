@@ -1,7 +1,5 @@
 """Tests for tiling consistency and Manhattanization metrics."""
 
-import math
-
 import pytest
 import torch
 
@@ -15,10 +13,9 @@ from openlithohub.benchmark.metrics.tiling_consistency import (
 )
 from openlithohub.workflow.tiling import (
     Tile,
-    tiled_ilt_with_consistency,
     tile_layout,
+    tiled_ilt_with_consistency,
 )
-
 
 # ---------------------------------------------------------------------------
 # tile_boundary_consistency
@@ -64,7 +61,9 @@ class TestTileBoundaryConsistency:
 
     def test_length_mismatch_raises(self):
         """tiles and tile_results of different lengths → ValueError."""
-        tiles = [Tile(tensor=torch.ones(4, 4), origin_x=0, origin_y=0, width=4, height=4, overlap=1)]
+        tiles = [
+            Tile(tensor=torch.ones(4, 4), origin_x=0, origin_y=0, width=4, height=4, overlap=1)
+        ]
         with pytest.raises(ValueError, match="same length"):
             tile_boundary_consistency(tiles, [torch.ones(4, 4), torch.ones(4, 4)])
 
@@ -172,9 +171,7 @@ class TestManhattanizationDegradation:
         manh = torch.zeros(64, 64)
         manh[10:50, 10:50] = 1.0  # axis-aligned square covering the diagonal
 
-        result = manhattanization_degradation(
-            curv, manh, target_cd_nm=40.0, pixel_size_nm=2.0
-        )
+        result = manhattanization_degradation(curv, manh, target_cd_nm=40.0, pixel_size_nm=2.0)
         assert result["edge_placement_error_nm"] >= 0.0
         assert result["shot_count_ratio"] > 0.0
 

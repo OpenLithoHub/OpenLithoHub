@@ -37,9 +37,7 @@ class WarmStartProvider(Protocol):
         """Produce a single initial mask guess from *target*."""
         ...
 
-    def generate_candidates(
-        self, target: torch.Tensor, n_candidates: int
-    ) -> list[torch.Tensor]:
+    def generate_candidates(self, target: torch.Tensor, n_candidates: int) -> list[torch.Tensor]:
         """Produce *n_candidates* diverse initial masks."""
         ...
 
@@ -190,10 +188,7 @@ class NeuralILTWarmStart(nn.Module):
         candidates = []
         for _ in range(n_candidates):
             mask_soft = _forward_with_noise(self.net, x)
-            blended = (
-                (1.0 - self.residual_weight) * mask_soft
-                + self.residual_weight * x
-            )
+            blended = (1.0 - self.residual_weight) * mask_soft + self.residual_weight * x
             mask = blended.squeeze(0)
             candidates.append(self._match_ndim(mask, target))
         return candidates
@@ -270,9 +265,7 @@ class CandidateScorer:
             target_2d = target_2d.squeeze()
 
         aerial = self._forward_fn(mask_2d)
-        resist = apply_differentiable_resist(
-            aerial, threshold=0.5, steepness=self.resist_steepness
-        )
+        resist = apply_differentiable_resist(aerial, threshold=0.5, steepness=self.resist_steepness)
         epe = nn.functional.mse_loss(resist, target_2d)
 
         grad_h = (mask_2d[1:, :] - mask_2d[:-1, :]).pow(2)
@@ -282,11 +275,7 @@ class CandidateScorer:
         tv = grad_h.sum() + grad_w.sum()
         mrc_penalty = tv / max(mask_2d.numel(), 1)
 
-        total = (
-            self.epe_weight * epe
-            + self.pvb_weight * pvb
-            + self.mrc_weight * mrc_penalty
-        )
+        total = self.epe_weight * epe + self.pvb_weight * pvb + self.mrc_weight * mrc_penalty
         return total.item()
 
     def rank_candidates(

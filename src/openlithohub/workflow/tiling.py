@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import torch
 import torch.nn.functional as functional
@@ -237,7 +237,7 @@ def tiled_ilt_with_consistency(
         tile_results.append(current)
 
     stitched = stitch_tiles(
-        [(t, r) for t, r in zip(tiles, tile_results)],
+        [(t, r) for t, r in zip(tiles, tile_results, strict=False)],
         (h, w),
     )
 
@@ -295,7 +295,7 @@ def schwarz_tiled_ilt(
 
     history: list[float] = []
 
-    for schwarz_it in range(n_schwarz_iters):
+    for _schwarz_it in range(n_schwarz_iters):
         new_results: list[torch.Tensor] = []
         for idx, tile in enumerate(tiles):
             current = _inject_boundary_data(tile, tile_results, idx, tiles, overlap)
@@ -313,7 +313,7 @@ def schwarz_tiled_ilt(
             break
 
     stitched = stitch_tiles(
-        [(t, r) for t, r in zip(tiles, tile_results)],
+        [(t, r) for t, r in zip(tiles, tile_results, strict=False)],
         (h, w),
     )
 

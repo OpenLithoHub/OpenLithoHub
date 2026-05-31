@@ -63,9 +63,7 @@ class TileParallelProcessor:
         if overlap < 0:
             raise ValueError(f"overlap must be non-negative, got {overlap}")
         if overlap >= tile_size:
-            raise ValueError(
-                f"overlap ({overlap}) must be less than tile_size ({tile_size})"
-            )
+            raise ValueError(f"overlap ({overlap}) must be less than tile_size ({tile_size})")
 
         self.tile_size = tile_size
         self.overlap = overlap
@@ -187,7 +185,7 @@ class TileParallelProcessor:
 
         # Build Tile objects expected by stitch_tiles
         tile_objects: list[tuple[Tile, torch.Tensor]] = []
-        for tensor, (oy, ox) in zip(processed_tiles, origins):
+        for tensor, (oy, ox) in zip(processed_tiles, origins, strict=False):
             tile_h = min(ts, h - oy)
             tile_w = min(ts, w - ox)
             t = Tile(
@@ -236,7 +234,8 @@ class SchwarzTilingSolver:
         convergence_tol: float = 0.01,
     ) -> None:
         self.processor = tile_processor or TileParallelProcessor(
-            tile_size=tile_size, overlap=overlap,
+            tile_size=tile_size,
+            overlap=overlap,
         )
         self.tile_size = tile_size
         self.overlap = overlap
@@ -293,7 +292,11 @@ class SchwarzTilingSolver:
             new_results: list[torch.Tensor] = []
             for idx, tile in enumerate(tiles):
                 updated = _inject_boundary_data(
-                    tile, tile_results, idx, tiles, self.overlap,
+                    tile,
+                    tile_results,
+                    idx,
+                    tiles,
+                    self.overlap,
                 )
                 updated = forward_fn(updated)
                 new_results.append(updated)
@@ -302,7 +305,9 @@ class SchwarzTilingSolver:
 
             # Measure convergence
             consistency = tile_boundary_consistency(
-                tiles, tile_results, overlap=self.overlap,
+                tiles,
+                tile_results,
+                overlap=self.overlap,
             )
             mse = consistency["boundary_mse"]
             residual_history.append(mse)
@@ -312,7 +317,7 @@ class SchwarzTilingSolver:
 
         # Stitch final result
         stitched = stitch_tiles(
-            [(t, r) for t, r in zip(tiles, tile_results)],
+            [(t, r) for t, r in zip(tiles, tile_results, strict=False)],
             output_shape=(h, w),
         )
 
@@ -337,8 +342,11 @@ class SchwarzTilingSolver:
         from openlithohub.benchmark.metrics.tiling_consistency import (
             tile_boundary_consistency,
         )
+
         metrics = tile_boundary_consistency(
-            tiles, tile_results, overlap=self.overlap,
+            tiles,
+            tile_results,
+            overlap=self.overlap,
         )
         return metrics["boundary_mse"]
 
@@ -393,7 +401,9 @@ class TileBenchmarkReport:
         for h, w in mask_sizes:
             mask = torch.rand(h, w)
             processor = TileParallelProcessor(
-                tile_size=tile_size, overlap=overlap, device=device,
+                tile_size=tile_size,
+                overlap=overlap,
+                device=device,
             )
 
             t0 = time.perf_counter()
@@ -408,12 +418,15 @@ class TileBenchmarkReport:
                 return batch
 
             processed = processor.process_tiles(
-                tile_tensors, _identity_batch,
+                tile_tensors,
+                _identity_batch,
             )
 
             # Reassemble
             _result = processor.reassemble(
-                processed, origins, (h, w),
+                processed,
+                origins,
+                (h, w),
             )
 
             elapsed = time.perf_counter() - t0
@@ -423,8 +436,11 @@ class TileBenchmarkReport:
             from openlithohub.benchmark.metrics.tiling_consistency import (
                 tile_boundary_consistency,
             )
+
             consistency = tile_boundary_consistency(
-                tiles, [t.tensor for t in tiles], overlap=overlap,
+                tiles,
+                [t.tensor for t in tiles],
+                overlap=overlap,
             )
             residual = consistency["boundary_mse"]
 
@@ -432,15 +448,17 @@ class TileBenchmarkReport:
             # Assume pixel_size = 2 nm → area_nm2 = h * w * 4
             # 1 cm^2 = 1e14 nm^2
             pixel_size_nm = 2.0
-            area_cm2 = h * w * (pixel_size_nm ** 2) / 1e14
+            area_cm2 = h * w * (pixel_size_nm**2) / 1e14
             throughput = area_cm2 / (elapsed / 60.0) if elapsed > 0 else 0.0
 
-            reports.append({
-                "mask_size": (h, w),
-                "n_tiles": len(partitioned),
-                "time_s": elapsed,
-                "residual": residual,
-                "throughput": throughput,
-            })
+            reports.append(
+                {
+                    "mask_size": (h, w),
+                    "n_tiles": len(partitioned),
+                    "time_s": elapsed,
+                    "residual": residual,
+                    "throughput": throughput,
+                }
+            )
 
         return reports

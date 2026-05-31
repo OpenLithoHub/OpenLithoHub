@@ -19,13 +19,12 @@ with ``CandidateScorer``, and returns the top-k.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
 
 from openlithohub.models.warm_start import CandidateScorer
-
 
 # ---------------------------------------------------------------------------
 # Conditional VAE components
@@ -69,9 +68,7 @@ class _Decoder(nn.Module):
     then upsampled back to the original resolution.
     """
 
-    def __init__(
-        self, latent_dim: int = 32, base_channels: int = 32
-    ) -> None:
+    def __init__(self, latent_dim: int = 32, base_channels: int = 32) -> None:
         super().__init__()
         self.base_channels = base_channels
         # z is broadcast to spatial dims and concatenated with target (1 ch)
@@ -87,21 +84,23 @@ class _Decoder(nn.Module):
         self.outc = nn.Conv2d(base_channels, 1, 1)
 
     def forward(self, z: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        B = z.shape[0]
-        H, W = target.shape[2], target.shape[3]
+        batch = z.shape[0]
+        height, width = target.shape[2], target.shape[3]
 
-        h = self.fc(z).reshape(B, self.base_channels, 4, 4)
+        h = self.fc(z).reshape(batch, self.base_channels, 4, 4)
         # Upsample to match target spatial dims
-        h = nn.functional.interpolate(h, size=(H // 2, W // 2), mode="nearest")
+        h = nn.functional.interpolate(h, size=(height // 2, width // 2), mode="nearest")
         # Concatenate target as conditioning
-        target_half = nn.functional.interpolate(target, size=(H // 2, W // 2), mode="nearest")
+        target_half = nn.functional.interpolate(
+            target, size=(height // 2, width // 2), mode="nearest"
+        )
         h = torch.cat([h, target_half], dim=1)
         h = torch.relu(self.bn1(self.up1(h)))
         # Upsample again — may exceed target size due to stride rounding
-        h = nn.functional.interpolate(h, size=(H, W), mode="nearest")
+        h = nn.functional.interpolate(h, size=(height, width), mode="nearest")
         h = torch.relu(self.bn2(self.up2(h)))
         # Final resize to exact target size
-        h = nn.functional.interpolate(h, size=(H, W), mode="nearest")
+        h = nn.functional.interpolate(h, size=(height, width), mode="nearest")
         logits = self.outc(h)
         return torch.sigmoid(logits)
 
@@ -128,9 +127,7 @@ class PosteriorWarmStart(nn.Module):
     training and samples diverse masks from p(mask | target) during inference.
     """
 
-    def __init__(
-        self, in_channels: int = 1, latent_dim: int = 32, base_channels: int = 32
-    ) -> None:
+    def __init__(self, in_channels: int = 1, latent_dim: int = 32, base_channels: int = 32) -> None:
         super().__init__()
         self.in_channels = in_channels
         self.latent_dim = latent_dim
@@ -144,9 +141,7 @@ class PosteriorWarmStart(nn.Module):
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
 
-    def encode(
-        self, target: torch.Tensor, mask: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def encode(self, target: torch.Tensor, mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Encode (target, mask) pair to latent distribution parameters."""
         t4 = self._ensure_4d(target)
         m4 = self._ensure_4d(mask)
@@ -155,17 +150,17 @@ class PosteriorWarmStart(nn.Module):
     def decode(self, z: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Decode latent + target -> mask."""
         t4 = self._ensure_4d(target)
-        B = z.shape[0]
-        if t4.shape[0] == 1 and B > 1:
-            t4 = t4.expand(B, -1, -1, -1)
+        batch_size = z.shape[0]
+        if t4.shape[0] == 1 and batch_size > 1:
+            t4 = t4.expand(batch_size, -1, -1, -1)
         mask_4d = self.decoder(z, t4)
         return mask_4d.squeeze(1)
 
     def forward(self, target: torch.Tensor) -> torch.Tensor:
         """Single sample from posterior (for WarmStartProvider protocol)."""
         t4 = self._ensure_4d(target)
-        B = t4.shape[0]
-        z = torch.randn(B, self.latent_dim, device=t4.device, dtype=t4.dtype)
+        batch_size = t4.shape[0]
+        z = torch.randn(batch_size, self.latent_dim, device=t4.device, dtype=t4.dtype)
         mask_4d = self.decoder(z, t4)
         mask = mask_4d.squeeze(0).squeeze(0)
         return self._match_ndim(mask, target)
@@ -173,8 +168,8 @@ class PosteriorWarmStart(nn.Module):
     def generate_initial_mask(self, target: torch.Tensor) -> torch.Tensor:
         """Single deterministic mask (mean of prior, z=0)."""
         t4 = self._ensure_4d(target)
-        B = t4.shape[0]
-        z = torch.zeros(B, self.latent_dim, device=t4.device, dtype=t4.dtype)
+        batch_size = t4.shape[0]
+        z = torch.zeros(batch_size, self.latent_dim, device=t4.device, dtype=t4.dtype)
         mask_4d = self.decoder(z, t4)
         mask = mask_4d.squeeze(0).squeeze(0)
         return self._match_ndim(mask, target)
@@ -184,10 +179,10 @@ class PosteriorWarmStart(nn.Module):
     ) -> list[torch.Tensor]:
         """Sample n_candidates from the learned posterior."""
         t4 = self._ensure_4d(target)
-        B = t4.shape[0]
+        batch_size = t4.shape[0]
         results: list[torch.Tensor] = []
         for _ in range(n_candidates):
-            z = torch.randn(B, self.latent_dim, device=t4.device, dtype=t4.dtype)
+            z = torch.randn(batch_size, self.latent_dim, device=t4.device, dtype=t4.dtype)
             mask_4d = self.decoder(z, t4)
             mask = mask_4d.squeeze(0).squeeze(0)
             results.append(self._match_ndim(mask, target))
@@ -233,7 +228,7 @@ class PosteriorWarmStart(nn.Module):
 
         for _epoch in range(n_epochs):
             epoch_loss = 0.0
-            for tgt, msk in zip(targets, masks):
+            for tgt, msk in zip(targets, masks, strict=False):
                 optimizer.zero_grad()
                 loss = self.loss(tgt, msk)
                 loss.backward()

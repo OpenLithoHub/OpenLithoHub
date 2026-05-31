@@ -16,7 +16,6 @@ from openlithohub.workflow.full_chip_tiling import (
     TileParallelProcessor,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -32,7 +31,8 @@ def _smooth_fn(tile: torch.Tensor) -> torch.Tensor:
     inp = tile.float().unsqueeze(0).unsqueeze(0)
     padded = torch.nn.functional.pad(inp, (1, 1, 1, 1), mode="reflect")
     out = torch.nn.functional.conv2d(
-        padded, kernel.unsqueeze(0).unsqueeze(0),
+        padded,
+        kernel.unsqueeze(0).unsqueeze(0),
     )
     return out.squeeze(0).squeeze(0)
 
@@ -63,8 +63,9 @@ class TestTileParallelProcessor:
 
         assert result.shape == mask.shape
         # Interior region (outside overlap zone) should be recovered exactly
-        assert torch.allclose(result[32:96, 32:96], mask[32:96:96, 32:96], atol=1e-5) or \
-            torch.allclose(result, mask, atol=0.05)
+        assert torch.allclose(
+            result[32:96, 32:96], mask[32:96:96, 32:96], atol=1e-5
+        ) or torch.allclose(result, mask, atol=0.05)
 
     def test_partition_and_reassemble_uniform(self):
         """Uniform mask round-trips exactly."""
@@ -102,7 +103,7 @@ class TestTileParallelProcessor:
         covered = torch.zeros_like(mask, dtype=torch.bool)
         for tile_tensor, (oy, ox) in partitioned:
             th, tw = tile_tensor.shape[-2], tile_tensor.shape[-1]
-            covered[oy:oy + th, ox:ox + tw] = True
+            covered[oy : oy + th, ox : ox + tw] = True
 
         assert covered.all(), "Not all pixels are covered by tiles"
 
@@ -154,7 +155,7 @@ class TestTileParallelProcessor:
 
         results = proc.process_tiles(tiles, _smooth_batch, batch_size=3)
         assert len(results) == 3
-        for orig, smoothed in zip(tiles, results):
+        for orig, smoothed in zip(tiles, results, strict=False):
             assert not torch.allclose(orig, smoothed.squeeze(), atol=1e-4)
 
 
@@ -170,7 +171,10 @@ class TestSchwarzTilingSolver:
         mask[8:56, 8:56] = 1.0
 
         solver = SchwarzTilingSolver(
-            tile_size=32, overlap=8, max_iterations=3, convergence_tol=1e-3,
+            tile_size=32,
+            overlap=8,
+            max_iterations=3,
+            convergence_tol=1e-3,
         )
         result = solver.solve(mask, forward_fn=_identity_fn)
 
@@ -187,7 +191,10 @@ class TestSchwarzTilingSolver:
         mask = torch.rand(64, 64)
 
         solver = SchwarzTilingSolver(
-            tile_size=32, overlap=8, max_iterations=5, convergence_tol=0.0,
+            tile_size=32,
+            overlap=8,
+            max_iterations=5,
+            convergence_tol=0.0,
         )
         result = solver.solve(mask, forward_fn=_smooth_fn)
 
@@ -203,7 +210,10 @@ class TestSchwarzTilingSolver:
         mask = torch.ones(48, 48) * 0.5
 
         solver = SchwarzTilingSolver(
-            tile_size=32, overlap=8, max_iterations=10, convergence_tol=1e-3,
+            tile_size=32,
+            overlap=8,
+            max_iterations=10,
+            convergence_tol=1e-3,
         )
         result = solver.solve(mask, forward_fn=_identity_fn)
 
@@ -214,7 +224,10 @@ class TestSchwarzTilingSolver:
         """Passing n_iterations overrides max_iterations."""
         mask = torch.ones(64, 64)
         solver = SchwarzTilingSolver(
-            tile_size=32, overlap=8, max_iterations=10, convergence_tol=0.0,
+            tile_size=32,
+            overlap=8,
+            max_iterations=10,
+            convergence_tol=0.0,
         )
         result = solver.solve(mask, forward_fn=_identity_fn, n_iterations=2)
         assert result["n_iterations"] == 2
@@ -223,7 +236,9 @@ class TestSchwarzTilingSolver:
         """Solver can accept an external TileParallelProcessor."""
         proc = TileParallelProcessor(tile_size=32, overlap=8, device="cpu")
         solver = SchwarzTilingSolver(
-            tile_processor=proc, tile_size=32, overlap=8,
+            tile_processor=proc,
+            tile_size=32,
+            overlap=8,
         )
         mask = torch.ones(64, 64) * 0.3
         result = solver.solve(mask, forward_fn=_identity_fn)
@@ -233,7 +248,9 @@ class TestSchwarzTilingSolver:
         """3-D input (1, H, W) is handled correctly."""
         mask = torch.ones(1, 64, 64) * 0.6
         solver = SchwarzTilingSolver(
-            tile_size=32, overlap=8, max_iterations=2,
+            tile_size=32,
+            overlap=8,
+            max_iterations=2,
         )
         result = solver.solve(mask, forward_fn=_identity_fn)
         assert result["result"].shape == (64, 64)
@@ -249,7 +266,10 @@ class TestTileBenchmarkReport:
         """Report dicts contain all expected keys."""
         sizes = [(64, 64), (128, 128)]
         report = TileBenchmarkReport.generate(
-            mask_sizes=sizes, tile_size=64, overlap=8, device="cpu",
+            mask_sizes=sizes,
+            tile_size=64,
+            overlap=8,
+            device="cpu",
         )
 
         assert len(report) == len(sizes)
@@ -268,13 +288,18 @@ class TestTileBenchmarkReport:
         """Larger masks should produce more tiles."""
         report = TileBenchmarkReport.generate(
             mask_sizes=[(64, 64), (256, 256)],
-            tile_size=64, overlap=8, device="cpu",
+            tile_size=64,
+            overlap=8,
+            device="cpu",
         )
         assert report[1]["n_tiles"] > report[0]["n_tiles"]
 
     def test_benchmark_single_size(self):
         report = TileBenchmarkReport.generate(
-            mask_sizes=[(96, 96)], tile_size=48, overlap=8, device="cpu",
+            mask_sizes=[(96, 96)],
+            tile_size=48,
+            overlap=8,
+            device="cpu",
         )
         assert len(report) == 1
         assert report[0]["mask_size"] == (96, 96)

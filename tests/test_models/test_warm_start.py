@@ -176,7 +176,7 @@ def _simple_ilt_loop(
     sigma_px: float = 2.0,
 ) -> tuple[torch.Tensor, float]:
     """Minimal ILT gradient descent returning (final_mask, final_loss)."""
-    mask_logit = (initial_mask.clone().clamp(1e-6, 1 - 1e-6))
+    mask_logit = initial_mask.clone().clamp(1e-6, 1 - 1e-6)
     mask_logit = torch.log(mask_logit / (1.0 - mask_logit))
     mask_logit = mask_logit.detach().requires_grad_(True)
 

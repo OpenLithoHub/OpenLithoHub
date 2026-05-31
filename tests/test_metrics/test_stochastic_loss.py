@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import torch
 import pytest
+import torch
 
 from openlithohub._utils.forward_model import simulate_aerial_image
 from openlithohub.benchmark.metrics.stochastic_loss import (
@@ -14,7 +14,6 @@ from openlithohub.benchmark.metrics.stochastic_loss import (
     differentiable_lcdu,
     quantile_loss,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -110,7 +109,8 @@ class TestDifferentiableEdgeError:
         mask = simple_mask.clone().requires_grad_(True)
         aerial = aerial_fn(mask)
         loss = differentiable_edge_error(
-            mask, aerial,
+            mask,
+            aerial,
             dose_photons_per_nm2=30.0,
             pixel_size_nm=1.0,
             n_samples=4,
@@ -124,7 +124,8 @@ class TestDifferentiableEdgeError:
         mask = simple_mask
         aerial = aerial_fn(mask)
         loss = differentiable_edge_error(
-            mask, aerial,
+            mask,
+            aerial,
             dose_photons_per_nm2=30.0,
             pixel_size_nm=1.0,
             n_samples=4,
@@ -143,7 +144,8 @@ class TestDifferentiableLcdu:
         mask = simple_mask.clone().requires_grad_(True)
         aerial = aerial_fn(mask)
         loss = differentiable_lcdu(
-            mask, aerial,
+            mask,
+            aerial,
             dose_photons_per_nm2=30.0,
             pixel_size_nm=1.0,
             n_samples=4,
@@ -157,7 +159,8 @@ class TestDifferentiableLcdu:
         mask = simple_mask
         aerial = aerial_fn(mask)
         loss = differentiable_lcdu(
-            mask, aerial,
+            mask,
+            aerial,
             dose_photons_per_nm2=30.0,
             pixel_size_nm=1.0,
             n_samples=8,
@@ -173,9 +176,7 @@ class TestDifferentiableLcdu:
 class TestStochasticAwareLoss:
     def test_stochastic_aware_loss_gradient_exists(self, simple_mask, aerial_fn):
         """Full loss must propagate gradients to the mask."""
-        loss_fn = StochasticAwareLoss(
-            alpha=0.95, n_mc_samples=4, dose_photons_per_nm2=30.0
-        )
+        loss_fn = StochasticAwareLoss(alpha=0.95, n_mc_samples=4, dose_photons_per_nm2=30.0)
         mask = simple_mask.clone().requires_grad_(True)
         loss = loss_fn.forward(mask, aerial_fn)
         loss.backward()
@@ -186,10 +187,14 @@ class TestStochasticAwareLoss:
         """Low dose (more noise) should give a higher loss than high dose."""
         torch.manual_seed(0)
         loss_low_dose = StochasticAwareLoss(
-            alpha=0.95, n_mc_samples=16, dose_photons_per_nm2=5.0,
+            alpha=0.95,
+            n_mc_samples=16,
+            dose_photons_per_nm2=5.0,
         )
         loss_high_dose = StochasticAwareLoss(
-            alpha=0.95, n_mc_samples=16, dose_photons_per_nm2=200.0,
+            alpha=0.95,
+            n_mc_samples=16,
+            dose_photons_per_nm2=200.0,
         )
         mask = simple_mask
         val_low = loss_low_dose.forward(mask, aerial_fn).item()
@@ -200,11 +205,15 @@ class TestStochasticAwareLoss:
         """CVaR (tail risk) should produce a loss >= mean-based loss."""
         torch.manual_seed(0)
         loss_cvar = StochasticAwareLoss(
-            alpha=0.95, n_mc_samples=32, dose_photons_per_nm2=20.0,
+            alpha=0.95,
+            n_mc_samples=32,
+            dose_photons_per_nm2=20.0,
             risk_measure="cvar",
         )
         loss_mean = StochasticAwareLoss(
-            alpha=0.95, n_mc_samples=32, dose_photons_per_nm2=20.0,
+            alpha=0.95,
+            n_mc_samples=32,
+            dose_photons_per_nm2=20.0,
             risk_measure="mean",
         )
         mask = simple_mask
@@ -234,7 +243,9 @@ class TestStochasticProcessWindow:
             dose_photons_per_nm2=30.0,
             epe_tolerance=5.0,
         )
-        result = spw.compute(simple_mask, aerial_image_fn=aerial_fn, focus_range_nm=(-20.0, 20.0, 10.0))
+        result = spw.compute(
+            simple_mask, aerial_image_fn=aerial_fn, focus_range_nm=(-20.0, 20.0, 10.0)
+        )
         assert len(result.focus_values_nm) > 0
         assert len(result.mean_epe_per_focus) == len(result.focus_values_nm)
         assert len(result.worst_case_epe_per_focus) == len(result.focus_values_nm)
@@ -244,7 +255,9 @@ class TestStochasticProcessWindow:
     def test_stochastic_process_window_best_focus_best(self, simple_mask):
         """Best focus (0 nm) should have lower EPE than extreme defocus."""
         spw = StochasticProcessWindow(
-            n_samples=8, dose_photons_per_nm2=30.0, epe_tolerance=5.0,
+            n_samples=8,
+            dose_photons_per_nm2=30.0,
+            epe_tolerance=5.0,
         )
         result = spw.compute(
             simple_mask,
@@ -276,7 +289,9 @@ class TestStochasticVsDeterministic:
         mask = torch.full((32, 32), 0.5, requires_grad=True)
         optimizer = torch.optim.Adam([mask], lr=0.05)
         loss_fn = StochasticAwareLoss(
-            alpha=0.9, n_mc_samples=4, dose_photons_per_nm2=30.0,
+            alpha=0.9,
+            n_mc_samples=4,
+            dose_photons_per_nm2=30.0,
         )
 
         initial_loss = loss_fn.forward(mask, aerial_fn).item()

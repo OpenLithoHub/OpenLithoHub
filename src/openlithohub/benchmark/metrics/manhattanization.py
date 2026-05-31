@@ -57,9 +57,7 @@ def manhattanization_degradation(
     manh = ensure_2d(manhattanized_mask).float()
 
     if curv.shape != manh.shape:
-        raise ValueError(
-            f"Shape mismatch: curvilinear {curv.shape} vs manhattanized {manh.shape}"
-        )
+        raise ValueError(f"Shape mismatch: curvilinear {curv.shape} vs manhattanized {manh.shape}")
 
     curv_binary = (curv > 0.5).float()
     manh_binary = (manh > 0.5).float()
@@ -116,9 +114,7 @@ def curvilinear_to_manhattan(
         Manhattanized mask tensor ``(H, W)`` with the same dtype as input.
     """
     if angle_quantization not in (45, 90):
-        raise ValueError(
-            f"angle_quantization must be 45 or 90, got {angle_quantization}"
-        )
+        raise ValueError(f"angle_quantization must be 45 or 90, got {angle_quantization}")
 
     m = ensure_2d(mask).float()
 
@@ -295,10 +291,17 @@ def _reconstruct_from_quantised_edges(
     # Interior seed: erode by 1 pixel to get pixels safely inside features
     kernel = torch.ones(1, 1, 3, 3, device=binary.device)
     inp = binary.unsqueeze(0).unsqueeze(0)
-    seed = (-functional.conv2d(
-        functional.pad(-inp, (1, 1, 1, 1), mode="replicate"),
-        kernel,
-    ) >= 9.0).squeeze().float()
+    seed = (
+        (
+            -functional.conv2d(
+                functional.pad(-inp, (1, 1, 1, 1), mode="replicate"),
+                kernel,
+            )
+            >= 9.0
+        )
+        .squeeze()
+        .float()
+    )
 
     # Iterative dilation: expand seed outward, constrained to pixels that
     # are inside the original mask or on quantised edges.
@@ -312,7 +315,7 @@ def _reconstruct_from_quantised_edges(
             functional.pad(result.unsqueeze(0).unsqueeze(0), (1, 1, 1, 1)),
             kernel,
         ).squeeze()
-        grown = ((dilated > 0).float() * mask_allowed)
+        grown = (dilated > 0).float() * mask_allowed
         result = torch.maximum(result, grown)
         if (result - prev).abs().sum() < 0.5:
             break

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 import torch
-import torch.nn as nn
 
 from openlithohub.models.posterior_warm_start import (
     BatchILTScheduler,
@@ -15,7 +14,6 @@ from openlithohub.models.warm_start import (
     GANOPCWarmStart,
     WarmStartProvider,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -112,7 +110,7 @@ class TestPosteriorDiversity:
             return total / max(count, 1)
 
         posterior_div = _avg_pairwise_dist(posterior_candidates)
-        ganopc_div = _avg_pairwise_dist(ganopc_candidates)
+        _avg_pairwise_dist(ganopc_candidates)
 
         # Posterior with untrained weights may or may not exceed GANOPC diversity,
         # but both should produce non-trivial diversity. We check that posterior

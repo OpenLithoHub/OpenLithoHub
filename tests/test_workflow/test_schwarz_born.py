@@ -43,7 +43,7 @@ class TestSchwarzTiledIlt:
 
         mask = torch.rand(64, 64)
 
-        independent = tiled_ilt_with_consistency(
+        tiled_ilt_with_consistency(
             mask, tile_size=32, ilt_fn=smoothing_ilt, overlap=8, n_iterations=5
         )
 
@@ -154,9 +154,7 @@ class TestBornForwardCorrection:
         sigma = 2.0
 
         standard = simulate_aerial_image(mask, sigma_px=sigma, dose=1.0)
-        born1 = simulate_aerial_image_born(
-            mask, sigma_px=sigma, dose=1.0, n_born_terms=1
-        )
+        born1 = simulate_aerial_image_born(mask, sigma_px=sigma, dose=1.0, n_born_terms=1)
 
         assert torch.allclose(standard, born1, atol=1e-5), (
             f"Max diff: {(standard - born1).abs().max():.6e}"

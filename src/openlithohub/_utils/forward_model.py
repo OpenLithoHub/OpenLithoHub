@@ -19,9 +19,7 @@ import math
 import torch
 import torch.nn.functional as functional
 
-from openlithohub._constants import WAVELENGTH_ARF_NM
-
-from openlithohub._constants import THRESHOLD_GENERIC
+from openlithohub._constants import THRESHOLD_GENERIC, WAVELENGTH_ARF_NM
 
 
 def _build_gaussian_kernel(sigma: float, device: torch.device) -> torch.Tensor:

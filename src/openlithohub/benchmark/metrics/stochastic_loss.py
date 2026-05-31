@@ -21,8 +21,8 @@ Key ideas
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import torch
 import torch.nn.functional as functional
@@ -30,7 +30,6 @@ import torch.nn.functional as functional
 from openlithohub._constants import THRESHOLD_ICCAD16
 from openlithohub._utils.forward_model import simulate_aerial_image
 from openlithohub._utils.resist_model import differentiable_threshold
-
 
 # ---------------------------------------------------------------------------
 # Risk-measure loss functions
@@ -91,9 +90,7 @@ def quantile_loss(errors: torch.Tensor, quantile: float) -> torch.Tensor:
         return errors.new_zeros(())
     tau = torch.quantile(errors.detach().float(), quantile)
     residual = errors - tau
-    return torch.mean(
-        torch.max(quantile * residual, (quantile - 1.0) * residual)
-    )
+    return torch.mean(torch.max(quantile * residual, (quantile - 1.0) * residual))
 
 
 # ---------------------------------------------------------------------------
@@ -134,9 +131,7 @@ def _soft_edge_mask(image: torch.Tensor, steepness: float = 10.0) -> torch.Tenso
 # ---------------------------------------------------------------------------
 
 
-def _reparameterized_poisson(
-    lambda_map: torch.Tensor, n_samples: int
-) -> torch.Tensor:
+def _reparameterized_poisson(lambda_map: torch.Tensor, n_samples: int) -> torch.Tensor:
     """Draw differentiable Poisson-like samples via the normal approximation.
 
     For large lambda (typical EUV doses), ``Poisson(lambda) ~ Normal(lambda,
@@ -210,12 +205,12 @@ def differentiable_edge_error(
 
     total_error = aerial_nominal.new_zeros(())
     for i in range(n_samples):
-        resist_noised = differentiable_threshold(
-            noised_intensity[i], resist_threshold, steepness
-        )
+        resist_noised = differentiable_threshold(noised_intensity[i], resist_threshold, steepness)
         # softplus(x) ~ |x| for large |x| but is smooth at 0 — avoids the
         # non-differentiable kink of abs().
-        pixel_diff = torch.nn.functional.softplus(resist_noised - resist_nominal) + torch.nn.functional.softplus(resist_nominal - resist_noised)
+        pixel_diff = torch.nn.functional.softplus(
+            resist_noised - resist_nominal
+        ) + torch.nn.functional.softplus(resist_nominal - resist_noised)
         edge_weight = edge_mask.clamp(min=1e-8)
         weighted_error = (pixel_diff * edge_weight).sum() / edge_weight.sum().clamp(min=1.0)
         total_error = total_error + weighted_error
@@ -265,9 +260,7 @@ def differentiable_lcdu(
 
     cd_proxies = []
     for i in range(n_samples):
-        resist_noised = differentiable_threshold(
-            noised_intensity[i], resist_threshold, steepness
-        )
+        resist_noised = differentiable_threshold(noised_intensity[i], resist_threshold, steepness)
         # CD proxy: sum of soft-resist along the edge contour (horizontal sum
         # weighted by edge mask gives a local-width estimate).
         cd_proxy = (resist_noised * edge_mask).sum()
@@ -370,10 +363,9 @@ class StochasticAwareLoss:
             resist_noised = differentiable_threshold(
                 noised_intensity[i], self.resist_threshold, self.steepness
             )
-            pixel_diff = (
-                torch.nn.functional.softplus(resist_noised - resist_nominal)
-                + torch.nn.functional.softplus(resist_nominal - resist_noised)
-            )
+            pixel_diff = torch.nn.functional.softplus(
+                resist_noised - resist_nominal
+            ) + torch.nn.functional.softplus(resist_nominal - resist_noised)
             edge_weight = edge_mask.clamp(min=1e-8)
             weighted_error = (pixel_diff * edge_weight).sum() / edge_weight.sum().clamp(min=1.0)
             per_sample_errors.append(weighted_error)
@@ -448,9 +440,7 @@ class StochasticProcessWindow:
         self.steepness = steepness
         self.epe_tolerance = epe_tolerance
 
-    def _aerial_with_defocus(
-        self, mask: torch.Tensor, defocus_nm: float
-    ) -> torch.Tensor:
+    def _aerial_with_defocus(self, mask: torch.Tensor, defocus_nm: float) -> torch.Tensor:
         """Compute aerial image with defocus via modified sigma.
 
         Defocus is approximated by increasing the PSF sigma. In real optical
@@ -523,7 +513,7 @@ class StochasticProcessWindow:
         lower = min(focus_values)
         upper = max(focus_values)
         in_window = [m < self.epe_tolerance for m in mean_epe]
-        passing = [f for f, ok in zip(focus_values, in_window) if ok]
+        passing = [f for f, ok in zip(focus_values, in_window, strict=False) if ok]
         if passing:
             lower = min(passing)
             upper = max(passing)

@@ -64,8 +64,7 @@ def tile_boundary_consistency(
     """
     if len(tiles) != len(tile_results):
         raise ValueError(
-            f"tiles and tile_results must have same length; "
-            f"got {len(tiles)} vs {len(tile_results)}"
+            f"tiles and tile_results must have same length; got {len(tiles)} vs {len(tile_results)}"
         )
     if not tiles:
         return {"boundary_mse": 0.0, "boundary_max_diff": 0.0, "sraf_consistency": 1.0}
@@ -107,9 +106,7 @@ def tile_boundary_consistency(
 
     avg_mse = sum(mse_accum) / len(mse_accum)
     max_diff = max(max_diff_accum)
-    sraf_consistency = (
-        sum(sraf_match_accum) / sum(sraf_total_accum) if sraf_total_accum else 1.0
-    )
+    sraf_consistency = sum(sraf_match_accum) / sum(sraf_total_accum) if sraf_total_accum else 1.0
 
     return {
         "boundary_mse": avg_mse,
@@ -257,8 +254,14 @@ def _overlap_regions(
     h_i, w_i = ri.shape[-2], ri.shape[-1]
     h_j, w_j = rj.shape[-2], rj.shape[-1]
     if (
-        ri_y0 < 0 or ri_x0 < 0 or ri_y1 > h_i or ri_x1 > w_i
-        or rj_y0 < 0 or rj_x0 < 0 or rj_y1 > h_j or rj_x1 > w_j
+        ri_y0 < 0
+        or ri_x0 < 0
+        or ri_y1 > h_i
+        or ri_x1 > w_i
+        or rj_y0 < 0
+        or rj_x0 < 0
+        or rj_y1 > h_j
+        or rj_x1 > w_j
     ):
         results.append((None, None))
         return results
@@ -359,8 +362,7 @@ def cross_tile_epe_residual(
     """
     if len(tiles) != len(tile_results):
         raise ValueError(
-            f"tiles and tile_results must have same length; "
-            f"got {len(tiles)} vs {len(tile_results)}"
+            f"tiles and tile_results must have same length; got {len(tiles)} vs {len(tile_results)}"
         )
     if not tiles or overlap <= 0:
         return {"mean_epe": 0.0, "max_epe": 0.0, "epe_per_boundary": []}
@@ -420,8 +422,7 @@ def cross_tile_contour_residual(
     """
     if len(tiles) != len(tile_results):
         raise ValueError(
-            f"tiles and tile_results must have same length; "
-            f"got {len(tiles)} vs {len(tile_results)}"
+            f"tiles and tile_results must have same length; got {len(tiles)} vs {len(tile_results)}"
         )
     if not tiles or overlap <= 0:
         return {"mean_contour_offset": 0.0, "max_contour_offset": 0.0, "n_boundary_pixels": 0}

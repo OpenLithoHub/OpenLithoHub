@@ -9,9 +9,8 @@ Provides:
 
 from __future__ import annotations
 
-import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 import torch
 import torch.nn as nn
@@ -161,8 +160,7 @@ class GradientFidelityGate:
         max_comp_err = (grad_surrogate - grad_hf).abs().div(denom).max().item()
 
         passed = (
-            cos_surrogate >= self.cosine_threshold
-            and max_comp_err <= self.max_component_threshold
+            cos_surrogate >= self.cosine_threshold and max_comp_err <= self.max_component_threshold
         )
 
         return FidelityResult(
@@ -230,6 +228,7 @@ class GradientFidelityGate:
 # ------------------------------------------------------------------
 # Utility functions
 # ------------------------------------------------------------------
+
 
 def _mse_loss(output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     return ((output - target) ** 2).mean()

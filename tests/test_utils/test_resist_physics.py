@@ -85,7 +85,9 @@ class TestAcidDiffusionSmooths:
 
     def test_diffusion_preserves_mean(self) -> None:
         model_no = PhysicalResistModel(acid_diffusion_nm=0.0, quencher_concentration=0.0)
-        model_diff = PhysicalResistModel(acid_diffusion_nm=4.0, pixel_size_nm=1.0, quencher_concentration=0.0)
+        model_diff = PhysicalResistModel(
+            acid_diffusion_nm=4.0, pixel_size_nm=1.0, quencher_concentration=0.0
+        )
 
         aerial = torch.rand(32, 32)
         # Acid diffusion is energy-conserving (Gaussian kernel sums to 1)
@@ -120,8 +122,12 @@ class TestGradientFidelityGatePassesForConsistent:
 
     def test_consistent_approximation_passes(self) -> None:
         """Surrogate is a slight smoothing of the high-fidelity — should pass."""
-        hf_fn = lambda x: torch.sigmoid(10.0 * x)
-        surr_fn = lambda x: torch.sigmoid(10.0 * x) + 0.0  # identical
+
+        def hf_fn(x):
+            return torch.sigmoid(10.0 * x)
+
+        def surr_fn(x):
+            return torch.sigmoid(10.0 * x) + 0.0  # identical
 
         gate = GradientFidelityGate(surrogate_fn=surr_fn, high_fidelity_fn=hf_fn)
         mask = torch.rand(6, 6)
@@ -134,9 +140,13 @@ class TestGradientFidelityGatePassesForConsistent:
 class TestGradientFidelityGateCatchesDivergence:
     def test_divergent_functions_fail(self) -> None:
         """Surrogate with opposite gradient direction should fail."""
-        hf_fn = lambda x: torch.sigmoid(5.0 * x)
+
+        def hf_fn(x):
+            return torch.sigmoid(5.0 * x)
+
         # Surrogate has inverted gradient
-        surr_fn = lambda x: -torch.sigmoid(5.0 * x)
+        def surr_fn(x):
+            return -torch.sigmoid(5.0 * x)
 
         gate = GradientFidelityGate(
             surrogate_fn=surr_fn,
@@ -150,8 +160,12 @@ class TestGradientFidelityGateCatchesDivergence:
 
     def test_scaled_gradient_detected(self) -> None:
         """Surrogate with much larger gradient magnitude should fail max-component check."""
-        hf_fn = lambda x: torch.sigmoid(5.0 * x)
-        surr_fn = lambda x: 3.0 * torch.sigmoid(5.0 * x)
+
+        def hf_fn(x):
+            return torch.sigmoid(5.0 * x)
+
+        def surr_fn(x):
+            return 3.0 * torch.sigmoid(5.0 * x)
 
         gate = GradientFidelityGate(
             surrogate_fn=surr_fn,
@@ -167,8 +181,11 @@ class TestGradientFidelityGateCatchesDivergence:
 
 class TestGradientCosineAboveThreshold:
     def test_cosine_metric_close_to_one(self) -> None:
-        hf_fn = lambda x: torch.sigmoid(10.0 * x)
-        surr_fn = lambda x: torch.sigmoid(10.0 * x)
+        def hf_fn(x):
+            return torch.sigmoid(10.0 * x)
+
+        def surr_fn(x):
+            return torch.sigmoid(10.0 * x)
 
         gate = GradientFidelityGate(surrogate_fn=surr_fn, high_fidelity_fn=hf_fn)
         mask = torch.rand(8, 8)
@@ -179,7 +196,9 @@ class TestGradientCosineAboveThreshold:
 
 class TestBenchmarkReturnsStatistics:
     def test_benchmark_structure(self) -> None:
-        fn = lambda x: torch.sigmoid(5.0 * x)
+        def fn(x):
+            return torch.sigmoid(5.0 * x)
+
         gate = GradientFidelityGate(surrogate_fn=fn, high_fidelity_fn=fn)
         stats = gate.benchmark(n_masks=3, size=4)
 
@@ -194,7 +213,9 @@ class TestBenchmarkReturnsStatistics:
         assert "n_passed" in stats
 
     def test_benchmark_all_passed_for_identical(self) -> None:
-        fn = lambda x: torch.sigmoid(5.0 * x)
+        def fn(x):
+            return torch.sigmoid(5.0 * x)
+
         gate = GradientFidelityGate(surrogate_fn=fn, high_fidelity_fn=fn)
         stats = gate.benchmark(n_masks=3, size=4)
         assert stats["all_passed"] is True

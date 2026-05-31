@@ -50,9 +50,7 @@ class TestCrossTileEpe:
         # Uniform tiles (no edges) → zero EPE by construction
         tile_a = torch.ones(32, 32) * 0.7
         tile_b = tile_a.clone()
-        out = cross_tile_epe_residual(
-            [tile_a, tile_b], [tile_a.clone(), tile_b.clone()], overlap=8
-        )
+        out = cross_tile_epe_residual([tile_a, tile_b], [tile_a.clone(), tile_b.clone()], overlap=8)
         assert out["mean_epe"] == pytest.approx(0.0, abs=1e-6)
         assert out["max_epe"] == pytest.approx(0.0, abs=1e-6)
 
@@ -224,17 +222,13 @@ class TestSchwarzVsNaive:
             forward_fn=_identity_forward,
         )
         # With identity forward, Schwarz and naive should produce identical results
-        assert result["schwarz_seam_error"] == pytest.approx(
-            result["naive_seam_error"], abs=1e-6
-        )
+        assert result["schwarz_seam_error"] == pytest.approx(result["naive_seam_error"], abs=1e-6)
 
     def test_default_forward_fn(self):
         mask = torch.zeros(48, 48)
         mask[8:40, 8:40] = 1.0
         # Should not raise — default uses simulate_aerial_image
-        result = schwarz_vs_naive_comparison(
-            mask, tile_size=32, overlap=8, n_schwarz_iter=2
-        )
+        result = schwarz_vs_naive_comparison(mask, tile_size=32, overlap=8, n_schwarz_iter=2)
         assert result["improvement_ratio"] > 0.0
 
 
