@@ -15,6 +15,7 @@ that converges in fewer iterations than a cold start.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
 import torch
@@ -227,9 +228,11 @@ class CandidateScorer:
     Lower score is better.
     """
 
+    _forward_fn: Callable[[torch.Tensor], torch.Tensor]
+
     def __init__(
         self,
-        forward_fn=None,
+        forward_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
         epe_weight: float = 1.0,
         pvb_weight: float = 1.0,
         mrc_weight: float = 10.0,
@@ -300,10 +303,10 @@ class CandidateScorer:
 def warm_start_ilt(
     target: torch.Tensor,
     warm_start_provider: WarmStartProvider,
-    ilt_refiner=None,
+    ilt_refiner: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None = None,
     n_candidates: int = 5,
     top_k: int = 3,
-) -> dict:
+) -> dict[str, object]:
     """Warm-start ILT: generate candidates -> optionally refine -> select best.
 
     Args:

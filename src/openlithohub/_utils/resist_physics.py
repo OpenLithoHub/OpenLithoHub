@@ -97,7 +97,7 @@ class FidelityResult:
     finite_diff_gradient_cosine: float
     max_component_error: float
     passed: bool
-    details: dict = field(default_factory=dict)
+    details: dict[str, object] = field(default_factory=dict)
 
 
 class GradientFidelityGate:
@@ -139,14 +139,16 @@ class GradientFidelityGate:
         mask_s = mask.detach().clone().requires_grad_(True)
         out_s = self.surrogate_fn(mask_s)
         loss_s = _mse_loss(out_s, target)
-        loss_s.backward()
+        loss_s.backward()  # type: ignore[no-untyped-call]
+        assert mask_s.grad is not None
         grad_surrogate = mask_s.grad.detach().clone().flatten()
 
         # --- Analytical gradient via high-fidelity ---
         mask_h = mask.detach().clone().requires_grad_(True)
         out_h = self.high_fidelity_fn(mask_h)
         loss_h = _mse_loss(out_h, target)
-        loss_h.backward()
+        loss_h.backward()  # type: ignore[no-untyped-call]
+        assert mask_h.grad is not None
         grad_hf = mask_h.grad.detach().clone().flatten()
 
         # --- Finite-difference gradient (high-fidelity) ---
@@ -175,7 +177,7 @@ class GradientFidelityGate:
             },
         )
 
-    def benchmark(self, n_masks: int = 10, size: int = 16) -> dict:
+    def benchmark(self, n_masks: int = 10, size: int = 16) -> dict[str, object]:
         """Run verification across multiple random masks.
 
         Returns aggregate statistics.
@@ -236,4 +238,5 @@ def _mse_loss(output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 
 def _cosine_similarity(a: torch.Tensor, b: torch.Tensor) -> float:
     denom = a.norm().clamp(min=1e-8) * b.norm().clamp(min=1e-8)
-    return (a.dot(b) / denom).item()
+    val: float = (a.dot(b) / denom).item()
+    return val

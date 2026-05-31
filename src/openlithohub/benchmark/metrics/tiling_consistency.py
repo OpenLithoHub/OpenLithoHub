@@ -86,7 +86,7 @@ def tile_boundary_consistency(
             # Check horizontal adjacency (same row, columns adjacent)
             regions = _overlap_regions(ti, tj, ri, rj, ol_width)
             for ra, rb in regions:
-                if ra is None:
+                if ra is None or rb is None:
                     continue
                 diff = ra - rb
                 mse_accum.append(float(diff.pow(2).mean().item()))
@@ -338,7 +338,7 @@ def cross_tile_epe_residual(
     tile_results: list[torch.Tensor],
     overlap: int,
     pixel_size_nm: float = 1.0,
-) -> dict[str, float]:
+) -> dict[str, float | list[float]]:
     """Compute edge placement error at tile boundaries.
 
     For each pair of adjacent tiles, extract the overlapping region from each
@@ -379,7 +379,7 @@ def cross_tile_epe_residual(
             # Extract overlap strips from each tile's result
             strips = _boundary_strips(ti_2d, tj_2d, ri, rj, overlap)
             for sa, sb in strips:
-                if sa is None:
+                if sa is None or sb is None:
                     continue
                 epe = _symmetric_edge_distance(sa, sb, pixel_size_nm)
                 if epe is not None:
@@ -439,7 +439,7 @@ def cross_tile_contour_residual(
 
             strips = _boundary_strips(ti_2d, tj_2d, ri, rj, overlap)
             for sa, sb in strips:
-                if sa is None:
+                if sa is None or sb is None:
                     continue
                 bin_a = (sa >= threshold).float()
                 bin_b = (sb >= threshold).float()
@@ -468,10 +468,10 @@ def cross_tile_contour_residual(
 def sweep_overlap_convergence(
     mask: torch.Tensor,
     tile_size: int,
-    forward_fn: Callable,
+    forward_fn: Callable[[torch.Tensor], torch.Tensor],
     overlap_range: list[int] | None = None,
     schwarz_iter_range: list[int] | None = None,
-) -> dict[str, dict]:
+) -> dict[str, dict[str, dict[str, float]]]:
     """Sweep overlap x Schwarz iterations and collect convergence metrics.
 
     For each (overlap, n_iterations) combination:
@@ -501,7 +501,7 @@ def sweep_overlap_convergence(
         mask = mask.squeeze()
     h, w = mask.shape
 
-    results: dict[str, dict] = {}
+    results: dict[str, dict[str, dict[str, float]]] = {}
 
     for overlap in overlap_range:
         if overlap >= tile_size:
@@ -531,6 +531,8 @@ def sweep_overlap_convergence(
             epe_result = cross_tile_epe_residual(
                 [t.tensor for t in tiles], cumulative_results, overlap=overlap
             )
+            mean_epe = epe_result["mean_epe"]
+            assert isinstance(mean_epe, float)
 
             # Measure contour residual
             contour_result = cross_tile_contour_residual(
@@ -539,7 +541,7 @@ def sweep_overlap_convergence(
 
             results[ol_key][str(n_iter)] = {
                 "seam_residual": consistency["boundary_mse"],
-                "epe": epe_result["mean_epe"],
+                "epe": mean_epe,
                 "contour_offset": contour_result["mean_contour_offset"],
                 "time": elapsed,
             }
@@ -552,7 +554,7 @@ def schwarz_vs_naive_comparison(
     tile_size: int,
     overlap: int,
     n_schwarz_iter: int = 5,
-    forward_fn: Callable | None = None,
+    forward_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
 ) -> dict[str, float]:
     """Compare Schwarz stitching vs naive zero-fill stitching.
 
@@ -579,7 +581,7 @@ def schwarz_vs_naive_comparison(
     if forward_fn is None:
         from openlithohub._utils.forward_model import simulate_aerial_image
 
-        def forward_fn(tile: torch.Tensor) -> torch.Tensor:  # type: ignore[misc]
+        def forward_fn(tile: torch.Tensor) -> torch.Tensor:
             return simulate_aerial_image(tile, sigma_px=2.0)
 
     if mask.ndim > 2:
@@ -624,7 +626,7 @@ def schwarz_vs_naive_comparison(
 def _run_schwarz_iteration(
     tiles: list[Tile],
     current_results: list[torch.Tensor],
-    forward_fn: Callable,
+    forward_fn: Callable[[torch.Tensor], torch.Tensor],
     overlap: int,
 ) -> list[torch.Tensor]:
     """Run one Schwarz iteration: exchange boundaries, then apply forward_fn."""

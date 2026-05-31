@@ -145,7 +145,8 @@ class PosteriorWarmStart(nn.Module):
         """Encode (target, mask) pair to latent distribution parameters."""
         t4 = self._ensure_4d(target)
         m4 = self._ensure_4d(mask)
-        return self.encoder(t4, m4)
+        result: tuple[torch.Tensor, torch.Tensor] = self.encoder(t4, m4)
+        return result
 
     def decode(self, z: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Decode latent + target -> mask."""
@@ -153,7 +154,7 @@ class PosteriorWarmStart(nn.Module):
         batch_size = z.shape[0]
         if t4.shape[0] == 1 and batch_size > 1:
             t4 = t4.expand(batch_size, -1, -1, -1)
-        mask_4d = self.decoder(z, t4)
+        mask_4d: torch.Tensor = self.decoder(z, t4)
         return mask_4d.squeeze(1)
 
     def forward(self, target: torch.Tensor) -> torch.Tensor:
@@ -231,7 +232,7 @@ class PosteriorWarmStart(nn.Module):
             for tgt, msk in zip(targets, masks, strict=False):
                 optimizer.zero_grad()
                 loss = self.loss(tgt, msk)
-                loss.backward()
+                loss.backward()  # type: ignore[no-untyped-call]
                 optimizer.step()
                 epoch_loss += loss.item()
             losses.append(epoch_loss)
@@ -283,7 +284,7 @@ class BatchILTScheduler:
         candidates: list[torch.Tensor],
         target: torch.Tensor,
         top_k: int = 1,
-    ) -> dict:
+    ) -> dict[str, object]:
         """Refine all candidates, score, return top_k.
 
         Args:

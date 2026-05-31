@@ -426,4 +426,4 @@ def _shift_kernel(
 
     cropped = shifted_full[r_lo:r_hi, c_lo:c_hi]
 
-    return cropped.unsqueeze(0).unsqueeze(0)
+    return cropped.unsqueeze(0).unsqueeze(0)  # type: ignore[no-any-return]

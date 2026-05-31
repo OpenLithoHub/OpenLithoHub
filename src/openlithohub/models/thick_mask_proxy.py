@@ -49,7 +49,7 @@ class ThickMaskProxy(nn.Module):
 
         t_map = thickness_param.unsqueeze(-1).unsqueeze(-1).expand_as(mask)
         x = torch.cat([mask, t_map], dim=1)
-        return self.unet(x)
+        return self.unet(x)  # type: ignore[no-any-return]
 
     def train_from_born(
         self,

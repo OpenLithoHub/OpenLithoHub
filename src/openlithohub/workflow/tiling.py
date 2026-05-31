@@ -195,7 +195,7 @@ def tiled_ilt_with_consistency(
     ilt_fn: Callable[[torch.Tensor], torch.Tensor],
     overlap: int = 16,
     n_iterations: int = 10,
-) -> dict:
+) -> dict[str, object]:
     """Run tiled ILT and measure cross-tile consistency.
 
     Partitions ``mask`` into tiles, applies ``ilt_fn`` independently to each
@@ -259,7 +259,7 @@ def schwarz_tiled_ilt(
     n_schwarz_iters: int = 3,
     n_inner_iters: int = 5,
     convergence_tol: float = 1e-3,
-) -> dict:
+) -> dict[str, object]:
     """Schwarz alternating iteration for tiled ILT.
 
     After each round of per-tile ILT optimization, the overlap regions are

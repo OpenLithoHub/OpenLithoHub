@@ -148,6 +148,7 @@ ignore = ["B008", "B027", "A002"]
 # fixed argv built from operator-supplied paths; rule_based pattern synth
 # uses random.Random for deterministic seeding, not crypto.
 "src/openlithohub/_utils/optics.py" = ["S101"]
+"src/openlithohub/_utils/resist_physics.py" = ["S101"]
 "src/openlithohub/cli/optimize_cmd.py" = ["S101"]
 "src/openlithohub/data/asap7.py" = ["S603", "S607"]
 "src/openlithohub/data/freepdk45.py" = ["S603", "S607"]
@@ -178,7 +179,7 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "tomli.*", "onnxscript.*", "fastapi", "fastapi.*", "uvicorn", "gdown", "multivolumefile", "py7zr", "pyarrow", "pyarrow.*"]
+module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "tomli.*", "onnxscript.*", "fastapi", "fastapi.*", "uvicorn", "gdown", "multivolumefile", "py7zr", "pyarrow", "pyarrow.*", "PIL", "PIL.*", "yaml", "yaml.*", "diff_surrogate", "diff_surrogate.*"]
 ignore_missing_imports = true
 
 # server/app.py uses fastapi decorators which mypy flags as untyped when
