@@ -1,5 +1,12 @@
 """Benchmark metrics for computational lithography evaluation."""
 
+from openlithohub.benchmark.metrics.coverage_gate import (
+    CoverageResult,
+    ProcessWindowPlotter,
+    StochasticAcceptanceGate,
+    StochasticSampler,
+    ThroughFocusCoverageCalibrator,
+)
 from openlithohub.benchmark.metrics.epe import compute_epe, compute_wafer_epe
 from openlithohub.benchmark.metrics.euv_3d import (
     Mask3DParams,
@@ -33,13 +40,6 @@ from openlithohub.benchmark.metrics.stochastic_loss import (
     differentiable_edge_error,
     differentiable_lcdu,
     quantile_loss,
-)
-from openlithohub.benchmark.metrics.coverage_gate import (
-    CoverageResult,
-    ProcessWindowPlotter,
-    StochasticAcceptanceGate,
-    StochasticSampler,
-    ThroughFocusCoverageCalibrator,
 )
 from openlithohub.benchmark.metrics.tiling_consistency import (
     cross_tile_contour_residual,

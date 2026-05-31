@@ -8,7 +8,7 @@ References:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import cast
 
 import torch
 import torch.nn as nn
@@ -52,7 +52,7 @@ class StyleConditioning(nn.Module):
         purpose_id = torch.tensor([self._PURPOSE_VOCAB.get(purpose_name, self._UNKNOWN_IDX)])
         le = self.layer_embed(layer_id)
         pe = self.purpose_embed(purpose_id)
-        return self.proj(torch.cat([le, pe], dim=-1)).squeeze(0)
+        return cast(torch.Tensor, self.proj(torch.cat([le, pe], dim=-1)).squeeze(0))
 
 
 class GRPOWarmStart(nn.Module):
@@ -60,8 +60,8 @@ class GRPOWarmStart(nn.Module):
 
     def __init__(
         self,
-        vae: Optional[PosteriorWarmStart] = None,
-        config: Optional[GRPOConfig] = None,
+        vae: PosteriorWarmStart | None = None,
+        config: GRPOConfig | None = None,
         style_embed_dim: int = 16,
     ) -> None:
         super().__init__()
@@ -73,7 +73,7 @@ class GRPOWarmStart(nn.Module):
     def generate_group(
         self,
         target: torch.Tensor,
-        layer_purpose: Optional[LayerPurpose] = None,
+        layer_purpose: LayerPurpose | None = None,
     ) -> list[torch.Tensor]:
         """Generate group_size candidates for the same target."""
         candidates: list[torch.Tensor] = []
@@ -111,7 +111,7 @@ class GRPOWarmStart(nn.Module):
 
     def style_aware_conditioning(self, layer_purpose: LayerPurpose) -> torch.Tensor:
         """Return conditioning vector from LayerPurpose."""
-        return self.style_conditioning(layer_purpose)
+        return cast(torch.Tensor, self.style_conditioning(layer_purpose))
 
     def _compute_log_prob(
         self,
@@ -129,8 +129,8 @@ class GRPOWarmStart(nn.Module):
         self,
         target: torch.Tensor,
         scorer: CandidateScorer,
-        layer_purpose: Optional[LayerPurpose] = None,
-        ilt_reference: Optional[torch.Tensor] = None,
+        layer_purpose: LayerPurpose | None = None,
+        ilt_reference: torch.Tensor | None = None,
     ) -> dict[str, float]:
         """One GRPO update step."""
         self.vae.train()
@@ -154,7 +154,10 @@ class GRPOWarmStart(nn.Module):
 
         ratio = torch.exp(log_probs_new - log_probs_old)
         surr1 = ratio * advantages
-        surr2 = torch.clamp(ratio, 1.0 - self.config.clip_ratio, 1.0 + self.config.clip_ratio) * advantages
+        surr2 = (
+            torch.clamp(ratio, 1.0 - self.config.clip_ratio, 1.0 + self.config.clip_ratio)
+            * advantages
+        )
         policy_loss = -torch.min(surr1, surr2).mean()
 
         # Entropy bonus (exploration)
@@ -171,7 +174,7 @@ class GRPOWarmStart(nn.Module):
         for p in self.vae.parameters():
             if p.grad is not None:
                 p.grad.zero_()
-        loss.backward()
+        loss.backward()  # type: ignore[no-untyped-call]
 
         with torch.no_grad():
             for p in self.vae.parameters():
@@ -191,8 +194,8 @@ class GRPOWarmStart(nn.Module):
         targets: list[torch.Tensor],
         scorer: CandidateScorer,
         n_epochs: int = 10,
-        layer_purposes: Optional[list[Optional[LayerPurpose]]] = None,
-        ilt_references: Optional[list[Optional[torch.Tensor]]] = None,
+        layer_purposes: list[LayerPurpose | None] | None = None,
+        ilt_references: list[torch.Tensor | None] | None = None,
     ) -> list[dict[str, float]]:
         """Full GRPO training loop."""
         lps = layer_purposes if layer_purposes is not None else [None] * len(targets)
@@ -209,8 +212,8 @@ class GRPOWarmStart(nn.Module):
         self,
         target: torch.Tensor,
         n_attempts: int = 16,
-        baseline_model: Optional[PosteriorWarmStart] = None,
-        scorer: Optional[CandidateScorer] = None,
+        baseline_model: PosteriorWarmStart | None = None,
+        scorer: CandidateScorer | None = None,
     ) -> dict[str, object]:
         """Compare with VAE-only baseline on escaping local optima."""
         if scorer is None:

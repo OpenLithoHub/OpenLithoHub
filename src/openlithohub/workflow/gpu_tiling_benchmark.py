@@ -14,8 +14,7 @@ results with honest performance annotations.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 import torch
 
@@ -23,8 +22,6 @@ from openlithohub.benchmark.metrics.tiling_consistency import (
     tile_boundary_consistency,
 )
 from openlithohub.workflow.tiling import (
-    Tile,
-    stitch_tiles,
     tile_layout,
 )
 
@@ -335,10 +332,7 @@ class ICCAD13Benchmark:
         for dim in range(2):
             n = binary.shape[dim]
             for i in range(n):
-                if dim == 0:
-                    run = _min_run_length(binary[i, :])
-                else:
-                    run = _min_run_length(binary[:, i])
+                run = _min_run_length(binary[i, :]) if dim == 0 else _min_run_length(binary[:, i])
                 if run > 0:
                     min_width = min(min_width, run)
         return min_width if min_width != float("inf") else 0.0

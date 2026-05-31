@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import torch
 import pytest
+import torch
 
 from openlithohub.workflow.gpu_tiling_benchmark import (
     GPUTileBatchProcessor,
@@ -12,7 +12,6 @@ from openlithohub.workflow.gpu_tiling_benchmark import (
     TileBatchResult,
     TilingResidualRegression,
 )
-
 
 # ---------------------------------------------------------------------------
 # TileBatchConfig
@@ -76,8 +75,12 @@ class TestGPUTileBatchProcessor:
 
     def test_benchmark_scalability_runs_multiple_configs(self):
         configs = [
-            TileBatchConfig(tile_size=32, overlap=4, n_tiles_x=2, n_tiles_y=2, n_schwarz_iterations=1),
-            TileBatchConfig(tile_size=32, overlap=4, n_tiles_x=3, n_tiles_y=3, n_schwarz_iterations=1),
+            TileBatchConfig(
+                tile_size=32, overlap=4, n_tiles_x=2, n_tiles_y=2, n_schwarz_iterations=1
+            ),
+            TileBatchConfig(
+                tile_size=32, overlap=4, n_tiles_x=3, n_tiles_y=3, n_schwarz_iterations=1
+            ),
         ]
         proc = GPUTileBatchProcessor(seed=0)
         results = proc.benchmark_scalability(configs)

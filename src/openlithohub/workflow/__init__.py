@@ -12,19 +12,19 @@ from openlithohub.workflow.full_chip_tiling import (
     TileBenchmarkReport,
     TileParallelProcessor,
 )
-from openlithohub.workflow.gpu_tiling_benchmark import (
-    GPUTileBatchProcessor,
-    ICCAD13Benchmark,
-    TileBatchConfig,
-    TileBatchResult,
-    TilingResidualRegression,
-)
 from openlithohub.workflow.gauges import (
     GaugePoint,
     GaugeTable,
     parse_gauge,
     parse_iccad13_gauge,
     write_iccad13_gauge,
+)
+from openlithohub.workflow.gpu_tiling_benchmark import (
+    GPUTileBatchProcessor,
+    ICCAD13Benchmark,
+    TileBatchConfig,
+    TileBatchResult,
+    TilingResidualRegression,
 )
 from openlithohub.workflow.halo import DEFAULT_HALO_PX, compute_halo_px, describe_halo
 from openlithohub.workflow.layer_purpose import (

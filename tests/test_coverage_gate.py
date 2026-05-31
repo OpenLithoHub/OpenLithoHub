@@ -12,7 +12,6 @@ from openlithohub.benchmark.metrics.coverage_gate import (
     ThroughFocusCoverageCalibrator,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

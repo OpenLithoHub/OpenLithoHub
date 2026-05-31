@@ -8,7 +8,6 @@ References:
 """
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -226,8 +225,10 @@ class ThroughFocusCoverageCalibrator:
             max_score = 0.0
             for fi in range(self.n_focus_points):
                 defocus_nm = self.focus_range_nm[0] + fi * focus_step
-                focus_half = abs(self.focus_range_nm[1] - self.focus_range_nm[0]) / 2.0
-                focus_range = (-abs(defocus_nm), abs(defocus_nm)) if abs(defocus_nm) > 0 else (-0.01, 0.01)
+                abs_defocus = abs(defocus_nm)
+                focus_range = (
+                    (-abs_defocus, abs_defocus) if abs_defocus > 0 else (-0.01, 0.01)
+                )
 
                 epe_samples = self.sampler.sample_epe(
                     mask,

@@ -14,7 +14,6 @@ from openlithohub.models.posterior_warm_start import PosteriorWarmStart
 from openlithohub.models.warm_start import CandidateScorer
 from openlithohub.workflow.layer_purpose import LayerPurpose
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -161,7 +160,7 @@ class TestGRPOStep:
         grpo.grpo_step(target, scorer)
         any_changed = any(
             not torch.equal(p, pb)
-            for p, pb in zip(grpo.vae.parameters(), params_before)
+            for p, pb in zip(grpo.vae.parameters(), params_before, strict=True)
         )
         assert any_changed, "GRPO step did not update any parameters"
 
@@ -296,7 +295,9 @@ class TestEvaluateEscape:
 
 
 class TestIntegration:
-    def test_grpo_output_compatible_with_scorer(self, target: torch.Tensor, scorer: CandidateScorer) -> None:
+    def test_grpo_output_compatible_with_scorer(
+        self, target: torch.Tensor, scorer: CandidateScorer
+    ) -> None:
         grpo = GRPOWarmStart()
         candidates = grpo.generate_group(target)
         for c in candidates:
@@ -313,5 +314,5 @@ class TestIntegration:
         grpo2 = GRPOWarmStart()
         masks2 = grpo2.generate_group(target)
 
-        for m1, m2 in zip(masks1, masks2):
+        for m1, m2 in zip(masks1, masks2, strict=True):
             assert torch.allclose(m1, m2)
