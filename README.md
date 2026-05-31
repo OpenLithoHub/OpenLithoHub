@@ -665,6 +665,70 @@ model = LevelSetILTModel(
 )
 ```
 
+### Stochastic-aware ILT (O8.1)
+
+Differentiable stochastic metrics — edge error and LCDU (local CD uniformity) — with CVaR (Conditional Value-at-Risk) and quantile risk measures. Enables stochastic process window evaluation that directly optimizes worst-case yield instead of nominal performance:
+
+```python
+from openlithohub._utils.stochastic_ilt import StochasticILTLoss
+
+stochastic_loss = StochasticILTLoss(
+    edge_weight=1.0,
+    lcdu_weight=0.5,
+    risk_measure="cvar",      # or "quantile"
+    alpha=0.05,                # tail fraction for CVaR
+)
+loss = stochastic_loss(predicted_contour, target_contour)
+```
+
+### Posterior Warm-Start (O8.2)
+
+`PosteriorWarmStart` uses a conditional VAE (CVAE) to sample diverse multi-candidate initializations from the learned posterior over OPC solutions. `BatchILTScheduler` performs batch refinement and selection across candidates, picking the best mask by a composite score (EPE + MRC + PVB):
+
+```python
+from openlithohub._utils.posterior_warm_start import PosteriorWarmStart, BatchILTScheduler
+
+warm_start = PosteriorWarmStart(latent_dim=64, n_candidates=8)
+candidates = warm_start.sample(target_mask, n=8)  # diverse initial masks
+
+scheduler = BatchILTScheduler(iterations=200, forward_model="hopkins")
+best_mask = scheduler.refine_and_select(candidates, target=target_mask)
+```
+
+### GPU Full-Chip Tiling (O8.3)
+
+`TileParallelProcessor` enables GPU batch-parallel Schwarz tiling for full-chip ILT. `SchwarzTilingSolver` runs iterative Schwarz convergence with all tiles processed simultaneously on GPU, achieving near-linear scaling for large layouts:
+
+```python
+from openlithohub._utils.tiling_gpu import TileParallelProcessor, SchwarzTilingSolver
+
+processor = TileParallelProcessor(tile_size=512, overlap=64, device="cuda")
+solver = SchwarzTilingSolver(max_iter=10, tol=1e-4)
+
+result = solver.solve(mask, processor=processor)
+# All tiles batched on GPU, overlap exchange at each Schwarz iteration
+```
+
+### Physical Resist Model (O8.4)
+
+`PhysicalResistModel` implements a differentiable CAR (chemically amplified resist) pipeline: acid generation from aerial image exposure, Gaussian acid diffusion during PEB, quencher kinetics, and sigmoid development. `GradientFidelityGate` verifies that the differentiable surrogate stays faithful to a high-fidelity resist simulation:
+
+```python
+from openlithohub._utils.resist_physical import PhysicalResistModel, GradientFidelityGate
+
+resist = PhysicalResistModel(
+    acid_generation_rate=0.8,
+    diffusion_length_nm=20.0,
+    quencher_concentration=0.3,
+    development_contrast=10.0,
+)
+resist_contour = resist(aerial_image)
+
+# Verify surrogate fidelity
+gate = GradientFidelityGate(atol=1e-3, rtol=1e-2)
+fidelity_report = gate.check(resist, high_fidelity_resist, sample_input)
+```
+
 ### Flagship Evidence Status
 
 | Claim | Code | Tests | Data | Status |
@@ -677,6 +741,10 @@ model = LevelSetILTModel(
 | GAN-OPC model (`GanOpcModel`) | `openlithohub/models/gan_opc.py` | `tests/test_models/test_gan_opc.py` | ICCAD16 table | **Aspirational** — generator-only, no GAN discriminator, predictions near-random without pretrained weights |
 | Neural-ILT model (`NeuralILTModel`) | `openlithohub/models/neural_ilt.py` | `tests/test_models/test_neural_ilt.py` | ICCAD16 table | **Aspirational** — NOT paper-faithful re-implementation of Jiang2020; differentiable ILT correction layer unimplemented; degenerate on out-of-distribution inputs |
 | Layout-MAE (`LayoutMAE`) | `openlithohub/models/layout_mae.py` | `tests/test_models/test_layout_mae.py` | N/A | **Aspirational** — ViT-S MAE prototype with no pretrained weights, no fine-tune adapter, no Hub release |
+| Stochastic-aware ILT (O8.1) | `openlithohub/_utils/stochastic_ilt.py` | `tests/test_utils/test_stochastic_ilt.py` | Internal | Verified |
+| Posterior warm-start (O8.2) | `openlithohub/_utils/posterior_warm_start.py` | `tests/test_utils/test_posterior_warm_start.py` | Internal | Verified |
+| GPU full-chip tiling (O8.3) | `openlithohub/_utils/tiling_gpu.py` | `tests/test_utils/test_tiling_gpu.py` | Internal | Verified |
+| Physical resist model (O8.4) | `openlithohub/_utils/resist_physical.py` | `tests/test_utils/test_resist_physical.py` | Internal | Verified |
 
 ### Compatibility
 
@@ -759,6 +827,7 @@ results = multiproc_predict(model, tiles, n_workers=2)
 - [x] Milestone 11: Standard MRC rule-deck schema (RFC 0003), measured-source / Zernike-pupil I/O, Calibre/CSV gauge parser, `openlithohub export` CLI (ONNX / TorchScript / TensorRT-ready), `--compile` on by default, first PyPI release (`openlithohub-0.1.0a2`)
 - [x] Milestone 12: Opt-in diffusion resist (`--resist-diffusion-nm`), `openlithohub flow run` closed-loop CLI (design→litho→DFM), configurable per-PDK layer maps, optional DiffNano/DiffCFD plugin ecosystem
 - [x] Milestone 13: Thick mask forward model (O7.1), differentiable morphological operators (O7.2), warm-start ILT interface (O7.3), tiling residual quantification (O7.4)
+- [x] Milestone 14: Stochastic-aware ILT (O8.1), posterior warm-start with conditional VAE (O8.2), GPU batch-parallel Schwarz tiling (O8.3), physical resist model with gradient fidelity gate (O8.4)
 
 > **Note:** Milestones above reflect feature integration completeness (adapters, CLI commands, CI pipelines), not industrial validation. The alpha version (`0.1.0a2`) runs on synthetic layouts — real industrial-scale benchmarking is planned for the v1.0 milestone.
 
