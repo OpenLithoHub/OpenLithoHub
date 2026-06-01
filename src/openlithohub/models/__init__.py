@@ -17,6 +17,16 @@ from openlithohub.models.bayesian_stochastic import (
     StochasticUNet,
     generate_synthetic_ground_truth,
 )
+from openlithohub.models.curvilinear_ilt import (
+    AdjointGuidance,
+    CurvilinearILTBenchmark,
+    CurvilinearILTConfig,
+    CurvilinearMaskILT,
+    CurvilinearMaskRepresentation,
+    ProcessWindowConfig,
+    ProcessWindowOptimizer,
+    ShotCountPareto,
+)
 from openlithohub.models.diffusion_mask import (
     DiffusionMaskBenchmark,
     DiffusionMaskConfig,
@@ -58,6 +68,14 @@ from openlithohub.models.resist_stochastic_3d import (
 from openlithohub.models.vae_benchmark import VAEBenchmark
 
 __all__ = [
+    "AdjointGuidance",
+    "CurvilinearILTBenchmark",
+    "CurvilinearILTConfig",
+    "CurvilinearMaskILT",
+    "CurvilinearMaskRepresentation",
+    "ProcessWindowConfig",
+    "ProcessWindowOptimizer",
+    "ShotCountPareto",
     "AnamorphicImaging",
     "AnamorphicParams",
     "AnamorphicSMOBenchmark",
