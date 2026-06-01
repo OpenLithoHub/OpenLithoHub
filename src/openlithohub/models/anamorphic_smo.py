@@ -874,7 +874,7 @@ class PolarizationState:
         if not (0.0 <= self.tm_weight <= 1.0):
             raise ValueError(f"tm_weight must be in [0, 1], got {self.tm_weight}")
 
-    def contrast_factor(self, na: float, wavelength_nm: float = 13.5) -> float:
+    def contrast_factor(self, na: float, wavelength_nm: float = _WAVELENGTH_EUV_NM) -> float:
         """Compute the polarisation-dependent contrast factor.
 
         At high NA the vector-image contrast depends on polarization.
@@ -964,7 +964,7 @@ class TripleBeamIllumination:
         polarization: PolarizationState | None = None,
         pitch_nm: float = 32.0,
         pixel_size_nm: float = 1.0,
-        wavelength_nm: float = 13.5,
+        wavelength_nm: float = _WAVELENGTH_EUV_NM,
         na: float = 0.55,
     ) -> None:
         self.polarization = polarization or PolarizationState()
