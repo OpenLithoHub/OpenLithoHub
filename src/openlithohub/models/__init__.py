@@ -3,9 +3,13 @@
 from openlithohub.models.anamorphic_smo import (
     AnamorphicImaging,
     AnamorphicParams,
-    AnamorphicSMOBenchmark,
     AnamorphicSMO,
+    AnamorphicSMOBenchmark,
+    HalfFieldStitching,
+    PolarizationState,
     ShotCountCost,
+    StitchingAwareSMO,
+    TripleBeamIllumination,
 )
 from openlithohub.models.base import LithographyModel, PredictionResult
 from openlithohub.models.bayesian_stochastic import (
@@ -41,11 +45,14 @@ from openlithohub.models.resist_pinn import (
 )
 from openlithohub.models.resist_stochastic_3d import (
     BenchmarkResult3D,
+    CalibrationReport,
     ConformalCoverageGate3D,
     CoverageMetrics,
+    DefectClusterMetrics,
     ResistProfile3D,
     SecondaryElectronKernel,
     Stochastic3DBenchmark,
+    StochasticCalibrationMetrics,
     StochasticDefectModel3D,
 )
 from openlithohub.models.vae_benchmark import VAEBenchmark
@@ -55,7 +62,11 @@ __all__ = [
     "AnamorphicParams",
     "AnamorphicSMOBenchmark",
     "AnamorphicSMO",
+    "HalfFieldStitching",
+    "PolarizationState",
     "ShotCountCost",
+    "StitchingAwareSMO",
+    "TripleBeamIllumination",
     "LithographyModel",
     "PredictionResult",
     "ModelRegistry",
@@ -92,4 +103,7 @@ __all__ = [
     "Stochastic3DBenchmark",
     "BenchmarkResult3D",
     "CoverageMetrics",
+    "DefectClusterMetrics",
+    "StochasticCalibrationMetrics",
+    "CalibrationReport",
 ]

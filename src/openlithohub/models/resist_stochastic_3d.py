@@ -5,15 +5,22 @@ Models through-thickness stochastic variation in EUV resist exposure by combinin
   - 3D resist profile (thickness dimension) with line-collapse risk analysis
   - Full 3D stochastic defect simulation with Monte Carlo trials
   - Conformal coverage-calibrated acceptance gate
+  - Beyond-LER/LCDU stochastic metrics: failure correlation length, defect
+    cluster distribution, and stochastic edge placement error quantiles
 
 References:
     - Fukuda et al., "Spatial correlation probability model for EUV stochastic
       analysis", Proc. SPIE 11147 (2019).
     - imec EUV Accelerator program, 2025-2026 stochastic defectivity roadmap.
+    - Siemens Calibre, "Calibration and verification metrics for EUVL stochastic
+      models: beyond LER and LCDU", Proc. SPIE 2026.
+    - IBM, "demonstrates High-NA EUV below 2 nm nodes at SPIE 2026",
+      research.ibm.com, 2026-02.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,6 +37,8 @@ __all__ = [
     "StochasticDefectModel3D",
     "ConformalCoverageGate3D",
     "Stochastic3DBenchmark",
+    "DefectClusterMetrics",
+    "StochasticCalibrationMetrics",
 ]
 
 
@@ -278,7 +287,9 @@ class ResistProfile3D:
 
         # Sigmoid risk: low below aspect_ratio_limit, rising steeply above
         steepness = 5.0
-        risk = 1.0 / (1.0 + torch.exp(torch.tensor(-steepness * (aspect_ratio - self.aspect_ratio_limit))))
+        risk = 1.0 / (
+            1.0 + torch.exp(torch.tensor(-steepness * (aspect_ratio - self.aspect_ratio_limit)))
+        )
         return risk.item()
 
     def compute_lcdu_3d(self, profile_3d: torch.Tensor) -> torch.Tensor:
@@ -452,7 +463,10 @@ class StochasticDefectModel3D:
             # Poisson noise at each depth
             lambda_3d = aerial_3d_nominal.clamp(min=0.0) * dose_scale
             white_noise = torch.randn(
-                lambda_3d.shape, generator=generator, device=lambda_3d.device, dtype=lambda_3d.dtype,
+                lambda_3d.shape,
+                generator=generator,
+                device=lambda_3d.device,
+                dtype=lambda_3d.dtype,
             )
             # Spatial correlation applied slice-by-slice for memory efficiency
             correlated_noise = torch.zeros_like(lambda_3d)
@@ -474,10 +488,8 @@ class StochasticDefectModel3D:
                 # Rescale to match original statistics
                 if correlated.std() > 1e-8:
                     correlated = (
-                        (correlated - correlated.mean()) / correlated.std()
-                        * noised_2d.std()
-                        + noised_2d.mean()
-                    )
+                        correlated - correlated.mean()
+                    ) / correlated.std() * noised_2d.std() + noised_2d.mean()
                 correlated_noise[z] = correlated.clamp(min=0.0)
 
             # Apply resist threshold at each depth
@@ -577,7 +589,9 @@ class StochasticDefectModel3D:
 
             aerial = simulate_aerial_image(binary, sigma_px=sigma_eff, dose=1.0)
             nominal_resist = apply_resist_threshold(
-                aerial, threshold=THRESHOLD_ICCAD16, pixel_size_nm=self.resist.pixel_size_nm,
+                aerial,
+                threshold=THRESHOLD_ICCAD16,
+                pixel_size_nm=self.resist.pixel_size_nm,
             )
 
             lambda_map = aerial.clamp(min=0.0) * dose_scale
@@ -670,7 +684,7 @@ class ConformalCoverageGate3D:
         # Flatten spatial dims for conformal calibration
         cal_preds_list = []
         cal_targets_list = []
-        for m, gt in zip(masks, ground_truth_defects):
+        for m, gt in zip(masks, ground_truth_defects, strict=False):
             # Use mean defect rate as the scalar prediction per mask
             cal_preds_list.append(m.flatten().float().mean().unsqueeze(0))
             cal_targets_list.append(gt.flatten().float().mean().unsqueeze(0))
@@ -715,7 +729,9 @@ class ConformalCoverageGate3D:
         if self._predictor is not None:
             lower, upper = self._predictor.predict(pred_mean)
             achieved_coverage = coverage_score(actual_mean, lower, upper, alpha=self.alpha)
-            cov_value = achieved_coverage.get("coverage", float(actual_mean >= lower and actual_mean <= upper))
+            cov_value = achieved_coverage.get(
+                "coverage", float(actual_mean >= lower and actual_mean <= upper)
+            )
         else:
             # Fallback: simple interval around prediction
             bandwidth = max((predicted_defects.flatten().float().std().item(), 0.01))
@@ -794,7 +810,8 @@ class ConformalCoverageGate3D:
             sigma_eff = sigma_px * (1.0 + (defocus_nm / 100.0) ** 2) ** 0.5
             aerial = simulate_aerial_image(binary, sigma_px=sigma_eff, dose=1.0)
             nominal_resist = apply_resist_threshold(
-                aerial, threshold=THRESHOLD_ICCAD16,
+                aerial,
+                threshold=THRESHOLD_ICCAD16,
                 pixel_size_nm=pixel_size_nm,
             )
 
@@ -907,7 +924,7 @@ class Stochastic3DBenchmark:
         test_masks = self._make_test_masks()
         results = []
 
-        for label, mask in test_masks:
+        for _label, mask in test_masks:
             defect_rates_3d = []
             defect_rates_2d = []
             collapse_risks = []
@@ -939,11 +956,15 @@ class Stochastic3DBenchmark:
                     pixel_size_nm=self.resist.pixel_size_nm,
                     seed=seed,
                 )
-                defect_rate_2d = (robustness["bridge_probability"] + robustness["break_probability"]) / 2.0
+                defect_rate_2d = (
+                    robustness["bridge_probability"] + robustness["break_probability"]
+                ) / 2.0
                 defect_rates_2d.append(defect_rate_2d)
 
                 # Coverage calibration (synthetic: use self-consistency)
-                cov_3d_list.append(1.0 - abs(defect_rate_3d - defect_rate_2d) / max(defect_rate_2d, 1e-6))
+                cov_3d_list.append(
+                    1.0 - abs(defect_rate_3d - defect_rate_2d) / max(defect_rate_2d, 1e-6)
+                )
                 cov_2d_list.append(1.0)
 
             mean_3d = sum(defect_rates_3d) / n_seeds
@@ -953,15 +974,17 @@ class Stochastic3DBenchmark:
             # Monotonicity: collapse risk should increase as CD decreases
             # (checked externally by the caller comparing all results)
 
-            results.append(BenchmarkResult3D(
-                model_3d_defect_rate=mean_3d,
-                model_2d_defect_rate=mean_2d,
-                defect_rate_diff=mean_3d - mean_2d,
-                model_3d_line_collapse_risk=mean_collapse,
-                coverage_calibration_3d=max(0.0, min(1.0, sum(cov_3d_list) / n_seeds)),
-                coverage_calibration_2d=max(0.0, min(1.0, sum(cov_2d_list) / n_seeds)),
-                monotonicity_check=True,  # Placeholder; validated by test
-            ))
+            results.append(
+                BenchmarkResult3D(
+                    model_3d_defect_rate=mean_3d,
+                    model_2d_defect_rate=mean_2d,
+                    defect_rate_diff=mean_3d - mean_2d,
+                    model_3d_line_collapse_risk=mean_collapse,
+                    coverage_calibration_3d=max(0.0, min(1.0, sum(cov_3d_list) / n_seeds)),
+                    coverage_calibration_2d=max(0.0, min(1.0, sum(cov_2d_list) / n_seeds)),
+                    monotonicity_check=True,  # Placeholder; validated by test
+                )
+            )
 
         # Check monotonicity: collapse risk should increase as CD decreases
         risks = [r.model_3d_line_collapse_risk for r in results]
@@ -984,3 +1007,402 @@ class Stochastic3DBenchmark:
             ]
 
         return results
+
+
+# ---------------------------------------------------------------------------
+# Beyond-LER / LCDU stochastic metrics
+# ---------------------------------------------------------------------------
+#
+# Siemens Calibre SPIE 2026 proposes calibration metrics that go beyond
+# traditional LER (line-edge roughness) and LCDU (local CD uniformity):
+#   - Failure correlation length: spatial scale over which stochastic
+#     failures are correlated, indicating clustering of defects.
+#   - Defect cluster distribution: histogram of contiguous defect cluster
+#     sizes, characterising the tail of large-cluster events.
+#   - Stochastic EPE quantile: the edge placement error at a given
+#     statistical quantile across an ensemble of stochastic trials.
+# ---------------------------------------------------------------------------
+
+
+class DefectClusterMetrics:
+    """Beyond-LER/LCDU stochastic metrics for EUV defect analysis.
+
+    Provides spatial-statistical metrics that characterise stochastic
+    defectivity more richly than scalar LER or LCDU:
+      - Failure correlation length: autocorrelation decay distance.
+      - Defect cluster size distribution: connected-component statistics.
+      - Stochastic EPE quantile: edge placement error at a quantile.
+
+    Parameters
+    ----------
+    pixel_size_nm : float
+        Physical pixel pitch in nanometres.
+    connectivity : int
+        Connectivity for connected-component labelling (4 or 8).
+    """
+
+    def __init__(
+        self,
+        pixel_size_nm: float = 1.0,
+        connectivity: int = 4,
+    ) -> None:
+        if pixel_size_nm <= 0.0:
+            raise ValueError(f"pixel_size_nm must be > 0, got {pixel_size_nm}")
+        if connectivity not in (4, 8):
+            raise ValueError(f"connectivity must be 4 or 8, got {connectivity}")
+        self.pixel_size_nm = pixel_size_nm
+        self.connectivity = connectivity
+
+    def failure_correlation_length(self, defect_map: torch.Tensor) -> float:
+        """Compute the spatial correlation length of failures.
+
+        Uses the 2D autocorrelation of the binary defect map and measures
+        the distance at which the autocorrelation drops to 1/e of its
+        peak value.  The correlation length is averaged over x and y
+        directions.
+
+        Parameters
+        ----------
+        defect_map : Tensor
+            ``(H, W)`` defect probability map or binary defect map.
+            Values are treated as-is (probability or 0/1).
+
+        Returns
+        -------
+        Correlation length in nm.  Returns 0.0 if the defect map is
+        uniform (no spatial structure).
+        """
+        d = ensure_2d(defect_map).float()
+        d = d - d.mean()
+
+        # Autocorrelation via FFT
+        d_fft = torch.fft.fft2(d)
+        autocorr = torch.fft.ifft2(d_fft * torch.conj(d_fft)).real
+        autocorr = torch.fft.fftshift(autocorr)
+
+        h, w = autocorr.shape
+        center_y, center_x = h // 2, w // 2
+        peak = autocorr[center_y, center_x].item()
+
+        if peak < 1e-12:
+            return 0.0
+
+        threshold = peak / math.e
+
+        # Measure correlation length along x
+        row = autocorr[center_y, :]
+        cx_left = 0
+        for i in range(center_x, -1, -1):
+            if row[i].item() < threshold:
+                cx_left = center_x - i
+                break
+        cx_right = 0
+        for i in range(center_x, w):
+            if row[i].item() < threshold:
+                cx_right = i - center_x
+                break
+        corr_x = (cx_left + cx_right) / 2.0
+
+        # Measure correlation length along y
+        col = autocorr[:, center_x]
+        cy_top = 0
+        for i in range(center_y, -1, -1):
+            if col[i].item() < threshold:
+                cy_top = center_y - i
+                break
+        cy_bottom = 0
+        for i in range(center_y, h):
+            if col[i].item() < threshold:
+                cy_bottom = i - center_y
+                break
+        corr_y = (cy_top + cy_bottom) / 2.0
+
+        # Average correlation length in pixels, convert to nm
+        corr_px = (corr_x + corr_y) / 2.0
+        return corr_px * self.pixel_size_nm
+
+    def defect_cluster_distribution(self, defect_map: torch.Tensor) -> dict[str, Any]:
+        """Compute the size distribution of defect clusters.
+
+        Connected-component analysis on the binarised defect map yields
+        a histogram of cluster sizes (in pixels).  This is useful for
+        detecting whether stochastic defects tend to cluster (indicating
+        spatial correlation) or are isolated (Poisson-like).
+
+        Parameters
+        ----------
+        defect_map : Tensor
+            ``(H, W)`` defect probability map.  Thresholded at 0.5 to
+            produce a binary defect mask.
+
+        Returns
+        -------
+        Dict with:
+        - ``n_clusters``: total number of defect clusters.
+        - ``cluster_sizes``: list of cluster sizes (pixels), sorted
+          descending.
+        - ``max_cluster_size``: size of the largest cluster.
+        - ``mean_cluster_size``: mean cluster size.
+        - ``size_histogram``: dict mapping size -> count.
+        """
+        d = ensure_2d(defect_map).float()
+        binary = (d > 0.5).float()
+
+        h, w = binary.shape
+        visited = torch.zeros(h, w, dtype=torch.bool)
+        cluster_sizes: list[int] = []
+
+        # Direction offsets for connectivity
+        if self.connectivity == 4:
+            offsets = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+        else:
+            offsets = [
+                (0, 1),
+                (0, -1),
+                (1, 0),
+                (-1, 0),
+                (1, 1),
+                (1, -1),
+                (-1, 1),
+                (-1, -1),
+            ]
+
+        # Flood-fill connected-component labelling
+        for y in range(h):
+            for x in range(w):
+                if binary[y, x] > 0.5 and not visited[y, x]:
+                    size = 0
+                    stack = [(y, x)]
+                    while stack:
+                        cy, cx = stack.pop()
+                        if cy < 0 or cy >= h or cx < 0 or cx >= w:
+                            continue
+                        if visited[cy, cx]:
+                            continue
+                        if binary[cy, cx] <= 0.5:
+                            continue
+                        visited[cy, cx] = True
+                        size += 1
+                        for dy, dx in offsets:
+                            ny, nx = cy + dy, cx + dx
+                            if 0 <= ny < h and 0 <= nx < w and not visited[ny, nx]:
+                                stack.append((ny, nx))
+                    cluster_sizes.append(size)
+
+        cluster_sizes.sort(reverse=True)
+
+        size_histogram: dict[int, int] = {}
+        for s in cluster_sizes:
+            size_histogram[s] = size_histogram.get(s, 0) + 1
+
+        return {
+            "n_clusters": len(cluster_sizes),
+            "cluster_sizes": cluster_sizes,
+            "max_cluster_size": max(cluster_sizes) if cluster_sizes else 0,
+            "mean_cluster_size": (
+                sum(cluster_sizes) / len(cluster_sizes) if cluster_sizes else 0.0
+            ),
+            "size_histogram": size_histogram,
+        }
+
+    def stochastic_epe_quantile(
+        self,
+        profile_ensemble: torch.Tensor,
+        alpha: float = 0.05,
+    ) -> dict[str, Any]:
+        """Compute stochastic edge placement error at a given quantile.
+
+        Measures the variation of the edge position across an ensemble of
+        stochastic trials and returns the alpha-quantile of the EPE
+        distribution.  This is a direct measure of worst-case (tail)
+        edge placement, complementing the mean LER metric.
+
+        Parameters
+        ----------
+        profile_ensemble : Tensor
+            ``(N, H, W)`` ensemble of N binary resist profiles from
+            stochastic trials.  Each trial is a 2D binary resist image.
+        alpha : float
+            Quantile level (e.g. 0.05 for the 5th percentile, or 0.95
+            for the 95th percentile).  Returns the absolute deviation
+            from the mean edge position at this quantile.
+
+        Returns
+        -------
+        Dict with:
+        - ``epe_quantile_nm``: the alpha-quantile of absolute EPE in nm.
+        - ``epe_mean_nm``: mean absolute EPE in nm.
+        - ``epe_std_nm``: standard deviation of absolute EPE in nm.
+        - ``n_trials``: number of stochastic trials used.
+        """
+        if profile_ensemble.ndim != 3:
+            raise ValueError(f"profile_ensemble must be 3D (N, H, W), got {profile_ensemble.ndim}D")
+        if not (0.0 < alpha < 1.0):
+            raise ValueError(f"alpha must be in (0, 1), got {alpha}")
+
+        n, h, w = profile_ensemble.shape
+
+        # For each trial, measure the edge position along each column.
+        # Edge = transition from 0->1 or 1->0 along rows (vertical edge).
+        edge_positions = []
+        for trial_idx in range(n):
+            trial = profile_ensemble[trial_idx].float()
+            # Compute horizontal gradient to find edges
+            grad_x = trial[:, 1:] - trial[:, :-1]
+            grad_x = F.pad(grad_x, (0, 1, 0, 0))  # (H, W)
+
+            # Edge pixels are where gradient magnitude is nonzero
+            edge_mask = grad_x.abs() > 0.5
+
+            if edge_mask.any():
+                # Mean edge x-position (weighted by gradient magnitude)
+                weights = grad_x.abs()
+                total_weight = weights.sum()
+                if total_weight > 1e-8:
+                    y_coords = torch.arange(h, dtype=torch.float32).unsqueeze(1).expand(h, w)
+                    x_coords = torch.arange(w, dtype=torch.float32).unsqueeze(0).expand(h, w)
+                    mean_y = (weights * y_coords).sum() / total_weight
+                    mean_x = (weights * x_coords).sum() / total_weight
+                    edge_positions.append((mean_y.item(), mean_x.item()))
+
+        if len(edge_positions) < 2:
+            return {
+                "epe_quantile_nm": 0.0,
+                "epe_mean_nm": 0.0,
+                "epe_std_nm": 0.0,
+                "n_trials": n,
+            }
+
+        # Compute per-trial EPE as distance from mean edge position
+        mean_pos_y = sum(p[0] for p in edge_positions) / len(edge_positions)
+        mean_pos_x = sum(p[1] for p in edge_positions) / len(edge_positions)
+
+        epe_values = []
+        for py, px in edge_positions:
+            dist = math.sqrt((py - mean_pos_y) ** 2 + (px - mean_pos_x) ** 2)
+            epe_values.append(dist)
+
+        epe_tensor = torch.tensor(epe_values)
+        quantile_val = torch.quantile(epe_tensor, alpha).item()
+        mean_val = epe_tensor.mean().item()
+        std_val = epe_tensor.std().item() if len(epe_values) > 1 else 0.0
+
+        return {
+            "epe_quantile_nm": quantile_val * self.pixel_size_nm,
+            "epe_mean_nm": mean_val * self.pixel_size_nm,
+            "epe_std_nm": std_val * self.pixel_size_nm,
+            "n_trials": n,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Stochastic calibration metrics (combining all beyond-LER metrics)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CalibrationReport:
+    """Aggregated stochastic calibration report."""
+
+    failure_corr_length_nm: float
+    n_defect_clusters: int
+    max_cluster_size: int
+    mean_cluster_size: float
+    epe_quantile_nm: float
+    epe_mean_nm: float
+    epe_std_nm: float
+    conformal_coverage: float
+    conformal_verdict: str
+
+
+class StochasticCalibrationMetrics:
+    """Combines all beyond-LER stochastic metrics and validates via conformal coverage.
+
+    Provides a single entry point to compute DefectClusterMetrics and
+    validate the resulting predictions through the
+    :class:`ConformalCoverageGate3D` coverage gate.
+
+    Parameters
+    ----------
+    cluster_metrics : DefectClusterMetrics
+        Instance for spatial defect cluster analysis.
+    coverage_gate : ConformalCoverageGate3D
+        Instance for conformal coverage validation.
+    """
+
+    def __init__(
+        self,
+        cluster_metrics: DefectClusterMetrics | None = None,
+        coverage_gate: ConformalCoverageGate3D | None = None,
+    ) -> None:
+        self.cluster_metrics = cluster_metrics or DefectClusterMetrics()
+        self.coverage_gate = coverage_gate or ConformalCoverageGate3D()
+
+    def evaluate(
+        self,
+        defect_map: torch.Tensor,
+        profile_ensemble: torch.Tensor | None = None,
+        epe_alpha: float = 0.05,
+        predicted_defects: torch.Tensor | None = None,
+        actual_defects: torch.Tensor | None = None,
+        mask: torch.Tensor | None = None,
+    ) -> CalibrationReport:
+        """Run full stochastic calibration evaluation.
+
+        Parameters
+        ----------
+        defect_map : Tensor
+            ``(H, W)`` defect probability map.
+        profile_ensemble : Tensor or None
+            ``(N, H, W)`` ensemble of binary resist profiles for EPE
+            quantile computation.  If None, EPE metrics are set to 0.
+        epe_alpha : float
+            Quantile for stochastic EPE.
+        predicted_defects : Tensor or None
+            Predicted defect map for coverage evaluation.
+        actual_defects : Tensor or None
+            Ground truth defect map for coverage evaluation.
+        mask : Tensor or None
+            Input mask for coverage evaluation.
+
+        Returns
+        -------
+        :class:`CalibrationReport` with all metrics.
+        """
+        corr_length = self.cluster_metrics.failure_correlation_length(defect_map)
+        cluster_dist = self.cluster_metrics.defect_cluster_distribution(defect_map)
+
+        epe_result: dict[str, Any] = {
+            "epe_quantile_nm": 0.0,
+            "epe_mean_nm": 0.0,
+            "epe_std_nm": 0.0,
+        }
+        if profile_ensemble is not None:
+            epe_result = self.cluster_metrics.stochastic_epe_quantile(
+                profile_ensemble,
+                alpha=epe_alpha,
+            )
+
+        # Conformal coverage check
+        coverage = 0.0
+        verdict = "UNCERTAIN"
+        if predicted_defects is not None and actual_defects is not None and mask is not None:
+            _, metrics = self.coverage_gate.evaluate(
+                mask,
+                predicted_defects,
+                actual_defects,
+            )
+            coverage = metrics.coverage
+            verdict = metrics.verdict
+
+        return CalibrationReport(
+            failure_corr_length_nm=corr_length,
+            n_defect_clusters=cluster_dist["n_clusters"],
+            max_cluster_size=cluster_dist["max_cluster_size"],
+            mean_cluster_size=cluster_dist["mean_cluster_size"],
+            epe_quantile_nm=epe_result["epe_quantile_nm"],
+            epe_mean_nm=epe_result["epe_mean_nm"],
+            epe_std_nm=epe_result["epe_std_nm"],
+            conformal_coverage=coverage,
+            conformal_verdict=verdict,
+        )
