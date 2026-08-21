@@ -1,0 +1,18 @@
+{
+  "model_name": "SCPG-DRDD-MetalSet",
+  "dataset": "custom-lithobench-MetalSet-512px4nm",
+  "process_node": "45nm",
+  "mask_topology": "manhattan",
+  "track": "open",
+  "epe_mean_nm": 109.89999694824219,
+  "epe_max_nm": 407.5766143798828,
+  "epe_wafer_mean_nm": 20.16509141921997,
+  "epe_wafer_max_nm": 251.37122955322266,
+  "l2_error_pixels": 5930.9,
+  "l2_error_nm2": 94894.4,
+  "pvband_mean_nm": 8.500768184661865,
+  "pvband_max_nm": 23.2,
+  "resist_diffusion_nm": 0.0,
+  "num_samples": 10,
+  "notes": "Evaluated on the 10 official MetalSet cases. Frozen SCPG-DRDD masks were generated at 1024x1024; masks and 2048x2048 targets were nearest-neighbor resampled to 512x512 at 4.0 nm/px, preserving a 2048 nm physical field. OpenLithoHub commit 348fa5d86d5355465af98e2c4ce3deac60081a4c; 45nm Hopkins forward model; CTR hard threshold; resist diffusion disabled; official CLI Gaussian PVB path. Original LithoBench shot results are not placed in shot_count because the writer/counting protocol differs. Replay summary SHA256: cd30085706cad393d91c552bc9789750af20d34fbfc12451cfbae1195d836562."
+}
