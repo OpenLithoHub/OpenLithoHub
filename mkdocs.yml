@@ -43,6 +43,7 @@ nav:
   - Architecture: architecture.md
   - For AI Engineers: lithography-for-ai-engineers.md
   - Benchmarks: benchmarks.md
+  - ORFS Integration: orfs-integration.md
   - Capability Matrix: capability_matrix.md
   - Resist Capability Matrix: resist_capability_matrix.md
   - CLI Reference: cli-reference.md
@@ -71,6 +72,8 @@ nav:
     - Simulator Backends: api/simulators.md
     - Visualization: api/vis.md
     - Leaderboard: api/leaderboard.md
+    - Streaming (Core/Halo): api/streaming.md
+    - Verification (B04): api/verification.md
   - Leaderboard Submissions: leaderboard-submission.md
   - Hackathon (2026-Q3): hackathon.md
   - Community: community.md
@@ -84,6 +87,12 @@ nav:
     - "0004 — Multi-GPU Tile Pipeline": rfcs/0004-multi-gpu-tile-pipeline.md
     - "0005 — Process-Node-Aware Tile Halo Sizing": rfcs/0005-process-node-halo-sizing.md
     - "0006 — MCP (Model Context Protocol) Bridge": rfcs/0006-mcp-bridge.md
+    - "0007 — QDM Continuous Process-Window Verification": rfcs/0007-qdm-continuous-process-window-verification.md
+    - "0008 — Streaming Core/Halo Tiling & Verification Plugins": rfcs/0008-streaming-verified-tiling-plugin-architecture.md
+  - Migration Notes:
+    - "0008 — Streaming Core/Halo": migration-notes/0008-streaming-core-halo.md
+  - Project Status:
+    - "QDM / B04 Readiness": qdm-readiness.md
   - Contributing: contributing.md
 
 markdown_extensions:

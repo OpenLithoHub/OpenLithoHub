@@ -2,7 +2,10 @@
 
 Status after RFC 0008 foundation + B04 Increment 14 integration
 (2026-09-10). This checklist is the honest scoreboard required by the
-B04 architecture brief (§23).
+B04 architecture brief (§23). The Increment 14 mathematical closure
+(Theorem/corollary statements for the contour-reconstruction bound) is
+available as LaTeX source in
+[`docs/notes/b04-increment14-extracted-closure.tex`](notes/b04-increment14-extracted-closure.tex).
 
 ## Foundation statuses
 

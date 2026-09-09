@@ -7,22 +7,31 @@ By participating in this project you agree to abide by our
 
 ## Project Scope & Responsibility Boundary
 
-OpenLithoHub 生态由两个独立仓库组成，职责清晰分离：
+The OpenLithoHub ecosystem consists of two independent repositories with a
+clear separation of responsibilities:
 
-| 仓库 | 职责 | 部署 |
+| Repository | Responsibility | Deployment |
 |------|------|------|
-| **本仓库 (OpenLithoHub)** | Python SDK、指标计算、模型接口、工作流引擎、CLI、技术文档、HF Spaces Playground | docs.openlithohub.com |
-| **openlithohub-website** | 品牌官网、排行榜前端展示、Blog、Community、Playground 嵌入 | openlithohub.com |
+| **This repository (OpenLithoHub)** | Python SDK, metrics, model interface, workflow engine, CLI, technical docs, HF Spaces Playground | docs.openlithohub.com |
+| **openlithohub-website** | Brand site, leaderboard front end, blog, community, playground embed | openlithohub.com |
 
-**边界原则：**
+**Boundary principles:**
 
-- 本仓库负责**数据生产**（metrics, leaderboard export, model inference）
-- 网站仓库负责**数据展示**（读取本仓库导出的 JSON 渲染前端）
-- 技术文档（API reference, Getting Started, Architecture）放在本仓库 `docs/`
-- 品牌/营销内容（Features 介绍页、Blog）放在网站仓库
-- 排行榜数据通过 `openlithohub leaderboard export` 导出 JSON，手动更新到网站仓库 `src/data/leaderboard.json`
-- 首页 hero 对比图通过 `python scripts/generate_hero_figure.py` 生成 `docs/assets/hero.{png,json}`，手动复制到网站仓库 `public/hero.png` 和 `src/data/hero.json`
-- 网站 features 页面的架构描述必须与本仓库 `docs/architecture.md` 保持一致
+- This repository owns **data production** (metrics, leaderboard export,
+  model inference).
+- The website repository owns **data presentation** (renders front end from
+  JSON exported by this repository).
+- Technical documentation (API reference, Getting Started, Architecture)
+  lives in this repository under `docs/`.
+- Brand/marketing content (feature pages, blog) lives in the website repo.
+- Leaderboard data is exported via `openlithohub leaderboard export` and
+  manually updated into the website repo at `src/data/leaderboard.json`.
+- The landing-page hero comparison figure is generated with
+  `python scripts/generate_hero_figure.py` producing
+  `docs/assets/hero.{png,json}`; copy manually to the website repo's
+  `public/hero.png` and `src/data/hero.json`.
+- Architecture descriptions on the website features page must stay
+  consistent with `docs/architecture.md` in this repository.
 
 ## Development Setup
 
@@ -47,14 +56,24 @@ pre-commit install
 
 ```
 src/openlithohub/
+├── api/          # Object-oriented façade (LitheEngine, Mask, Report)
+├── baselines/    # Baseline model weights/configs metadata
+├── benchmark/    # Layer 2: Metrics, MRC/DRC compliance checks
 ├── cli/          # Command-line interface (Typer)
 ├── data/         # Layer 1: Dataset adapters + dummy generator
-├── benchmark/    # Layer 2: Metrics and compliance checks
-├── models/       # Layer 3: Model integration interface
-├── workflow/     # Layer 4: OASIS workflow engine + EDA bridge templates
-├── leaderboard/  # Layer 5: SOTA tracking and data engine
-├── vis/          # Paper-publication matplotlib helpers (IEEE / SPIE styles)
+├── hackathon/    # Hackathon manifest / submission validation
+├── inference/    # Multi-process shared-weight inference
 ├── jupyter/      # IPython display helpers and `%load_ext` magics
+├── leaderboard/  # Layer 5: SOTA tracking and data engine
+├── models/       # Layer 3: Model integration interface + registry
+├── plugins/      # Optional physics plugins (DiffNano / DiffCFD, opt-in)
+├── server/       # FastAPI optimization/eval service
+├── simulators/   # Simulator backends + registry
+├── streaming/    # RFC 0008: core/halo streaming tiling + plugin API
+├── synth/        # Synthetic rule-based pattern generation
+├── verify/       # B04 / RFC 0007: proof-carrying verification
+├── vis/          # Paper-publication matplotlib helpers (IEEE / SPIE styles)
+├── workflow/     # Layer 4: OASIS workflow engine + EDA bridge templates
 └── _utils/       # Shared internal utilities (Hopkins, resist, morphology)
 ```
 
@@ -74,10 +93,26 @@ pytest --cov=openlithohub --cov-report=html
 pytest tests/test_models/test_interface.py
 ```
 
-> **Note**: CI shards the suite into 5 directory groups × 3 Python versions
-> for ~9 min wall-clock. The `tests/test_workflow` shard runs serially because
+> **Note**: CI shards the suite into 6 directory groups × 3 Python versions.
+> The `tests/test_workflow` shard runs serially because
 > `tests/test_workflow/test_parallel.py` already spawns its own subprocess
 > pool — nesting it under xdist deadlocks on Linux runners.
+
+## Quality Gates (CI-enforced)
+
+Every PR must pass all five CI jobs — they are hard gates, not warnings:
+
+| Gate | Tool | Notes |
+|------|------|-------|
+| Lint + format | ruff (incl. `S` security rules) | `ruff check` + `ruff format --check` over all code dirs; `pre-commit run --all-files` also runs here |
+| Type check | mypy `--strict` | Package sources only (`src/`); must be error-free |
+| Tests | pytest | 6 shards × Python 3.10/3.11/3.12 |
+| Coverage floor | pytest-cov | Full-suite run fails below **80%** (`coverage-gate` job; optional physics plugins are omitted from the denominator) |
+| Security | pip-audit + bandit | Known-VULN allowlist in `.github/pip-audit-ignore.txt`; bandit gates on medium+ findings |
+| License | scancode | Any copyleft (GPL/AGPL) detection fails the build |
+
+Also enforced: README bilingual parity (English ⇄ Chinese H2 sections must
+stay aligned via `scripts/check_readme_parity.py`).
 
 ## Code Quality
 
@@ -93,6 +128,15 @@ ruff check --fix src/ tests/
 # Format code
 ruff format src/ tests/
 ```
+
+And **mypy** for static typing (strict mode; run over `src/`):
+
+```bash
+mypy src
+```
+
+Types are load-bearing here — CI fails on any mypy error, and new modules
+must ship complete annotations.
 
 ## Adding a New Metric
 

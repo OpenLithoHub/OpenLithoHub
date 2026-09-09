@@ -169,3 +169,16 @@ model = BayesianStochasticModel(n_mc_samples=64, mode="poisson", dose_photons_pe
 result = model.predict(ds[0].design)
 # Cross-reference: failure_prob peaks should overlap with metadata['hotspots']
 ```
+
+## Streaming / halo-adequacy benchmark
+
+`benchmarks/benchmark_streaming.py` (RFC 0008) compares the legacy
+whole-raster tiling path against the streaming core/halo pipeline on a
+synthetic layout, reporting wall time, tile count, resident raster bytes,
+halo overhead, and output discrepancy vs a full-context forward reference.
+It also sweeps halo candidates to report the empirically stable minimum
+halo alongside the kernel-tail certified halo:
+
+```bash
+python benchmarks/benchmark_streaming.py --size 2048 --tile 512 --halo 16
+```

@@ -1,0 +1,268 @@
+% SPDX-License-Identifier: CC-BY-SA-4.0
+
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools,booktabs,longtable}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{remark}[theorem]{Remark}
+\newcommand{\dH}{d_{\mathrm H}}
+
+\title{B04 Increment 14: Certified Chord Reconstruction,\\
+Explicit Spatial Hausdorff Error, and MVP-1 Extracted-Contour Closure}
+\author{Lin Tao}
+\date{2026-09-09}
+\begin{document}
+\maketitle
+
+\section*{Strategic verdict}
+\[
+\boxed{\texttt{CONTINUE}}
+\]
+
+Increment 13 proved complete component discovery but correctly kept explicit
+contour reconstruction behind a separate firewall. This increment closes
+that final spatial gate without marching-squares sampling or unverified
+interior roots.
+
+\section{One arc per seeded cell}
+
+Every one of the 148 seeded cells has exactly two certified transverse
+boundary-root brackets. Moreover every seeded 8 nm cell satisfies
+\[
+\operatorname{diam}(C)<\frac{2\kappa_C}{H_C}.
+\]
+Hence no seeded cell can contain a hidden closed component. Since a regular
+open arc consumes two boundary intersections, the two available roots force
+\[
+\boxed{\Gamma_0\cap C\text{ to be exactly one regular arc}.}
+\]
+
+\section{Fixed-normal graph theorem}
+
+Let \(c\) be the cell center. Choose \(e\) in the direction of the midpoint
+of the certified center-gradient rectangle and let \(t\perp e\).
+The interval replay proves throughout the whole cell
+\[
+f_e\ge m_C>0,\qquad |f_t|\le B_C,
+\qquad \|D^2f\|_{\rm op}\le H_C.
+\]
+
+\begin{theorem}[Cell graph and chord error]
+The unique zero arc in \(C\) is a graph
+\[
+u=\psi(v)
+\]
+in coordinates \(x=c+ue+vt\). Put
+\[
+S_C=\frac{B_C}{m_C}.
+\]
+Then
+\[
+|\psi'|\le S_C
+\]
+and
+\[
+\boxed{
+|\psi''|
+\le
+M_C:=
+\frac{H_C(1+S_C^2)}{m_C}.
+}
+\]
+
+Let \(p_0,p_1\) be the exact boundary roots and \(q_0,q_1\) the midpoints of
+their certified brackets. If \(\epsilon_i\) is the bracket half-width and
+\[
+L_C
+=
+|t\cdot(q_1-q_0)|+\epsilon_0+\epsilon_1,
+\]
+then the segment \(\widehat L_C=[q_0,q_1]\) satisfies
+\[
+\boxed{
+\dH(\Gamma_0\cap C,\widehat L_C)
+\le
+\frac{M_CL_C^2}{8}
++
+\max\{\epsilon_0,\epsilon_1\}.
+}
+\]
+\end{theorem}
+
+\begin{proof}
+Since \(f_e>0\), the implicit function theorem and strict monotonicity along
+every \(e\)-line make the unique arc a global graph over its \(v\)-projection.
+Thus \(\psi'=-f_t/f_e\).
+
+Along the graph let \(w=t+\psi'e\). Twice differentiating \(f=0\) gives
+\[
+0=w^TD^2f\,w+f_e\psi'',
+\]
+hence
+\[
+|\psi''|
+\le
+\frac{H_C\|w\|^2}{m_C}
+\le
+\frac{H_C(1+S_C^2)}{m_C}.
+\]
+The sharp linear-interpolation remainder for a \(C^2\) scalar graph gives
+\(M_CL_C^2/8\) relative to the exact endpoint chord. Replacing exact roots
+by bracket midpoints moves a chord by at most the larger endpoint error.
+\end{proof}
+
+\section{Actual replay}
+
+All 148 cells satisfy the fixed-normal condition. The smallest certified
+normal derivative is
+\[
+\boxed{
+m_{\min}
+\ge
+5.891396342472181\times10^{-3}\ {\rm nm}^{-1}.
+}
+\]
+The largest graph slope bound is
+\[
+\boxed{S_{\max}\le0.562931829601}.
+\]
+
+The 148 cell chords join consistently on shared boundary brackets and form
+one closed 148-vertex, 148-segment polyline
+\[
+\widehat\Gamma_0.
+\]
+Its diagnostic perimeter is approximately
+\[
+1076.8534734001\ {\rm nm}.
+\]
+
+The worst cell is
+\[
+\boxed{(y,x)=(21,53)},
+\]
+and the global nominal reconstruction bound is
+\[
+\boxed{
+\eta_{\rm sp}
+=
+\dH(\Gamma_{37,0},\widehat\Gamma_0)
+\le
+1.056042021172912\ {\rm nm}.
+}
+\]
+
+\paragraph{Evidence level.}
+\[
+\boxed{
+\texttt{PROVED UNDER EXACT-SOURCE INTERVAL + CHORD THEOREM CONTRACT}.
+}
+\]
+
+\section{Focus-window transfer to the explicit reconstruction}
+
+Increment 11 proved
+\[
+\dH(\Gamma_{24,z},\Gamma_{37,0})
+\le
+0.976436035396712\ {\rm nm}
+\qquad(|z|\le10\ {\rm nm}).
+\]
+Therefore
+\[
+\boxed{
+\dH(\Gamma_{24,z},\widehat\Gamma_0)
+\le
+0.976436035396712+\eta_{\rm sp}
+\le
+2.032478056569624\ {\rm nm}.
+}
+\]
+
+This is the first B04 theorem whose comparison object is an explicitly stored
+finite contour reconstruction.
+
+\section{Semantic firewall}
+
+The software target name \texttt{EXTRACTED\_CONTOUR\_EPE} is retained for
+current RFC compatibility, but its precise B04 MVP-1 meaning is
+\[
+\text{continuous focus contour}
+\longleftrightarrow
+\text{certified nominal reconstruction}.
+\]
+It is \emph{not} yet design-target edge-placement error and must not be
+identified with OpenLithoHub's raster Sobel \texttt{epe\_max\_nm}.
+
+\section{Software result}
+
+The proof-carrying patch now binds a reconstruction JSON artifact and exposes
+\[
+\texttt{nominal\_reconstruction\_upper\_nm}.
+\]
+For the golden fixture:
+\[
+\begin{array}{ll}
+\text{tolerance }2.1\ {\rm nm} &\Rightarrow \texttt{PASS},\\
+\text{tolerance }2.0\ {\rm nm} &\Rightarrow \texttt{INCONCLUSIVE}.
+\end{array}
+\]
+The focused verifier suite returns
+\[
+\boxed{\texttt{22 passed}}.
+\]
+
+\section{Theorem ledger}
+
+\begin{longtable}{@{}p{0.62\linewidth}p{0.29\linewidth}@{}}
+\toprule
+Claim & Status\\
+\midrule
+\endhead
+One unique arc in every seeded cell & \texttt{PROVED}\\
+Fixed-normal graph on every seeded cell & \texttt{PROVED / REPLAYED}\\
+Graph second-derivative bound & \texttt{PROVED ABSTRACTLY}\\
+Certified chord Hausdorff theorem & \texttt{PROVED ABSTRACTLY}\\
+148-cell reconstruction replay & \texttt{PASS}\\
+One closed 148-segment nominal polyline & \texttt{PASS}\\
+Nominal reconstruction \(\eta_{\rm sp}\le 1.056042\) nm
+& \texttt{PROVED}\\
+Focus-window-to-polyline bound \(\le 2.032478\) nm
+& \texttt{PROVED}\\
+Design-target continuous EPE & \texttt{NOT YET CLAIMED}\\
+Raster EPE equivalence & \texttt{NOT CLAIMED}\\
+\bottomrule
+\end{longtable}
+
+\section*{MVP-1 bounded-sprint status}
+
+The proof chain now contains
+\[
+\boxed{
+\text{source-native optics}
+\to
+\text{continuous focus bridge}
+\to
+\text{complete root coverage}
+\to
+\text{explicit reconstruction}
+\to
+\text{replayable software certificate}.
+}
+\]
+
+The mathematically necessary MVP-1 spatial gates are closed. Further
+subdivision merely to sharpen the \(1.056\) nm reconstruction constant is
+lower leverage than an external audit and promote/pause decision.
+
+The next primary target should therefore be
+\[
+\boxed{\textbf{MVP-1 Hostile External Audit + Promote/Pause Decision}}.
+\]
+
+\end{document}

@@ -97,8 +97,29 @@ halo = compute_halo_px(node=node, model=model, pixel_nm=1.0, tile_size=2048)
 print(describe_halo(halo, node, model, pixel_nm=1.0))
 ```
 
+## Streaming and certified halos (RFC 0008 / B04)
+
+The `compute_halo_px` heuristic above is an **engineering estimate**. Two
+newer layers build on it without changing it:
+
+- **`HaloPolicy` (streaming)** — RFC 0008 turns halo sizing into a policy
+  interface. `PhysicalInteractionHaloPolicy` carries this RFC's
+  `max(OIR, RF)` logic; `KernelTailHaloPolicy` picks the smallest halo
+  whose kernel tail mass meets a tolerance; `estimate_minimum_halo` runs
+  an adaptive sweep and reports `EMPIRICALLY_STABLE` — explicitly not a
+  certificate. See
+  [RFC 0008 — Streaming Core/Halo Tiling](rfcs/0008-streaming-verified-tiling-plugin-architecture.md)
+  and [Streaming API](api/streaming.md).
+- **Theorem-facing certified halo** — `openlithohub.verify.halo` keeps
+  proof-carrying halo contracts separate from workflow heuristics: a
+  sufficient absolute-tail upper bound and a necessary
+  unrestricted-binary lower bound bracket the minimal halo
+  (`CERTIFIED_SUFFICIENT` / `PARTIAL` / `OPEN`). `workflow.halo` values
+  are never relabeled as proofs.
+
 ## See also
 
 - [RFC 0005 — Process-Node-Aware Tile Halo Sizing](rfcs/0005-process-node-halo-sizing.md)
+- [RFC 0008 — Streaming Core/Halo Tiling & Verification Plugins](rfcs/0008-streaming-verified-tiling-plugin-architecture.md)
 - [Architecture — Workflow Engine](architecture.md)
 - [CLI Reference — `optimize run`](cli-reference.md)

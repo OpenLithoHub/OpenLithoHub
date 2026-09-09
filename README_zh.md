@@ -48,6 +48,8 @@ Dose 响应**单调递减**（10→100 ph/nm² 下降 19.4×），符合已发�
 - **制造合规检查** — MRC/DRC 规则检查作为一票否决门槛
 - **OASIS / GDSII 工作流** — 端到端 Tensor→fab-ready 掩膜（Manhattan 与 Curvilinear）
 - **模型无关评测** — 任何 OPC/ILT 模型只需实现最小接口
+- **流式全芯片流水线** — Core/Halo 分块 + 外存 Source/Sink；版图增长只增加 tile 数量，不增加单次内存规模（RFC 0008）
+- **证明携带式验证** — 面向定理的 `PASS`/`FAIL`/`INCONCLUSIVE` 证书，含认证 halo 括号、覆盖契约与可选 source-native 后端（RFC 0007 / B04）
 - **可选物理插件** — DiffNano（EM 求解器）和 DiffCFD（光刻+旋涂）作为 opt-in 扩展
 
 **诚实边界：** 所有基准使用合成 64×64 版图，无产线验证，无生产 tapeout。CPU 计时。详见 [BENCHMARKS.md](BENCHMARKS.md)。

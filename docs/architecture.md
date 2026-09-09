@@ -18,6 +18,8 @@ OpenLithoHub uses a layered architecture designed for extensibility and separati
 | **Jupyter** | `openlithohub.jupyter` | IPython display helpers and `%load_ext` magics |
 | **CLI** | `openlithohub.cli` | User-facing commands via Typer |
 | **Leaderboard** | `openlithohub.leaderboard` | SOTA tracking, submission, querying |
+| **Streaming** | `openlithohub.streaming` | RFC 0008: core/halo streaming tiling (`TileSource`/`TileSink`, `HaloPolicy`, `TileScheduler`), verification-plugin API, full-chip pipeline with `O(tile area + active batch)` memory |
+| **Verification** | `openlithohub.verify` | B04 / RFC 0007: proof-carrying certificates (`PASS`/`FAIL`/`INCONCLUSIVE`), certified halo contracts, source-native snapshot/backend interfaces — separate from raster benchmark metrics |
 | **Constants** | `openlithohub._constants` | Single source of truth for optical, resist, EUV 3D-mask, and plugin defaults |
 | **Forward models** | `openlithohub._utils` | Differentiable Hopkins SOCS imaging, resist simulation, morphology, optics I/O |
 
@@ -352,3 +354,48 @@ been independently verified by third parties. Plugin-based backends:
 | `diffnano_fdfd2d` | DiffNano | `DiffNanoFDFD2D` |
 | `diffcfd_litho` | DiffCFD | `DiffCFDLithoSimulator` |
 | `diffcfd_spin_coat` | DiffCFD | `DiffCFDSpinCoatSimulator` |
+
+## Streaming Full-Chip Pipeline (RFC 0008)
+
+The `openlithohub.streaming` package decouples full-chip scale from
+per-run memory: layout growth increases **tile count**, not allocation
+size. The pipeline reads only core+halo windows from a `TileSource`,
+runs the forward model, optionally lets `VerificationPlugin`s inspect
+each tile, and commits only the trusted core to a `TileSink`.
+
+Key abstractions:
+
+| Abstraction | Role |
+|-------------|------|
+| `TileSource` | `read_window(bbox)` — `TensorTileSource` (compat), `MemmapTensorTileSource` (out-of-core), `VectorLayoutTileSource` (window-only rasterization via `SpatialLayoutIndex`) |
+| `TileSink` | `write_core(...)` — `TensorTileSink`, `MemmapTileSink`, `MetricOnlyTileSink` (raster-free aggregation) |
+| `HaloPolicy` | Halo sizing with provenance: `LegacyFixedHaloPolicy`, `PhysicalInteractionHaloPolicy`, `KernelTailHaloPolicy`; statuses `FIXED` / `PHYSICS_ESTIMATED` / `EMPIRICALLY_STABLE` / `CERTIFIED_SUFFICIENT` / `INCONCLUSIVE` |
+| `TileScheduler` | Exact-core-cover planning + verifier-driven refinement (increase halo / subdivide) |
+| `run_streaming` | The per-tile loop; peak memory `O(tile area + active batch)` |
+
+Trust boundary: only the **core** is committed; the **halo** is context.
+Cores partition the output exactly, so no weight map or blend pass exists.
+
+## Theorem-Facing Verification (B04 / RFC 0007)
+
+`openlithohub.verify` carries proof-carrying verification, deliberately
+separate from the raster benchmark metrics:
+
+- **Certificates** — `PASS` / `FAIL` / `INCONCLUSIVE` with typed
+  dependencies (`ProofLevel`); `PASS` requires a certified chain, `FAIL`
+  requires a certified violation lower bound, everything else is
+  `INCONCLUSIVE`.
+- **Certified halo** — sufficient upper bound
+  `U(h) = Σ w_j (2 A_j T_j(h) + T_j(h)^2)` and necessary
+  unrestricted-binary lower bound `L(h) = max_j w_j (T_j(h)/π)^2` over a
+  frozen SOCS kernel family (`verify.halo`). Only `CERTIFIED_SUFFICIENT`
+  counts as a proof; empirical stability never does.
+- **Coverage contract** — `ALL_COMPONENTS_COVERED` / `PARTIAL_COVER` /
+  `INCONCLUSIVE`; a partial cover can never yield global `PASS`.
+- **Source-native backend** — opt-in `source_native_full` contract over a
+  frozen `SourceSnapshot` (no dynamic top-K spectral branch), with exact
+  dyadic-rational import and outward rounding.
+
+See [RFC 0007](rfcs/0007-qdm-continuous-process-window-verification.md),
+[RFC 0008](rfcs/0008-streaming-verified-tiling-plugin-architecture.md),
+and the [QDM/B04 readiness scoreboard](qdm-readiness.md).

@@ -46,6 +46,8 @@ Dose-response is **monotonically decreasing** (19.4× from 10→100 ph/nm²), ma
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gates
 - **OASIS / GDSII workflow** — end-to-end tensor→fab-ready mask (manhattan & curvilinear)
 - **Model-agnostic evaluation** — plug any OPC/ILT model via minimal interface
+- **Streaming full-chip pipeline** — core/halo tiling with out-of-core sources/sinks; layout growth adds tiles, not memory (RFC 0008)
+- **Proof-carrying verification** — theorem-facing `PASS`/`FAIL`/`INCONCLUSIVE` certificates with certified-halo brackets, coverage contract, and an opt-in source-native backend (RFC 0007 / B04)
 - **Optional physics plugins** — DiffNano (EM solvers) and DiffCFD (litho + spin-coat) as opt-in extras
 
 **Honesty boundaries:** All benchmarks use synthetic 64×64 layouts. No foundry validation, no production tapeout. CPU-only timing. See [BENCHMARKS.md](BENCHMARKS.md) for full methodology.
