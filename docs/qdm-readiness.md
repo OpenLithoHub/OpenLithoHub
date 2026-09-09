@@ -55,12 +55,11 @@ QDM READINESS:                   CONDITIONAL
    theorem) wired into `TileVerificationResult.spatial_extraction_error`.
 3. `SourceNativeVerificationBackend` consumed by a real verifier plugin on
    a pinned mask + pinned forward model, machine-replayed in CI.
-4. Increment 15 no-go: for arbitrary binary exterior perturbations, the
-   sufficient halo proof only closes at the full half-tile radius. For
-   *known* layouts this is now resolved (Increments 16–18: run-prefix
-   oracle + layout-conditioned Fourier envelope recover transversality and
-   hidden-loop completeness on the pinned fixture), but the envelope is
-   still materialized from the full corrected 72×72 grid — the ledger
-   keeps `production_streamed_construction_without_full_grid =
-   OPEN_IMPLEMENTATION`. A streamed row-run accumulation of the
-   layout-conditioned spectrum is the remaining architectural step.
+4. Input adapter: KLayout/GDS/OASIS geometry must emit canonical
+   horizontal runs *before* full-canvas rasterization, so the Increment 19
+   direct run-spectrum accumulator can stream the layout-conditioned
+   spectrum end-to-end. (Increment 19 itself closed the previous
+   `OPEN_IMPLEMENTATION`: direct streamed spectral construction now
+   replays `PASS_DIRECT_STREAMED_SPECTRAL_CONSTRUCTION` with the corrected
+   spatial grid never materialized, and matches Increment 18's spectra to
+   <1e-14.)

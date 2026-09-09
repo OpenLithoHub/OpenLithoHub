@@ -1,0 +1,1878 @@
+{
+  "continuous_geometry": {
+    "active_cells": 164,
+    "cell_diameter_nm": 11.313708498984761,
+    "cells": [
+      {
+        "cell_gradient_lower_per_nm": 0.006103115503939427,
+        "cell_hessian_upper_per_nm2": 0.0005969040426919786,
+        "cell_yx": [
+          17,
+          22
+        ],
+        "center_gradient_lower_per_nm": 0.009479714674380727,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003135688818750329,
+        "hidden_loop_curvature_scale_nm": 20.44923494374397
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.006929836269710444,
+        "cell_hessian_upper_per_nm2": 0.0005987207411415985,
+        "cell_yx": [
+          17,
+          23
+        ],
+        "center_gradient_lower_per_nm": 0.010316712238496522,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003153855803246528,
+        "hidden_loop_curvature_scale_nm": 23.148809765625025
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007620459274920568,
+        "cell_hessian_upper_per_nm2": 0.0005972376617555669,
+        "cell_yx": [
+          17,
+          24
+        ],
+        "center_gradient_lower_per_nm": 0.010998945679779439,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031390250093862133,
+        "hidden_loop_curvature_scale_nm": 25.51901784800508
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008147220029046946,
+        "cell_hessian_upper_per_nm2": 0.000594997990983972,
+        "cell_yx": [
+          17,
+          25
+        ],
+        "center_gradient_lower_per_nm": 0.011513036942784056,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031166283016702636,
+        "hidden_loop_curvature_scale_nm": 27.385706010783537
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00849492145888966,
+        "cell_hessian_upper_per_nm2": 0.0005941568905384866,
+        "cell_yx": [
+          17,
+          26
+        ],
+        "center_gradient_lower_per_nm": 0.011855980389997477,
+        "center_hessian_frobenius_upper_per_nm2": 0.000310821729721541,
+        "hidden_loop_curvature_scale_nm": 28.594876518862485
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008675215102518985,
+        "cell_hessian_upper_per_nm2": 0.0005953232950498261,
+        "cell_yx": [
+          17,
+          27
+        ],
+        "center_gradient_lower_per_nm": 0.012042872213943399,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031198813423288037,
+        "hidden_loop_curvature_scale_nm": 29.14455111921298
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008727558892323161,
+        "cell_hessian_upper_per_nm2": 0.000597544913007436,
+        "cell_yx": [
+          17,
+          28
+        ],
+        "center_gradient_lower_per_nm": 0.01210778337273183,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031420975219049037,
+        "hidden_loop_curvature_scale_nm": 29.211390482424044
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008705193893343217,
+        "cell_hessian_upper_per_nm2": 0.0005994289614982489,
+        "cell_yx": [
+          17,
+          29
+        ],
+        "center_gradient_lower_per_nm": 0.012096076161463392,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003160938006813033,
+        "hidden_loop_curvature_scale_nm": 29.044955958033558
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008656529982593496,
+        "cell_hessian_upper_per_nm2": 0.0006002440885680711,
+        "cell_yx": [
+          17,
+          30
+        ],
+        "center_gradient_lower_per_nm": 0.01205202330574247,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003169089277511254,
+        "hidden_loop_curvature_scale_nm": 28.843366048782986
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008613220139092269,
+        "cell_hessian_upper_per_nm2": 0.0006001399305544331,
+        "cell_yx": [
+          17,
+          31
+        ],
+        "center_gradient_lower_per_nm": 0.012008124255539175,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031680476973748736,
+        "hidden_loop_curvature_scale_nm": 28.704039510035713
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008588386082590068,
+        "cell_hessian_upper_per_nm2": 0.0005996601022709547,
+        "cell_yx": [
+          17,
+          32
+        ],
+        "center_gradient_lower_per_nm": 0.011980575880372555,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031632494145400903,
+        "hidden_loop_curvature_scale_nm": 28.6441804284302
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008581464554255283,
+        "cell_hessian_upper_per_nm2": 0.0005992211408016664,
+        "cell_yx": [
+          17,
+          33
+        ],
+        "center_gradient_lower_per_nm": 0.01197117121098486,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003158859799847207,
+        "hidden_loop_curvature_scale_nm": 28.642062070021737
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008584764977848384,
+        "cell_hessian_upper_per_nm2": 0.0005989593674588827,
+        "cell_yx": [
+          17,
+          34
+        ],
+        "center_gradient_lower_per_nm": 0.011972990820931433,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003156242066419371,
+        "hidden_loop_curvature_scale_nm": 28.665600520682094
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00858930597932827,
+        "cell_hessian_upper_per_nm2": 0.0005988499931479748,
+        "cell_yx": [
+          17,
+          35
+        ],
+        "center_gradient_lower_per_nm": 0.011976913107875874,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031551483233102916,
+        "hidden_loop_curvature_scale_nm": 28.68600176206687
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00858930599979702,
+        "cell_hessian_upper_per_nm2": 0.0005988499925997006,
+        "cell_yx": [
+          17,
+          36
+        ],
+        "center_gradient_lower_per_nm": 0.011976913125243117,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031551483178275495,
+        "hidden_loop_curvature_scale_nm": 28.68600185669039
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008584765060259044,
+        "cell_hessian_upper_per_nm2": 0.0005989593667384317,
+        "cell_yx": [
+          17,
+          37
+        ],
+        "center_gradient_lower_per_nm": 0.011972990899266607,
+        "center_hessian_frobenius_upper_per_nm2": 0.000315624205921486,
+        "hidden_loop_curvature_scale_nm": 28.665600830341635
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008581464704947287,
+        "cell_hessian_upper_per_nm2": 0.0005992211375044109,
+        "cell_yx": [
+          17,
+          38
+        ],
+        "center_gradient_lower_per_nm": 0.011971171343024773,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031588597668746524,
+        "hidden_loop_curvature_scale_nm": 28.642062730586225
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008588386262617693,
+        "cell_hessian_upper_per_nm2": 0.000599660098332156,
+        "cell_yx": [
+          17,
+          39
+        ],
+        "center_gradient_lower_per_nm": 0.011980576038118968,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003163249375152104,
+        "hidden_loop_curvature_scale_nm": 28.64418121700845
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008613220388953194,
+        "cell_hessian_upper_per_nm2": 0.0006001399251585322,
+        "cell_yx": [
+          17,
+          40
+        ],
+        "center_gradient_lower_per_nm": 0.012008124474876276,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031680476434158656,
+        "hidden_loop_curvature_scale_nm": 28.70404060079134
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008656530287550018,
+        "cell_hessian_upper_per_nm2": 0.0006002440846846392,
+        "cell_yx": [
+          17,
+          41
+        ],
+        "center_gradient_lower_per_nm": 0.012052023588730983,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003169089238676936,
+        "hidden_loop_curvature_scale_nm": 28.843367251500865
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008705194237659464,
+        "cell_hessian_upper_per_nm2": 0.0005994289542784233,
+        "cell_yx": [
+          17,
+          42
+        ],
+        "center_gradient_lower_per_nm": 0.012096076464938137,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031609379346147766,
+        "hidden_loop_curvature_scale_nm": 29.044957456679903
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008727559289291571,
+        "cell_hessian_upper_per_nm2": 0.000597544904430837,
+        "cell_yx": [
+          17,
+          43
+        ],
+        "center_gradient_lower_per_nm": 0.012107783721183669,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031420974361389125,
+        "hidden_loop_curvature_scale_nm": 29.21139223036164
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008675215500150118,
+        "cell_hessian_upper_per_nm2": 0.0005953232865933824,
+        "cell_yx": [
+          17,
+          44
+        ],
+        "center_gradient_lower_per_nm": 0.012042872563737664,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003119881257764367,
+        "hidden_loop_curvature_scale_nm": 29.144552869054692
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008494921842634763,
+        "cell_hessian_upper_per_nm2": 0.0005941568909957139,
+        "cell_yx": [
+          17,
+          45
+        ],
+        "center_gradient_lower_per_nm": 0.011855980776329048,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003108217301787682,
+        "hidden_loop_curvature_scale_nm": 28.594877788587464
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008147220392122768,
+        "cell_hessian_upper_per_nm2": 0.0005949979996681378,
+        "cell_yx": [
+          17,
+          46
+        ],
+        "center_gradient_lower_per_nm": 0.01151303735498494,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031166283885119216,
+        "hidden_loop_curvature_scale_nm": 27.38570683150837
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00762045966105439,
+        "cell_hessian_upper_per_nm2": 0.000597237660508366,
+        "cell_yx": [
+          17,
+          47
+        ],
+        "center_gradient_lower_per_nm": 0.010998946058858027,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003139024996914204,
+        "hidden_loop_curvature_scale_nm": 25.51901919436188
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.006929836572233321,
+        "cell_hessian_upper_per_nm2": 0.0005987207290653469,
+        "cell_yx": [
+          17,
+          48
+        ],
+        "center_gradient_lower_per_nm": 0.010316712472705804,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031538556824840125,
+        "hidden_loop_curvature_scale_nm": 23.148811243102852
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0061031158205433434,
+        "cell_hessian_upper_per_nm2": 0.000596904036761824,
+        "cell_yx": [
+          17,
+          49
+        ],
+        "center_gradient_lower_per_nm": 0.009479714957438623,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031356887594487844,
+        "hidden_loop_curvature_scale_nm": 20.449236207724294
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.005867008384355602,
+        "cell_hessian_upper_per_nm2": 0.0005885560277913555,
+        "cell_yx": [
+          18,
+          20
+        ],
+        "center_gradient_lower_per_nm": 0.009196384051231486,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030522086697440983,
+        "hidden_loop_curvature_scale_nm": 19.93695793541501
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007032565164664732,
+        "cell_hessian_upper_per_nm2": 0.0005918011498000883,
+        "cell_yx": [
+          18,
+          21
+        ],
+        "center_gradient_lower_per_nm": 0.010380298013765837,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003084659889831426,
+        "hidden_loop_curvature_scale_nm": 23.76664920992582
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0080863326570757,
+        "cell_hessian_upper_per_nm2": 0.0005878286915624249,
+        "cell_yx": [
+          18,
+          22
+        ],
+        "center_gradient_lower_per_nm": 0.011411593888914148,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003044935307454793,
+        "hidden_loop_curvature_scale_nm": 27.512548377257847
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.009031453758803333,
+        "cell_hessian_upper_per_nm2": 0.0005765250641021172,
+        "cell_yx": [
+          18,
+          23
+        ],
+        "center_gradient_lower_per_nm": 0.012292772017608262,
+        "center_hessian_frobenius_upper_per_nm2": 0.0002931899032851716,
+        "hidden_loop_curvature_scale_nm": 31.330654367538937
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00903145407859309,
+        "cell_hessian_upper_per_nm2": 0.000576525049943168,
+        "cell_yx": [
+          18,
+          48
+        ],
+        "center_gradient_lower_per_nm": 0.012292772257302907,
+        "center_hessian_frobenius_upper_per_nm2": 0.0002931898891262223,
+        "hidden_loop_curvature_scale_nm": 31.330656246362167
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00808633278621875,
+        "cell_hessian_upper_per_nm2": 0.0005878287160272689,
+        "cell_yx": [
+          18,
+          49
+        ],
+        "center_gradient_lower_per_nm": 0.011411594156451255,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003044935552103232,
+        "hidden_loop_curvature_scale_nm": 27.512547671603134
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007032565201709335,
+        "cell_hessian_upper_per_nm2": 0.000591801175337241,
+        "cell_yx": [
+          18,
+          50
+        ],
+        "center_gradient_lower_per_nm": 0.010380298195270391,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003084660145202954,
+        "hidden_loop_curvature_scale_nm": 23.766648309550213
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.005867008277119774,
+        "cell_hessian_upper_per_nm2": 0.0005885560328359529,
+        "cell_yx": [
+          18,
+          51
+        ],
+        "center_gradient_lower_per_nm": 0.00919638397253221,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003052208720190072,
+        "hidden_loop_curvature_scale_nm": 19.936957400129387
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0060898618693377505,
+        "cell_hessian_upper_per_nm2": 0.000588066841074301,
+        "cell_yx": [
+          19,
+          19
+        ],
+        "center_gradient_lower_per_nm": 0.00941647027825447,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003047316802573553,
+        "hidden_loop_curvature_scale_nm": 20.71146150057561
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007436186583587487,
+        "cell_hessian_upper_per_nm2": 0.0005908278316578229,
+        "cell_yx": [
+          19,
+          20
+        ],
+        "center_gradient_lower_per_nm": 0.010778413513819411,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030749267084087734,
+        "hidden_loop_curvature_scale_nm": 25.172093070572014
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008603188508288733,
+        "cell_hessian_upper_per_nm2": 0.000587838432790146,
+        "cell_yx": [
+          19,
+          21
+        ],
+        "center_gradient_lower_per_nm": 0.011928504844832611,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030450327197320033,
+        "hidden_loop_curvature_scale_nm": 29.27058874818417
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008603188951602538,
+        "cell_hessian_upper_per_nm2": 0.0005878384517647644,
+        "cell_yx": [
+          19,
+          50
+        ],
+        "center_gradient_lower_per_nm": 0.011928505395483067,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030450329094781876,
+        "hidden_loop_curvature_scale_nm": 29.270589311654213
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007436186623144172,
+        "cell_hessian_upper_per_nm2": 0.0005908278514182879,
+        "cell_yx": [
+          19,
+          51
+        ],
+        "center_gradient_lower_per_nm": 0.010778413665158165,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003074926906013423,
+        "hidden_loop_curvature_scale_nm": 25.17209236258424
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.006089862037641809,
+        "cell_hessian_upper_per_nm2": 0.000588066846672351,
+        "cell_yx": [
+          19,
+          52
+        ],
+        "center_gradient_lower_per_nm": 0.00941647047822588,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003047316858554053,
+        "hidden_loop_curvature_scale_nm": 20.711461875812404
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.005864248076633821,
+        "cell_hessian_upper_per_nm2": 0.0005885780283019192,
+        "cell_yx": [
+          20,
+          18
+        ],
+        "center_gradient_lower_per_nm": 0.009193748197191378,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003052428674849735,
+        "hidden_loop_curvature_scale_nm": 19.926833128829177
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007433446714401219,
+        "cell_hessian_upper_per_nm2": 0.0005908806893021864,
+        "cell_yx": [
+          20,
+          19
+        ],
+        "center_gradient_lower_per_nm": 0.010775972652623278,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003075455284852408,
+        "hidden_loop_curvature_scale_nm": 25.160567434281568
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007433447019921294,
+        "cell_hessian_upper_per_nm2": 0.0005908806878163182,
+        "cell_yx": [
+          20,
+          52
+        ],
+        "center_gradient_lower_per_nm": 0.010775972949738014,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003075455269993726,
+        "hidden_loop_curvature_scale_nm": 25.160568531669668
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.005864247916084206,
+        "cell_hessian_upper_per_nm2": 0.0005885780858055264,
+        "cell_yx": [
+          20,
+          53
+        ],
+        "center_gradient_lower_per_nm": 0.009193748361931289,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030524292498858074,
+        "hidden_loop_curvature_scale_nm": 19.92683063644278
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007027567911547386,
+        "cell_hessian_upper_per_nm2": 0.0005918295974766792,
+        "cell_yx": [
+          21,
+          18
+        ],
+        "center_gradient_lower_per_nm": 0.010375461685008703,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003084944366597336,
+        "hidden_loop_curvature_scale_nm": 23.74861933742441
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008596072959612818,
+        "cell_hessian_upper_per_nm2": 0.0005879956004674439,
+        "cell_yx": [
+          21,
+          19
+        ],
+        "center_gradient_lower_per_nm": 0.011922278370799903,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003046604396504983,
+        "hidden_loop_curvature_scale_nm": 29.238562168761543
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008596073440806675,
+        "cell_hessian_upper_per_nm2": 0.0005879955845355733,
+        "cell_yx": [
+          21,
+          52
+        ],
+        "center_gradient_lower_per_nm": 0.011922278761869489,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030466042371862757,
+        "hidden_loop_curvature_scale_nm": 29.238564597712955
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007027567833802048,
+        "cell_hessian_upper_per_nm2": 0.0005918296776360226,
+        "cell_yx": [
+          21,
+          53
+        ],
+        "center_gradient_lower_per_nm": 0.010375462060713088,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003084945168190769,
+        "hidden_loop_curvature_scale_nm": 23.748615858105133
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.006103531161283611,
+        "cell_hessian_upper_per_nm2": 0.0005966299094718973,
+        "cell_yx": [
+          22,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.009478579600053967,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031329474865495166,
+        "hidden_loop_curvature_scale_nm": 20.460024093281234
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00807890839134956,
+        "cell_hessian_upper_per_nm2": 0.0005878611601564629,
+        "cell_yx": [
+          22,
+          18
+        ],
+        "center_gradient_lower_per_nm": 0.011404353293292167,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003045259993395172,
+        "hidden_loop_curvature_scale_nm": 27.4857702427536
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00807890849326458,
+        "cell_hessian_upper_per_nm2": 0.0005878612442293693,
+        "cell_yx": [
+          22,
+          53
+        ],
+        "center_gradient_lower_per_nm": 0.011404353870795365,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030452608341242373,
+        "hidden_loop_curvature_scale_nm": 27.485766658610963
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.006103530193286752,
+        "cell_hessian_upper_per_nm2": 0.000596629963931173,
+        "cell_yx": [
+          22,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.009478578940125293,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031329480311422734,
+        "hidden_loop_curvature_scale_nm": 20.4600189808464
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0069317041795483115,
+        "cell_hessian_upper_per_nm2": 0.0005982718220986903,
+        "cell_yx": [
+          23,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.010316040678738836,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003149366612817447,
+        "hidden_loop_curvature_scale_nm": 23.172424050433932
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.009022339564207716,
+        "cell_hessian_upper_per_nm2": 0.00057650957848564,
+        "cell_yx": [
+          23,
+          18
+        ],
+        "center_gradient_lower_per_nm": 0.01228357022313727,
+        "center_hessian_frobenius_upper_per_nm2": 0.0002931744176686944,
+        "hidden_loop_curvature_scale_nm": 31.299877403276994
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.009022339652808766,
+        "cell_hessian_upper_per_nm2": 0.0005765096977571128,
+        "cell_yx": [
+          23,
+          53
+        ],
+        "center_gradient_lower_per_nm": 0.012283570986439658,
+        "center_hessian_frobenius_upper_per_nm2": 0.0002931745369401672,
+        "hidden_loop_curvature_scale_nm": 31.299871235158072
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.006931703077387987,
+        "cell_hessian_upper_per_nm2": 0.0005982718823316059,
+        "cell_yx": [
+          23,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.010316039917307337,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031493672151466034,
+        "hidden_loop_curvature_scale_nm": 23.17241803299701
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007625165201580101,
+        "cell_hessian_upper_per_nm2": 0.000596514686931835,
+        "cell_yx": [
+          24,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.010999561843235068,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031317952611488936,
+        "hidden_loop_curvature_scale_nm": 25.565724930596534
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007625163883274051,
+        "cell_hessian_upper_per_nm2": 0.0005965147737819451,
+        "cell_yx": [
+          24,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.010999561016227432,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003131796129649995,
+        "hidden_loop_curvature_scale_nm": 25.565716788303433
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008155695106264679,
+        "cell_hessian_upper_per_nm2": 0.0005939432482025443,
+        "cell_yx": [
+          25,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.011515545493816549,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031060808738559873,
+        "hidden_loop_curvature_scale_nm": 27.46287673425476
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008155693725571346,
+        "cell_hessian_upper_per_nm2": 0.0005939433428689024,
+        "cell_yx": [
+          25,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011515544648637006,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003106081820519568,
+        "hidden_loop_curvature_scale_nm": 27.462867707809306
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00850670946661363,
+        "cell_hessian_upper_per_nm2": 0.0005928360507966948,
+        "cell_yx": [
+          26,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.011860296599815195,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003095008899797491,
+        "hidden_loop_curvature_scale_nm": 28.698354140851304
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008506708070955896,
+        "cell_hessian_upper_per_nm2": 0.0005928361524390923,
+        "cell_yx": [
+          26,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011860295779133688,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003095009916221467,
+        "hidden_loop_curvature_scale_nm": 28.698344512077878
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008688628471012422,
+        "cell_hessian_upper_per_nm2": 0.0005938979999964054,
+        "cell_yx": [
+          27,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.012048222896057113,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031056283917945977,
+        "hidden_loop_curvature_scale_nm": 29.259665703757243
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008688627090632521,
+        "cell_hessian_upper_per_nm2": 0.0005938981023628994,
+        "cell_yx": [
+          27,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.012048222094749551,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003105629415459538,
+        "hidden_loop_curvature_scale_nm": 29.259656011910824
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008740738905363239,
+        "cell_hessian_upper_per_nm2": 0.0005961654088871028,
+        "cell_yx": [
+          28,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.01211315973202661,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003128302480701572,
+        "hidden_loop_curvature_scale_nm": 29.32320049121968
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008740737588400603,
+        "cell_hessian_upper_per_nm2": 0.0005961655110530078,
+        "cell_yx": [
+          28,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.012113158993001607,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003128303502360621,
+        "hidden_loop_curvature_scale_nm": 29.323191047941794
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008716912804386528,
+        "cell_hessian_upper_per_nm2": 0.0005981801091738592,
+        "cell_yx": [
+          29,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.01210073049692849,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031484494835691356,
+        "hidden_loop_curvature_scale_nm": 29.14477653369441
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008716911527896469,
+        "cell_hessian_upper_per_nm2": 0.0005981802148000412,
+        "cell_yx": [
+          29,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.012100729817950347,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003148450539830955,
+        "hidden_loop_curvature_scale_nm": 29.144767119421843
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008666303546446506,
+        "cell_hessian_upper_per_nm2": 0.0005991690045697604,
+        "cell_yx": [
+          30,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.012055715276111075,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031583384375281475,
+        "hidden_loop_curvature_scale_nm": 28.92774319215473
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008666302258793133,
+        "cell_hessian_upper_per_nm2": 0.0005991691146381839,
+        "cell_yx": [
+          30,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.012055714611098731,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003158339538212382,
+        "hidden_loop_curvature_scale_nm": 28.927733579947265
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0086211618672312,
+        "cell_hessian_upper_per_nm2": 0.0005992645091149788,
+        "cell_yx": [
+          31,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.012011113852188234,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031592934829803316,
+        "hidden_loop_curvature_scale_nm": 28.772476047224373
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00862116060664577,
+        "cell_hessian_upper_per_nm2": 0.0005992646212420802,
+        "cell_yx": [
+          31,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.012011113225889472,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003159294604251346,
+        "hidden_loop_curvature_scale_nm": 28.772466456561087
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008595062340967735,
+        "cell_hessian_upper_per_nm2": 0.000598985876522277,
+        "cell_yx": [
+          32,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.011983438141958697,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003156507157053313,
+        "hidden_loop_curvature_scale_nm": 28.69871453687965
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00859506105693665,
+        "cell_hessian_upper_per_nm2": 0.000598985995725971,
+        "cell_yx": [
+          32,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011983437532245534,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003156508349090253,
+        "hidden_loop_curvature_scale_nm": 28.698704538223584
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008587625440080413,
+        "cell_hessian_upper_per_nm2": 0.0005987175194019072,
+        "cell_yx": [
+          33,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.011974483183954629,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003153823585849616,
+        "hidden_loop_curvature_scale_nm": 28.686735102253483
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008587624322718394,
+        "cell_hessian_upper_per_nm2": 0.0005987176323725363,
+        "cell_yx": [
+          33,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011974482705650992,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031538247155559065,
+        "hidden_loop_curvature_scale_nm": 28.686725956903068
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00859096852580171,
+        "cell_hessian_upper_per_nm2": 0.0005985737767649589,
+        "cell_yx": [
+          34,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.011977013138529271,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031523861594801326,
+        "hidden_loop_curvature_scale_nm": 28.70479415998577
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008590967432039754,
+        "cell_hessian_upper_per_nm2": 0.000598573892536057,
+        "cell_yx": [
+          34,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011977012699667543,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003152387317191114,
+        "hidden_loop_curvature_scale_nm": 28.704784953587826
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008595692802321144,
+        "cell_hessian_upper_per_nm2": 0.000598523304268992,
+        "cell_yx": [
+          35,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.011981451899495413,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031518814345204635,
+        "hidden_loop_curvature_scale_nm": 28.723001229900365
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008595691699612247,
+        "cell_hessian_upper_per_nm2": 0.0005985234246578229,
+        "cell_yx": [
+          35,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011981451477808585,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031518826384087725,
+        "hidden_loop_curvature_scale_nm": 28.722991767703732
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00859569280986663,
+        "cell_hessian_upper_per_nm2": 0.0005985233005350411,
+        "cell_yx": [
+          36,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.011981451885918483,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003151881397180954,
+        "hidden_loop_curvature_scale_nm": 28.72300143430552
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008595691711041343,
+        "cell_hessian_upper_per_nm2": 0.0005985234236323126,
+        "cell_yx": [
+          36,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011981451483436519,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031518826281536695,
+        "hidden_loop_curvature_scale_nm": 28.722991855108692
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008590968553354993,
+        "cell_hessian_upper_per_nm2": 0.0005985737678732693,
+        "cell_yx": [
+          37,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.011977013115783561,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003152386070563237,
+        "hidden_loop_curvature_scale_nm": 28.704794678452668
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008590967463284417,
+        "cell_hessian_upper_per_nm2": 0.0005985738931144241,
+        "cell_yx": [
+          37,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011977012734183945,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003152387322974785,
+        "hidden_loop_curvature_scale_nm": 28.704785030249077
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008587625403116144,
+        "cell_hessian_upper_per_nm2": 0.0005987175135962368,
+        "cell_yx": [
+          38,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.011974483114148528,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003153823527792912,
+        "hidden_loop_curvature_scale_nm": 28.686735256946122
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008587624286849853,
+        "cell_hessian_upper_per_nm2": 0.0005987176438387963,
+        "cell_yx": [
+          38,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011974482734645414,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003153824830218507,
+        "hidden_loop_curvature_scale_nm": 28.68672528769523
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008595062274636847,
+        "cell_hessian_upper_per_nm2": 0.000598985876807522,
+        "cell_yx": [
+          39,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.011983438077241396,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031565071599057635,
+        "hidden_loop_curvature_scale_nm": 28.698714301735635
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008595061119126926,
+        "cell_hessian_upper_per_nm2": 0.0005989860123411592,
+        "cell_yx": [
+          39,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011983437688425509,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003156508515242135,
+        "hidden_loop_curvature_scale_nm": 28.698703949806134
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008621161748422992,
+        "cell_hessian_upper_per_nm2": 0.0005992645159998263,
+        "cell_yx": [
+          40,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.012011113772326604,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003159293551828806,
+        "hidden_loop_curvature_scale_nm": 28.77247532014891
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008621160640796852,
+        "cell_hessian_upper_per_nm2": 0.0005992646523633485,
+        "cell_yx": [
+          40,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.012011113436089035,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003159294915464029,
+        "hidden_loop_curvature_scale_nm": 28.77246507631368
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008666303449107368,
+        "cell_hessian_upper_per_nm2": 0.0005991690244426241,
+        "cell_yx": [
+          41,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.01205571529118983,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031583386362567847,
+        "hidden_loop_curvature_scale_nm": 28.927741907783634
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008666302314587543,
+        "cell_hessian_upper_per_nm2": 0.0005991691653123473,
+        "cell_yx": [
+          41,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.012055714953549497,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003158340044954017,
+        "hidden_loop_curvature_scale_nm": 28.92773131965091
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008716912785523626,
+        "cell_hessian_upper_per_nm2": 0.0005981801175269478,
+        "cell_yx": [
+          42,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.012100730525317792,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003148449567100022,
+        "hidden_loop_curvature_scale_nm": 29.144776063644176
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008716911654712096,
+        "cell_hessian_upper_per_nm2": 0.0005981802604700192,
+        "cell_yx": [
+          42,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.012100730203114383,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031484509965307357,
+        "hidden_loop_curvature_scale_nm": 29.144765318276455
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008740738886501615,
+        "cell_hessian_upper_per_nm2": 0.0005961654142608237,
+        "cell_yx": [
+          43,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.012113159743563341,
+        "center_hessian_frobenius_upper_per_nm2": 0.000312830253443878,
+        "hidden_loop_curvature_scale_nm": 29.323200163629487
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00874073778379503,
+        "cell_hessian_upper_per_nm2": 0.0005961655571995601,
+        "cell_yx": [
+          43,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.012113159449440355,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003128303963826144,
+        "hidden_loop_curvature_scale_nm": 29.323189433666528
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008688628424643689,
+        "cell_hessian_upper_per_nm2": 0.0005938980078028703,
+        "cell_yx": [
+          44,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.012048222893848414,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031056284698592466,
+        "hidden_loop_curvature_scale_nm": 29.259665163004428
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008688627425221602,
+        "cell_hessian_upper_per_nm2": 0.0005938981459420381,
+        "cell_yx": [
+          44,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.012048222675859466,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031056298512509246,
+        "hidden_loop_curvature_scale_nm": 29.259654991647587
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00850670939408653,
+        "cell_hessian_upper_per_nm2": 0.0005928360660091871,
+        "cell_yx": [
+          45,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.011860296613342945,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003095009051922414,
+        "hidden_loop_curvature_scale_nm": 28.698353159757666
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00850670846695994,
+        "cell_hessian_upper_per_nm2": 0.0005928362004295446,
+        "cell_yx": [
+          45,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011860296446612725,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030950103961259896,
+        "hidden_loop_curvature_scale_nm": 28.698343524893822
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008155695068562164,
+        "cell_hessian_upper_per_nm2": 0.0005939432639078007,
+        "cell_yx": [
+          46,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.01151554554495638,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031060810309085506,
+        "hidden_loop_curvature_scale_nm": 27.46287588111511
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008155694254012897,
+        "cell_hessian_upper_per_nm2": 0.0005939433858166318,
+        "cell_yx": [
+          46,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.011515545420027603,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003106082249996861,
+        "hidden_loop_curvature_scale_nm": 27.46286750141807
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007625165119432081,
+        "cell_hessian_upper_per_nm2": 0.0005965147048278781,
+        "cell_yx": [
+          47,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.010999561862322356,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031317954401093246,
+        "hidden_loop_curvature_scale_nm": 25.56572388817235
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0076251644723057165,
+        "cell_hessian_upper_per_nm2": 0.0005965148066435626,
+        "cell_yx": [
+          47,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.010999561791152478,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031317964582661703,
+        "hidden_loop_curvature_scale_nm": 25.56571735481498
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.006931704265346112,
+        "cell_hessian_upper_per_nm2": 0.0005982718069928272,
+        "cell_yx": [
+          48,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.01031604067908497,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031493664617588156,
+        "hidden_loop_curvature_scale_nm": 23.17242492233707
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.009022339898444353,
+        "cell_hessian_upper_per_nm2": 0.000576509550192387,
+        "cell_yx": [
+          48,
+          18
+        ],
+        "center_gradient_lower_per_nm": 0.012283570397323099,
+        "center_hessian_frobenius_upper_per_nm2": 0.0002931743893754413,
+        "hidden_loop_curvature_scale_nm": 31.299880098893443
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.009022340350513613,
+        "cell_hessian_upper_per_nm2": 0.0005765096859562353,
+        "cell_yx": [
+          48,
+          53
+        ],
+        "center_gradient_lower_per_nm": 0.012283571617388661,
+        "center_hessian_frobenius_upper_per_nm2": 0.0002931745251392896,
+        "hidden_loop_curvature_scale_nm": 31.299874296295958
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.006931703748447214,
+        "cell_hessian_upper_per_nm2": 0.0005982718972251014,
+        "cell_yx": [
+          48,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.010316040672616896,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031493673640815574,
+        "hidden_loop_curvature_scale_nm": 23.17241969946364
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.006103531151834121,
+        "cell_hessian_upper_per_nm2": 0.0005966299152781413,
+        "cell_yx": [
+          49,
+          17
+        ],
+        "center_gradient_lower_per_nm": 0.009478579623449553,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003132947544611956,
+        "hidden_loop_curvature_scale_nm": 20.460023862493493
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008078908539457851,
+        "cell_hessian_upper_per_nm2": 0.0005878611462700355,
+        "cell_yx": [
+          49,
+          18
+        ],
+        "center_gradient_lower_per_nm": 0.011404353362846963,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003045259854530899,
+        "hidden_loop_curvature_scale_nm": 27.485771395909815
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008078909081024769,
+        "cell_hessian_upper_per_nm2": 0.0005878612519413241,
+        "cell_yx": [
+          49,
+          53
+        ],
+        "center_gradient_lower_per_nm": 0.011404354502180959,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030452609112437845,
+        "hidden_loop_curvature_scale_nm": 27.485768297690573
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.006103530806509603,
+        "cell_hessian_upper_per_nm2": 0.0005966299850273585,
+        "cell_yx": [
+          49,
+          54
+        ],
+        "center_gradient_lower_per_nm": 0.00947857967268619,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031329482421041285,
+        "hidden_loop_curvature_scale_nm": 20.46002031302441
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007027568194797551,
+        "cell_hessian_upper_per_nm2": 0.0005918295969153095,
+        "cell_yx": [
+          50,
+          18
+        ],
+        "center_gradient_lower_per_nm": 0.010375461965083281,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030849443609836383,
+        "hidden_loop_curvature_scale_nm": 23.74862031715251
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008596073037692704,
+        "cell_hessian_upper_per_nm2": 0.0005879956220342413,
+        "cell_yx": [
+          50,
+          19
+        ],
+        "center_gradient_lower_per_nm": 0.011922278570880017,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003046604612172957,
+        "hidden_loop_curvature_scale_nm": 29.238561361914766
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008596074293758523,
+        "cell_hessian_upper_per_nm2": 0.0005879956340671797,
+        "cell_yx": [
+          50,
+          52
+        ],
+        "center_gradient_lower_per_nm": 0.011922279895014416,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030466047325023403,
+        "hidden_loop_curvature_scale_nm": 29.23856503593155
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007027568679796012,
+        "cell_hessian_upper_per_nm2": 0.0005918296920395628,
+        "cell_yx": [
+          50,
+          53
+        ],
+        "center_gradient_lower_per_nm": 0.010375462988185778,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003084945312226171,
+        "hidden_loop_curvature_scale_nm": 23.748618139037976
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.005864248156830744,
+        "cell_hessian_upper_per_nm2": 0.0005885780252089787,
+        "cell_yx": [
+          51,
+          18
+        ],
+        "center_gradient_lower_per_nm": 0.009193748259891988,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030524286439203305,
+        "hidden_loop_curvature_scale_nm": 19.926833506054194
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0074334467567795885,
+        "cell_hessian_upper_per_nm2": 0.0005908806846871656,
+        "cell_yx": [
+          51,
+          19
+        ],
+        "center_gradient_lower_per_nm": 0.010775972668895148,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030754552387021993,
+        "hidden_loop_curvature_scale_nm": 25.160567774237308
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007433447758125467,
+        "cell_hessian_upper_per_nm2": 0.0005908806965087863,
+        "cell_yx": [
+          51,
+          52
+        ],
+        "center_gradient_lower_per_nm": 0.010775973737114211,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003075455356918406,
+        "hidden_loop_curvature_scale_nm": 25.160570660188867
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0058642487007119605,
+        "cell_hessian_upper_per_nm2": 0.0005885780864103399,
+        "cell_yx": [
+          51,
+          53
+        ],
+        "center_gradient_lower_per_nm": 0.009193749149980385,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003052429255933943,
+        "hidden_loop_curvature_scale_nm": 19.92683328214694
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00608986190105506,
+        "cell_hessian_upper_per_nm2": 0.0005880668317592026,
+        "cell_yx": [
+          52,
+          19
+        ],
+        "center_gradient_lower_per_nm": 0.009416470257277624,
+        "center_hessian_frobenius_upper_per_nm2": 0.000304731670942257,
+        "hidden_loop_curvature_scale_nm": 20.71146193651912
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0074361865440090375,
+        "cell_hessian_upper_per_nm2": 0.0005908278481732695,
+        "cell_yx": [
+          52,
+          20
+        ],
+        "center_gradient_lower_per_nm": 0.010778413567666435,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003074926873563238,
+        "hidden_loop_curvature_scale_nm": 25.172092232958722
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00860318856402226,
+        "cell_hessian_upper_per_nm2": 0.0005878384329951335,
+        "cell_yx": [
+          52,
+          21
+        ],
+        "center_gradient_lower_per_nm": 0.011928504901725723,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030450327217818783,
+        "hidden_loop_curvature_scale_nm": 29.270588927599032
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008603189315650366,
+        "cell_hessian_upper_per_nm2": 0.0005878384837446151,
+        "cell_yx": [
+          52,
+          50
+        ],
+        "center_gradient_lower_per_nm": 0.01192850594043625,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003045033229276695,
+        "hidden_loop_curvature_scale_nm": 29.270588957860735
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0074361872160925635,
+        "cell_hessian_upper_per_nm2": 0.0005908278401446293,
+        "cell_yx": [
+          52,
+          51
+        ],
+        "center_gradient_lower_per_nm": 0.010778414194333114,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030749267932768365,
+        "hidden_loop_curvature_scale_nm": 25.172094850074267
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00608986287389112,
+        "cell_hessian_upper_per_nm2": 0.0005880668418070024,
+        "cell_yx": [
+          52,
+          52
+        ],
+        "center_gradient_lower_per_nm": 0.009416471286952624,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003047316809900567,
+        "hidden_loop_curvature_scale_nm": 20.71146489123
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.005867008529193837,
+        "cell_hessian_upper_per_nm2": 0.0005885560135582398,
+        "cell_yx": [
+          53,
+          20
+        ],
+        "center_gradient_lower_per_nm": 0.00919638411555506,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003052208527412941,
+        "hidden_loop_curvature_scale_nm": 19.936958909734336
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007032565197445651,
+        "cell_hessian_upper_per_nm2": 0.00059180112838618,
+        "cell_yx": [
+          53,
+          21
+        ],
+        "center_gradient_lower_per_nm": 0.010380297925411399,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003084659675692344,
+        "hidden_loop_curvature_scale_nm": 23.7666501806889
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008086332849339779,
+        "cell_hessian_upper_per_nm2": 0.0005878287020953722,
+        "cell_yx": [
+          53,
+          22
+        ],
+        "center_gradient_lower_per_nm": 0.011411594140761575,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003044935412784265,
+        "hidden_loop_curvature_scale_nm": 27.512548538427144
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.009031454149167392,
+        "cell_hessian_upper_per_nm2": 0.0005765250353897229,
+        "cell_yx": [
+          53,
+          23
+        ],
+        "center_gradient_lower_per_nm": 0.01229277224555049,
+        "center_hessian_frobenius_upper_per_nm2": 0.0002931898745727772,
+        "hidden_loop_curvature_scale_nm": 31.330657282080573
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.009031454636245771,
+        "cell_hessian_upper_per_nm2": 0.0005765250642448719,
+        "cell_yx": [
+          53,
+          48
+        ],
+        "center_gradient_lower_per_nm": 0.012292772895858242,
+        "center_hessian_frobenius_upper_per_nm2": 0.00029318990342792623,
+        "hidden_loop_curvature_scale_nm": 31.33065740368148
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008086333344288326,
+        "cell_hessian_upper_per_nm2": 0.0005878287136890169,
+        "cell_yx": [
+          53,
+          49
+        ],
+        "center_gradient_lower_per_nm": 0.011411594701293682,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030449355287207134,
+        "hidden_loop_curvature_scale_nm": 27.512549679790883
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007032565814637021,
+        "cell_hessian_upper_per_nm2": 0.0005918011860605886,
+        "cell_yx": [
+          53,
+          50
+        ],
+        "center_gradient_lower_per_nm": 0.010380298868858492,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030846602524364287,
+        "hidden_loop_curvature_scale_nm": 23.766649950299445
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.005867009139707972,
+        "cell_hessian_upper_per_nm2": 0.0005885560271425039,
+        "cell_yx": [
+          53,
+          51
+        ],
+        "center_gradient_lower_per_nm": 0.009196384802913397,
+        "center_hessian_frobenius_upper_per_nm2": 0.00030522086632555826,
+        "hidden_loop_curvature_scale_nm": 19.936960524192962
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.006103115879163619,
+        "cell_hessian_upper_per_nm2": 0.0005969040353857627,
+        "cell_yx": [
+          54,
+          22
+        ],
+        "center_gradient_lower_per_nm": 0.009479715008274719,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031356887456881696,
+        "hidden_loop_curvature_scale_nm": 20.449236451280957
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0069298365963005116,
+        "cell_hessian_upper_per_nm2": 0.0005987207495477477,
+        "cell_yx": [
+          54,
+          23
+        ],
+        "center_gradient_lower_per_nm": 0.01031671261263895,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031538558873080207,
+        "hidden_loop_curvature_scale_nm": 23.14881053157106
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.007620459795729027,
+        "cell_hessian_upper_per_nm2": 0.0005972376566827821,
+        "cell_yx": [
+          54,
+          24
+        ],
+        "center_gradient_lower_per_nm": 0.010998946171891894,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003139024958658364,
+        "hidden_loop_curvature_scale_nm": 25.519019808814807
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008147220566983679,
+        "cell_hessian_upper_per_nm2": 0.0005949979896221315,
+        "cell_yx": [
+          54,
+          25
+        ],
+        "center_gradient_lower_per_nm": 0.011513037473017056,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031166282880518587,
+        "hidden_loop_curvature_scale_nm": 27.385707881661165
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008494922063280837,
+        "cell_hessian_upper_per_nm2": 0.0005941568854974671,
+        "cell_yx": [
+          54,
+          26
+        ],
+        "center_gradient_lower_per_nm": 0.011855980965872343,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003108217246805215,
+        "hidden_loop_curvature_scale_nm": 28.594878795920476
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008675215794214798,
+        "cell_hessian_upper_per_nm2": 0.0005953232804630147,
+        "cell_yx": [
+          54,
+          27
+        ],
+        "center_gradient_lower_per_nm": 0.012042872823123748,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031198811964606906,
+        "hidden_loop_curvature_scale_nm": 29.144554157087956
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008727559627816371,
+        "cell_hessian_upper_per_nm2": 0.000597544898446075,
+        "cell_yx": [
+          54,
+          28
+        ],
+        "center_gradient_lower_per_nm": 0.012107784025853543,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031420973762912935,
+        "hidden_loop_curvature_scale_nm": 29.2113936559831
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008705194675789011,
+        "cell_hessian_upper_per_nm2": 0.0005994289508505496,
+        "cell_yx": [
+          54,
+          29
+        ],
+        "center_gradient_lower_per_nm": 0.012096076883676702,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031609379003360395,
+        "hidden_loop_curvature_scale_nm": 29.044959084598503
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00865653075299911,
+        "cell_hessian_upper_per_nm2": 0.000600244080855519,
+        "cell_yx": [
+          54,
+          30
+        ],
+        "center_gradient_lower_per_nm": 0.012052024032519301,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031690892003857334,
+        "hidden_loop_curvature_scale_nm": 28.843368986366627
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008613220866205999,
+        "cell_hessian_upper_per_nm2": 0.0006001399249313844,
+        "cell_yx": [
+          54,
+          31
+        ],
+        "center_gradient_lower_per_nm": 0.012008124950844138,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003168047641144387,
+        "hidden_loop_curvature_scale_nm": 28.704042202127347
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008588386740799796,
+        "cell_hessian_upper_per_nm2": 0.0005996601011825183,
+        "cell_yx": [
+          54,
+          32
+        ],
+        "center_gradient_lower_per_nm": 0.011980576532425156,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003163249403655726,
+        "hidden_loop_curvature_scale_nm": 28.644182675697984
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008581465198074076,
+        "cell_hessian_upper_per_nm2": 0.0005992211413562578,
+        "cell_yx": [
+          54,
+          33
+        ],
+        "center_gradient_lower_per_nm": 0.011971171857940898,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031588598053931214,
+        "hidden_loop_curvature_scale_nm": 28.642064192364987
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008584765521403482,
+        "cell_hessian_upper_per_nm2": 0.0005989593700829982,
+        "cell_yx": [
+          54,
+          34
+        ],
+        "center_gradient_lower_per_nm": 0.01197299137933077,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031562420926605265,
+        "hidden_loop_curvature_scale_nm": 28.66560221009276
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008589306503168965,
+        "cell_hessian_upper_per_nm2": 0.0005988499986153023,
+        "cell_yx": [
+          54,
+          35
+        ],
+        "center_gradient_lower_per_nm": 0.011976913662644443,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003155148377983566,
+        "hidden_loop_curvature_scale_nm": 28.6860032496608
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008589306459750659,
+        "cell_hessian_upper_per_nm2": 0.0005988499972292839,
+        "cell_yx": [
+          54,
+          36
+        ],
+        "center_gradient_lower_per_nm": 0.011976913611385634,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003155148364123383,
+        "hidden_loop_curvature_scale_nm": 28.686003171047986
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008584765504184728,
+        "cell_hessian_upper_per_nm2": 0.0005989593736207176,
+        "cell_yx": [
+          54,
+          37
+        ],
+        "center_gradient_lower_per_nm": 0.01197299138212438,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003156242128037719,
+        "hidden_loop_curvature_scale_nm": 28.665601983285452
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0085814650937706,
+        "cell_hessian_upper_per_nm2": 0.0005992211473705225,
+        "cell_yx": [
+          54,
+          38
+        ],
+        "center_gradient_lower_per_nm": 0.01197117178765924,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031588598655357686,
+        "hidden_loop_curvature_scale_nm": 28.64206355676007
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00858838670534447,
+        "cell_hessian_upper_per_nm2": 0.0005996601092294087,
+        "cell_yx": [
+          54,
+          39
+        ],
+        "center_gradient_lower_per_nm": 0.011980576542489916,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003163249484124631,
+        "hidden_loop_curvature_scale_nm": 28.644182173067833
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008613220774204369,
+        "cell_hessian_upper_per_nm2": 0.0006001399434589612,
+        "cell_yx": [
+          54,
+          40
+        ],
+        "center_gradient_lower_per_nm": 0.01200812496365031,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003168047826420155,
+        "hidden_loop_curvature_scale_nm": 28.704041009372865
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008656530737293496,
+        "cell_hessian_upper_per_nm2": 0.000600244102461138,
+        "cell_yx": [
+          54,
+          41
+        ],
+        "center_gradient_lower_per_nm": 0.012052024139033524,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003169089416441923,
+        "hidden_loop_curvature_scale_nm": 28.84336789582685
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008705194663742137,
+        "cell_hessian_upper_per_nm2": 0.0005994289765594646,
+        "cell_yx": [
+          54,
+          42
+        ],
+        "center_gradient_lower_per_nm": 0.012096077017061413,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031609381574251904,
+        "hidden_loop_curvature_scale_nm": 29.04495779869448
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.00872755969807794,
+        "cell_hessian_upper_per_nm2": 0.0005975449317130594,
+        "cell_yx": [
+          54,
+          43
+        ],
+        "center_gradient_lower_per_nm": 0.012107784284301594,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031420977089611384,
+        "hidden_loop_curvature_scale_nm": 29.21139226487124
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008675215957383514,
+        "cell_hessian_upper_per_nm2": 0.0005953233030864098,
+        "cell_yx": [
+          54,
+          44
+        ],
+        "center_gradient_lower_per_nm": 0.012042873114269713,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003119881422694642,
+        "hidden_loop_curvature_scale_nm": 29.144553597708992
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008494922283830296,
+        "cell_hessian_upper_per_nm2": 0.0005941569194538825,
+        "cell_yx": [
+          54,
+          45
+        ],
+        "center_gradient_lower_per_nm": 0.011855981378508294,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003108217586369369,
+        "hidden_loop_curvature_scale_nm": 28.594877904101082
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.008147220929310342,
+        "cell_hessian_upper_per_nm2": 0.0005949980114237382,
+        "cell_yx": [
+          54,
+          46
+        ],
+        "center_gradient_lower_per_nm": 0.011513037958672232,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031166285060679256,
+        "hidden_loop_curvature_scale_nm": 27.38570809611717
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0076204601362298684,
+        "cell_hessian_upper_per_nm2": 0.0005972376697283672,
+        "cell_yx": [
+          54,
+          47
+        ],
+        "center_gradient_lower_per_nm": 0.010998946586189709,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031390250891142154,
+        "hidden_loop_curvature_scale_nm": 25.519020391650006
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0069298370657851814,
+        "cell_hessian_upper_per_nm2": 0.0005987207612842799,
+        "cell_yx": [
+          54,
+          48
+        ],
+        "center_gradient_lower_per_nm": 0.010316713148515472,
+        "center_hessian_frobenius_upper_per_nm2": 0.00031538560046733433,
+        "hidden_loop_curvature_scale_nm": 23.14881164608491
+      },
+      {
+        "cell_gradient_lower_per_nm": 0.0061031163822529355,
+        "cell_hessian_upper_per_nm2": 0.000596904030423708,
+        "cell_yx": [
+          54,
+          49
+        ],
+        "center_gradient_lower_per_nm": 0.009479715483294416,
+        "center_hessian_frobenius_upper_per_nm2": 0.0003135688696067624,
+        "hidden_loop_curvature_scale_nm": 20.449238306937485
+      }
+    ],
+    "global_cell_gradient_lower_per_nm": 0.002350759143331506,
+    "hidden_loop_scale_worst_cell_yx": [
+      20,
+      53
+    ],
+    "local_cell_gradient_lower_per_nm": 0.005864247916084206,
+    "local_gradient_worst_cell_yx": [
+      20,
+      53
+    ],
+    "max_hessian_cell_yx": [
+      54,
+      41
+    ],
+    "max_local_hessian_upper_per_nm2": 0.000600244102461138,
+    "min_hidden_loop_curvature_scale_nm": 19.92683063644278,
+    "status": "PASS"
+  },
+  "date": "2026-09-10",
+  "direct_layout_conditioned_majorants": {
+    "Ixx_abs_upper_per_nm2": 0.0007841691536971798,
+    "Ixy_abs_upper_per_nm2": 0.0003402327065793234,
+    "Iyy_abs_upper_per_nm2": 0.0007854236110938494,
+    "hessian_frobenius_upper_per_nm2": 0.001209680990892408,
+    "third_derivative_tensor_upper_per_nm3": 5.0087053390560795e-05
+  },
+  "equivalence_to_increment18": {
+    "coherent_coefficient_midpoint_max_difference": 4.163336342344337e-17,
+    "coherent_disks_intersect": true,
+    "intensity_coefficient_midpoint_max_difference": 2.498001805406602e-16,
+    "intensity_disks_intersect": true,
+    "layout_dense_fft_diagnostic_midpoint_difference": 8.348779133882892e-17
+  },
+  "inputs": {
+    "boundary_coverage_sha256": "5392e94a51abdd12fc3e02f507f927942615ae142f92e269067fb88c6e5e2149",
+    "direct_spectrum_artifact_sha256": "9725e7a01bf6c425a9e626b7236bc943742c8be0bbd30f6acfe23270af0f7f7a",
+    "increment18_fourier_sha256": "b88741a354707cddbd58aadf8f7f063cb74ead665f14d1edef55b981a5a949d7",
+    "kernel_snapshot_sha256": "b1c2d0c9f23ce6e6a8c931b05970f5a50ef0a16d5663a1ebbe463f191bdf14fd"
+  },
+  "ledger": {
+    "continuous_active_cell_geometry": "PASS",
+    "direct_coherent_to_alias_free_intensity_spectrum": "PASS",
+    "direct_layout_to_coherent_spectrum": "PROVED",
+    "direct_run_to_layout_spectrum": "PROVED_UNDER_OUTWARD_ROOT_CONTRACT",
+    "equivalence_with_increment18_grid_path": "PASS",
+    "production_klayout_oasis_gds_run_source": "OPEN_IMPLEMENTATION"
+  },
+  "new_first_failure": {
+    "name": "PRODUCTION_LAYOUT_RUN_SOURCE",
+    "status": "OPEN_IMPLEMENTATION"
+  },
+  "project": "B04",
+  "schema": "B04.direct_streamed_run_spectrum.v1",
+  "status": "PASS_DIRECT_STREAMED_SPECTRAL_CONSTRUCTION",
+  "stream_contract": {
+    "coherent_spectrum_identity": "c_E = N^2 * c_kernel * c_layout",
+    "corrected_spatial_grid_materialized": false,
+    "layout_representation": "36 horizontal runs; no dense layout raster in proof construction",
+    "layout_spectrum_memory": "O(N^2)",
+    "layout_spectrum_work": "O(R*N^2) in current full-frequency implementation",
+    "run_formula": "sum_y exp(-i ky y) * sum_{x=x0}^{x1-1} exp(-i kx x)"
+  },
+  "verification": {
+    "focused_test_suite": "49 passed",
+    "numeric_run_vs_fft_test_tolerance": "3e-15, diagnostic only",
+    "standalone_consumer_replay": "PASS"
+  }
+}

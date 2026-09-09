@@ -46,6 +46,11 @@ from .interface_runs import (
 )
 from .mvp1 import certify_mvp1_manifest
 from .replay import ExpandedBandReplay, replay_expanded_band, sha256_file
+from .run_spectrum import (
+    ComplexDiskGrid,
+    RunSpectrumAccumulator,
+    coherent_spectrum_from_layout,
+)
 from .source_native import (
     BACKEND_ID as SOURCE_NATIVE_BACKEND_ID,
 )
@@ -91,6 +96,7 @@ __all__ = [
     "CertificateTarget",
     "CellTransversalityTransfer",
     "CenterJetCertificate",
+    "ComplexDiskGrid",
     "ComplexIntervalVector",
     "CoreHaloGeometry",
     "CoreWindow",
@@ -119,6 +125,7 @@ __all__ = [
     "RootBracket",
     "RunCompressionStats",
     "RunSource",
+    "RunSpectrumAccumulator",
     "SOURCE_NATIVE_BACKEND_ID",
     "SOURCE_NATIVE_FORWARD_MODEL_ID",
     "SourceNativeVerificationBackend",
@@ -130,6 +137,7 @@ __all__ = [
     "assemble_continuous_focus_certificate",
     "center_jet_certificate_from_json",
     "certify_mvp1_manifest",
+    "coherent_spectrum_from_layout",
     "curvature_scale_nm",
     "dyadic_from_float",
     "encode_binary_row_runs",

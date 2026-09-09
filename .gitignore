@@ -65,3 +65,4 @@ proof_artifacts/B04_K24_HaloKernelSnapshot_2026-09-09.npz
 proof_artifacts/B04_K24_RunPrefixIntervalSnapshot_2026-09-09.npz
 proof_artifacts/B04_K24_DerivativeRunPrefixIntervalSnapshot_2026-09-10.npz
 proof_artifacts/B04_K24_RunInterface_AliasFreeIntensityFourier_2026-09-10.npz
+proof_artifacts/B04_K24_DirectRunSpectrum_AliasFreeIntensity_2026-09-10.npz

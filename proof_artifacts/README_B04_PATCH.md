@@ -149,6 +149,25 @@ materializes the full 72x72 corrected coherent grid before constructing its
 alias-free Fourier envelope. A production streaming path should instead
 accumulate the same layout-conditioned spectrum directly from row runs.
 
+
+## Increment 19: direct streamed run spectrum
+
+Horizontal runs are accumulated directly into the normalized layout Fourier
+spectrum; no corrected coherent spatial grid is required.  Circular
+convolution gives `c_E = N^2 * c_h * c_m`, after which the existing
+144-grid alias-free intensity proof is reused.
+
+Frozen results:
+- coherent midpoint difference vs Increment 18: 4.163e-17;
+- intensity midpoint difference vs Increment 18: 2.498e-16;
+- Hessian upper: 1.209680990892e-03 nm^-2;
+- L3 upper: 5.008705339056e-05 nm^-3;
+- local cell gradient floor: 5.864247916084e-03 nm^-1;
+- hidden-loop scale: 19.926830636 nm.
+
+The remaining full-chip blocker is the input adapter: KLayout/GDS/OASIS
+geometry must emit canonical horizontal runs before full-canvas rasterization.
+
 ## External large artifacts (not in git)
 
 The snapshot NPZ files below exceed the repository's 500 KB large-file
@@ -162,6 +181,7 @@ tests to run; the tests skip when a file is absent.
 | `B04_K24_RunPrefixIntervalSnapshot_2026-09-09.npz` | `7ff0322fa01075aa0be6495b50ee6ca7df357cf67672a878464fe1052988a050` | Increment 16 interval certificate replay |
 | `B04_K24_DerivativeRunPrefixIntervalSnapshot_2026-09-10.npz` | `a5523c4c693be9380f1636511f38a26b711b18418a346a4ee867b42c20d89379` | Increment 17 derivative run-prefix tests |
 | `B04_K24_RunInterface_AliasFreeIntensityFourier_2026-09-10.npz` | `b88741a354707cddbd58aadf8f7f063cb74ead665f14d1edef55b981a5a949d7` | Increment 18 cellwise Fourier tests |
+| `B04_K24_DirectRunSpectrum_AliasFreeIntensity_2026-09-10.npz` | `9725e7a01bf6c425a9e626b7236bc943742c8be0bbd30f6acfe23270af0f7f7a` | Increment 19 direct run-spectrum tests |
 
 Note: `B04_Increment15_HaloTail_Certificate_2026-09-09.json` pins the halo
 kernel snapshot via `kernel_snapshot_sha256` = the first hash above.
