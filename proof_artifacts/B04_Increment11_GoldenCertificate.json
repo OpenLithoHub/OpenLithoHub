@@ -1,0 +1,52 @@
+{
+  "date": "2026-09-09",
+  "evidence_firewall": {
+    "expanded_band_transversality": "PROVED_IN_EXACT_SOURCE_NATIVE_INTERVAL_LIFT",
+    "main_combined_theorem": "PROVED_UNDER_B04_FROZEN_PROOF_MODE_CONTRACT",
+    "not_claimed": [
+      "foundry sign-off",
+      "bitwise correctness of arbitrary future FFT/SVD hardware execution",
+      "equality with raster epe_max_nm or pvband_max_nm"
+    ],
+    "uniform_focus_k24_bridge": "PROVED_UNDER_FROZEN_OPTICAL_LIFT_PLUS_EXPLICIT_NODE_GUARD"
+  },
+  "exact_source_expanded_band": {
+    "active_cells": 164,
+    "global_spatial_hessian_upper_per_nm2": 0.0012059014294102087,
+    "kappa_lower_per_nm": 0.005891396342472183,
+    "spatial_third_derivative_upper_per_nm3": 4.972184653511609e-05,
+    "worst_cell_yx": [
+      18,
+      20
+    ]
+  },
+  "fixture": {
+    "fast_model_k": 24,
+    "focus_interval_nm": [
+      -10.0,
+      10.0
+    ],
+    "full_source_rank": 37,
+    "grid_n": 72,
+    "pixel_nm": 8.0,
+    "threshold": 0.225
+  },
+  "independent_error_terms": {
+    "combined_nominal_intensity_radius": 0.005752571687594228,
+    "full_source_focus_intensity_upper": 0.002916392,
+    "uniform_focus_k24_to_k37_intensity_upper": 0.002836179687594228
+  },
+  "main_result": {
+    "continuous_focus_k24_pairwise_contour_diameter_upper_nm": 1.952872070793424,
+    "continuous_focus_k24_to_nominal_k37_hausdorff_upper_nm": 0.976436035396712
+  },
+  "pinned_commit": "348fa5d86d5355465af98e2c4ce3deac60081a4c",
+  "project": "B04",
+  "replay_artifacts": {
+    "coefficient_cache_sha256": "01866d9caa29b5f19c098adf2e0f4ed058d0ddfdc0585be9a5f9ab9523d50967",
+    "exact_source_grid_sha256": "0cb6cb3671389a514009320344ddb699a5b27fc26769665e705f7cfeb13a2360",
+    "k24_snapshot_sha256": "436d3759613b9cfac3ed7611d3122f499021fe713499abb7d6d519e1e6219a51"
+  },
+  "schema": "B04.continuous_focus_k24_certificate.v1",
+  "status": "PASS_UNDER_FROZEN_PROOF_MODE_CONTRACT"
+}

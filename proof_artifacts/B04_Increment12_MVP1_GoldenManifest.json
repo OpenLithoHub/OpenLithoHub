@@ -1,0 +1,87 @@
+{
+  "bounds": {
+    "combined_nominal_intensity_radius": 0.005752571687594228,
+    "continuous_focus_contour_upper_nm": 0.976436035396712,
+    "continuous_focus_pairwise_diameter_upper_nm": 1.952872070793424,
+    "continuous_focus_to_reconstruction_upper_nm": 2.0324780565696243,
+    "expanded_band_active_cells": 164,
+    "expanded_band_kappa_lower_per_nm": 0.005891396342472183,
+    "full_source_focus_intensity_upper": 0.002916392,
+    "nominal_reconstruction_upper_nm": 1.056042021172912,
+    "uniform_focus_k24_to_k37_intensity_upper": 0.002836179687594228
+  },
+  "certificate_target": "LEVEL_SET_STABILITY",
+  "coverage": {
+    "active_cells": 164,
+    "curvature_certified_empty_cells": 16,
+    "root_face_incidences": 296,
+    "root_free_face_incidences": 360,
+    "seeded_cells": 148,
+    "spatial_reconstruction_status": "PASS",
+    "status": "ALL_COMPONENTS_COVERED"
+  },
+  "fixture": {
+    "binary_square_slice": [
+      18,
+      54,
+      18,
+      54
+    ],
+    "dtype": "uint8",
+    "focus_interval_nm": [
+      -10.0,
+      10.0
+    ],
+    "k": 24,
+    "layout": "C-row-major",
+    "na": 1.35,
+    "pixel_nm": 8.0,
+    "shape": [
+      72,
+      72
+    ],
+    "sigma": 0.7,
+    "threshold": 0.225,
+    "wavelength_nm": 193.0
+  },
+  "input_mask_sha256": "adab6ee98f738ca723ec043e79ce90f10f9a7099a9e35c6bfc6f951544bd169a",
+  "model_id": "hopkins-socs-k24-continuous-focus",
+  "pinned_commit": "348fa5d86d5355465af98e2c4ce3deac60081a4c",
+  "project": "B04",
+  "proof_artifacts": {
+    "boundary_coverage_file": "B04_Increment13_BoundaryCoverage_Certificate_2026-09-09.json",
+    "boundary_coverage_sha256": "5392e94a51abdd12fc3e02f507f927942615ae142f92e269067fb88c6e5e2149",
+    "expanded_band_grid_file": "B04_ExactSource_ExpandedBand_Grid_2026-09-09.npz",
+    "expanded_band_grid_sha256": "0cb6cb3671389a514009320344ddb699a5b27fc26769665e705f7cfeb13a2360",
+    "increment11_certificate_file": "B04_Increment11_GoldenCertificate.json",
+    "reconstruction_file": "B04_Increment14_ContourReconstruction_Certificate_2026-09-09.json",
+    "reconstruction_sha256": "29c71a8f53ed6098564517440f76cf27c48fa3c32cd2e1d2c4dec0834465abea"
+  },
+  "provenance": [
+    {
+      "level": "INTERVAL-CERTIFIED",
+      "method": "source-native analytic focus jet + interval band localization",
+      "name": "full_source_focus_bound",
+      "satisfied": true
+    },
+    {
+      "level": "INTERVAL-CERTIFIED",
+      "method": "frozen optical lift + symmetry-sector projector transport + explicit node guard",
+      "name": "uniform_k24_bridge",
+      "satisfied": true
+    },
+    {
+      "level": "INTERVAL-CERTIFIED",
+      "method": "exact source-native outward-rounded 72x72 center replay",
+      "name": "expanded_band_transversality",
+      "satisfied": true
+    }
+  ],
+  "schema": "B04.openlithohub.mvp1.manifest.v1",
+  "semantic_firewall": [
+    "not foundry sign-off",
+    "not a bitwise theorem for arbitrary future FFT/SVD hardware executions",
+    "not raster epe_max_nm",
+    "not raster pvband_max_nm"
+  ]
+}

@@ -1,0 +1,7154 @@
+{
+  "cells": [
+    {
+      "cell_yx": [
+        17,
+        22
+      ],
+      "eta_cell_upper_nm": 0.13726054814727956,
+      "graph_second_derivative_upper_per_nm2": 0.12713803589099143,
+      "graph_slope_upper": 0.5514798019234183,
+      "normal": [
+        0.31631489732624124,
+        0.9486542498347275
+      ],
+      "normal_derivative_lower_per_nm": 0.006107633583383113,
+      "projected_endpoint_span_upper_nm": 2.9385414736724647,
+      "root_edges": [
+        [
+          "h",
+          17.5,
+          21.5
+        ],
+        [
+          "v",
+          22.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003368236558784937
+    },
+    {
+      "cell_yx": [
+        17,
+        23
+      ],
+      "eta_cell_upper_nm": 0.904923463742374,
+      "graph_second_derivative_upper_per_nm2": 0.1066301818398784,
+      "graph_slope_upper": 0.48740306983131787,
+      "normal": [
+        0.2274955966211614,
+        0.973779109201867
+      ],
+      "normal_derivative_lower_per_nm": 0.006932079418155728,
+      "projected_endpoint_span_upper_nm": 8.23955050231841,
+      "root_edges": [
+        [
+          "v",
+          22.5,
+          16.5
+        ],
+        [
+          "v",
+          23.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003378716788723598
+    },
+    {
+      "cell_yx": [
+        17,
+        24
+      ],
+      "eta_cell_upper_nm": 0.7645222148883575,
+      "graph_second_derivative_upper_per_nm2": 0.09337689376188392,
+      "graph_slope_upper": 0.44191714300211865,
+      "normal": [
+        0.14837127226321375,
+        0.988931729477316
+      ],
+      "normal_derivative_lower_per_nm": 0.007624273902030082,
+      "projected_endpoint_span_upper_nm": 8.093039660557062,
+      "root_edges": [
+        [
+          "v",
+          23.5,
+          16.5
+        ],
+        [
+          "v",
+          24.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033692973402507493
+    },
+    {
+      "cell_yx": [
+        17,
+        25
+      ],
+      "eta_cell_upper_nm": 0.6851653470855893,
+      "graph_second_derivative_upper_per_nm2": 0.08504831752109425,
+      "graph_slope_upper": 0.4114507376329809,
+      "normal": [
+        0.08383181344795461,
+        0.9964799180385059
+      ],
+      "normal_derivative_lower_per_nm": 0.008154477717765573,
+      "projected_endpoint_span_upper_nm": 8.027866710976367,
+      "root_edges": [
+        [
+          "v",
+          24.5,
+          16.5
+        ],
+        [
+          "v",
+          25.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033551658719863523
+    },
+    {
+      "cell_yx": [
+        17,
+        26
+      ],
+      "eta_cell_upper_nm": 0.6441421134892127,
+      "graph_second_derivative_upper_per_nm2": 0.08041335377962082,
+      "graph_slope_upper": 0.39381141947501025,
+      "normal": [
+        0.036297534410368586,
+        0.9993410273754041
+      ],
+      "normal_derivative_lower_per_nm": 0.00850507111247238,
+      "projected_endpoint_span_upper_nm": 8.005002366563769,
+      "root_edges": [
+        [
+          "v",
+          25.5,
+          16.5
+        ],
+        [
+          "v",
+          26.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033493941275386536
+    },
+    {
+      "cell_yx": [
+        17,
+        27
+      ],
+      "eta_cell_upper_nm": 0.6278623271656957,
+      "graph_second_derivative_upper_per_nm2": 0.0784757494591912,
+      "graph_slope_upper": 0.38628564597743803,
+      "normal": [
+        0.0057098832425452875,
+        0.9999836984838085
+      ],
+      "normal_derivative_lower_per_nm": 0.008686707078507208,
+      "projected_endpoint_span_upper_nm": 8.000164468952974,
+      "root_edges": [
+        [
+          "v",
+          26.5,
+          16.5
+        ],
+        [
+          "v",
+          27.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003355550255237941
+    },
+    {
+      "cell_yx": [
+        17,
+        28
+      ],
+      "eta_cell_upper_nm": 0.6260670979399583,
+      "graph_second_derivative_upper_per_nm2": 0.07824550281589028,
+      "graph_slope_upper": 0.38538528291758645,
+      "normal": [
+        -0.010028739577995455,
+        0.9999497109267429
+      ],
+      "normal_derivative_lower_per_nm": 0.008739114271190177,
+      "projected_endpoint_span_upper_nm": 8.000463641548777,
+      "root_edges": [
+        [
+          "v",
+          27.5,
+          16.5
+        ],
+        [
+          "v",
+          28.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033679260258517446
+    },
+    {
+      "cell_yx": [
+        17,
+        29
+      ],
+      "eta_cell_upper_nm": 0.6306883981706369,
+      "graph_second_derivative_upper_per_nm2": 0.0788151838193868,
+      "graph_slope_upper": 0.3876106169384162,
+      "normal": [
+        -0.014454211137924238,
+        0.999895532433454
+      ],
+      "normal_derivative_lower_per_nm": 0.008716166474389327,
+      "projected_endpoint_span_upper_nm": 8.000865332374458,
+      "root_edges": [
+        [
+          "v",
+          28.5,
+          16.5
+        ],
+        [
+          "v",
+          29.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003378478664475988
+    },
+    {
+      "cell_yx": [
+        17,
+        30
+      ],
+      "eta_cell_upper_nm": 0.6362648842186351,
+      "graph_second_derivative_upper_per_nm2": 0.0795174788029145,
+      "graph_slope_upper": 0.3903430955906998,
+      "normal": [
+        -0.011822225246953927,
+        0.9999301150531522
+      ],
+      "normal_derivative_lower_per_nm": 0.008666982230462797,
+      "projected_endpoint_span_upper_nm": 8.000594414628338,
+      "root_edges": [
+        [
+          "v",
+          29.5,
+          16.5
+        ],
+        [
+          "v",
+          30.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033830966732684366
+    },
+    {
+      "cell_yx": [
+        17,
+        31
+      ],
+      "eta_cell_upper_nm": 0.6401069523262899,
+      "graph_second_derivative_upper_per_nm2": 0.08000532472420956,
+      "graph_slope_upper": 0.39223416189351845,
+      "normal": [
+        -0.006270934118040228,
+        0.9999803374993367
+      ],
+      "normal_derivative_lower_per_nm": 0.00862397523509938,
+      "projected_endpoint_span_upper_nm": 8.000211464095702,
+      "root_edges": [
+        [
+          "v",
+          30.5,
+          16.5
+        ],
+        [
+          "v",
+          31.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033826176985296648
+    },
+    {
+      "cell_yx": [
+        17,
+        32
+      ],
+      "eta_cell_upper_nm": 0.641657137300942,
+      "graph_second_derivative_upper_per_nm2": 0.08020202111043984,
+      "graph_slope_upper": 0.3929950024888311,
+      "normal": [
+        -0.0010283581323805987,
+        0.999999471239636
+      ],
+      "normal_derivative_lower_per_nm": 0.008600725681918935,
+      "projected_endpoint_span_upper_nm": 8.000065152951246,
+      "root_edges": [
+        [
+          "v",
+          31.5,
+          16.5
+        ],
+        [
+          "v",
+          32.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033800422107714864
+    },
+    {
+      "cell_yx": [
+        17,
+        33
+      ],
+      "eta_cell_upper_nm": 0.6414974970026027,
+      "graph_second_derivative_upper_per_nm2": 0.08018183393899554,
+      "graph_slope_upper": 0.39291695949109184,
+      "normal": [
+        0.002062464471960408,
+        0.9999978731178891
+      ],
+      "normal_derivative_lower_per_nm": 0.008596416510479774,
+      "projected_endpoint_span_upper_nm": 8.000076749638104,
+      "root_edges": [
+        [
+          "v",
+          32.5,
+          16.5
+        ],
+        [
+          "v",
+          33.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003377677837816735
+    },
+    {
+      "cell_yx": [
+        17,
+        34
+      ],
+      "eta_cell_upper_nm": 0.6405934264972438,
+      "graph_second_derivative_upper_per_nm2": 0.08006865010088979,
+      "graph_slope_upper": 0.3924792123450298,
+      "normal": [
+        0.0025602773295126877,
+        0.9999967224846269
+      ],
+      "normal_derivative_lower_per_nm": 0.008602443124504512,
+      "projected_endpoint_span_upper_nm": 8.000085601784493,
+      "root_edges": [
+        [
+          "v",
+          33.5,
+          16.5
+        ],
+        [
+          "v",
+          34.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003376280101748449
+    },
+    {
+      "cell_yx": [
+        17,
+        35
+      ],
+      "eta_cell_upper_nm": 0.6398606542002725,
+      "graph_second_derivative_upper_per_nm2": 0.07997745818882168,
+      "graph_slope_upper": 0.39212629600916266,
+      "normal": [
+        0.0010933423785886907,
+        0.999999402301043
+      ],
+      "normal_derivative_lower_per_nm": 0.008608716063500199,
+      "projected_endpoint_span_upper_nm": 8.000065462625157,
+      "root_edges": [
+        [
+          "v",
+          34.5,
+          16.5
+        ],
+        [
+          "v",
+          35.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033757039433749136
+    },
+    {
+      "cell_yx": [
+        17,
+        36
+      ],
+      "eta_cell_upper_nm": 0.6398606542002725,
+      "graph_second_derivative_upper_per_nm2": 0.07997745818882168,
+      "graph_slope_upper": 0.39212629600916266,
+      "normal": [
+        -0.0010933423785886673,
+        0.999999402301043
+      ],
+      "normal_derivative_lower_per_nm": 0.008608716063500199,
+      "projected_endpoint_span_upper_nm": 8.000065462625157,
+      "root_edges": [
+        [
+          "v",
+          35.5,
+          16.5
+        ],
+        [
+          "v",
+          36.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033757039433749136
+    },
+    {
+      "cell_yx": [
+        17,
+        37
+      ],
+      "eta_cell_upper_nm": 0.6405934264972438,
+      "graph_second_derivative_upper_per_nm2": 0.08006865010088979,
+      "graph_slope_upper": 0.3924792123450298,
+      "normal": [
+        -0.0025602773295126673,
+        0.9999967224846269
+      ],
+      "normal_derivative_lower_per_nm": 0.008602443124504512,
+      "projected_endpoint_span_upper_nm": 8.000085601784493,
+      "root_edges": [
+        [
+          "v",
+          36.5,
+          16.5
+        ],
+        [
+          "v",
+          37.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003376280101748449
+    },
+    {
+      "cell_yx": [
+        17,
+        38
+      ],
+      "eta_cell_upper_nm": 0.6414974970026027,
+      "graph_second_derivative_upper_per_nm2": 0.08018183393899554,
+      "graph_slope_upper": 0.39291695949109184,
+      "normal": [
+        -0.0020624644719603943,
+        0.9999978731178891
+      ],
+      "normal_derivative_lower_per_nm": 0.008596416510479774,
+      "projected_endpoint_span_upper_nm": 8.000076749638104,
+      "root_edges": [
+        [
+          "v",
+          37.5,
+          16.5
+        ],
+        [
+          "v",
+          38.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003377677837816735
+    },
+    {
+      "cell_yx": [
+        17,
+        39
+      ],
+      "eta_cell_upper_nm": 0.641657137300942,
+      "graph_second_derivative_upper_per_nm2": 0.08020202111043984,
+      "graph_slope_upper": 0.3929950024888311,
+      "normal": [
+        0.0010283581323806028,
+        0.999999471239636
+      ],
+      "normal_derivative_lower_per_nm": 0.008600725681918935,
+      "projected_endpoint_span_upper_nm": 8.000065152951246,
+      "root_edges": [
+        [
+          "v",
+          38.5,
+          16.5
+        ],
+        [
+          "v",
+          39.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033800422107714864
+    },
+    {
+      "cell_yx": [
+        17,
+        40
+      ],
+      "eta_cell_upper_nm": 0.6401069523262899,
+      "graph_second_derivative_upper_per_nm2": 0.08000532472420956,
+      "graph_slope_upper": 0.39223416189351845,
+      "normal": [
+        0.006270934118040221,
+        0.9999803374993367
+      ],
+      "normal_derivative_lower_per_nm": 0.00862397523509938,
+      "projected_endpoint_span_upper_nm": 8.000211464095702,
+      "root_edges": [
+        [
+          "v",
+          39.5,
+          16.5
+        ],
+        [
+          "v",
+          40.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033826176985296648
+    },
+    {
+      "cell_yx": [
+        17,
+        41
+      ],
+      "eta_cell_upper_nm": 0.6362648842186351,
+      "graph_second_derivative_upper_per_nm2": 0.0795174788029145,
+      "graph_slope_upper": 0.3903430955906998,
+      "normal": [
+        0.01182222524695391,
+        0.9999301150531522
+      ],
+      "normal_derivative_lower_per_nm": 0.008666982230462797,
+      "projected_endpoint_span_upper_nm": 8.000594414628338,
+      "root_edges": [
+        [
+          "v",
+          40.5,
+          16.5
+        ],
+        [
+          "v",
+          41.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033830966732684366
+    },
+    {
+      "cell_yx": [
+        17,
+        42
+      ],
+      "eta_cell_upper_nm": 0.6306883981706369,
+      "graph_second_derivative_upper_per_nm2": 0.0788151838193868,
+      "graph_slope_upper": 0.3876106169384162,
+      "normal": [
+        0.014454211137924208,
+        0.999895532433454
+      ],
+      "normal_derivative_lower_per_nm": 0.008716166474389327,
+      "projected_endpoint_span_upper_nm": 8.000865332374458,
+      "root_edges": [
+        [
+          "v",
+          41.5,
+          16.5
+        ],
+        [
+          "v",
+          42.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003378478664475988
+    },
+    {
+      "cell_yx": [
+        17,
+        43
+      ],
+      "eta_cell_upper_nm": 0.6260670979399583,
+      "graph_second_derivative_upper_per_nm2": 0.07824550281589028,
+      "graph_slope_upper": 0.38538528291758645,
+      "normal": [
+        0.010028739577995417,
+        0.9999497109267429
+      ],
+      "normal_derivative_lower_per_nm": 0.008739114271190177,
+      "projected_endpoint_span_upper_nm": 8.000463641548777,
+      "root_edges": [
+        [
+          "v",
+          42.5,
+          16.5
+        ],
+        [
+          "v",
+          43.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033679260258517446
+    },
+    {
+      "cell_yx": [
+        17,
+        44
+      ],
+      "eta_cell_upper_nm": 0.6278623271656957,
+      "graph_second_derivative_upper_per_nm2": 0.0784757494591912,
+      "graph_slope_upper": 0.38628564597743803,
+      "normal": [
+        -0.005709883242545334,
+        0.9999836984838085
+      ],
+      "normal_derivative_lower_per_nm": 0.008686707078507208,
+      "projected_endpoint_span_upper_nm": 8.000164468952974,
+      "root_edges": [
+        [
+          "v",
+          43.5,
+          16.5
+        ],
+        [
+          "v",
+          44.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003355550255237941
+    },
+    {
+      "cell_yx": [
+        17,
+        45
+      ],
+      "eta_cell_upper_nm": 0.6441421134892127,
+      "graph_second_derivative_upper_per_nm2": 0.08041335377962082,
+      "graph_slope_upper": 0.39381141947501025,
+      "normal": [
+        -0.036297534410368634,
+        0.9993410273754041
+      ],
+      "normal_derivative_lower_per_nm": 0.00850507111247238,
+      "projected_endpoint_span_upper_nm": 8.005002366563769,
+      "root_edges": [
+        [
+          "v",
+          44.5,
+          16.5
+        ],
+        [
+          "v",
+          45.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033493941275386536
+    },
+    {
+      "cell_yx": [
+        17,
+        46
+      ],
+      "eta_cell_upper_nm": 0.6851653470855893,
+      "graph_second_derivative_upper_per_nm2": 0.08504831752109425,
+      "graph_slope_upper": 0.4114507376329809,
+      "normal": [
+        -0.08383181344795465,
+        0.9964799180385059
+      ],
+      "normal_derivative_lower_per_nm": 0.008154477717765573,
+      "projected_endpoint_span_upper_nm": 8.027866710976367,
+      "root_edges": [
+        [
+          "v",
+          45.5,
+          16.5
+        ],
+        [
+          "v",
+          46.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033551658719863523
+    },
+    {
+      "cell_yx": [
+        17,
+        47
+      ],
+      "eta_cell_upper_nm": 0.7645222148883575,
+      "graph_second_derivative_upper_per_nm2": 0.09337689376188392,
+      "graph_slope_upper": 0.44191714300211865,
+      "normal": [
+        -0.1483712722632138,
+        0.988931729477316
+      ],
+      "normal_derivative_lower_per_nm": 0.007624273902030082,
+      "projected_endpoint_span_upper_nm": 8.093039660557062,
+      "root_edges": [
+        [
+          "v",
+          46.5,
+          16.5
+        ],
+        [
+          "v",
+          47.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033692973402507493
+    },
+    {
+      "cell_yx": [
+        17,
+        48
+      ],
+      "eta_cell_upper_nm": 0.904923463742374,
+      "graph_second_derivative_upper_per_nm2": 0.1066301818398784,
+      "graph_slope_upper": 0.48740306983131787,
+      "normal": [
+        -0.22749559662116142,
+        0.973779109201867
+      ],
+      "normal_derivative_lower_per_nm": 0.006932079418155728,
+      "projected_endpoint_span_upper_nm": 8.23955050231841,
+      "root_edges": [
+        [
+          "v",
+          47.5,
+          16.5
+        ],
+        [
+          "v",
+          48.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003378716788723598
+    },
+    {
+      "cell_yx": [
+        17,
+        49
+      ],
+      "eta_cell_upper_nm": 0.1372605481472795,
+      "graph_second_derivative_upper_per_nm2": 0.12713803589099137,
+      "graph_slope_upper": 0.5514798019234181,
+      "normal": [
+        -0.31631489732624124,
+        0.9486542498347275
+      ],
+      "normal_derivative_lower_per_nm": 0.006107633583383115,
+      "projected_endpoint_span_upper_nm": 2.9385414736724647,
+      "root_edges": [
+        [
+          "h",
+          17.5,
+          48.5
+        ],
+        [
+          "v",
+          48.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003368236558784937
+    },
+    {
+      "cell_yx": [
+        18,
+        20
+      ],
+      "eta_cell_upper_nm": 0.14876419684406375,
+      "graph_second_derivative_upper_per_nm2": 0.13104819888281186,
+      "graph_slope_upper": 0.5629318296001538,
+      "normal": [
+        0.5595106420803343,
+        0.8288231665432935
+      ],
+      "normal_derivative_lower_per_nm": 0.005891396342472181,
+      "projected_endpoint_span_upper_nm": 3.0132427892385016,
+      "root_edges": [
+        [
+          "h",
+          18.5,
+          19.5
+        ],
+        [
+          "v",
+          20.5,
+          17.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003316454521967519
+    },
+    {
+      "cell_yx": [
+        18,
+        21
+      ],
+      "eta_cell_upper_nm": 1.0519877631365067,
+      "graph_second_derivative_upper_per_nm2": 0.1023452521705805,
+      "graph_slope_upper": 0.47307680127130297,
+      "normal": [
+        0.4690834116645023,
+        0.8831538670589577
+      ],
+      "normal_derivative_lower_per_nm": 0.007051165756192709,
+      "projected_endpoint_span_upper_nm": 9.067972364848144,
+      "root_edges": [
+        [
+          "v",
+          20.5,
+          17.5
+        ],
+        [
+          "v",
+          21.5,
+          17.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003335742941173395
+    },
+    {
+      "cell_yx": [
+        18,
+        22
+      ],
+      "eta_cell_upper_nm": 0.3307709989314954,
+      "graph_second_derivative_upper_per_nm2": 0.08449402496349803,
+      "graph_slope_upper": 0.40936774096250234,
+      "normal": [
+        0.37180802399435164,
+        0.92830964300357
+      ],
+      "normal_derivative_lower_per_nm": 0.008097930888645162,
+      "projected_endpoint_span_upper_nm": 5.595973783656123,
+      "root_edges": [
+        [
+          "h",
+          17.5,
+          21.5
+        ],
+        [
+          "v",
+          21.5,
+          17.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033150316743551403
+    },
+    {
+      "cell_yx": [
+        18,
+        49
+      ],
+      "eta_cell_upper_nm": 0.3307709989314954,
+      "graph_second_derivative_upper_per_nm2": 0.08449402496349803,
+      "graph_slope_upper": 0.40936774096250234,
+      "normal": [
+        -0.37180802399435164,
+        0.92830964300357
+      ],
+      "normal_derivative_lower_per_nm": 0.008097930888645162,
+      "projected_endpoint_span_upper_nm": 5.595973783656123,
+      "root_edges": [
+        [
+          "h",
+          17.5,
+          48.5
+        ],
+        [
+          "v",
+          49.5,
+          17.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033150316743551403
+    },
+    {
+      "cell_yx": [
+        18,
+        50
+      ],
+      "eta_cell_upper_nm": 1.0519877631365067,
+      "graph_second_derivative_upper_per_nm2": 0.1023452521705805,
+      "graph_slope_upper": 0.47307680127130297,
+      "normal": [
+        -0.4690834116645023,
+        0.8831538670589577
+      ],
+      "normal_derivative_lower_per_nm": 0.007051165756192709,
+      "projected_endpoint_span_upper_nm": 9.067972364848144,
+      "root_edges": [
+        [
+          "v",
+          49.5,
+          17.5
+        ],
+        [
+          "v",
+          50.5,
+          17.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003335742941173395
+    },
+    {
+      "cell_yx": [
+        18,
+        51
+      ],
+      "eta_cell_upper_nm": 0.14876419684406375,
+      "graph_second_derivative_upper_per_nm2": 0.13104819888281186,
+      "graph_slope_upper": 0.5629318296001538,
+      "normal": [
+        -0.5595106420803343,
+        0.8288231665432935
+      ],
+      "normal_derivative_lower_per_nm": 0.005891396342472181,
+      "projected_endpoint_span_upper_nm": 3.0132427892385016,
+      "root_edges": [
+        [
+          "h",
+          18.5,
+          50.5
+        ],
+        [
+          "v",
+          50.5,
+          17.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003316454521967519
+    },
+    {
+      "cell_yx": [
+        19,
+        19
+      ],
+      "eta_cell_upper_nm": 0.3992615743638206,
+      "graph_second_derivative_upper_per_nm2": 0.12360257750608265,
+      "graph_slope_upper": 0.5409261656767717,
+      "normal": [
+        0.7050382801861479,
+        0.7091692488201662
+      ],
+      "normal_derivative_lower_per_nm": 0.006121975926498742,
+      "projected_endpoint_span_upper_nm": 5.083272469586813,
+      "root_edges": [
+        [
+          "h",
+          19.5,
+          18.5
+        ],
+        [
+          "v",
+          19.5,
+          18.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033115369642864666
+    },
+    {
+      "cell_yx": [
+        19,
+        20
+      ],
+      "eta_cell_upper_nm": 0.5863551745048164,
+      "graph_second_derivative_upper_per_nm2": 0.09436612128193045,
+      "graph_slope_upper": 0.44543537227002755,
+      "normal": [
+        0.6295623631783456,
+        0.7769499539026287
+      ],
+      "normal_derivative_lower_per_nm": 0.007467236253783668,
+      "projected_endpoint_span_upper_nm": 7.050274399244836,
+      "root_edges": [
+        [
+          "h",
+          18.5,
+          19.5
+        ],
+        [
+          "v",
+          19.5,
+          18.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033261711605323744
+    },
+    {
+      "cell_yx": [
+        19,
+        51
+      ],
+      "eta_cell_upper_nm": 0.5863551745048164,
+      "graph_second_derivative_upper_per_nm2": 0.09436612128193045,
+      "graph_slope_upper": 0.44543537227002755,
+      "normal": [
+        -0.6295623631783456,
+        0.7769499539026287
+      ],
+      "normal_derivative_lower_per_nm": 0.007467236253783668,
+      "projected_endpoint_span_upper_nm": 7.050274399244836,
+      "root_edges": [
+        [
+          "h",
+          18.5,
+          50.5
+        ],
+        [
+          "v",
+          51.5,
+          18.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033261711605323744
+    },
+    {
+      "cell_yx": [
+        19,
+        52
+      ],
+      "eta_cell_upper_nm": 0.3992615743638206,
+      "graph_second_derivative_upper_per_nm2": 0.12360257750608265,
+      "graph_slope_upper": 0.5409261656767717,
+      "normal": [
+        -0.7050382801861479,
+        0.7091692488201662
+      ],
+      "normal_derivative_lower_per_nm": 0.006121975926498742,
+      "projected_endpoint_span_upper_nm": 5.083272469586813,
+      "root_edges": [
+        [
+          "h",
+          19.5,
+          51.5
+        ],
+        [
+          "v",
+          51.5,
+          18.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033115369642864666
+    },
+    {
+      "cell_yx": [
+        20,
+        18
+      ],
+      "eta_cell_upper_nm": 0.1606867693849383,
+      "graph_second_derivative_upper_per_nm2": 0.13097500487411173,
+      "graph_slope_upper": 0.5627195320232412,
+      "normal": [
+        0.8258307474743433,
+        0.5639180583435571
+      ],
+      "normal_derivative_lower_per_nm": 0.00589221748462103,
+      "projected_endpoint_span_upper_nm": 3.132561435345226,
+      "root_edges": [
+        [
+          "h",
+          20.5,
+          17.5
+        ],
+        [
+          "v",
+          18.5,
+          19.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033156658655251058
+    },
+    {
+      "cell_yx": [
+        20,
+        19
+      ],
+      "eta_cell_upper_nm": 0.5731285892125131,
+      "graph_second_derivative_upper_per_nm2": 0.09442411442157053,
+      "graph_slope_upper": 0.4456409856219634,
+      "normal": [
+        0.77359073743028,
+        0.6336855458049171
+      ],
+      "normal_derivative_lower_per_nm": 0.007464449988302661,
+      "projected_endpoint_span_upper_nm": 6.9681582779067,
+      "root_edges": [
+        [
+          "h",
+          19.5,
+          18.5
+        ],
+        [
+          "v",
+          18.5,
+          19.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033264648499130513
+    },
+    {
+      "cell_yx": [
+        20,
+        52
+      ],
+      "eta_cell_upper_nm": 0.5731285892125131,
+      "graph_second_derivative_upper_per_nm2": 0.09442411442157053,
+      "graph_slope_upper": 0.4456409856219634,
+      "normal": [
+        -0.77359073743028,
+        0.6336855458049171
+      ],
+      "normal_derivative_lower_per_nm": 0.007464449988302661,
+      "projected_endpoint_span_upper_nm": 6.9681582779067,
+      "root_edges": [
+        [
+          "h",
+          19.5,
+          51.5
+        ],
+        [
+          "v",
+          52.5,
+          19.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033264648499130513
+    },
+    {
+      "cell_yx": [
+        20,
+        53
+      ],
+      "eta_cell_upper_nm": 0.1606867693849383,
+      "graph_second_derivative_upper_per_nm2": 0.13097500487411173,
+      "graph_slope_upper": 0.5627195320232412,
+      "normal": [
+        -0.8258307474743433,
+        0.5639180583435571
+      ],
+      "normal_derivative_lower_per_nm": 0.00589221748462103,
+      "projected_endpoint_span_upper_nm": 3.132561435345226,
+      "root_edges": [
+        [
+          "h",
+          20.5,
+          52.5
+        ],
+        [
+          "v",
+          52.5,
+          19.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033156658655251058
+    },
+    {
+      "cell_yx": [
+        21,
+        18
+      ],
+      "eta_cell_upper_nm": 1.0560420211729118,
+      "graph_second_derivative_upper_per_nm2": 0.10236417323545081,
+      "graph_slope_upper": 0.4731408359533721,
+      "normal": [
+        0.8811215595327074,
+        0.4728898363537215
+      ],
+      "normal_derivative_lower_per_nm": 0.00704866953133558,
+      "projected_endpoint_span_upper_nm": 9.084589890131669,
+      "root_edges": [
+        [
+          "h",
+          20.5,
+          17.5
+        ],
+        [
+          "h",
+          21.5,
+          17.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.00333501339441518
+    },
+    {
+      "cell_yx": [
+        21,
+        53
+      ],
+      "eta_cell_upper_nm": 1.056042021172912,
+      "graph_second_derivative_upper_per_nm2": 0.10236417323545086,
+      "graph_slope_upper": 0.4731408359533722,
+      "normal": [
+        -0.8811215595327074,
+        0.47288983635372156
+      ],
+      "normal_derivative_lower_per_nm": 0.007048669531335578,
+      "projected_endpoint_span_upper_nm": 9.084589890131669,
+      "root_edges": [
+        [
+          "h",
+          20.5,
+          52.5
+        ],
+        [
+          "h",
+          21.5,
+          52.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.00333501339441518
+    },
+    {
+      "cell_yx": [
+        22,
+        17
+      ],
+      "eta_cell_upper_nm": 0.1752978989874966,
+      "graph_second_derivative_upper_per_nm2": 0.12665346642623257,
+      "graph_slope_upper": 0.5500446639447197,
+      "normal": [
+        0.9477678072846627,
+        0.31896110025334207
+      ],
+      "normal_derivative_lower_per_nm": 0.006116363996378094,
+      "projected_endpoint_span_upper_nm": 3.327262016655701,
+      "root_edges": [
+        [
+          "h",
+          22.5,
+          16.5
+        ],
+        [
+          "v",
+          17.5,
+          21.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033642733789513725
+    },
+    {
+      "cell_yx": [
+        22,
+        18
+      ],
+      "eta_cell_upper_nm": 0.28736584444310137,
+      "graph_second_derivative_upper_per_nm2": 0.08454845411351034,
+      "graph_slope_upper": 0.4095725967756916,
+      "normal": [
+        0.9271260808303018,
+        0.3747495566965285
+      ],
+      "normal_derivative_lower_per_nm": 0.008091799471601454,
+      "projected_endpoint_span_upper_nm": 5.214187809556895,
+      "root_edges": [
+        [
+          "h",
+          21.5,
+          17.5
+        ],
+        [
+          "v",
+          17.5,
+          21.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033141793221719775
+    },
+    {
+      "cell_yx": [
+        22,
+        53
+      ],
+      "eta_cell_upper_nm": 0.28736584444310137,
+      "graph_second_derivative_upper_per_nm2": 0.08454845411351034,
+      "graph_slope_upper": 0.4095725967756916,
+      "normal": [
+        -0.9271260808303018,
+        0.3747495566965286
+      ],
+      "normal_derivative_lower_per_nm": 0.008091799471601454,
+      "projected_endpoint_span_upper_nm": 5.214187809556895,
+      "root_edges": [
+        [
+          "h",
+          21.5,
+          52.5
+        ],
+        [
+          "v",
+          53.5,
+          21.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033141793221719775
+    },
+    {
+      "cell_yx": [
+        22,
+        54
+      ],
+      "eta_cell_upper_nm": 0.1752978989874966,
+      "graph_second_derivative_upper_per_nm2": 0.12665346642623257,
+      "graph_slope_upper": 0.5500446639447197,
+      "normal": [
+        -0.9477678072846627,
+        0.31896110025334207
+      ],
+      "normal_derivative_lower_per_nm": 0.006116363996378094,
+      "projected_endpoint_span_upper_nm": 3.327262016655701,
+      "root_edges": [
+        [
+          "h",
+          22.5,
+          53.5
+        ],
+        [
+          "v",
+          53.5,
+          21.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033642733789513725
+    },
+    {
+      "cell_yx": [
+        23,
+        17
+      ],
+      "eta_cell_upper_nm": 0.9015216866124375,
+      "graph_second_derivative_upper_per_nm2": 0.10617879121083977,
+      "graph_slope_upper": 0.48591026422236755,
+      "normal": [
+        0.9734074606369414,
+        0.22908058751527033
+      ],
+      "normal_derivative_lower_per_nm": 0.006941966841812417,
+      "projected_endpoint_span_upper_nm": 8.241511015957718,
+      "root_edges": [
+        [
+          "h",
+          22.5,
+          16.5
+        ],
+        [
+          "h",
+          23.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033731729423279863
+    },
+    {
+      "cell_yx": [
+        23,
+        54
+      ],
+      "eta_cell_upper_nm": 0.9015216866124375,
+      "graph_second_derivative_upper_per_nm2": 0.10617879121083977,
+      "graph_slope_upper": 0.48591026422236755,
+      "normal": [
+        -0.9734074606369414,
+        0.22908058751527033
+      ],
+      "normal_derivative_lower_per_nm": 0.006941966841812417,
+      "projected_endpoint_span_upper_nm": 8.241511015957718,
+      "root_edges": [
+        [
+          "h",
+          22.5,
+          53.5
+        ],
+        [
+          "h",
+          23.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033731729423279863
+    },
+    {
+      "cell_yx": [
+        24,
+        17
+      ],
+      "eta_cell_upper_nm": 0.7607275918530539,
+      "graph_second_derivative_upper_per_nm2": 0.09291249213064233,
+      "graph_slope_upper": 0.44025831088471556,
+      "normal": [
+        0.9888396038878511,
+        0.14898401854869486
+      ],
+      "normal_derivative_lower_per_nm": 0.007636216879976469,
+      "projected_endpoint_span_upper_nm": 8.093079599893352,
+      "root_edges": [
+        [
+          "h",
+          23.5,
+          16.5
+        ],
+        [
+          "h",
+          24.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033619079451277932
+    },
+    {
+      "cell_yx": [
+        24,
+        54
+      ],
+      "eta_cell_upper_nm": 0.7607275918530539,
+      "graph_second_derivative_upper_per_nm2": 0.09291249213064233,
+      "graph_slope_upper": 0.44025831088471556,
+      "normal": [
+        -0.9888396038878511,
+        0.14898401854869486
+      ],
+      "normal_derivative_lower_per_nm": 0.007636216879976469,
+      "projected_endpoint_span_upper_nm": 8.093079599893352,
+      "root_edges": [
+        [
+          "h",
+          23.5,
+          53.5
+        ],
+        [
+          "h",
+          24.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033619079451277932
+    },
+    {
+      "cell_yx": [
+        25,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6812179568318917,
+      "graph_second_derivative_upper_per_nm2": 0.08456722325036488,
+      "graph_slope_upper": 0.40964322255543,
+      "normal": [
+        0.9964951917223271,
+        0.08365006201003403
+      ],
+      "normal_derivative_lower_per_nm": 0.008168494752110927,
+      "projected_endpoint_span_upper_nm": 8.027443798373278,
+      "root_edges": [
+        [
+          "h",
+          24.5,
+          16.5
+        ],
+        [
+          "h",
+          25.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033461685136818393
+    },
+    {
+      "cell_yx": [
+        25,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6812179568318917,
+      "graph_second_derivative_upper_per_nm2": 0.08456722325036488,
+      "graph_slope_upper": 0.40964322255543,
+      "normal": [
+        -0.9964951917223271,
+        0.08365006201003405
+      ],
+      "normal_derivative_lower_per_nm": 0.008168494752110927,
+      "projected_endpoint_span_upper_nm": 8.027443798373278,
+      "root_edges": [
+        [
+          "h",
+          24.5,
+          53.5
+        ],
+        [
+          "h",
+          25.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033461685136818393
+    },
+    {
+      "cell_yx": [
+        26,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6402551073389349,
+      "graph_second_derivative_upper_per_nm2": 0.07993396715562007,
+      "graph_slope_upper": 0.391957913321971,
+      "normal": [
+        0.9993686950467747,
+        0.0355276140559239
+      ],
+      "normal_derivative_lower_per_nm": 0.008520139112620125,
+      "projected_endpoint_span_upper_nm": 8.004707830031066,
+      "root_edges": [
+        [
+          "h",
+          25.5,
+          16.5
+        ],
+        [
+          "h",
+          26.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033395359477954942
+    },
+    {
+      "cell_yx": [
+        26,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6402551073389349,
+      "graph_second_derivative_upper_per_nm2": 0.07993396715562007,
+      "graph_slope_upper": 0.391957913321971,
+      "normal": [
+        -0.9993686950467747,
+        0.035527614055923924
+      ],
+      "normal_derivative_lower_per_nm": 0.008520139112620125,
+      "projected_endpoint_span_upper_nm": 8.004707830031066,
+      "root_edges": [
+        [
+          "h",
+          25.5,
+          53.5
+        ],
+        [
+          "h",
+          26.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033395359477954942
+    },
+    {
+      "cell_yx": [
+        27,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6242232006362701,
+      "graph_second_derivative_upper_per_nm2": 0.07802181159922791,
+      "graph_slope_upper": 0.3845093107585661,
+      "normal": [
+        0.9999896841019078,
+        0.00454221199049822
+      ],
+      "normal_derivative_lower_per_nm": 0.008701325525158869,
+      "projected_endpoint_span_upper_nm": 8.000116570811558,
+      "root_edges": [
+        [
+          "h",
+          26.5,
+          16.5
+        ],
+        [
+          "h",
+          27.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003345740680364755
+    },
+    {
+      "cell_yx": [
+        27,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6242232006362701,
+      "graph_second_derivative_upper_per_nm2": 0.07802181159922791,
+      "graph_slope_upper": 0.3845093107585661,
+      "normal": [
+        -0.9999896841019078,
+        0.004542211990498236
+      ],
+      "normal_derivative_lower_per_nm": 0.008701325525158869,
+      "projected_endpoint_span_upper_nm": 8.000116570811558,
+      "root_edges": [
+        [
+          "h",
+          26.5,
+          53.5
+        ],
+        [
+          "h",
+          27.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003345740680364755
+    },
+    {
+      "cell_yx": [
+        28,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6228071707095192,
+      "graph_second_derivative_upper_per_nm2": 0.07783557769909402,
+      "graph_slope_upper": 0.3837790842958786,
+      "normal": [
+        0.9999345797224481,
+        -0.011438368558978196
+      ],
+      "normal_derivative_lower_per_nm": 0.008752050859442218,
+      "projected_endpoint_span_upper_nm": 8.00059117013771,
+      "root_edges": [
+        [
+          "h",
+          27.5,
+          16.5
+        ],
+        [
+          "h",
+          28.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003358854064547692
+    },
+    {
+      "cell_yx": [
+        28,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6228071707095192,
+      "graph_second_derivative_upper_per_nm2": 0.07783557769909402,
+      "graph_slope_upper": 0.3837790842958786,
+      "normal": [
+        -0.9999345797224481,
+        -0.011438368558978179
+      ],
+      "normal_derivative_lower_per_nm": 0.008752050859442218,
+      "projected_endpoint_span_upper_nm": 8.00059117013771,
+      "root_edges": [
+        [
+          "h",
+          27.5,
+          53.5
+        ],
+        [
+          "h",
+          28.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003358854064547692
+    },
+    {
+      "cell_yx": [
+        29,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6278700572910075,
+      "graph_second_derivative_upper_per_nm2": 0.07845931314377408,
+      "graph_slope_upper": 0.3862214159259045,
+      "normal": [
+        0.9998722550724856,
+        -0.015983539541116837
+      ],
+      "normal_derivative_lower_per_nm": 0.008726847381190696,
+      "projected_endpoint_span_upper_nm": 8.001051651546275,
+      "root_edges": [
+        [
+          "h",
+          28.5,
+          16.5
+        ],
+        [
+          "h",
+          29.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003370495352132743
+    },
+    {
+      "cell_yx": [
+        29,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6278700572910075,
+      "graph_second_derivative_upper_per_nm2": 0.07845931314377408,
+      "graph_slope_upper": 0.3862214159259045,
+      "normal": [
+        -0.9998722550724856,
+        -0.015983539541116816
+      ],
+      "normal_derivative_lower_per_nm": 0.008726847381190696,
+      "projected_endpoint_span_upper_nm": 8.001051651546275,
+      "root_edges": [
+        [
+          "h",
+          28.5,
+          53.5
+        ],
+        [
+          "h",
+          29.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003370495352132743
+    },
+    {
+      "cell_yx": [
+        30,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6338945525962063,
+      "graph_second_derivative_upper_per_nm2": 0.07921817509597753,
+      "graph_slope_upper": 0.38918003456590944,
+      "normal": [
+        0.9999106064962311,
+        -0.013370827062653147
+      ],
+      "normal_derivative_lower_per_nm": 0.00867546144630888,
+      "projected_endpoint_span_upper_nm": 8.000748746728194,
+      "root_edges": [
+        [
+          "h",
+          29.5,
+          16.5
+        ],
+        [
+          "h",
+          30.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033763163855497053
+    },
+    {
+      "cell_yx": [
+        30,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6338945525962063,
+      "graph_second_derivative_upper_per_nm2": 0.07921817509597753,
+      "graph_slope_upper": 0.38918003456590944,
+      "normal": [
+        -0.9999106064962311,
+        -0.013370827062653124
+      ],
+      "normal_derivative_lower_per_nm": 0.00867546144630888,
+      "projected_endpoint_span_upper_nm": 8.000748746728194,
+      "root_edges": [
+        [
+          "h",
+          29.5,
+          53.5
+        ],
+        [
+          "h",
+          30.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033763163855497053
+    },
+    {
+      "cell_yx": [
+        31,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6381509140510275,
+      "graph_second_derivative_upper_per_nm2": 0.07975920982625001,
+      "graph_slope_upper": 0.3912808511037322,
+      "normal": [
+        0.9999700031399105,
+        -0.007745503235255363
+      ],
+      "normal_derivative_lower_per_nm": 0.00863070983676389,
+      "projected_endpoint_span_upper_nm": 8.000292862779734,
+      "root_edges": [
+        [
+          "h",
+          30.5,
+          16.5
+        ],
+        [
+          "h",
+          31.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033770314905583287
+    },
+    {
+      "cell_yx": [
+        31,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6381509140510275,
+      "graph_second_derivative_upper_per_nm2": 0.07975920982625001,
+      "graph_slope_upper": 0.3912808511037322,
+      "normal": [
+        -0.9999700031399105,
+        -0.007745503235255336
+      ],
+      "normal_derivative_lower_per_nm": 0.00863070983676389,
+      "projected_endpoint_span_upper_nm": 8.000292862779734,
+      "root_edges": [
+        [
+          "h",
+          30.5,
+          53.5
+        ],
+        [
+          "h",
+          31.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033770314905583287
+    },
+    {
+      "cell_yx": [
+        32,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6400505648120492,
+      "graph_second_derivative_upper_per_nm2": 0.08000084630289869,
+      "graph_slope_upper": 0.3922168280677772,
+      "normal": [
+        0.9999972810250581,
+        -0.002331939641340427
+      ],
+      "normal_derivative_lower_per_nm": 0.008606337626486544,
+      "projected_endpoint_span_upper_nm": 8.000082978758932,
+      "root_edges": [
+        [
+          "h",
+          31.5,
+          16.5
+        ],
+        [
+          "h",
+          32.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033755504451409147
+    },
+    {
+      "cell_yx": [
+        32,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6400505648120492,
+      "graph_second_derivative_upper_per_nm2": 0.08000084630289869,
+      "graph_slope_upper": 0.3922168280677772,
+      "normal": [
+        -0.9999972810250581,
+        -0.0023319396413403956
+      ],
+      "normal_derivative_lower_per_nm": 0.008606337626486544,
+      "projected_endpoint_span_upper_nm": 8.000082978758932,
+      "root_edges": [
+        [
+          "h",
+          31.5,
+          53.5
+        ],
+        [
+          "h",
+          32.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033755504451409147
+    },
+    {
+      "cell_yx": [
+        33,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6401522918851609,
+      "graph_second_derivative_upper_per_nm2": 0.08001393109373935,
+      "graph_slope_upper": 0.3922674716731822,
+      "normal": [
+        0.999999468343254,
+        0.001031170795357626
+      ],
+      "normal_derivative_lower_per_nm": 0.008601491633596811,
+      "projected_endpoint_span_upper_nm": 8.00006452323577,
+      "root_edges": [
+        [
+          "h",
+          32.5,
+          16.5
+        ],
+        [
+          "h",
+          33.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003374085375729052
+    },
+    {
+      "cell_yx": [
+        33,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6401522918851609,
+      "graph_second_derivative_upper_per_nm2": 0.08001393109373935,
+      "graph_slope_upper": 0.3922674716731822,
+      "normal": [
+        -0.999999468343254,
+        0.001031170795357661
+      ],
+      "normal_derivative_lower_per_nm": 0.008601491633596811,
+      "projected_endpoint_span_upper_nm": 8.00006452323577,
+      "root_edges": [
+        [
+          "h",
+          32.5,
+          53.5
+        ],
+        [
+          "h",
+          33.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003374085375729052
+    },
+    {
+      "cell_yx": [
+        34,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6394140186619459,
+      "graph_second_derivative_upper_per_nm2": 0.07992146205675156,
+      "graph_slope_upper": 0.39190948932513947,
+      "normal": [
+        0.9999982034972748,
+        0.001895521622929215
+      ],
+      "normal_derivative_lower_per_nm": 0.008607380422138627,
+      "projected_endpoint_span_upper_nm": 8.00007385109718,
+      "root_edges": [
+        [
+          "h",
+          33.5,
+          16.5
+        ],
+        [
+          "h",
+          34.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003373314065667554
+    },
+    {
+      "cell_yx": [
+        34,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6394140186619459,
+      "graph_second_derivative_upper_per_nm2": 0.07992146205675156,
+      "graph_slope_upper": 0.39190948932513947,
+      "normal": [
+        -0.9999982034972748,
+        0.0018955216229292527
+      ],
+      "normal_derivative_lower_per_nm": 0.008607380422138627,
+      "projected_endpoint_span_upper_nm": 8.00007385109718,
+      "root_edges": [
+        [
+          "h",
+          33.5,
+          53.5
+        ],
+        [
+          "h",
+          34.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003373314065667554
+    },
+    {
+      "cell_yx": [
+        35,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6387591341488994,
+      "graph_second_derivative_upper_per_nm2": 0.07983980472570035,
+      "graph_slope_upper": 0.3915931915360435,
+      "normal": [
+        0.9999996272672425,
+        0.0008634033682323215
+      ],
+      "normal_derivative_lower_per_nm": 0.008613670200614975,
+      "projected_endpoint_span_upper_nm": 8.000063744673815,
+      "root_edges": [
+        [
+          "h",
+          34.5,
+          16.5
+        ],
+        [
+          "h",
+          35.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033730546046977306
+    },
+    {
+      "cell_yx": [
+        35,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6387591341488994,
+      "graph_second_derivative_upper_per_nm2": 0.07983980472570035,
+      "graph_slope_upper": 0.3915931915360435,
+      "normal": [
+        -0.9999996272672425,
+        0.0008634033682323603
+      ],
+      "normal_derivative_lower_per_nm": 0.008613670200614975,
+      "projected_endpoint_span_upper_nm": 8.000063744673815,
+      "root_edges": [
+        [
+          "h",
+          34.5,
+          53.5
+        ],
+        [
+          "h",
+          35.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033730546046977306
+    },
+    {
+      "cell_yx": [
+        36,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6387591341488994,
+      "graph_second_derivative_upper_per_nm2": 0.07983980472570035,
+      "graph_slope_upper": 0.3915931915360435,
+      "normal": [
+        0.9999996272672425,
+        -0.0008634033682323624
+      ],
+      "normal_derivative_lower_per_nm": 0.008613670200614975,
+      "projected_endpoint_span_upper_nm": 8.000063744673815,
+      "root_edges": [
+        [
+          "h",
+          35.5,
+          16.5
+        ],
+        [
+          "h",
+          36.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033730546046977306
+    },
+    {
+      "cell_yx": [
+        36,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6387591341488994,
+      "graph_second_derivative_upper_per_nm2": 0.07983980472570035,
+      "graph_slope_upper": 0.3915931915360435,
+      "normal": [
+        -0.9999996272672425,
+        -0.0008634033682323239
+      ],
+      "normal_derivative_lower_per_nm": 0.008613670200614975,
+      "projected_endpoint_span_upper_nm": 8.000063744673815,
+      "root_edges": [
+        [
+          "h",
+          35.5,
+          53.5
+        ],
+        [
+          "h",
+          36.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033730546046977306
+    },
+    {
+      "cell_yx": [
+        37,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6394140186619459,
+      "graph_second_derivative_upper_per_nm2": 0.07992146205675156,
+      "graph_slope_upper": 0.39190948932513947,
+      "normal": [
+        0.9999982034972748,
+        -0.0018955216229292536
+      ],
+      "normal_derivative_lower_per_nm": 0.008607380422138627,
+      "projected_endpoint_span_upper_nm": 8.00007385109718,
+      "root_edges": [
+        [
+          "h",
+          36.5,
+          16.5
+        ],
+        [
+          "h",
+          37.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003373314065667554
+    },
+    {
+      "cell_yx": [
+        37,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6394140186619459,
+      "graph_second_derivative_upper_per_nm2": 0.07992146205675156,
+      "graph_slope_upper": 0.39190948932513947,
+      "normal": [
+        -0.9999982034972748,
+        -0.0018955216229292174
+      ],
+      "normal_derivative_lower_per_nm": 0.008607380422138627,
+      "projected_endpoint_span_upper_nm": 8.00007385109718,
+      "root_edges": [
+        [
+          "h",
+          36.5,
+          53.5
+        ],
+        [
+          "h",
+          37.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003373314065667554
+    },
+    {
+      "cell_yx": [
+        38,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6401522918851609,
+      "graph_second_derivative_upper_per_nm2": 0.08001393109373935,
+      "graph_slope_upper": 0.3922674716731822,
+      "normal": [
+        0.999999468343254,
+        -0.0010311707953576605
+      ],
+      "normal_derivative_lower_per_nm": 0.008601491633596811,
+      "projected_endpoint_span_upper_nm": 8.00006452323577,
+      "root_edges": [
+        [
+          "h",
+          37.5,
+          16.5
+        ],
+        [
+          "h",
+          38.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003374085375729052
+    },
+    {
+      "cell_yx": [
+        38,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6401522918851609,
+      "graph_second_derivative_upper_per_nm2": 0.08001393109373935,
+      "graph_slope_upper": 0.3922674716731822,
+      "normal": [
+        -0.999999468343254,
+        -0.0010311707953576277
+      ],
+      "normal_derivative_lower_per_nm": 0.008601491633596811,
+      "projected_endpoint_span_upper_nm": 8.00006452323577,
+      "root_edges": [
+        [
+          "h",
+          37.5,
+          53.5
+        ],
+        [
+          "h",
+          38.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003374085375729052
+    },
+    {
+      "cell_yx": [
+        39,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6400505648120492,
+      "graph_second_derivative_upper_per_nm2": 0.08000084630289869,
+      "graph_slope_upper": 0.3922168280677772,
+      "normal": [
+        0.9999972810250581,
+        0.0023319396413403978
+      ],
+      "normal_derivative_lower_per_nm": 0.008606337626486544,
+      "projected_endpoint_span_upper_nm": 8.000082978758932,
+      "root_edges": [
+        [
+          "h",
+          38.5,
+          16.5
+        ],
+        [
+          "h",
+          39.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033755504451409147
+    },
+    {
+      "cell_yx": [
+        39,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6400505648120492,
+      "graph_second_derivative_upper_per_nm2": 0.08000084630289869,
+      "graph_slope_upper": 0.3922168280677772,
+      "normal": [
+        -0.9999972810250581,
+        0.002331939641340426
+      ],
+      "normal_derivative_lower_per_nm": 0.008606337626486544,
+      "projected_endpoint_span_upper_nm": 8.000082978758932,
+      "root_edges": [
+        [
+          "h",
+          38.5,
+          53.5
+        ],
+        [
+          "h",
+          39.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033755504451409147
+    },
+    {
+      "cell_yx": [
+        40,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6381509140510275,
+      "graph_second_derivative_upper_per_nm2": 0.07975920982625001,
+      "graph_slope_upper": 0.3912808511037322,
+      "normal": [
+        0.9999700031399105,
+        0.0077455032352553395
+      ],
+      "normal_derivative_lower_per_nm": 0.00863070983676389,
+      "projected_endpoint_span_upper_nm": 8.000292862779734,
+      "root_edges": [
+        [
+          "h",
+          39.5,
+          16.5
+        ],
+        [
+          "h",
+          40.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033770314905583287
+    },
+    {
+      "cell_yx": [
+        40,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6381509140510275,
+      "graph_second_derivative_upper_per_nm2": 0.07975920982625001,
+      "graph_slope_upper": 0.3912808511037322,
+      "normal": [
+        -0.9999700031399105,
+        0.007745503235255363
+      ],
+      "normal_derivative_lower_per_nm": 0.00863070983676389,
+      "projected_endpoint_span_upper_nm": 8.000292862779734,
+      "root_edges": [
+        [
+          "h",
+          39.5,
+          53.5
+        ],
+        [
+          "h",
+          40.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033770314905583287
+    },
+    {
+      "cell_yx": [
+        41,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6338945525962063,
+      "graph_second_derivative_upper_per_nm2": 0.07921817509597753,
+      "graph_slope_upper": 0.38918003456590944,
+      "normal": [
+        0.9999106064962311,
+        0.01337082706265313
+      ],
+      "normal_derivative_lower_per_nm": 0.00867546144630888,
+      "projected_endpoint_span_upper_nm": 8.000748746728194,
+      "root_edges": [
+        [
+          "h",
+          40.5,
+          16.5
+        ],
+        [
+          "h",
+          41.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033763163855497053
+    },
+    {
+      "cell_yx": [
+        41,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6338945525962063,
+      "graph_second_derivative_upper_per_nm2": 0.07921817509597753,
+      "graph_slope_upper": 0.38918003456590944,
+      "normal": [
+        -0.9999106064962311,
+        0.01337082706265315
+      ],
+      "normal_derivative_lower_per_nm": 0.00867546144630888,
+      "projected_endpoint_span_upper_nm": 8.000748746728194,
+      "root_edges": [
+        [
+          "h",
+          40.5,
+          53.5
+        ],
+        [
+          "h",
+          41.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033763163855497053
+    },
+    {
+      "cell_yx": [
+        42,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6278700572910075,
+      "graph_second_derivative_upper_per_nm2": 0.07845931314377408,
+      "graph_slope_upper": 0.3862214159259045,
+      "normal": [
+        0.9998722550724856,
+        0.015983539541116826
+      ],
+      "normal_derivative_lower_per_nm": 0.008726847381190696,
+      "projected_endpoint_span_upper_nm": 8.001051651546275,
+      "root_edges": [
+        [
+          "h",
+          41.5,
+          16.5
+        ],
+        [
+          "h",
+          42.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003370495352132743
+    },
+    {
+      "cell_yx": [
+        42,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6278700572910075,
+      "graph_second_derivative_upper_per_nm2": 0.07845931314377408,
+      "graph_slope_upper": 0.3862214159259045,
+      "normal": [
+        -0.9998722550724856,
+        0.015983539541116844
+      ],
+      "normal_derivative_lower_per_nm": 0.008726847381190696,
+      "projected_endpoint_span_upper_nm": 8.001051651546275,
+      "root_edges": [
+        [
+          "h",
+          41.5,
+          53.5
+        ],
+        [
+          "h",
+          42.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003370495352132743
+    },
+    {
+      "cell_yx": [
+        43,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6228071707095192,
+      "graph_second_derivative_upper_per_nm2": 0.07783557769909402,
+      "graph_slope_upper": 0.3837790842958786,
+      "normal": [
+        0.9999345797224481,
+        0.011438368558978187
+      ],
+      "normal_derivative_lower_per_nm": 0.008752050859442218,
+      "projected_endpoint_span_upper_nm": 8.00059117013771,
+      "root_edges": [
+        [
+          "h",
+          42.5,
+          16.5
+        ],
+        [
+          "h",
+          43.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003358854064547692
+    },
+    {
+      "cell_yx": [
+        43,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6228071707095192,
+      "graph_second_derivative_upper_per_nm2": 0.07783557769909402,
+      "graph_slope_upper": 0.3837790842958786,
+      "normal": [
+        -0.9999345797224481,
+        0.011438368558978201
+      ],
+      "normal_derivative_lower_per_nm": 0.008752050859442218,
+      "projected_endpoint_span_upper_nm": 8.00059117013771,
+      "root_edges": [
+        [
+          "h",
+          42.5,
+          53.5
+        ],
+        [
+          "h",
+          43.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003358854064547692
+    },
+    {
+      "cell_yx": [
+        44,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6242232006362701,
+      "graph_second_derivative_upper_per_nm2": 0.07802181159922791,
+      "graph_slope_upper": 0.3845093107585661,
+      "normal": [
+        0.9999896841019078,
+        -0.004542211990498227
+      ],
+      "normal_derivative_lower_per_nm": 0.008701325525158869,
+      "projected_endpoint_span_upper_nm": 8.000116570811558,
+      "root_edges": [
+        [
+          "h",
+          43.5,
+          16.5
+        ],
+        [
+          "h",
+          44.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003345740680364755
+    },
+    {
+      "cell_yx": [
+        44,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6242232006362701,
+      "graph_second_derivative_upper_per_nm2": 0.07802181159922791,
+      "graph_slope_upper": 0.3845093107585661,
+      "normal": [
+        -0.9999896841019078,
+        -0.004542211990498212
+      ],
+      "normal_derivative_lower_per_nm": 0.008701325525158869,
+      "projected_endpoint_span_upper_nm": 8.000116570811558,
+      "root_edges": [
+        [
+          "h",
+          43.5,
+          53.5
+        ],
+        [
+          "h",
+          44.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003345740680364755
+    },
+    {
+      "cell_yx": [
+        45,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6402551073389349,
+      "graph_second_derivative_upper_per_nm2": 0.07993396715562007,
+      "graph_slope_upper": 0.391957913321971,
+      "normal": [
+        0.9993686950467747,
+        -0.03552761405592391
+      ],
+      "normal_derivative_lower_per_nm": 0.008520139112620125,
+      "projected_endpoint_span_upper_nm": 8.004707830031066,
+      "root_edges": [
+        [
+          "h",
+          44.5,
+          16.5
+        ],
+        [
+          "h",
+          45.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033395359477954942
+    },
+    {
+      "cell_yx": [
+        45,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6402551073389349,
+      "graph_second_derivative_upper_per_nm2": 0.07993396715562007,
+      "graph_slope_upper": 0.391957913321971,
+      "normal": [
+        -0.9993686950467747,
+        -0.035527614055923896
+      ],
+      "normal_derivative_lower_per_nm": 0.008520139112620125,
+      "projected_endpoint_span_upper_nm": 8.004707830031066,
+      "root_edges": [
+        [
+          "h",
+          44.5,
+          53.5
+        ],
+        [
+          "h",
+          45.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033395359477954942
+    },
+    {
+      "cell_yx": [
+        46,
+        17
+      ],
+      "eta_cell_upper_nm": 0.6812179568318917,
+      "graph_second_derivative_upper_per_nm2": 0.08456722325036488,
+      "graph_slope_upper": 0.40964322255543,
+      "normal": [
+        0.9964951917223271,
+        -0.08365006201003404
+      ],
+      "normal_derivative_lower_per_nm": 0.008168494752110927,
+      "projected_endpoint_span_upper_nm": 8.027443798373278,
+      "root_edges": [
+        [
+          "h",
+          45.5,
+          16.5
+        ],
+        [
+          "h",
+          46.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033461685136818393
+    },
+    {
+      "cell_yx": [
+        46,
+        54
+      ],
+      "eta_cell_upper_nm": 0.6812179568318917,
+      "graph_second_derivative_upper_per_nm2": 0.08456722325036488,
+      "graph_slope_upper": 0.40964322255543,
+      "normal": [
+        -0.9964951917223271,
+        -0.08365006201003403
+      ],
+      "normal_derivative_lower_per_nm": 0.008168494752110927,
+      "projected_endpoint_span_upper_nm": 8.027443798373278,
+      "root_edges": [
+        [
+          "h",
+          45.5,
+          53.5
+        ],
+        [
+          "h",
+          46.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033461685136818393
+    },
+    {
+      "cell_yx": [
+        47,
+        17
+      ],
+      "eta_cell_upper_nm": 0.7607275918530539,
+      "graph_second_derivative_upper_per_nm2": 0.09291249213064233,
+      "graph_slope_upper": 0.44025831088471556,
+      "normal": [
+        0.9888396038878511,
+        -0.14898401854869486
+      ],
+      "normal_derivative_lower_per_nm": 0.007636216879976469,
+      "projected_endpoint_span_upper_nm": 8.093079599893352,
+      "root_edges": [
+        [
+          "h",
+          46.5,
+          16.5
+        ],
+        [
+          "h",
+          47.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033619079451277932
+    },
+    {
+      "cell_yx": [
+        47,
+        54
+      ],
+      "eta_cell_upper_nm": 0.7607275918530539,
+      "graph_second_derivative_upper_per_nm2": 0.09291249213064233,
+      "graph_slope_upper": 0.44025831088471556,
+      "normal": [
+        -0.9888396038878511,
+        -0.14898401854869484
+      ],
+      "normal_derivative_lower_per_nm": 0.007636216879976469,
+      "projected_endpoint_span_upper_nm": 8.093079599893352,
+      "root_edges": [
+        [
+          "h",
+          46.5,
+          53.5
+        ],
+        [
+          "h",
+          47.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033619079451277932
+    },
+    {
+      "cell_yx": [
+        48,
+        17
+      ],
+      "eta_cell_upper_nm": 0.9015216866124375,
+      "graph_second_derivative_upper_per_nm2": 0.10617879121083977,
+      "graph_slope_upper": 0.48591026422236755,
+      "normal": [
+        0.9734074606369414,
+        -0.22908058751527033
+      ],
+      "normal_derivative_lower_per_nm": 0.006941966841812417,
+      "projected_endpoint_span_upper_nm": 8.241511015957718,
+      "root_edges": [
+        [
+          "h",
+          47.5,
+          16.5
+        ],
+        [
+          "h",
+          48.5,
+          16.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033731729423279863
+    },
+    {
+      "cell_yx": [
+        48,
+        54
+      ],
+      "eta_cell_upper_nm": 0.9015216866124375,
+      "graph_second_derivative_upper_per_nm2": 0.10617879121083977,
+      "graph_slope_upper": 0.48591026422236755,
+      "normal": [
+        -0.9734074606369414,
+        -0.22908058751527033
+      ],
+      "normal_derivative_lower_per_nm": 0.006941966841812417,
+      "projected_endpoint_span_upper_nm": 8.241511015957718,
+      "root_edges": [
+        [
+          "h",
+          47.5,
+          53.5
+        ],
+        [
+          "h",
+          48.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033731729423279863
+    },
+    {
+      "cell_yx": [
+        49,
+        17
+      ],
+      "eta_cell_upper_nm": 0.1752978989874966,
+      "graph_second_derivative_upper_per_nm2": 0.12665346642623257,
+      "graph_slope_upper": 0.5500446639447197,
+      "normal": [
+        0.9477678072846627,
+        -0.31896110025334207
+      ],
+      "normal_derivative_lower_per_nm": 0.006116363996378094,
+      "projected_endpoint_span_upper_nm": 3.327262016655701,
+      "root_edges": [
+        [
+          "h",
+          48.5,
+          16.5
+        ],
+        [
+          "v",
+          17.5,
+          48.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033642733789513725
+    },
+    {
+      "cell_yx": [
+        49,
+        18
+      ],
+      "eta_cell_upper_nm": 0.28736584444310137,
+      "graph_second_derivative_upper_per_nm2": 0.08454845411351034,
+      "graph_slope_upper": 0.4095725967756916,
+      "normal": [
+        0.9271260808303018,
+        -0.3747495566965286
+      ],
+      "normal_derivative_lower_per_nm": 0.008091799471601454,
+      "projected_endpoint_span_upper_nm": 5.214187809556895,
+      "root_edges": [
+        [
+          "h",
+          49.5,
+          17.5
+        ],
+        [
+          "v",
+          17.5,
+          48.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033141793221719775
+    },
+    {
+      "cell_yx": [
+        49,
+        53
+      ],
+      "eta_cell_upper_nm": 0.28736584444310137,
+      "graph_second_derivative_upper_per_nm2": 0.08454845411351034,
+      "graph_slope_upper": 0.4095725967756916,
+      "normal": [
+        -0.9271260808303018,
+        -0.3747495566965285
+      ],
+      "normal_derivative_lower_per_nm": 0.008091799471601454,
+      "projected_endpoint_span_upper_nm": 5.214187809556895,
+      "root_edges": [
+        [
+          "h",
+          49.5,
+          52.5
+        ],
+        [
+          "v",
+          53.5,
+          48.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033141793221719775
+    },
+    {
+      "cell_yx": [
+        49,
+        54
+      ],
+      "eta_cell_upper_nm": 0.1752978989874966,
+      "graph_second_derivative_upper_per_nm2": 0.12665346642623257,
+      "graph_slope_upper": 0.5500446639447197,
+      "normal": [
+        -0.9477678072846627,
+        -0.31896110025334207
+      ],
+      "normal_derivative_lower_per_nm": 0.006116363996378094,
+      "projected_endpoint_span_upper_nm": 3.327262016655701,
+      "root_edges": [
+        [
+          "h",
+          48.5,
+          53.5
+        ],
+        [
+          "v",
+          53.5,
+          48.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033642733789513725
+    },
+    {
+      "cell_yx": [
+        50,
+        18
+      ],
+      "eta_cell_upper_nm": 1.056042021172912,
+      "graph_second_derivative_upper_per_nm2": 0.10236417323545086,
+      "graph_slope_upper": 0.4731408359533722,
+      "normal": [
+        0.8811215595327074,
+        -0.47288983635372156
+      ],
+      "normal_derivative_lower_per_nm": 0.007048669531335578,
+      "projected_endpoint_span_upper_nm": 9.084589890131669,
+      "root_edges": [
+        [
+          "h",
+          49.5,
+          17.5
+        ],
+        [
+          "h",
+          50.5,
+          17.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.00333501339441518
+    },
+    {
+      "cell_yx": [
+        50,
+        53
+      ],
+      "eta_cell_upper_nm": 1.0560420211729118,
+      "graph_second_derivative_upper_per_nm2": 0.10236417323545081,
+      "graph_slope_upper": 0.4731408359533721,
+      "normal": [
+        -0.8811215595327074,
+        -0.4728898363537215
+      ],
+      "normal_derivative_lower_per_nm": 0.00704866953133558,
+      "projected_endpoint_span_upper_nm": 9.084589890131669,
+      "root_edges": [
+        [
+          "h",
+          49.5,
+          52.5
+        ],
+        [
+          "h",
+          50.5,
+          52.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.00333501339441518
+    },
+    {
+      "cell_yx": [
+        51,
+        18
+      ],
+      "eta_cell_upper_nm": 0.1606867693849383,
+      "graph_second_derivative_upper_per_nm2": 0.13097500487411173,
+      "graph_slope_upper": 0.5627195320232412,
+      "normal": [
+        0.8258307474743433,
+        -0.5639180583435571
+      ],
+      "normal_derivative_lower_per_nm": 0.00589221748462103,
+      "projected_endpoint_span_upper_nm": 3.132561435345226,
+      "root_edges": [
+        [
+          "h",
+          50.5,
+          17.5
+        ],
+        [
+          "v",
+          18.5,
+          50.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033156658655251058
+    },
+    {
+      "cell_yx": [
+        51,
+        19
+      ],
+      "eta_cell_upper_nm": 0.5731285892125131,
+      "graph_second_derivative_upper_per_nm2": 0.09442411442157053,
+      "graph_slope_upper": 0.4456409856219634,
+      "normal": [
+        0.77359073743028,
+        -0.6336855458049171
+      ],
+      "normal_derivative_lower_per_nm": 0.007464449988302661,
+      "projected_endpoint_span_upper_nm": 6.9681582779067,
+      "root_edges": [
+        [
+          "h",
+          51.5,
+          18.5
+        ],
+        [
+          "v",
+          18.5,
+          50.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033264648499130513
+    },
+    {
+      "cell_yx": [
+        51,
+        52
+      ],
+      "eta_cell_upper_nm": 0.5731285892125131,
+      "graph_second_derivative_upper_per_nm2": 0.09442411442157053,
+      "graph_slope_upper": 0.4456409856219634,
+      "normal": [
+        -0.77359073743028,
+        -0.6336855458049171
+      ],
+      "normal_derivative_lower_per_nm": 0.007464449988302661,
+      "projected_endpoint_span_upper_nm": 6.9681582779067,
+      "root_edges": [
+        [
+          "h",
+          51.5,
+          51.5
+        ],
+        [
+          "v",
+          52.5,
+          50.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033264648499130513
+    },
+    {
+      "cell_yx": [
+        51,
+        53
+      ],
+      "eta_cell_upper_nm": 0.1606867693849383,
+      "graph_second_derivative_upper_per_nm2": 0.13097500487411173,
+      "graph_slope_upper": 0.5627195320232412,
+      "normal": [
+        -0.8258307474743433,
+        -0.5639180583435571
+      ],
+      "normal_derivative_lower_per_nm": 0.00589221748462103,
+      "projected_endpoint_span_upper_nm": 3.132561435345226,
+      "root_edges": [
+        [
+          "h",
+          50.5,
+          52.5
+        ],
+        [
+          "v",
+          52.5,
+          50.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033156658655251058
+    },
+    {
+      "cell_yx": [
+        52,
+        19
+      ],
+      "eta_cell_upper_nm": 0.3992615743638206,
+      "graph_second_derivative_upper_per_nm2": 0.12360257750608265,
+      "graph_slope_upper": 0.5409261656767717,
+      "normal": [
+        0.7050382801861479,
+        -0.7091692488201662
+      ],
+      "normal_derivative_lower_per_nm": 0.006121975926498742,
+      "projected_endpoint_span_upper_nm": 5.083272469586813,
+      "root_edges": [
+        [
+          "h",
+          51.5,
+          18.5
+        ],
+        [
+          "v",
+          19.5,
+          51.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033115369642864666
+    },
+    {
+      "cell_yx": [
+        52,
+        20
+      ],
+      "eta_cell_upper_nm": 0.5863551745048164,
+      "graph_second_derivative_upper_per_nm2": 0.09436612128193045,
+      "graph_slope_upper": 0.44543537227002755,
+      "normal": [
+        0.6295623631783456,
+        -0.7769499539026287
+      ],
+      "normal_derivative_lower_per_nm": 0.007467236253783668,
+      "projected_endpoint_span_upper_nm": 7.050274399244836,
+      "root_edges": [
+        [
+          "h",
+          52.5,
+          19.5
+        ],
+        [
+          "v",
+          19.5,
+          51.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033261711605323744
+    },
+    {
+      "cell_yx": [
+        52,
+        51
+      ],
+      "eta_cell_upper_nm": 0.5863551745048164,
+      "graph_second_derivative_upper_per_nm2": 0.09436612128193045,
+      "graph_slope_upper": 0.44543537227002755,
+      "normal": [
+        -0.6295623631783456,
+        -0.7769499539026287
+      ],
+      "normal_derivative_lower_per_nm": 0.007467236253783668,
+      "projected_endpoint_span_upper_nm": 7.050274399244836,
+      "root_edges": [
+        [
+          "h",
+          52.5,
+          50.5
+        ],
+        [
+          "v",
+          51.5,
+          51.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033261711605323744
+    },
+    {
+      "cell_yx": [
+        52,
+        52
+      ],
+      "eta_cell_upper_nm": 0.3992615743638206,
+      "graph_second_derivative_upper_per_nm2": 0.12360257750608265,
+      "graph_slope_upper": 0.5409261656767717,
+      "normal": [
+        -0.7050382801861479,
+        -0.7091692488201662
+      ],
+      "normal_derivative_lower_per_nm": 0.006121975926498742,
+      "projected_endpoint_span_upper_nm": 5.083272469586813,
+      "root_edges": [
+        [
+          "h",
+          51.5,
+          51.5
+        ],
+        [
+          "v",
+          51.5,
+          51.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033115369642864666
+    },
+    {
+      "cell_yx": [
+        53,
+        20
+      ],
+      "eta_cell_upper_nm": 0.14876419684406375,
+      "graph_second_derivative_upper_per_nm2": 0.13104819888281186,
+      "graph_slope_upper": 0.5629318296001538,
+      "normal": [
+        0.5595106420803343,
+        -0.8288231665432935
+      ],
+      "normal_derivative_lower_per_nm": 0.005891396342472181,
+      "projected_endpoint_span_upper_nm": 3.0132427892385016,
+      "root_edges": [
+        [
+          "h",
+          52.5,
+          19.5
+        ],
+        [
+          "v",
+          20.5,
+          52.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003316454521967519
+    },
+    {
+      "cell_yx": [
+        53,
+        21
+      ],
+      "eta_cell_upper_nm": 1.0519877631365067,
+      "graph_second_derivative_upper_per_nm2": 0.1023452521705805,
+      "graph_slope_upper": 0.47307680127130297,
+      "normal": [
+        0.4690834116645023,
+        -0.8831538670589577
+      ],
+      "normal_derivative_lower_per_nm": 0.007051165756192709,
+      "projected_endpoint_span_upper_nm": 9.067972364848144,
+      "root_edges": [
+        [
+          "v",
+          20.5,
+          52.5
+        ],
+        [
+          "v",
+          21.5,
+          52.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003335742941173395
+    },
+    {
+      "cell_yx": [
+        53,
+        22
+      ],
+      "eta_cell_upper_nm": 0.3307709989314954,
+      "graph_second_derivative_upper_per_nm2": 0.08449402496349803,
+      "graph_slope_upper": 0.40936774096250234,
+      "normal": [
+        0.37180802399435164,
+        -0.92830964300357
+      ],
+      "normal_derivative_lower_per_nm": 0.008097930888645162,
+      "projected_endpoint_span_upper_nm": 5.595973783656123,
+      "root_edges": [
+        [
+          "h",
+          53.5,
+          21.5
+        ],
+        [
+          "v",
+          21.5,
+          52.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033150316743551403
+    },
+    {
+      "cell_yx": [
+        53,
+        49
+      ],
+      "eta_cell_upper_nm": 0.3307709989314954,
+      "graph_second_derivative_upper_per_nm2": 0.08449402496349803,
+      "graph_slope_upper": 0.40936774096250234,
+      "normal": [
+        -0.37180802399435164,
+        -0.92830964300357
+      ],
+      "normal_derivative_lower_per_nm": 0.008097930888645162,
+      "projected_endpoint_span_upper_nm": 5.595973783656123,
+      "root_edges": [
+        [
+          "h",
+          53.5,
+          48.5
+        ],
+        [
+          "v",
+          49.5,
+          52.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033150316743551403
+    },
+    {
+      "cell_yx": [
+        53,
+        50
+      ],
+      "eta_cell_upper_nm": 1.0519877631365067,
+      "graph_second_derivative_upper_per_nm2": 0.1023452521705805,
+      "graph_slope_upper": 0.47307680127130297,
+      "normal": [
+        -0.4690834116645023,
+        -0.8831538670589577
+      ],
+      "normal_derivative_lower_per_nm": 0.007051165756192709,
+      "projected_endpoint_span_upper_nm": 9.067972364848144,
+      "root_edges": [
+        [
+          "v",
+          49.5,
+          52.5
+        ],
+        [
+          "v",
+          50.5,
+          52.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003335742941173395
+    },
+    {
+      "cell_yx": [
+        53,
+        51
+      ],
+      "eta_cell_upper_nm": 0.14876419684406375,
+      "graph_second_derivative_upper_per_nm2": 0.13104819888281186,
+      "graph_slope_upper": 0.5629318296001538,
+      "normal": [
+        -0.5595106420803343,
+        -0.8288231665432935
+      ],
+      "normal_derivative_lower_per_nm": 0.005891396342472181,
+      "projected_endpoint_span_upper_nm": 3.0132427892385016,
+      "root_edges": [
+        [
+          "h",
+          52.5,
+          50.5
+        ],
+        [
+          "v",
+          50.5,
+          52.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003316454521967519
+    },
+    {
+      "cell_yx": [
+        54,
+        22
+      ],
+      "eta_cell_upper_nm": 0.1372605481472795,
+      "graph_second_derivative_upper_per_nm2": 0.12713803589099137,
+      "graph_slope_upper": 0.5514798019234181,
+      "normal": [
+        0.31631489732624124,
+        -0.9486542498347275
+      ],
+      "normal_derivative_lower_per_nm": 0.006107633583383115,
+      "projected_endpoint_span_upper_nm": 2.9385414736724647,
+      "root_edges": [
+        [
+          "h",
+          53.5,
+          21.5
+        ],
+        [
+          "v",
+          22.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003368236558784937
+    },
+    {
+      "cell_yx": [
+        54,
+        23
+      ],
+      "eta_cell_upper_nm": 0.904923463742374,
+      "graph_second_derivative_upper_per_nm2": 0.1066301818398784,
+      "graph_slope_upper": 0.48740306983131787,
+      "normal": [
+        0.22749559662116148,
+        -0.973779109201867
+      ],
+      "normal_derivative_lower_per_nm": 0.006932079418155728,
+      "projected_endpoint_span_upper_nm": 8.23955050231841,
+      "root_edges": [
+        [
+          "v",
+          22.5,
+          53.5
+        ],
+        [
+          "v",
+          23.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003378716788723598
+    },
+    {
+      "cell_yx": [
+        54,
+        24
+      ],
+      "eta_cell_upper_nm": 0.7645222148883575,
+      "graph_second_derivative_upper_per_nm2": 0.09337689376188392,
+      "graph_slope_upper": 0.44191714300211865,
+      "normal": [
+        0.1483712722632138,
+        -0.988931729477316
+      ],
+      "normal_derivative_lower_per_nm": 0.007624273902030082,
+      "projected_endpoint_span_upper_nm": 8.093039660557062,
+      "root_edges": [
+        [
+          "v",
+          23.5,
+          53.5
+        ],
+        [
+          "v",
+          24.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033692973402507493
+    },
+    {
+      "cell_yx": [
+        54,
+        25
+      ],
+      "eta_cell_upper_nm": 0.6851653470855893,
+      "graph_second_derivative_upper_per_nm2": 0.08504831752109425,
+      "graph_slope_upper": 0.4114507376329809,
+      "normal": [
+        0.08383181344795466,
+        -0.9964799180385059
+      ],
+      "normal_derivative_lower_per_nm": 0.008154477717765573,
+      "projected_endpoint_span_upper_nm": 8.027866710976367,
+      "root_edges": [
+        [
+          "v",
+          24.5,
+          53.5
+        ],
+        [
+          "v",
+          25.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033551658719863523
+    },
+    {
+      "cell_yx": [
+        54,
+        26
+      ],
+      "eta_cell_upper_nm": 0.6441421134892127,
+      "graph_second_derivative_upper_per_nm2": 0.08041335377962082,
+      "graph_slope_upper": 0.39381141947501025,
+      "normal": [
+        0.03629753441036865,
+        -0.9993410273754041
+      ],
+      "normal_derivative_lower_per_nm": 0.00850507111247238,
+      "projected_endpoint_span_upper_nm": 8.005002366563769,
+      "root_edges": [
+        [
+          "v",
+          25.5,
+          53.5
+        ],
+        [
+          "v",
+          26.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033493941275386536
+    },
+    {
+      "cell_yx": [
+        54,
+        27
+      ],
+      "eta_cell_upper_nm": 0.6278623271656957,
+      "graph_second_derivative_upper_per_nm2": 0.0784757494591912,
+      "graph_slope_upper": 0.38628564597743803,
+      "normal": [
+        0.005709883242545344,
+        -0.9999836984838085
+      ],
+      "normal_derivative_lower_per_nm": 0.008686707078507208,
+      "projected_endpoint_span_upper_nm": 8.000164468952974,
+      "root_edges": [
+        [
+          "v",
+          26.5,
+          53.5
+        ],
+        [
+          "v",
+          27.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003355550255237941
+    },
+    {
+      "cell_yx": [
+        54,
+        28
+      ],
+      "eta_cell_upper_nm": 0.6260670979399583,
+      "graph_second_derivative_upper_per_nm2": 0.07824550281589028,
+      "graph_slope_upper": 0.38538528291758645,
+      "normal": [
+        -0.010028739577995407,
+        -0.9999497109267429
+      ],
+      "normal_derivative_lower_per_nm": 0.008739114271190177,
+      "projected_endpoint_span_upper_nm": 8.000463641548777,
+      "root_edges": [
+        [
+          "v",
+          27.5,
+          53.5
+        ],
+        [
+          "v",
+          28.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033679260258517446
+    },
+    {
+      "cell_yx": [
+        54,
+        29
+      ],
+      "eta_cell_upper_nm": 0.6306883981706369,
+      "graph_second_derivative_upper_per_nm2": 0.0788151838193868,
+      "graph_slope_upper": 0.3876106169384162,
+      "normal": [
+        -0.0144542111379242,
+        -0.999895532433454
+      ],
+      "normal_derivative_lower_per_nm": 0.008716166474389327,
+      "projected_endpoint_span_upper_nm": 8.000865332374458,
+      "root_edges": [
+        [
+          "v",
+          28.5,
+          53.5
+        ],
+        [
+          "v",
+          29.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003378478664475988
+    },
+    {
+      "cell_yx": [
+        54,
+        30
+      ],
+      "eta_cell_upper_nm": 0.6362648842186351,
+      "graph_second_derivative_upper_per_nm2": 0.0795174788029145,
+      "graph_slope_upper": 0.3903430955906998,
+      "normal": [
+        -0.011822225246953902,
+        -0.9999301150531522
+      ],
+      "normal_derivative_lower_per_nm": 0.008666982230462797,
+      "projected_endpoint_span_upper_nm": 8.000594414628338,
+      "root_edges": [
+        [
+          "v",
+          29.5,
+          53.5
+        ],
+        [
+          "v",
+          30.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033830966732684366
+    },
+    {
+      "cell_yx": [
+        54,
+        31
+      ],
+      "eta_cell_upper_nm": 0.6401069523262899,
+      "graph_second_derivative_upper_per_nm2": 0.08000532472420956,
+      "graph_slope_upper": 0.39223416189351845,
+      "normal": [
+        -0.0062709341180402145,
+        -0.9999803374993367
+      ],
+      "normal_derivative_lower_per_nm": 0.00862397523509938,
+      "projected_endpoint_span_upper_nm": 8.000211464095702,
+      "root_edges": [
+        [
+          "v",
+          30.5,
+          53.5
+        ],
+        [
+          "v",
+          31.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033826176985296648
+    },
+    {
+      "cell_yx": [
+        54,
+        32
+      ],
+      "eta_cell_upper_nm": 0.641657137300942,
+      "graph_second_derivative_upper_per_nm2": 0.08020202111043984,
+      "graph_slope_upper": 0.3929950024888311,
+      "normal": [
+        -0.0010283581323805994,
+        -0.999999471239636
+      ],
+      "normal_derivative_lower_per_nm": 0.008600725681918935,
+      "projected_endpoint_span_upper_nm": 8.000065152951246,
+      "root_edges": [
+        [
+          "v",
+          31.5,
+          53.5
+        ],
+        [
+          "v",
+          32.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033800422107714864
+    },
+    {
+      "cell_yx": [
+        54,
+        33
+      ],
+      "eta_cell_upper_nm": 0.6414974970026025,
+      "graph_second_derivative_upper_per_nm2": 0.08018183393899551,
+      "graph_slope_upper": 0.3929169594910918,
+      "normal": [
+        0.0020624644719603948,
+        -0.9999978731178891
+      ],
+      "normal_derivative_lower_per_nm": 0.008596416510479776,
+      "projected_endpoint_span_upper_nm": 8.000076749638104,
+      "root_edges": [
+        [
+          "v",
+          32.5,
+          53.5
+        ],
+        [
+          "v",
+          33.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003377677837816735
+    },
+    {
+      "cell_yx": [
+        54,
+        34
+      ],
+      "eta_cell_upper_nm": 0.6405934264972438,
+      "graph_second_derivative_upper_per_nm2": 0.08006865010088979,
+      "graph_slope_upper": 0.3924792123450298,
+      "normal": [
+        0.0025602773295126655,
+        -0.9999967224846269
+      ],
+      "normal_derivative_lower_per_nm": 0.008602443124504512,
+      "projected_endpoint_span_upper_nm": 8.000085601784493,
+      "root_edges": [
+        [
+          "v",
+          33.5,
+          53.5
+        ],
+        [
+          "v",
+          34.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003376280101748449
+    },
+    {
+      "cell_yx": [
+        54,
+        35
+      ],
+      "eta_cell_upper_nm": 0.6398606542002724,
+      "graph_second_derivative_upper_per_nm2": 0.07997745818882165,
+      "graph_slope_upper": 0.3921262960091626,
+      "normal": [
+        0.0010933423785886628,
+        -0.999999402301043
+      ],
+      "normal_derivative_lower_per_nm": 0.0086087160635002,
+      "projected_endpoint_span_upper_nm": 8.000065462625157,
+      "root_edges": [
+        [
+          "v",
+          34.5,
+          53.5
+        ],
+        [
+          "v",
+          35.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033757039433749136
+    },
+    {
+      "cell_yx": [
+        54,
+        36
+      ],
+      "eta_cell_upper_nm": 0.6398606542002724,
+      "graph_second_derivative_upper_per_nm2": 0.07997745818882165,
+      "graph_slope_upper": 0.3921262960091626,
+      "normal": [
+        -0.0010933423785886973,
+        -0.999999402301043
+      ],
+      "normal_derivative_lower_per_nm": 0.0086087160635002,
+      "projected_endpoint_span_upper_nm": 8.000065462625157,
+      "root_edges": [
+        [
+          "v",
+          35.5,
+          53.5
+        ],
+        [
+          "v",
+          36.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033757039433749136
+    },
+    {
+      "cell_yx": [
+        54,
+        37
+      ],
+      "eta_cell_upper_nm": 0.6405934264972438,
+      "graph_second_derivative_upper_per_nm2": 0.08006865010088979,
+      "graph_slope_upper": 0.3924792123450298,
+      "normal": [
+        -0.002560277329512696,
+        -0.9999967224846269
+      ],
+      "normal_derivative_lower_per_nm": 0.008602443124504512,
+      "projected_endpoint_span_upper_nm": 8.000085601784493,
+      "root_edges": [
+        [
+          "v",
+          36.5,
+          53.5
+        ],
+        [
+          "v",
+          37.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003376280101748449
+    },
+    {
+      "cell_yx": [
+        54,
+        38
+      ],
+      "eta_cell_upper_nm": 0.6414974970026025,
+      "graph_second_derivative_upper_per_nm2": 0.08018183393899551,
+      "graph_slope_upper": 0.3929169594910918,
+      "normal": [
+        -0.0020624644719604178,
+        -0.9999978731178891
+      ],
+      "normal_derivative_lower_per_nm": 0.008596416510479776,
+      "projected_endpoint_span_upper_nm": 8.000076749638104,
+      "root_edges": [
+        [
+          "v",
+          37.5,
+          53.5
+        ],
+        [
+          "v",
+          38.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003377677837816735
+    },
+    {
+      "cell_yx": [
+        54,
+        39
+      ],
+      "eta_cell_upper_nm": 0.641657137300942,
+      "graph_second_derivative_upper_per_nm2": 0.08020202111043984,
+      "graph_slope_upper": 0.3929950024888311,
+      "normal": [
+        0.0010283581323805872,
+        -0.999999471239636
+      ],
+      "normal_derivative_lower_per_nm": 0.008600725681918935,
+      "projected_endpoint_span_upper_nm": 8.000065152951246,
+      "root_edges": [
+        [
+          "v",
+          38.5,
+          53.5
+        ],
+        [
+          "v",
+          39.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033800422107714864
+    },
+    {
+      "cell_yx": [
+        54,
+        40
+      ],
+      "eta_cell_upper_nm": 0.6401069523262899,
+      "graph_second_derivative_upper_per_nm2": 0.08000532472420956,
+      "graph_slope_upper": 0.39223416189351845,
+      "normal": [
+        0.006270934118040215,
+        -0.9999803374993367
+      ],
+      "normal_derivative_lower_per_nm": 0.00862397523509938,
+      "projected_endpoint_span_upper_nm": 8.000211464095702,
+      "root_edges": [
+        [
+          "v",
+          39.5,
+          53.5
+        ],
+        [
+          "v",
+          40.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033826176985296648
+    },
+    {
+      "cell_yx": [
+        54,
+        41
+      ],
+      "eta_cell_upper_nm": 0.6362648842186351,
+      "graph_second_derivative_upper_per_nm2": 0.0795174788029145,
+      "graph_slope_upper": 0.3903430955906998,
+      "normal": [
+        0.011822225246953916,
+        -0.9999301150531522
+      ],
+      "normal_derivative_lower_per_nm": 0.008666982230462797,
+      "projected_endpoint_span_upper_nm": 8.000594414628338,
+      "root_edges": [
+        [
+          "v",
+          40.5,
+          53.5
+        ],
+        [
+          "v",
+          41.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033830966732684366
+    },
+    {
+      "cell_yx": [
+        54,
+        42
+      ],
+      "eta_cell_upper_nm": 0.6306883981706369,
+      "graph_second_derivative_upper_per_nm2": 0.0788151838193868,
+      "graph_slope_upper": 0.3876106169384162,
+      "normal": [
+        0.014454211137924226,
+        -0.999895532433454
+      ],
+      "normal_derivative_lower_per_nm": 0.008716166474389327,
+      "projected_endpoint_span_upper_nm": 8.000865332374458,
+      "root_edges": [
+        [
+          "v",
+          41.5,
+          53.5
+        ],
+        [
+          "v",
+          42.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003378478664475988
+    },
+    {
+      "cell_yx": [
+        54,
+        43
+      ],
+      "eta_cell_upper_nm": 0.6260670979399583,
+      "graph_second_derivative_upper_per_nm2": 0.07824550281589028,
+      "graph_slope_upper": 0.38538528291758645,
+      "normal": [
+        0.010028739577995447,
+        -0.9999497109267429
+      ],
+      "normal_derivative_lower_per_nm": 0.008739114271190177,
+      "projected_endpoint_span_upper_nm": 8.000463641548777,
+      "root_edges": [
+        [
+          "v",
+          42.5,
+          53.5
+        ],
+        [
+          "v",
+          43.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033679260258517446
+    },
+    {
+      "cell_yx": [
+        54,
+        44
+      ],
+      "eta_cell_upper_nm": 0.6278623271656957,
+      "graph_second_derivative_upper_per_nm2": 0.0784757494591912,
+      "graph_slope_upper": 0.38628564597743803,
+      "normal": [
+        -0.0057098832425452935,
+        -0.9999836984838085
+      ],
+      "normal_derivative_lower_per_nm": 0.008686707078507208,
+      "projected_endpoint_span_upper_nm": 8.000164468952974,
+      "root_edges": [
+        [
+          "v",
+          43.5,
+          53.5
+        ],
+        [
+          "v",
+          44.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003355550255237941
+    },
+    {
+      "cell_yx": [
+        54,
+        45
+      ],
+      "eta_cell_upper_nm": 0.6441421134892125,
+      "graph_second_derivative_upper_per_nm2": 0.08041335377962079,
+      "graph_slope_upper": 0.3938114194750102,
+      "normal": [
+        -0.036297534410368586,
+        -0.9993410273754041
+      ],
+      "normal_derivative_lower_per_nm": 0.008505071112472382,
+      "projected_endpoint_span_upper_nm": 8.005002366563769,
+      "root_edges": [
+        [
+          "v",
+          44.5,
+          53.5
+        ],
+        [
+          "v",
+          45.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033493941275386536
+    },
+    {
+      "cell_yx": [
+        54,
+        46
+      ],
+      "eta_cell_upper_nm": 0.685165347085589,
+      "graph_second_derivative_upper_per_nm2": 0.08504831752109422,
+      "graph_slope_upper": 0.4114507376329808,
+      "normal": [
+        -0.08383181344795461,
+        -0.9964799180385059
+      ],
+      "normal_derivative_lower_per_nm": 0.008154477717765573,
+      "projected_endpoint_span_upper_nm": 8.027866710976367,
+      "root_edges": [
+        [
+          "v",
+          45.5,
+          53.5
+        ],
+        [
+          "v",
+          46.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003355165871986352
+    },
+    {
+      "cell_yx": [
+        54,
+        47
+      ],
+      "eta_cell_upper_nm": 0.7645222148883575,
+      "graph_second_derivative_upper_per_nm2": 0.09337689376188392,
+      "graph_slope_upper": 0.44191714300211865,
+      "normal": [
+        -0.14837127226321375,
+        -0.988931729477316
+      ],
+      "normal_derivative_lower_per_nm": 0.007624273902030082,
+      "projected_endpoint_span_upper_nm": 8.093039660557062,
+      "root_edges": [
+        [
+          "v",
+          46.5,
+          53.5
+        ],
+        [
+          "v",
+          47.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.0033692973402507493
+    },
+    {
+      "cell_yx": [
+        54,
+        48
+      ],
+      "eta_cell_upper_nm": 0.904923463742374,
+      "graph_second_derivative_upper_per_nm2": 0.1066301818398784,
+      "graph_slope_upper": 0.48740306983131787,
+      "normal": [
+        -0.2274955966211614,
+        -0.973779109201867
+      ],
+      "normal_derivative_lower_per_nm": 0.006932079418155728,
+      "projected_endpoint_span_upper_nm": 8.23955050231841,
+      "root_edges": [
+        [
+          "v",
+          47.5,
+          53.5
+        ],
+        [
+          "v",
+          48.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003378716788723598
+    },
+    {
+      "cell_yx": [
+        54,
+        49
+      ],
+      "eta_cell_upper_nm": 0.13726054814727956,
+      "graph_second_derivative_upper_per_nm2": 0.12713803589099143,
+      "graph_slope_upper": 0.5514798019234183,
+      "normal": [
+        -0.31631489732624124,
+        -0.9486542498347275
+      ],
+      "normal_derivative_lower_per_nm": 0.006107633583383113,
+      "projected_endpoint_span_upper_nm": 2.9385414736724647,
+      "root_edges": [
+        [
+          "h",
+          53.5,
+          48.5
+        ],
+        [
+          "v",
+          48.5,
+          53.5
+        ]
+      ],
+      "root_midpoint_error_upper_nm": 3.0517578125e-05,
+      "tangent_derivative_upper_per_nm": 0.003368236558784937
+    }
+  ],
+  "date": "2026-09-09",
+  "inputs": {
+    "boundary_coverage_sha256": "5392e94a51abdd12fc3e02f507f927942615ae142f92e269067fb88c6e5e2149",
+    "expanded_band_grid_sha256": "0cb6cb3671389a514009320344ddb699a5b27fc26769665e705f7cfeb13a2360"
+  },
+  "polyline": {
+    "closed": true,
+    "segments": [
+      {
+        "cell_yx": [
+          18,
+          22
+        ],
+        "index": 0,
+        "v0": 0,
+        "v1": 1
+      },
+      {
+        "cell_yx": [
+          18,
+          21
+        ],
+        "index": 1,
+        "v0": 1,
+        "v1": 2
+      },
+      {
+        "cell_yx": [
+          18,
+          20
+        ],
+        "index": 2,
+        "v0": 2,
+        "v1": 3
+      },
+      {
+        "cell_yx": [
+          19,
+          20
+        ],
+        "index": 3,
+        "v0": 3,
+        "v1": 4
+      },
+      {
+        "cell_yx": [
+          19,
+          19
+        ],
+        "index": 4,
+        "v0": 4,
+        "v1": 5
+      },
+      {
+        "cell_yx": [
+          20,
+          19
+        ],
+        "index": 5,
+        "v0": 5,
+        "v1": 6
+      },
+      {
+        "cell_yx": [
+          20,
+          18
+        ],
+        "index": 6,
+        "v0": 6,
+        "v1": 7
+      },
+      {
+        "cell_yx": [
+          21,
+          18
+        ],
+        "index": 7,
+        "v0": 7,
+        "v1": 8
+      },
+      {
+        "cell_yx": [
+          22,
+          18
+        ],
+        "index": 8,
+        "v0": 8,
+        "v1": 9
+      },
+      {
+        "cell_yx": [
+          22,
+          17
+        ],
+        "index": 9,
+        "v0": 9,
+        "v1": 10
+      },
+      {
+        "cell_yx": [
+          23,
+          17
+        ],
+        "index": 10,
+        "v0": 10,
+        "v1": 11
+      },
+      {
+        "cell_yx": [
+          24,
+          17
+        ],
+        "index": 11,
+        "v0": 11,
+        "v1": 12
+      },
+      {
+        "cell_yx": [
+          25,
+          17
+        ],
+        "index": 12,
+        "v0": 12,
+        "v1": 13
+      },
+      {
+        "cell_yx": [
+          26,
+          17
+        ],
+        "index": 13,
+        "v0": 13,
+        "v1": 14
+      },
+      {
+        "cell_yx": [
+          27,
+          17
+        ],
+        "index": 14,
+        "v0": 14,
+        "v1": 15
+      },
+      {
+        "cell_yx": [
+          28,
+          17
+        ],
+        "index": 15,
+        "v0": 15,
+        "v1": 16
+      },
+      {
+        "cell_yx": [
+          29,
+          17
+        ],
+        "index": 16,
+        "v0": 16,
+        "v1": 17
+      },
+      {
+        "cell_yx": [
+          30,
+          17
+        ],
+        "index": 17,
+        "v0": 17,
+        "v1": 18
+      },
+      {
+        "cell_yx": [
+          31,
+          17
+        ],
+        "index": 18,
+        "v0": 18,
+        "v1": 19
+      },
+      {
+        "cell_yx": [
+          32,
+          17
+        ],
+        "index": 19,
+        "v0": 19,
+        "v1": 20
+      },
+      {
+        "cell_yx": [
+          33,
+          17
+        ],
+        "index": 20,
+        "v0": 20,
+        "v1": 21
+      },
+      {
+        "cell_yx": [
+          34,
+          17
+        ],
+        "index": 21,
+        "v0": 21,
+        "v1": 22
+      },
+      {
+        "cell_yx": [
+          35,
+          17
+        ],
+        "index": 22,
+        "v0": 22,
+        "v1": 23
+      },
+      {
+        "cell_yx": [
+          36,
+          17
+        ],
+        "index": 23,
+        "v0": 23,
+        "v1": 24
+      },
+      {
+        "cell_yx": [
+          37,
+          17
+        ],
+        "index": 24,
+        "v0": 24,
+        "v1": 25
+      },
+      {
+        "cell_yx": [
+          38,
+          17
+        ],
+        "index": 25,
+        "v0": 25,
+        "v1": 26
+      },
+      {
+        "cell_yx": [
+          39,
+          17
+        ],
+        "index": 26,
+        "v0": 26,
+        "v1": 27
+      },
+      {
+        "cell_yx": [
+          40,
+          17
+        ],
+        "index": 27,
+        "v0": 27,
+        "v1": 28
+      },
+      {
+        "cell_yx": [
+          41,
+          17
+        ],
+        "index": 28,
+        "v0": 28,
+        "v1": 29
+      },
+      {
+        "cell_yx": [
+          42,
+          17
+        ],
+        "index": 29,
+        "v0": 29,
+        "v1": 30
+      },
+      {
+        "cell_yx": [
+          43,
+          17
+        ],
+        "index": 30,
+        "v0": 30,
+        "v1": 31
+      },
+      {
+        "cell_yx": [
+          44,
+          17
+        ],
+        "index": 31,
+        "v0": 31,
+        "v1": 32
+      },
+      {
+        "cell_yx": [
+          45,
+          17
+        ],
+        "index": 32,
+        "v0": 32,
+        "v1": 33
+      },
+      {
+        "cell_yx": [
+          46,
+          17
+        ],
+        "index": 33,
+        "v0": 33,
+        "v1": 34
+      },
+      {
+        "cell_yx": [
+          47,
+          17
+        ],
+        "index": 34,
+        "v0": 34,
+        "v1": 35
+      },
+      {
+        "cell_yx": [
+          48,
+          17
+        ],
+        "index": 35,
+        "v0": 35,
+        "v1": 36
+      },
+      {
+        "cell_yx": [
+          49,
+          17
+        ],
+        "index": 36,
+        "v0": 36,
+        "v1": 37
+      },
+      {
+        "cell_yx": [
+          49,
+          18
+        ],
+        "index": 37,
+        "v0": 37,
+        "v1": 38
+      },
+      {
+        "cell_yx": [
+          50,
+          18
+        ],
+        "index": 38,
+        "v0": 38,
+        "v1": 39
+      },
+      {
+        "cell_yx": [
+          51,
+          18
+        ],
+        "index": 39,
+        "v0": 39,
+        "v1": 40
+      },
+      {
+        "cell_yx": [
+          51,
+          19
+        ],
+        "index": 40,
+        "v0": 40,
+        "v1": 41
+      },
+      {
+        "cell_yx": [
+          52,
+          19
+        ],
+        "index": 41,
+        "v0": 41,
+        "v1": 42
+      },
+      {
+        "cell_yx": [
+          52,
+          20
+        ],
+        "index": 42,
+        "v0": 42,
+        "v1": 43
+      },
+      {
+        "cell_yx": [
+          53,
+          20
+        ],
+        "index": 43,
+        "v0": 43,
+        "v1": 44
+      },
+      {
+        "cell_yx": [
+          53,
+          21
+        ],
+        "index": 44,
+        "v0": 44,
+        "v1": 45
+      },
+      {
+        "cell_yx": [
+          53,
+          22
+        ],
+        "index": 45,
+        "v0": 45,
+        "v1": 46
+      },
+      {
+        "cell_yx": [
+          54,
+          22
+        ],
+        "index": 46,
+        "v0": 46,
+        "v1": 47
+      },
+      {
+        "cell_yx": [
+          54,
+          23
+        ],
+        "index": 47,
+        "v0": 47,
+        "v1": 48
+      },
+      {
+        "cell_yx": [
+          54,
+          24
+        ],
+        "index": 48,
+        "v0": 48,
+        "v1": 49
+      },
+      {
+        "cell_yx": [
+          54,
+          25
+        ],
+        "index": 49,
+        "v0": 49,
+        "v1": 50
+      },
+      {
+        "cell_yx": [
+          54,
+          26
+        ],
+        "index": 50,
+        "v0": 50,
+        "v1": 51
+      },
+      {
+        "cell_yx": [
+          54,
+          27
+        ],
+        "index": 51,
+        "v0": 51,
+        "v1": 52
+      },
+      {
+        "cell_yx": [
+          54,
+          28
+        ],
+        "index": 52,
+        "v0": 52,
+        "v1": 53
+      },
+      {
+        "cell_yx": [
+          54,
+          29
+        ],
+        "index": 53,
+        "v0": 53,
+        "v1": 54
+      },
+      {
+        "cell_yx": [
+          54,
+          30
+        ],
+        "index": 54,
+        "v0": 54,
+        "v1": 55
+      },
+      {
+        "cell_yx": [
+          54,
+          31
+        ],
+        "index": 55,
+        "v0": 55,
+        "v1": 56
+      },
+      {
+        "cell_yx": [
+          54,
+          32
+        ],
+        "index": 56,
+        "v0": 56,
+        "v1": 57
+      },
+      {
+        "cell_yx": [
+          54,
+          33
+        ],
+        "index": 57,
+        "v0": 57,
+        "v1": 58
+      },
+      {
+        "cell_yx": [
+          54,
+          34
+        ],
+        "index": 58,
+        "v0": 58,
+        "v1": 59
+      },
+      {
+        "cell_yx": [
+          54,
+          35
+        ],
+        "index": 59,
+        "v0": 59,
+        "v1": 60
+      },
+      {
+        "cell_yx": [
+          54,
+          36
+        ],
+        "index": 60,
+        "v0": 60,
+        "v1": 61
+      },
+      {
+        "cell_yx": [
+          54,
+          37
+        ],
+        "index": 61,
+        "v0": 61,
+        "v1": 62
+      },
+      {
+        "cell_yx": [
+          54,
+          38
+        ],
+        "index": 62,
+        "v0": 62,
+        "v1": 63
+      },
+      {
+        "cell_yx": [
+          54,
+          39
+        ],
+        "index": 63,
+        "v0": 63,
+        "v1": 64
+      },
+      {
+        "cell_yx": [
+          54,
+          40
+        ],
+        "index": 64,
+        "v0": 64,
+        "v1": 65
+      },
+      {
+        "cell_yx": [
+          54,
+          41
+        ],
+        "index": 65,
+        "v0": 65,
+        "v1": 66
+      },
+      {
+        "cell_yx": [
+          54,
+          42
+        ],
+        "index": 66,
+        "v0": 66,
+        "v1": 67
+      },
+      {
+        "cell_yx": [
+          54,
+          43
+        ],
+        "index": 67,
+        "v0": 67,
+        "v1": 68
+      },
+      {
+        "cell_yx": [
+          54,
+          44
+        ],
+        "index": 68,
+        "v0": 68,
+        "v1": 69
+      },
+      {
+        "cell_yx": [
+          54,
+          45
+        ],
+        "index": 69,
+        "v0": 69,
+        "v1": 70
+      },
+      {
+        "cell_yx": [
+          54,
+          46
+        ],
+        "index": 70,
+        "v0": 70,
+        "v1": 71
+      },
+      {
+        "cell_yx": [
+          54,
+          47
+        ],
+        "index": 71,
+        "v0": 71,
+        "v1": 72
+      },
+      {
+        "cell_yx": [
+          54,
+          48
+        ],
+        "index": 72,
+        "v0": 72,
+        "v1": 73
+      },
+      {
+        "cell_yx": [
+          54,
+          49
+        ],
+        "index": 73,
+        "v0": 73,
+        "v1": 74
+      },
+      {
+        "cell_yx": [
+          53,
+          49
+        ],
+        "index": 74,
+        "v0": 74,
+        "v1": 75
+      },
+      {
+        "cell_yx": [
+          53,
+          50
+        ],
+        "index": 75,
+        "v0": 75,
+        "v1": 76
+      },
+      {
+        "cell_yx": [
+          53,
+          51
+        ],
+        "index": 76,
+        "v0": 76,
+        "v1": 77
+      },
+      {
+        "cell_yx": [
+          52,
+          51
+        ],
+        "index": 77,
+        "v0": 77,
+        "v1": 78
+      },
+      {
+        "cell_yx": [
+          52,
+          52
+        ],
+        "index": 78,
+        "v0": 78,
+        "v1": 79
+      },
+      {
+        "cell_yx": [
+          51,
+          52
+        ],
+        "index": 79,
+        "v0": 79,
+        "v1": 80
+      },
+      {
+        "cell_yx": [
+          51,
+          53
+        ],
+        "index": 80,
+        "v0": 80,
+        "v1": 81
+      },
+      {
+        "cell_yx": [
+          50,
+          53
+        ],
+        "index": 81,
+        "v0": 81,
+        "v1": 82
+      },
+      {
+        "cell_yx": [
+          49,
+          53
+        ],
+        "index": 82,
+        "v0": 82,
+        "v1": 83
+      },
+      {
+        "cell_yx": [
+          49,
+          54
+        ],
+        "index": 83,
+        "v0": 83,
+        "v1": 84
+      },
+      {
+        "cell_yx": [
+          48,
+          54
+        ],
+        "index": 84,
+        "v0": 84,
+        "v1": 85
+      },
+      {
+        "cell_yx": [
+          47,
+          54
+        ],
+        "index": 85,
+        "v0": 85,
+        "v1": 86
+      },
+      {
+        "cell_yx": [
+          46,
+          54
+        ],
+        "index": 86,
+        "v0": 86,
+        "v1": 87
+      },
+      {
+        "cell_yx": [
+          45,
+          54
+        ],
+        "index": 87,
+        "v0": 87,
+        "v1": 88
+      },
+      {
+        "cell_yx": [
+          44,
+          54
+        ],
+        "index": 88,
+        "v0": 88,
+        "v1": 89
+      },
+      {
+        "cell_yx": [
+          43,
+          54
+        ],
+        "index": 89,
+        "v0": 89,
+        "v1": 90
+      },
+      {
+        "cell_yx": [
+          42,
+          54
+        ],
+        "index": 90,
+        "v0": 90,
+        "v1": 91
+      },
+      {
+        "cell_yx": [
+          41,
+          54
+        ],
+        "index": 91,
+        "v0": 91,
+        "v1": 92
+      },
+      {
+        "cell_yx": [
+          40,
+          54
+        ],
+        "index": 92,
+        "v0": 92,
+        "v1": 93
+      },
+      {
+        "cell_yx": [
+          39,
+          54
+        ],
+        "index": 93,
+        "v0": 93,
+        "v1": 94
+      },
+      {
+        "cell_yx": [
+          38,
+          54
+        ],
+        "index": 94,
+        "v0": 94,
+        "v1": 95
+      },
+      {
+        "cell_yx": [
+          37,
+          54
+        ],
+        "index": 95,
+        "v0": 95,
+        "v1": 96
+      },
+      {
+        "cell_yx": [
+          36,
+          54
+        ],
+        "index": 96,
+        "v0": 96,
+        "v1": 97
+      },
+      {
+        "cell_yx": [
+          35,
+          54
+        ],
+        "index": 97,
+        "v0": 97,
+        "v1": 98
+      },
+      {
+        "cell_yx": [
+          34,
+          54
+        ],
+        "index": 98,
+        "v0": 98,
+        "v1": 99
+      },
+      {
+        "cell_yx": [
+          33,
+          54
+        ],
+        "index": 99,
+        "v0": 99,
+        "v1": 100
+      },
+      {
+        "cell_yx": [
+          32,
+          54
+        ],
+        "index": 100,
+        "v0": 100,
+        "v1": 101
+      },
+      {
+        "cell_yx": [
+          31,
+          54
+        ],
+        "index": 101,
+        "v0": 101,
+        "v1": 102
+      },
+      {
+        "cell_yx": [
+          30,
+          54
+        ],
+        "index": 102,
+        "v0": 102,
+        "v1": 103
+      },
+      {
+        "cell_yx": [
+          29,
+          54
+        ],
+        "index": 103,
+        "v0": 103,
+        "v1": 104
+      },
+      {
+        "cell_yx": [
+          28,
+          54
+        ],
+        "index": 104,
+        "v0": 104,
+        "v1": 105
+      },
+      {
+        "cell_yx": [
+          27,
+          54
+        ],
+        "index": 105,
+        "v0": 105,
+        "v1": 106
+      },
+      {
+        "cell_yx": [
+          26,
+          54
+        ],
+        "index": 106,
+        "v0": 106,
+        "v1": 107
+      },
+      {
+        "cell_yx": [
+          25,
+          54
+        ],
+        "index": 107,
+        "v0": 107,
+        "v1": 108
+      },
+      {
+        "cell_yx": [
+          24,
+          54
+        ],
+        "index": 108,
+        "v0": 108,
+        "v1": 109
+      },
+      {
+        "cell_yx": [
+          23,
+          54
+        ],
+        "index": 109,
+        "v0": 109,
+        "v1": 110
+      },
+      {
+        "cell_yx": [
+          22,
+          54
+        ],
+        "index": 110,
+        "v0": 110,
+        "v1": 111
+      },
+      {
+        "cell_yx": [
+          22,
+          53
+        ],
+        "index": 111,
+        "v0": 111,
+        "v1": 112
+      },
+      {
+        "cell_yx": [
+          21,
+          53
+        ],
+        "index": 112,
+        "v0": 112,
+        "v1": 113
+      },
+      {
+        "cell_yx": [
+          20,
+          53
+        ],
+        "index": 113,
+        "v0": 113,
+        "v1": 114
+      },
+      {
+        "cell_yx": [
+          20,
+          52
+        ],
+        "index": 114,
+        "v0": 114,
+        "v1": 115
+      },
+      {
+        "cell_yx": [
+          19,
+          52
+        ],
+        "index": 115,
+        "v0": 115,
+        "v1": 116
+      },
+      {
+        "cell_yx": [
+          19,
+          51
+        ],
+        "index": 116,
+        "v0": 116,
+        "v1": 117
+      },
+      {
+        "cell_yx": [
+          18,
+          51
+        ],
+        "index": 117,
+        "v0": 117,
+        "v1": 118
+      },
+      {
+        "cell_yx": [
+          18,
+          50
+        ],
+        "index": 118,
+        "v0": 118,
+        "v1": 119
+      },
+      {
+        "cell_yx": [
+          18,
+          49
+        ],
+        "index": 119,
+        "v0": 119,
+        "v1": 120
+      },
+      {
+        "cell_yx": [
+          17,
+          49
+        ],
+        "index": 120,
+        "v0": 120,
+        "v1": 121
+      },
+      {
+        "cell_yx": [
+          17,
+          48
+        ],
+        "index": 121,
+        "v0": 121,
+        "v1": 122
+      },
+      {
+        "cell_yx": [
+          17,
+          47
+        ],
+        "index": 122,
+        "v0": 122,
+        "v1": 123
+      },
+      {
+        "cell_yx": [
+          17,
+          46
+        ],
+        "index": 123,
+        "v0": 123,
+        "v1": 124
+      },
+      {
+        "cell_yx": [
+          17,
+          45
+        ],
+        "index": 124,
+        "v0": 124,
+        "v1": 125
+      },
+      {
+        "cell_yx": [
+          17,
+          44
+        ],
+        "index": 125,
+        "v0": 125,
+        "v1": 126
+      },
+      {
+        "cell_yx": [
+          17,
+          43
+        ],
+        "index": 126,
+        "v0": 126,
+        "v1": 127
+      },
+      {
+        "cell_yx": [
+          17,
+          42
+        ],
+        "index": 127,
+        "v0": 127,
+        "v1": 128
+      },
+      {
+        "cell_yx": [
+          17,
+          41
+        ],
+        "index": 128,
+        "v0": 128,
+        "v1": 129
+      },
+      {
+        "cell_yx": [
+          17,
+          40
+        ],
+        "index": 129,
+        "v0": 129,
+        "v1": 130
+      },
+      {
+        "cell_yx": [
+          17,
+          39
+        ],
+        "index": 130,
+        "v0": 130,
+        "v1": 131
+      },
+      {
+        "cell_yx": [
+          17,
+          38
+        ],
+        "index": 131,
+        "v0": 131,
+        "v1": 132
+      },
+      {
+        "cell_yx": [
+          17,
+          37
+        ],
+        "index": 132,
+        "v0": 132,
+        "v1": 133
+      },
+      {
+        "cell_yx": [
+          17,
+          36
+        ],
+        "index": 133,
+        "v0": 133,
+        "v1": 134
+      },
+      {
+        "cell_yx": [
+          17,
+          35
+        ],
+        "index": 134,
+        "v0": 134,
+        "v1": 135
+      },
+      {
+        "cell_yx": [
+          17,
+          34
+        ],
+        "index": 135,
+        "v0": 135,
+        "v1": 136
+      },
+      {
+        "cell_yx": [
+          17,
+          33
+        ],
+        "index": 136,
+        "v0": 136,
+        "v1": 137
+      },
+      {
+        "cell_yx": [
+          17,
+          32
+        ],
+        "index": 137,
+        "v0": 137,
+        "v1": 138
+      },
+      {
+        "cell_yx": [
+          17,
+          31
+        ],
+        "index": 138,
+        "v0": 138,
+        "v1": 139
+      },
+      {
+        "cell_yx": [
+          17,
+          30
+        ],
+        "index": 139,
+        "v0": 139,
+        "v1": 140
+      },
+      {
+        "cell_yx": [
+          17,
+          29
+        ],
+        "index": 140,
+        "v0": 140,
+        "v1": 141
+      },
+      {
+        "cell_yx": [
+          17,
+          28
+        ],
+        "index": 141,
+        "v0": 141,
+        "v1": 142
+      },
+      {
+        "cell_yx": [
+          17,
+          27
+        ],
+        "index": 142,
+        "v0": 142,
+        "v1": 143
+      },
+      {
+        "cell_yx": [
+          17,
+          26
+        ],
+        "index": 143,
+        "v0": 143,
+        "v1": 144
+      },
+      {
+        "cell_yx": [
+          17,
+          25
+        ],
+        "index": 144,
+        "v0": 144,
+        "v1": 145
+      },
+      {
+        "cell_yx": [
+          17,
+          24
+        ],
+        "index": 145,
+        "v0": 145,
+        "v1": 146
+      },
+      {
+        "cell_yx": [
+          17,
+          23
+        ],
+        "index": 146,
+        "v0": 146,
+        "v1": 147
+      },
+      {
+        "cell_yx": [
+          17,
+          22
+        ],
+        "index": 147,
+        "v0": 147,
+        "v1": 0
+      }
+    ],
+    "vertices": [
+      {
+        "edge_key": [
+          "h",
+          17.5,
+          21.5
+        ],
+        "index": 0,
+        "x_nm": 177.20547485351562,
+        "y_nm": 140.0
+      },
+      {
+        "edge_key": [
+          "v",
+          21.5,
+          17.5
+        ],
+        "index": 1,
+        "x_nm": 172.0,
+        "y_nm": 142.05380249023438
+      },
+      {
+        "edge_key": [
+          "v",
+          20.5,
+          17.5
+        ],
+        "index": 2,
+        "x_nm": 164.0,
+        "y_nm": 146.32315063476562
+      },
+      {
+        "edge_key": [
+          "h",
+          18.5,
+          19.5
+        ],
+        "index": 3,
+        "x_nm": 161.49649047851562,
+        "y_nm": 148.0
+      },
+      {
+        "edge_key": [
+          "v",
+          19.5,
+          18.5
+        ],
+        "index": 4,
+        "x_nm": 156.0,
+        "y_nm": 152.41531372070312
+      },
+      {
+        "edge_key": [
+          "h",
+          19.5,
+          18.5
+        ],
+        "index": 5,
+        "x_nm": 152.39596557617188,
+        "y_nm": 156.0
+      },
+      {
+        "edge_key": [
+          "v",
+          18.5,
+          19.5
+        ],
+        "index": 6,
+        "x_nm": 148.0,
+        "y_nm": 161.40652465820312
+      },
+      {
+        "edge_key": [
+          "h",
+          20.5,
+          17.5
+        ],
+        "index": 7,
+        "x_nm": 146.24313354492188,
+        "y_nm": 164.0
+      },
+      {
+        "edge_key": [
+          "h",
+          21.5,
+          17.5
+        ],
+        "index": 8,
+        "x_nm": 141.93862915039062,
+        "y_nm": 172.0
+      },
+      {
+        "edge_key": [
+          "v",
+          17.5,
+          21.5
+        ],
+        "index": 9,
+        "x_nm": 140.0,
+        "y_nm": 176.84036254882812
+      },
+      {
+        "edge_key": [
+          "h",
+          22.5,
+          16.5
+        ],
+        "index": 10,
+        "x_nm": 138.95724487304688,
+        "y_nm": 180.0
+      },
+      {
+        "edge_key": [
+          "h",
+          23.5,
+          16.5
+        ],
+        "index": 11,
+        "x_nm": 136.97457885742188,
+        "y_nm": 188.0
+      },
+      {
+        "edge_key": [
+          "h",
+          24.5,
+          16.5
+        ],
+        "index": 12,
+        "x_nm": 135.75094604492188,
+        "y_nm": 196.0
+      },
+      {
+        "edge_key": [
+          "h",
+          25.5,
+          16.5
+        ],
+        "index": 13,
+        "x_nm": 135.08840942382812,
+        "y_nm": 204.0
+      },
+      {
+        "edge_key": [
+          "h",
+          26.5,
+          16.5
+        ],
+        "index": 14,
+        "x_nm": 134.81546020507812,
+        "y_nm": 212.0
+      },
+      {
+        "edge_key": [
+          "h",
+          27.5,
+          16.5
+        ],
+        "index": 15,
+        "x_nm": 134.78506469726562,
+        "y_nm": 220.0
+      },
+      {
+        "edge_key": [
+          "h",
+          28.5,
+          16.5
+        ],
+        "index": 16,
+        "x_nm": 134.87716674804688,
+        "y_nm": 228.0
+      },
+      {
+        "edge_key": [
+          "h",
+          29.5,
+          16.5
+        ],
+        "index": 17,
+        "x_nm": 135.00308227539062,
+        "y_nm": 236.0
+      },
+      {
+        "edge_key": [
+          "h",
+          30.5,
+          16.5
+        ],
+        "index": 18,
+        "x_nm": 135.10800170898438,
+        "y_nm": 244.0
+      },
+      {
+        "edge_key": [
+          "h",
+          31.5,
+          16.5
+        ],
+        "index": 19,
+        "x_nm": 135.16891479492188,
+        "y_nm": 252.0
+      },
+      {
+        "edge_key": [
+          "h",
+          32.5,
+          16.5
+        ],
+        "index": 20,
+        "x_nm": 135.18765258789062,
+        "y_nm": 260.0
+      },
+      {
+        "edge_key": [
+          "h",
+          33.5,
+          16.5
+        ],
+        "index": 21,
+        "x_nm": 135.18014526367188,
+        "y_nm": 268.0
+      },
+      {
+        "edge_key": [
+          "h",
+          34.5,
+          16.5
+        ],
+        "index": 22,
+        "x_nm": 135.16580200195312,
+        "y_nm": 276.0
+      },
+      {
+        "edge_key": [
+          "h",
+          35.5,
+          16.5
+        ],
+        "index": 23,
+        "x_nm": 135.15921020507812,
+        "y_nm": 284.0
+      },
+      {
+        "edge_key": [
+          "h",
+          36.5,
+          16.5
+        ],
+        "index": 24,
+        "x_nm": 135.16580200195312,
+        "y_nm": 292.0
+      },
+      {
+        "edge_key": [
+          "h",
+          37.5,
+          16.5
+        ],
+        "index": 25,
+        "x_nm": 135.18014526367188,
+        "y_nm": 300.0
+      },
+      {
+        "edge_key": [
+          "h",
+          38.5,
+          16.5
+        ],
+        "index": 26,
+        "x_nm": 135.18765258789062,
+        "y_nm": 308.0
+      },
+      {
+        "edge_key": [
+          "h",
+          39.5,
+          16.5
+        ],
+        "index": 27,
+        "x_nm": 135.16891479492188,
+        "y_nm": 316.0
+      },
+      {
+        "edge_key": [
+          "h",
+          40.5,
+          16.5
+        ],
+        "index": 28,
+        "x_nm": 135.10800170898438,
+        "y_nm": 324.0
+      },
+      {
+        "edge_key": [
+          "h",
+          41.5,
+          16.5
+        ],
+        "index": 29,
+        "x_nm": 135.00308227539062,
+        "y_nm": 332.0
+      },
+      {
+        "edge_key": [
+          "h",
+          42.5,
+          16.5
+        ],
+        "index": 30,
+        "x_nm": 134.87716674804688,
+        "y_nm": 340.0
+      },
+      {
+        "edge_key": [
+          "h",
+          43.5,
+          16.5
+        ],
+        "index": 31,
+        "x_nm": 134.78506469726562,
+        "y_nm": 348.0
+      },
+      {
+        "edge_key": [
+          "h",
+          44.5,
+          16.5
+        ],
+        "index": 32,
+        "x_nm": 134.81546020507812,
+        "y_nm": 356.0
+      },
+      {
+        "edge_key": [
+          "h",
+          45.5,
+          16.5
+        ],
+        "index": 33,
+        "x_nm": 135.08840942382812,
+        "y_nm": 364.0
+      },
+      {
+        "edge_key": [
+          "h",
+          46.5,
+          16.5
+        ],
+        "index": 34,
+        "x_nm": 135.75094604492188,
+        "y_nm": 372.0
+      },
+      {
+        "edge_key": [
+          "h",
+          47.5,
+          16.5
+        ],
+        "index": 35,
+        "x_nm": 136.97457885742188,
+        "y_nm": 380.0
+      },
+      {
+        "edge_key": [
+          "h",
+          48.5,
+          16.5
+        ],
+        "index": 36,
+        "x_nm": 138.95724487304688,
+        "y_nm": 388.0
+      },
+      {
+        "edge_key": [
+          "v",
+          17.5,
+          48.5
+        ],
+        "index": 37,
+        "x_nm": 140.0,
+        "y_nm": 391.1596374511719
+      },
+      {
+        "edge_key": [
+          "h",
+          49.5,
+          17.5
+        ],
+        "index": 38,
+        "x_nm": 141.93862915039062,
+        "y_nm": 396.0
+      },
+      {
+        "edge_key": [
+          "h",
+          50.5,
+          17.5
+        ],
+        "index": 39,
+        "x_nm": 146.24313354492188,
+        "y_nm": 404.0
+      },
+      {
+        "edge_key": [
+          "v",
+          18.5,
+          50.5
+        ],
+        "index": 40,
+        "x_nm": 148.0,
+        "y_nm": 406.5934753417969
+      },
+      {
+        "edge_key": [
+          "h",
+          51.5,
+          18.5
+        ],
+        "index": 41,
+        "x_nm": 152.39596557617188,
+        "y_nm": 412.0
+      },
+      {
+        "edge_key": [
+          "v",
+          19.5,
+          51.5
+        ],
+        "index": 42,
+        "x_nm": 156.0,
+        "y_nm": 415.5846862792969
+      },
+      {
+        "edge_key": [
+          "h",
+          52.5,
+          19.5
+        ],
+        "index": 43,
+        "x_nm": 161.49649047851562,
+        "y_nm": 420.0
+      },
+      {
+        "edge_key": [
+          "v",
+          20.5,
+          52.5
+        ],
+        "index": 44,
+        "x_nm": 164.0,
+        "y_nm": 421.6768493652344
+      },
+      {
+        "edge_key": [
+          "v",
+          21.5,
+          52.5
+        ],
+        "index": 45,
+        "x_nm": 172.0,
+        "y_nm": 425.9461975097656
+      },
+      {
+        "edge_key": [
+          "h",
+          53.5,
+          21.5
+        ],
+        "index": 46,
+        "x_nm": 177.20547485351562,
+        "y_nm": 428.0
+      },
+      {
+        "edge_key": [
+          "v",
+          22.5,
+          53.5
+        ],
+        "index": 47,
+        "x_nm": 180.0,
+        "y_nm": 428.9087219238281
+      },
+      {
+        "edge_key": [
+          "v",
+          23.5,
+          53.5
+        ],
+        "index": 48,
+        "x_nm": 188.0,
+        "y_nm": 430.8835144042969
+      },
+      {
+        "edge_key": [
+          "v",
+          24.5,
+          53.5
+        ],
+        "index": 49,
+        "x_nm": 196.0,
+        "y_nm": 432.1069641113281
+      },
+      {
+        "edge_key": [
+          "v",
+          25.5,
+          53.5
+        ],
+        "index": 50,
+        "x_nm": 204.0,
+        "y_nm": 432.7745666503906
+      },
+      {
+        "edge_key": [
+          "v",
+          26.5,
+          53.5
+        ],
+        "index": 51,
+        "x_nm": 212.0,
+        "y_nm": 433.0559387207031
+      },
+      {
+        "edge_key": [
+          "v",
+          27.5,
+          53.5
+        ],
+        "index": 52,
+        "x_nm": 220.0,
+        "y_nm": 433.0968933105469
+      },
+      {
+        "edge_key": [
+          "v",
+          28.5,
+          53.5
+        ],
+        "index": 53,
+        "x_nm": 228.0,
+        "y_nm": 433.0166320800781
+      },
+      {
+        "edge_key": [
+          "v",
+          29.5,
+          53.5
+        ],
+        "index": 54,
+        "x_nm": 236.0,
+        "y_nm": 432.9031677246094
+      },
+      {
+        "edge_key": [
+          "v",
+          30.5,
+          53.5
+        ],
+        "index": 55,
+        "x_nm": 244.0,
+        "y_nm": 432.8107604980469
+      },
+      {
+        "edge_key": [
+          "v",
+          31.5,
+          53.5
+        ],
+        "index": 56,
+        "x_nm": 252.0,
+        "y_nm": 432.7616882324219
+      },
+      {
+        "edge_key": [
+          "v",
+          32.5,
+          53.5
+        ],
+        "index": 57,
+        "x_nm": 260.0,
+        "y_nm": 432.7535705566406
+      },
+      {
+        "edge_key": [
+          "v",
+          33.5,
+          53.5
+        ],
+        "index": 58,
+        "x_nm": 268.0,
+        "y_nm": 432.7694396972656
+      },
+      {
+        "edge_key": [
+          "v",
+          34.5,
+          53.5
+        ],
+        "index": 59,
+        "x_nm": 276.0,
+        "y_nm": 432.7892761230469
+      },
+      {
+        "edge_key": [
+          "v",
+          35.5,
+          53.5
+        ],
+        "index": 60,
+        "x_nm": 284.0,
+        "y_nm": 432.7976989746094
+      },
+      {
+        "edge_key": [
+          "v",
+          36.5,
+          53.5
+        ],
+        "index": 61,
+        "x_nm": 292.0,
+        "y_nm": 432.7892761230469
+      },
+      {
+        "edge_key": [
+          "v",
+          37.5,
+          53.5
+        ],
+        "index": 62,
+        "x_nm": 300.0,
+        "y_nm": 432.7694396972656
+      },
+      {
+        "edge_key": [
+          "v",
+          38.5,
+          53.5
+        ],
+        "index": 63,
+        "x_nm": 308.0,
+        "y_nm": 432.7535705566406
+      },
+      {
+        "edge_key": [
+          "v",
+          39.5,
+          53.5
+        ],
+        "index": 64,
+        "x_nm": 316.0,
+        "y_nm": 432.7616882324219
+      },
+      {
+        "edge_key": [
+          "v",
+          40.5,
+          53.5
+        ],
+        "index": 65,
+        "x_nm": 324.0,
+        "y_nm": 432.8107604980469
+      },
+      {
+        "edge_key": [
+          "v",
+          41.5,
+          53.5
+        ],
+        "index": 66,
+        "x_nm": 332.0,
+        "y_nm": 432.9031677246094
+      },
+      {
+        "edge_key": [
+          "v",
+          42.5,
+          53.5
+        ],
+        "index": 67,
+        "x_nm": 340.0,
+        "y_nm": 433.0166320800781
+      },
+      {
+        "edge_key": [
+          "v",
+          43.5,
+          53.5
+        ],
+        "index": 68,
+        "x_nm": 348.0,
+        "y_nm": 433.0968933105469
+      },
+      {
+        "edge_key": [
+          "v",
+          44.5,
+          53.5
+        ],
+        "index": 69,
+        "x_nm": 356.0,
+        "y_nm": 433.0559387207031
+      },
+      {
+        "edge_key": [
+          "v",
+          45.5,
+          53.5
+        ],
+        "index": 70,
+        "x_nm": 364.0,
+        "y_nm": 432.7745666503906
+      },
+      {
+        "edge_key": [
+          "v",
+          46.5,
+          53.5
+        ],
+        "index": 71,
+        "x_nm": 372.0,
+        "y_nm": 432.1069641113281
+      },
+      {
+        "edge_key": [
+          "v",
+          47.5,
+          53.5
+        ],
+        "index": 72,
+        "x_nm": 380.0,
+        "y_nm": 430.8835144042969
+      },
+      {
+        "edge_key": [
+          "v",
+          48.5,
+          53.5
+        ],
+        "index": 73,
+        "x_nm": 388.0,
+        "y_nm": 428.9087219238281
+      },
+      {
+        "edge_key": [
+          "h",
+          53.5,
+          48.5
+        ],
+        "index": 74,
+        "x_nm": 390.7945251464844,
+        "y_nm": 428.0
+      },
+      {
+        "edge_key": [
+          "v",
+          49.5,
+          52.5
+        ],
+        "index": 75,
+        "x_nm": 396.0,
+        "y_nm": 425.9461975097656
+      },
+      {
+        "edge_key": [
+          "v",
+          50.5,
+          52.5
+        ],
+        "index": 76,
+        "x_nm": 404.0,
+        "y_nm": 421.6768493652344
+      },
+      {
+        "edge_key": [
+          "h",
+          52.5,
+          50.5
+        ],
+        "index": 77,
+        "x_nm": 406.5035095214844,
+        "y_nm": 420.0
+      },
+      {
+        "edge_key": [
+          "v",
+          51.5,
+          51.5
+        ],
+        "index": 78,
+        "x_nm": 412.0,
+        "y_nm": 415.5846862792969
+      },
+      {
+        "edge_key": [
+          "h",
+          51.5,
+          51.5
+        ],
+        "index": 79,
+        "x_nm": 415.6040344238281,
+        "y_nm": 412.0
+      },
+      {
+        "edge_key": [
+          "v",
+          52.5,
+          50.5
+        ],
+        "index": 80,
+        "x_nm": 420.0,
+        "y_nm": 406.5934753417969
+      },
+      {
+        "edge_key": [
+          "h",
+          50.5,
+          52.5
+        ],
+        "index": 81,
+        "x_nm": 421.7568664550781,
+        "y_nm": 404.0
+      },
+      {
+        "edge_key": [
+          "h",
+          49.5,
+          52.5
+        ],
+        "index": 82,
+        "x_nm": 426.0613708496094,
+        "y_nm": 396.0
+      },
+      {
+        "edge_key": [
+          "v",
+          53.5,
+          48.5
+        ],
+        "index": 83,
+        "x_nm": 428.0,
+        "y_nm": 391.1596374511719
+      },
+      {
+        "edge_key": [
+          "h",
+          48.5,
+          53.5
+        ],
+        "index": 84,
+        "x_nm": 429.0427551269531,
+        "y_nm": 388.0
+      },
+      {
+        "edge_key": [
+          "h",
+          47.5,
+          53.5
+        ],
+        "index": 85,
+        "x_nm": 431.0254211425781,
+        "y_nm": 380.0
+      },
+      {
+        "edge_key": [
+          "h",
+          46.5,
+          53.5
+        ],
+        "index": 86,
+        "x_nm": 432.2490539550781,
+        "y_nm": 372.0
+      },
+      {
+        "edge_key": [
+          "h",
+          45.5,
+          53.5
+        ],
+        "index": 87,
+        "x_nm": 432.9115905761719,
+        "y_nm": 364.0
+      },
+      {
+        "edge_key": [
+          "h",
+          44.5,
+          53.5
+        ],
+        "index": 88,
+        "x_nm": 433.1845397949219,
+        "y_nm": 356.0
+      },
+      {
+        "edge_key": [
+          "h",
+          43.5,
+          53.5
+        ],
+        "index": 89,
+        "x_nm": 433.2149353027344,
+        "y_nm": 348.0
+      },
+      {
+        "edge_key": [
+          "h",
+          42.5,
+          53.5
+        ],
+        "index": 90,
+        "x_nm": 433.1228332519531,
+        "y_nm": 340.0
+      },
+      {
+        "edge_key": [
+          "h",
+          41.5,
+          53.5
+        ],
+        "index": 91,
+        "x_nm": 432.9969177246094,
+        "y_nm": 332.0
+      },
+      {
+        "edge_key": [
+          "h",
+          40.5,
+          53.5
+        ],
+        "index": 92,
+        "x_nm": 432.8919982910156,
+        "y_nm": 324.0
+      },
+      {
+        "edge_key": [
+          "h",
+          39.5,
+          53.5
+        ],
+        "index": 93,
+        "x_nm": 432.8310852050781,
+        "y_nm": 316.0
+      },
+      {
+        "edge_key": [
+          "h",
+          38.5,
+          53.5
+        ],
+        "index": 94,
+        "x_nm": 432.8123474121094,
+        "y_nm": 308.0
+      },
+      {
+        "edge_key": [
+          "h",
+          37.5,
+          53.5
+        ],
+        "index": 95,
+        "x_nm": 432.8198547363281,
+        "y_nm": 300.0
+      },
+      {
+        "edge_key": [
+          "h",
+          36.5,
+          53.5
+        ],
+        "index": 96,
+        "x_nm": 432.8341979980469,
+        "y_nm": 292.0
+      },
+      {
+        "edge_key": [
+          "h",
+          35.5,
+          53.5
+        ],
+        "index": 97,
+        "x_nm": 432.8407897949219,
+        "y_nm": 284.0
+      },
+      {
+        "edge_key": [
+          "h",
+          34.5,
+          53.5
+        ],
+        "index": 98,
+        "x_nm": 432.8341979980469,
+        "y_nm": 276.0
+      },
+      {
+        "edge_key": [
+          "h",
+          33.5,
+          53.5
+        ],
+        "index": 99,
+        "x_nm": 432.8198547363281,
+        "y_nm": 268.0
+      },
+      {
+        "edge_key": [
+          "h",
+          32.5,
+          53.5
+        ],
+        "index": 100,
+        "x_nm": 432.8123474121094,
+        "y_nm": 260.0
+      },
+      {
+        "edge_key": [
+          "h",
+          31.5,
+          53.5
+        ],
+        "index": 101,
+        "x_nm": 432.8310852050781,
+        "y_nm": 252.0
+      },
+      {
+        "edge_key": [
+          "h",
+          30.5,
+          53.5
+        ],
+        "index": 102,
+        "x_nm": 432.8919982910156,
+        "y_nm": 244.0
+      },
+      {
+        "edge_key": [
+          "h",
+          29.5,
+          53.5
+        ],
+        "index": 103,
+        "x_nm": 432.9969177246094,
+        "y_nm": 236.0
+      },
+      {
+        "edge_key": [
+          "h",
+          28.5,
+          53.5
+        ],
+        "index": 104,
+        "x_nm": 433.1228332519531,
+        "y_nm": 228.0
+      },
+      {
+        "edge_key": [
+          "h",
+          27.5,
+          53.5
+        ],
+        "index": 105,
+        "x_nm": 433.2149353027344,
+        "y_nm": 220.0
+      },
+      {
+        "edge_key": [
+          "h",
+          26.5,
+          53.5
+        ],
+        "index": 106,
+        "x_nm": 433.1845397949219,
+        "y_nm": 212.0
+      },
+      {
+        "edge_key": [
+          "h",
+          25.5,
+          53.5
+        ],
+        "index": 107,
+        "x_nm": 432.9115905761719,
+        "y_nm": 204.0
+      },
+      {
+        "edge_key": [
+          "h",
+          24.5,
+          53.5
+        ],
+        "index": 108,
+        "x_nm": 432.2490539550781,
+        "y_nm": 196.0
+      },
+      {
+        "edge_key": [
+          "h",
+          23.5,
+          53.5
+        ],
+        "index": 109,
+        "x_nm": 431.0254211425781,
+        "y_nm": 188.0
+      },
+      {
+        "edge_key": [
+          "h",
+          22.5,
+          53.5
+        ],
+        "index": 110,
+        "x_nm": 429.0427551269531,
+        "y_nm": 180.0
+      },
+      {
+        "edge_key": [
+          "v",
+          53.5,
+          21.5
+        ],
+        "index": 111,
+        "x_nm": 428.0,
+        "y_nm": 176.84036254882812
+      },
+      {
+        "edge_key": [
+          "h",
+          21.5,
+          52.5
+        ],
+        "index": 112,
+        "x_nm": 426.0613708496094,
+        "y_nm": 172.0
+      },
+      {
+        "edge_key": [
+          "h",
+          20.5,
+          52.5
+        ],
+        "index": 113,
+        "x_nm": 421.7568664550781,
+        "y_nm": 164.0
+      },
+      {
+        "edge_key": [
+          "v",
+          52.5,
+          19.5
+        ],
+        "index": 114,
+        "x_nm": 420.0,
+        "y_nm": 161.40652465820312
+      },
+      {
+        "edge_key": [
+          "h",
+          19.5,
+          51.5
+        ],
+        "index": 115,
+        "x_nm": 415.6040344238281,
+        "y_nm": 156.0
+      },
+      {
+        "edge_key": [
+          "v",
+          51.5,
+          18.5
+        ],
+        "index": 116,
+        "x_nm": 412.0,
+        "y_nm": 152.41531372070312
+      },
+      {
+        "edge_key": [
+          "h",
+          18.5,
+          50.5
+        ],
+        "index": 117,
+        "x_nm": 406.5035095214844,
+        "y_nm": 148.0
+      },
+      {
+        "edge_key": [
+          "v",
+          50.5,
+          17.5
+        ],
+        "index": 118,
+        "x_nm": 404.0,
+        "y_nm": 146.32315063476562
+      },
+      {
+        "edge_key": [
+          "v",
+          49.5,
+          17.5
+        ],
+        "index": 119,
+        "x_nm": 396.0,
+        "y_nm": 142.05380249023438
+      },
+      {
+        "edge_key": [
+          "h",
+          17.5,
+          48.5
+        ],
+        "index": 120,
+        "x_nm": 390.7945251464844,
+        "y_nm": 140.0
+      },
+      {
+        "edge_key": [
+          "v",
+          48.5,
+          16.5
+        ],
+        "index": 121,
+        "x_nm": 388.0,
+        "y_nm": 139.09127807617188
+      },
+      {
+        "edge_key": [
+          "v",
+          47.5,
+          16.5
+        ],
+        "index": 122,
+        "x_nm": 380.0,
+        "y_nm": 137.11648559570312
+      },
+      {
+        "edge_key": [
+          "v",
+          46.5,
+          16.5
+        ],
+        "index": 123,
+        "x_nm": 372.0,
+        "y_nm": 135.89303588867188
+      },
+      {
+        "edge_key": [
+          "v",
+          45.5,
+          16.5
+        ],
+        "index": 124,
+        "x_nm": 364.0,
+        "y_nm": 135.22543334960938
+      },
+      {
+        "edge_key": [
+          "v",
+          44.5,
+          16.5
+        ],
+        "index": 125,
+        "x_nm": 356.0,
+        "y_nm": 134.94406127929688
+      },
+      {
+        "edge_key": [
+          "v",
+          43.5,
+          16.5
+        ],
+        "index": 126,
+        "x_nm": 348.0,
+        "y_nm": 134.90310668945312
+      },
+      {
+        "edge_key": [
+          "v",
+          42.5,
+          16.5
+        ],
+        "index": 127,
+        "x_nm": 340.0,
+        "y_nm": 134.98336791992188
+      },
+      {
+        "edge_key": [
+          "v",
+          41.5,
+          16.5
+        ],
+        "index": 128,
+        "x_nm": 332.0,
+        "y_nm": 135.09683227539062
+      },
+      {
+        "edge_key": [
+          "v",
+          40.5,
+          16.5
+        ],
+        "index": 129,
+        "x_nm": 324.0,
+        "y_nm": 135.18923950195312
+      },
+      {
+        "edge_key": [
+          "v",
+          39.5,
+          16.5
+        ],
+        "index": 130,
+        "x_nm": 316.0,
+        "y_nm": 135.23831176757812
+      },
+      {
+        "edge_key": [
+          "v",
+          38.5,
+          16.5
+        ],
+        "index": 131,
+        "x_nm": 308.0,
+        "y_nm": 135.24642944335938
+      },
+      {
+        "edge_key": [
+          "v",
+          37.5,
+          16.5
+        ],
+        "index": 132,
+        "x_nm": 300.0,
+        "y_nm": 135.23056030273438
+      },
+      {
+        "edge_key": [
+          "v",
+          36.5,
+          16.5
+        ],
+        "index": 133,
+        "x_nm": 292.0,
+        "y_nm": 135.21072387695312
+      },
+      {
+        "edge_key": [
+          "v",
+          35.5,
+          16.5
+        ],
+        "index": 134,
+        "x_nm": 284.0,
+        "y_nm": 135.20230102539062
+      },
+      {
+        "edge_key": [
+          "v",
+          34.5,
+          16.5
+        ],
+        "index": 135,
+        "x_nm": 276.0,
+        "y_nm": 135.21072387695312
+      },
+      {
+        "edge_key": [
+          "v",
+          33.5,
+          16.5
+        ],
+        "index": 136,
+        "x_nm": 268.0,
+        "y_nm": 135.23056030273438
+      },
+      {
+        "edge_key": [
+          "v",
+          32.5,
+          16.5
+        ],
+        "index": 137,
+        "x_nm": 260.0,
+        "y_nm": 135.24642944335938
+      },
+      {
+        "edge_key": [
+          "v",
+          31.5,
+          16.5
+        ],
+        "index": 138,
+        "x_nm": 252.0,
+        "y_nm": 135.23831176757812
+      },
+      {
+        "edge_key": [
+          "v",
+          30.5,
+          16.5
+        ],
+        "index": 139,
+        "x_nm": 244.0,
+        "y_nm": 135.18923950195312
+      },
+      {
+        "edge_key": [
+          "v",
+          29.5,
+          16.5
+        ],
+        "index": 140,
+        "x_nm": 236.0,
+        "y_nm": 135.09683227539062
+      },
+      {
+        "edge_key": [
+          "v",
+          28.5,
+          16.5
+        ],
+        "index": 141,
+        "x_nm": 228.0,
+        "y_nm": 134.98336791992188
+      },
+      {
+        "edge_key": [
+          "v",
+          27.5,
+          16.5
+        ],
+        "index": 142,
+        "x_nm": 220.0,
+        "y_nm": 134.90310668945312
+      },
+      {
+        "edge_key": [
+          "v",
+          26.5,
+          16.5
+        ],
+        "index": 143,
+        "x_nm": 212.0,
+        "y_nm": 134.94406127929688
+      },
+      {
+        "edge_key": [
+          "v",
+          25.5,
+          16.5
+        ],
+        "index": 144,
+        "x_nm": 204.0,
+        "y_nm": 135.22543334960938
+      },
+      {
+        "edge_key": [
+          "v",
+          24.5,
+          16.5
+        ],
+        "index": 145,
+        "x_nm": 196.0,
+        "y_nm": 135.89303588867188
+      },
+      {
+        "edge_key": [
+          "v",
+          23.5,
+          16.5
+        ],
+        "index": 146,
+        "x_nm": 188.0,
+        "y_nm": 137.11648559570312
+      },
+      {
+        "edge_key": [
+          "v",
+          22.5,
+          16.5
+        ],
+        "index": 147,
+        "x_nm": 180.0,
+        "y_nm": 139.09127807617188
+      }
+    ]
+  },
+  "project": "B04",
+  "schema": "B04.nominal_contour_reconstruction.v1",
+  "semantic_firewall": {
+    "meaning": "Hausdorff distance from continuous K=24 focus contours to the certified nominal full-source reconstruction polyline",
+    "not_claimed": [
+      "design-target edge-placement error",
+      "raster Sobel epe_max_nm equivalence",
+      "foundry sign-off"
+    ]
+  },
+  "status": "PASS_UNDER_EXACT_SOURCE_INTERVAL_PLUS_CHORD_THEOREM",
+  "summary": {
+    "continuous_focus_to_reconstruction_upper_nm": 2.0324780565696243,
+    "contour_components": 1,
+    "level_set_focus_upper_nm": 0.976436035396712,
+    "max_graph_slope_upper": 0.5629318296001538,
+    "min_fixed_normal_derivative_lower_per_nm": 0.005891396342472181,
+    "nominal_reconstruction_hausdorff_upper_nm": 1.056042021172912,
+    "polyline_perimeter_nm": 1076.8534734000536,
+    "polyline_segments": 148,
+    "polyline_vertices": 148,
+    "reconstructed_arc_cells": 148,
+    "worst_cell_yx": [
+      21,
+      53
+    ]
+  },
+  "theorem_contract": {
+    "cell_topology": "exactly two certified transverse boundary roots plus curvature-scale hidden-loop exclusion imply one regular arc",
+    "chord_error_bound": "eta_cell <= M*L_v^2/8 + max(root_bracket_halfwidth)",
+    "fixed_normal_graph": "center-gradient normal e satisfies f_e >= m > 0 on each cell",
+    "second_derivative_bound": "|psi''| <= H*(1+(B/m)^2)/m",
+    "slope_bound": "|psi'| <= B/m"
+  }
+}
