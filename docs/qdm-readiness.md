@@ -32,6 +32,7 @@ QDM READINESS:                   CONDITIONAL
 | J. budget composition | `StreamingVerificationReducer.error_budget` + `test_error_budget_composition` |
 | K. coverage semantics | `PARTIAL_COVER != PASS` pinned in reducer tests and `verify/spatial.reduce_coverage` |
 | B04 actual model | `tests/test_verify/` replays the frozen Increment 11–14 artifacts (164 cells, 148 seeded, `ALL_COMPONENTS_COVERED`, Hausdorff uppers 0.976/1.056/2.032 nm) |
+| Certified-halo brackets | `verify/halo.py` + Increment 15 artifact: on the 72×72 ArF K=24 snapshot, ε=2.916392e-3 gives only `29 ≤ h* ≤ 36` px (PARTIAL). The unrestricted-binary lower bound proves no smaller halo can be certified — a useful large-layout certified halo for arbitrary binary exteriors is **not yet obtained** and is honestly reported as `PARTIAL_NONTRIVIAL_SUFFICIENT_HALO_NOT_OBTAINED` |
 
 ## Why QDM READINESS is CONDITIONAL
 
@@ -51,3 +52,8 @@ QDM READINESS:                   CONDITIONAL
    theorem) wired into `TileVerificationResult.spatial_extraction_error`.
 3. `SourceNativeVerificationBackend` consumed by a real verifier plugin on
    a pinned mask + pinned forward model, machine-replayed in CI.
+4. Increment 15 no-go: for arbitrary binary exterior perturbations, the
+   sufficient halo proof only closes at the full half-tile radius. A
+   useful certified halo needs either an exterior regularity/interface
+   class (polygon/TV/edge-density control) or a known-layout streaming
+   tail oracle. No exponential spatial decay is assumed.

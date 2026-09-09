@@ -1,0 +1,268 @@
+{
+  "date": "2026-09-09",
+  "kernel_snapshot_sha256": "b1c2d0c9f23ce6e6a8c931b05970f5a50ef0a16d5663a1ebbe463f191bdf14fd",
+  "profile": [
+    {
+      "absolute_tail_upper_intensity": 15.358383590380297,
+      "h_nm": 0.0,
+      "h_px": 0,
+      "unrestricted_binary_lower_intensity": 0.14379231463172162
+    },
+    {
+      "absolute_tail_upper_intensity": 14.95032935024571,
+      "h_nm": 8.0,
+      "h_px": 1,
+      "unrestricted_binary_lower_intensity": 0.12677355416140815
+    },
+    {
+      "absolute_tail_upper_intensity": 14.15156824738522,
+      "h_nm": 16.0,
+      "h_px": 2,
+      "unrestricted_binary_lower_intensity": 0.0984382763957735
+    },
+    {
+      "absolute_tail_upper_intensity": 13.076672999752635,
+      "h_nm": 24.0,
+      "h_px": 3,
+      "unrestricted_binary_lower_intensity": 0.06723106330798788
+    },
+    {
+      "absolute_tail_upper_intensity": 11.877829965779357,
+      "h_nm": 32.0,
+      "h_px": 4,
+      "unrestricted_binary_lower_intensity": 0.04041260789123654
+    },
+    {
+      "absolute_tail_upper_intensity": 10.684680000572909,
+      "h_nm": 40.0,
+      "h_px": 5,
+      "unrestricted_binary_lower_intensity": 0.02450009291373811
+    },
+    {
+      "absolute_tail_upper_intensity": 9.629268057331979,
+      "h_nm": 48.0,
+      "h_px": 6,
+      "unrestricted_binary_lower_intensity": 0.019408730057231753
+    },
+    {
+      "absolute_tail_upper_intensity": 8.800456878208857,
+      "h_nm": 56.0,
+      "h_px": 7,
+      "unrestricted_binary_lower_intensity": 0.01727084597503692
+    },
+    {
+      "absolute_tail_upper_intensity": 8.243626864217495,
+      "h_nm": 64.0,
+      "h_px": 8,
+      "unrestricted_binary_lower_intensity": 0.015501155324267666
+    },
+    {
+      "absolute_tail_upper_intensity": 7.881476121079992,
+      "h_nm": 72.0,
+      "h_px": 9,
+      "unrestricted_binary_lower_intensity": 0.01487473235349181
+    },
+    {
+      "absolute_tail_upper_intensity": 7.593152464810399,
+      "h_nm": 80.0,
+      "h_px": 10,
+      "unrestricted_binary_lower_intensity": 0.014192268398215165
+    },
+    {
+      "absolute_tail_upper_intensity": 7.2707721889510895,
+      "h_nm": 88.0,
+      "h_px": 11,
+      "unrestricted_binary_lower_intensity": 0.013132964249249967
+    },
+    {
+      "absolute_tail_upper_intensity": 6.812288868843312,
+      "h_nm": 96.0,
+      "h_px": 12,
+      "unrestricted_binary_lower_intensity": 0.011649516439948328
+    },
+    {
+      "absolute_tail_upper_intensity": 6.290259239438749,
+      "h_nm": 104.0,
+      "h_px": 13,
+      "unrestricted_binary_lower_intensity": 0.010680114333002668
+    },
+    {
+      "absolute_tail_upper_intensity": 5.790904110914274,
+      "h_nm": 112.0,
+      "h_px": 14,
+      "unrestricted_binary_lower_intensity": 0.010349371403879218
+    },
+    {
+      "absolute_tail_upper_intensity": 5.344499851495511,
+      "h_nm": 120.0,
+      "h_px": 15,
+      "unrestricted_binary_lower_intensity": 0.009999812591542543
+    },
+    {
+      "absolute_tail_upper_intensity": 4.940554134527648,
+      "h_nm": 128.0,
+      "h_px": 16,
+      "unrestricted_binary_lower_intensity": 0.00955139047948639
+    },
+    {
+      "absolute_tail_upper_intensity": 4.566190379222722,
+      "h_nm": 136.0,
+      "h_px": 17,
+      "unrestricted_binary_lower_intensity": 0.008952117093890759
+    },
+    {
+      "absolute_tail_upper_intensity": 4.224143877510778,
+      "h_nm": 144.0,
+      "h_px": 18,
+      "unrestricted_binary_lower_intensity": 0.008208996861208675
+    },
+    {
+      "absolute_tail_upper_intensity": 3.927810328845833,
+      "h_nm": 152.0,
+      "h_px": 19,
+      "unrestricted_binary_lower_intensity": 0.007400353355765233
+    },
+    {
+      "absolute_tail_upper_intensity": 3.690894924732873,
+      "h_nm": 160.0,
+      "h_px": 20,
+      "unrestricted_binary_lower_intensity": 0.006824714547662494
+    },
+    {
+      "absolute_tail_upper_intensity": 3.4534132729728637,
+      "h_nm": 168.0,
+      "h_px": 21,
+      "unrestricted_binary_lower_intensity": 0.006592980635817924
+    },
+    {
+      "absolute_tail_upper_intensity": 3.2168878696266723,
+      "h_nm": 176.0,
+      "h_px": 22,
+      "unrestricted_binary_lower_intensity": 0.006323316403231455
+    },
+    {
+      "absolute_tail_upper_intensity": 2.9744132215943537,
+      "h_nm": 184.0,
+      "h_px": 23,
+      "unrestricted_binary_lower_intensity": 0.00598420239075434
+    },
+    {
+      "absolute_tail_upper_intensity": 2.7259907586399814,
+      "h_nm": 192.0,
+      "h_px": 24,
+      "unrestricted_binary_lower_intensity": 0.0055603457996114295
+    },
+    {
+      "absolute_tail_upper_intensity": 2.4779699221663125,
+      "h_nm": 200.0,
+      "h_px": 25,
+      "unrestricted_binary_lower_intensity": 0.005070015685223751
+    },
+    {
+      "absolute_tail_upper_intensity": 2.215461913359578,
+      "h_nm": 208.0,
+      "h_px": 26,
+      "unrestricted_binary_lower_intensity": 0.004506978525380159
+    },
+    {
+      "absolute_tail_upper_intensity": 1.9426494327476245,
+      "h_nm": 216.0,
+      "h_px": 27,
+      "unrestricted_binary_lower_intensity": 0.0038986397888801615
+    },
+    {
+      "absolute_tail_upper_intensity": 1.684004944984288,
+      "h_nm": 224.0,
+      "h_px": 28,
+      "unrestricted_binary_lower_intensity": 0.003318431987159328
+    },
+    {
+      "absolute_tail_upper_intensity": 1.4614430690296432,
+      "h_nm": 232.0,
+      "h_px": 29,
+      "unrestricted_binary_lower_intensity": 0.00284692933354397
+    },
+    {
+      "absolute_tail_upper_intensity": 1.2715958530297897,
+      "h_nm": 240.0,
+      "h_px": 30,
+      "unrestricted_binary_lower_intensity": 0.0024623056813591953
+    },
+    {
+      "absolute_tail_upper_intensity": 1.0864143775348596,
+      "h_nm": 248.0,
+      "h_px": 31,
+      "unrestricted_binary_lower_intensity": 0.0020507662702282
+    },
+    {
+      "absolute_tail_upper_intensity": 0.8827433434142103,
+      "h_nm": 256.0,
+      "h_px": 32,
+      "unrestricted_binary_lower_intensity": 0.0015384027355215886
+    },
+    {
+      "absolute_tail_upper_intensity": 0.6493637731284595,
+      "h_nm": 264.0,
+      "h_px": 33,
+      "unrestricted_binary_lower_intensity": 0.0009454987586590436
+    },
+    {
+      "absolute_tail_upper_intensity": 0.38707646770762355,
+      "h_nm": 272.0,
+      "h_px": 34,
+      "unrestricted_binary_lower_intensity": 0.0003880302328301101
+    },
+    {
+      "absolute_tail_upper_intensity": 0.12190508064578125,
+      "h_nm": 280.0,
+      "h_px": 35,
+      "unrestricted_binary_lower_intensity": 4.608920572546471e-05
+    },
+    {
+      "absolute_tail_upper_intensity": 5e-324,
+      "h_nm": 288.0,
+      "h_px": 36,
+      "unrestricted_binary_lower_intensity": 0.0
+    }
+  ],
+  "project": "B04",
+  "schema": "B04.halo_tail_profile.v1",
+  "semantics": {
+    "admissible_exterior": "arbitrary binary mask values outside the halo",
+    "distance": "Chebyshev displacement radius in the 72x72 frozen torus kernel",
+    "grid_n": 72,
+    "model": "frozen normalized K=24 SOCS coherent-kernel lift",
+    "pixel_nm": 8.0,
+    "warning": "The theorem radius h is not silently identified with workflow.tiling overlap; a core/loaded-region geometry adapter is required."
+  },
+  "status": "PARTIAL_NONTRIVIAL_SUFFICIENT_HALO_NOT_OBTAINED",
+  "theorem": {
+    "A_j": "sum_r |k_j(r)|",
+    "T_j_h": "sum_{||r||_infty>h} |k_j(r)|",
+    "necessary_lower": "L(h)=max_j w_j*(T_j(h)/pi)^2",
+    "sufficient_upper": "U(h)=sum_j w_j*(2*A_j*T_j(h)+T_j(h)^2)"
+  },
+  "threshold_brackets": [
+    {
+      "certified_sufficient_h_nm": 288.0,
+      "certified_sufficient_h_px": 36,
+      "epsilon_intensity": 0.005752571687594228,
+      "necessary_h_min_nm": 192.0,
+      "necessary_h_min_px": 24
+    },
+    {
+      "certified_sufficient_h_nm": 288.0,
+      "certified_sufficient_h_px": 36,
+      "epsilon_intensity": 0.002916392,
+      "necessary_h_min_nm": 232.0,
+      "necessary_h_min_px": 29
+    },
+    {
+      "certified_sufficient_h_nm": 288.0,
+      "certified_sufficient_h_px": 36,
+      "epsilon_intensity": 0.001,
+      "necessary_h_min_nm": 264.0,
+      "necessary_h_min_px": 33
+    }
+  ]
+}
