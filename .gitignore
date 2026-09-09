@@ -59,3 +59,9 @@ checkpoints/*.metadata.json
 cache/
 .venv-review/
 .mimosa/
+# B04 large proof snapshots — distributed as release/CI artifacts addressed
+# by SHA-256 (see proof_artifacts/README_B04_PATCH.md); tests skip when absent.
+proof_artifacts/B04_K24_HaloKernelSnapshot_2026-09-09.npz
+proof_artifacts/B04_K24_RunPrefixIntervalSnapshot_2026-09-09.npz
+proof_artifacts/B04_K24_DerivativeRunPrefixIntervalSnapshot_2026-09-10.npz
+proof_artifacts/B04_K24_RunInterface_AliasFreeIntensityFourier_2026-09-10.npz

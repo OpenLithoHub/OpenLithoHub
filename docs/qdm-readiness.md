@@ -56,7 +56,11 @@ QDM READINESS:                   CONDITIONAL
 3. `SourceNativeVerificationBackend` consumed by a real verifier plugin on
    a pinned mask + pinned forward model, machine-replayed in CI.
 4. Increment 15 no-go: for arbitrary binary exterior perturbations, the
-   sufficient halo proof only closes at the full half-tile radius. A
-   useful certified halo needs either an exterior regularity/interface
-   class (polygon/TV/edge-density control) or a known-layout streaming
-   tail oracle. No exponential spatial decay is assumed.
+   sufficient halo proof only closes at the full half-tile radius. For
+   *known* layouts this is now resolved (Increments 16–18: run-prefix
+   oracle + layout-conditioned Fourier envelope recover transversality and
+   hidden-loop completeness on the pinned fixture), but the envelope is
+   still materialized from the full corrected 72×72 grid — the ledger
+   keeps `production_streamed_construction_without_full_grid =
+   OPEN_IMPLEMENTATION`. A streamed row-run accumulation of the
+   layout-conditioned spectrum is the remaining architectural step.

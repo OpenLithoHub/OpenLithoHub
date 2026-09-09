@@ -1,0 +1,141 @@
+{
+  "date": "2026-09-10",
+  "derivative_semantics": {
+    "D1_formula": "(pi/L)*(-1)^(j-k)*cot(pi(j-k)/N), off-diagonal",
+    "D2_formula": "-0.5*(2pi/L)^2*(-1)^(j-k)*csc^2(pi(j-k)/N), off-diagonal",
+    "arithmetic": "100-digit coefficient generation + midpoint-radius IEEE-754 gamma_64N guard",
+    "base": "unique periodic trigonometric interpolant of frozen complex64 spatial kernels",
+    "components": [
+      "value",
+      "dx",
+      "dy",
+      "dxx",
+      "dxy",
+      "dyy"
+    ],
+    "physical_units": {
+      "dx_dy": "nm^-1",
+      "dxx_dxy_dyy": "nm^-2",
+      "value": "1"
+    }
+  },
+  "inputs": {
+    "boundary_coverage_sha256": "5392e94a51abdd12fc3e02f507f927942615ae142f92e269067fb88c6e5e2149",
+    "derivative_prefix_sha256": "a5523c4c693be9380f1636511f38a26b711b18418a346a4ee867b42c20d89379",
+    "kernel_snapshot_sha256": "b1c2d0c9f23ce6e6a8c931b05970f5a50ef0a16d5663a1ebbe463f191bdf14fd"
+  },
+  "new_first_failure": {
+    "generic_K24_L3_upper_per_nm3": 0.005233895592649348,
+    "name": "LOCAL_HIGHER_DERIVATIVE_ENVELOPE",
+    "reason": "generic kernel-L1 third-derivative majorant is noncoercive over an 8 nm cell; center-jet PASS must not be silently upgraded to continuous-cell/slab PASS",
+    "status": "OPEN"
+  },
+  "project": "B04",
+  "queries": {
+    "active_centers": 164,
+    "coherent_modes": 24,
+    "halos": [
+      {
+        "h_nm": 64.0,
+        "h_px": 8,
+        "max_coherent_interval_width": {
+          "dx": 9.021788307736478e-13,
+          "dxx": 1.3536162648934442e-13,
+          "dxy": 6.515062960828081e-13,
+          "dy": 1.2561297488278278e-12,
+          "dyy": 1.4656391334952334e-13,
+          "value": 1.388999765900012e-11
+        },
+        "max_corrected_vs_dense_midpoint_difference": {
+          "dx": 3.686287386450715e-18,
+          "dxx": 2.303929616531697e-19,
+          "dxy": 4.743384504624082e-20,
+          "dy": 3.7947076036992655e-18,
+          "dyy": 2.303929616531697e-19,
+          "value": 2.0816681711721685e-17
+        },
+        "max_intensity_jet_interval_width": {
+          "I": 5.191555518813118e-11,
+          "Ix": 4.5511129587172405e-12,
+          "Ixx": 6.677625032786016e-13,
+          "Ixy": 2.3084059213836564e-12,
+          "Iy": 3.950680765602704e-12,
+          "Iyy": 5.989691842555114e-13
+        },
+        "min_center_gradient_lower_per_nm": 0.00919378638701189
+      },
+      {
+        "h_nm": 128.0,
+        "h_px": 16,
+        "max_coherent_interval_width": {
+          "dx": 1.139356838042449e-12,
+          "dxx": 1.7678710769874085e-13,
+          "dxy": 8.277607822645354e-13,
+          "dy": 1.4610559127565398e-12,
+          "dyy": 1.906452494243767e-13,
+          "value": 1.565023631522333e-11
+        },
+        "max_corrected_vs_dense_midpoint_difference": {
+          "dx": 3.686287386450715e-18,
+          "dxx": 1.8295911660692887e-19,
+          "dxy": 4.573977915173222e-20,
+          "dy": 4.119968255444917e-18,
+          "dyy": 2.236166980751353e-19,
+          "value": 2.0816681711721685e-17
+        },
+        "max_intensity_jet_interval_width": {
+          "I": 6.087380599595349e-11,
+          "Ix": 5.1397618799908784e-12,
+          "Ixx": 7.193268333413605e-13,
+          "Ixy": 2.7081846837580617e-12,
+          "Iy": 4.498093439603626e-12,
+          "Iyy": 6.476073610749492e-13
+        },
+        "min_center_gradient_lower_per_nm": 0.009193786386748715
+      },
+      {
+        "h_nm": 232.0,
+        "h_px": 29,
+        "max_coherent_interval_width": {
+          "dx": 1.2591967399333548e-12,
+          "dxx": 1.9065155812576784e-13,
+          "dxy": 9.244355074592174e-13,
+          "dy": 1.6894820503536578e-12,
+          "dyy": 2.0724077293664267e-13,
+          "value": 1.819193060081936e-11
+        },
+        "max_corrected_vs_dense_midpoint_difference": {
+          "dx": 2.8189256484623115e-18,
+          "dxx": 1.1180834903756764e-19,
+          "dxy": 4.573977915173222e-20,
+          "dy": 2.8189256484623115e-18,
+          "dyy": 1.2874900798265365e-19,
+          "value": 1.3877787807814457e-17
+        },
+        "max_intensity_jet_interval_width": {
+          "I": 7.498263121519244e-11,
+          "Ix": 5.741391737035251e-12,
+          "Ixx": 7.460256913095764e-13,
+          "Ixy": 2.9066989388514814e-12,
+          "Iy": 5.007321814132215e-12,
+          "Iyy": 6.937163110664127e-13
+        },
+        "min_center_gradient_lower_per_nm": 0.009193786386454145
+      }
+    ]
+  },
+  "replay": {
+    "consumer_replay_scope": "164 active centers x 6 jet components x halos {8,16,29}",
+    "consumer_replay_status": "PASS",
+    "dense_pixel_crosscheck_centers": 6
+  },
+  "schema": "B04.derivative_run_prefix.v1",
+  "status": "PASS_CENTER_JET__CONTINUOUS_CELL_EXTENSION_OPEN",
+  "theorem_ledger": {
+    "continuous_cell_transversality_from_run_interface_alone": "OPEN",
+    "derivative_run_prefixes": "PROVED_UNDER_SAME_CONTRACT",
+    "intensity_value_gradient_hessian_center_intervals": "PASS",
+    "known_layout_near_plus_interface_center_jet": "PASS",
+    "spectral_derivative_kernel_enclosures": "PROVED_UNDER_ARITHMETIC_CONTRACT"
+  }
+}

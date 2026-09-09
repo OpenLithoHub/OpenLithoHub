@@ -1,0 +1,79 @@
+{
+  "date": "2026-09-09",
+  "inputs": {
+    "boundary_coverage_sha256": "5392e94a51abdd12fc3e02f507f927942615ae142f92e269067fb88c6e5e2149",
+    "kernel_snapshot_sha256": "b1c2d0c9f23ce6e6a8c931b05970f5a50ef0a16d5663a1ebbe463f191bdf14fd",
+    "run_prefix_interval_sha256": "7ff0322fa01075aa0be6495b50ee6ca7df357cf67672a878464fe1052988a050"
+  },
+  "mask": {
+    "canonical_fixture": "centered 36x36 binary square on 72x72 grid",
+    "global_pixel_to_run_compression": 36.0,
+    "grid_n": 72,
+    "horizontal_runs": 36,
+    "occupied_pixels": 1296
+  },
+  "project": "B04",
+  "queries": {
+    "active_centers": 164,
+    "coherent_modes": 24,
+    "rows": [
+      {
+        "average_far_occupied_pixels": 1171.4146341463415,
+        "average_far_run_segments": 37.75609756097561,
+        "h_nm": 64.0,
+        "h_px": 8,
+        "max_exact_prefix_interval_width": 8.743006318923108e-16,
+        "max_numeric_run_vs_pixel_discrepancy": 1.734723475976807e-17,
+        "operation_compression_pixels_per_segment": 31.025839793281655,
+        "python_pixel_time_s": 0.4320180770009756,
+        "python_run_time_s": 0.01492587099710363,
+        "python_speedup": 28.94424567147933
+      },
+      {
+        "average_far_occupied_pixels": 886.1463414634146,
+        "average_far_run_segments": 36.390243902439025,
+        "h_nm": 128.0,
+        "h_px": 16,
+        "max_exact_prefix_interval_width": 6.869504964868156e-16,
+        "max_numeric_run_vs_pixel_discrepancy": 6.938893903907228e-18,
+        "operation_compression_pixels_per_segment": 24.351206434316353,
+        "python_pixel_time_s": 0.3228379150023102,
+        "python_run_time_s": 0.015640913999959594,
+        "python_speedup": 20.64060418739878
+      },
+      {
+        "average_far_occupied_pixels": 269.4390243902439,
+        "average_far_run_segments": 27.51219512195122,
+        "h_nm": 232.0,
+        "h_px": 29,
+        "max_exact_prefix_interval_width": 3.608224830031759e-16,
+        "max_numeric_run_vs_pixel_discrepancy": 8.673617379884035e-19,
+        "operation_compression_pixels_per_segment": 9.793439716312056,
+        "python_pixel_time_s": 0.1435791320000135,
+        "python_run_time_s": 0.011648114999843528,
+        "python_speedup": 12.326383453626807
+      }
+    ]
+  },
+  "schema": "B04.known_layout_run_interface.v1",
+  "semantic_firewall": {
+    "certified": [
+      "exact-dyadic containment of frozen coherent far sums at integer active centers",
+      "run/pixel algebraic equality"
+    ],
+    "diagnostic_only": [
+      "Python wall-time speedups"
+    ],
+    "open": [
+      "continuous derivative run-prefix oracle",
+      "direct KLayout/OASIS/GDS RunSource without dense raster materialization"
+    ]
+  },
+  "status": "PASS_FOR_FROZEN_INTEGER_CENTER_COHERENT_VALUES",
+  "theorem_contract": {
+    "binary_run_tv_identity": "with zero-padded row boundaries, horizontal variation equals 2 * run_count",
+    "interface_cost": "O(K * number_of_far_run_segments) per integer query after prefix build",
+    "run_prefix_identity": "each horizontal run contributes one difference of a cyclic reverse row prefix",
+    "two_scale_decomposition": "near loaded halo h + streamed known-layout annulus h<r<=R + certified residual tail r>R"
+  }
+}
