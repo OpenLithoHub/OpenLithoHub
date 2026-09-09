@@ -207,8 +207,7 @@ class ModelHub:
         cache_root = self.cache_dir.resolve()
         if not cached_path.resolve().is_relative_to(cache_root):
             raise ValueError(
-                f"Refusing download target outside cache dir: {cached_path} "
-                f"(root {cache_root})"
+                f"Refusing download target outside cache dir: {cached_path} (root {cache_root})"
             )
         if cached_path.exists():
             if sha256 is not None and self.get_checksum(cached_path) != sha256.lower():

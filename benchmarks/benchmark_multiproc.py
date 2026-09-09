@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 try:
-    import numpy as np
+    import numpy as np  # noqa: F401 — availability probe; used by worker paths
     import torch
     import torch.nn as nn
 except ImportError as exc:
@@ -137,7 +137,7 @@ def check_consistency(
         }
 
     max_diff = 0.0
-    for i, (s, m) in enumerate(zip(serial_outputs, mp_outputs)):
+    for i, (s, m) in enumerate(zip(serial_outputs, mp_outputs, strict=False)):
         diff = torch.max(torch.abs(s - m)).item()
         max_diff = max(max_diff, diff)
         if not torch.allclose(s, m, rtol=1e-5, atol=1e-6):
@@ -166,8 +166,10 @@ def format_md(results: list[dict], consistency: list[dict]) -> str:
         "",
         "## Throughput & Latency",
         "",
-        "| Workers | Wall Time (avg, s) | Wall Time (min, s) | Throughput (items/s) | Peak Memory (MB) |",
-        "|---------|--------------------|--------------------|----------------------|------------------|",
+        "| Workers | Wall Time (avg, s) | Wall Time (min, s) | "
+        "Throughput (items/s) | Peak Memory (MB) |",
+        "|---------|--------------------|--------------------|"
+        "----------------------|------------------|",
     ]
     for r in results:
         lines.append(
