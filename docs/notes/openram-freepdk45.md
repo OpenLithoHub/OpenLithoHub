@@ -52,6 +52,7 @@ write_driver.gds
 
 ```python
 import klayout.db as kdb
+
 ly = kdb.Layout()
 ly.read(".../technology/freepdk45/gds_lib/cell_1rw.gds")
 # Result:
@@ -81,12 +82,12 @@ with config:
 word_size = 4
 num_words = 16
 num_banks = 1
-tech_name = 'freepdk45'
+tech_name = "freepdk45"
 nominal_corner_only = True
 route_supplies = False
 check_lvsdrc = False
-output_path = '/tmp/openram_smoke_out'
-output_name = 'tiny_4x16'
+output_path = "/tmp/openram_smoke_out"
+output_name = "tiny_4x16"
 ```
 
 Result: progresses through bank / decoder / sense-amp synthesis, placement, then

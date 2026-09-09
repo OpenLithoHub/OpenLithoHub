@@ -51,10 +51,12 @@ def demo_real_mode_error() -> None:
     mask = make_test_mask()
 
     sim = TachyonSimulator(
-        SimulatorConfig(extra={
-            "tachyon_home": "/opt/asml/tachyon",
-            "recipe": "/recipes/default.tcl",
-        })
+        SimulatorConfig(
+            extra={
+                "tachyon_home": "/opt/asml/tachyon",
+                "recipe": "/recipes/default.tcl",
+            }
+        )
     )
 
     status = sim.preflight()

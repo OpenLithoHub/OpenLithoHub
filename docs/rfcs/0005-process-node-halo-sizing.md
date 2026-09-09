@@ -135,8 +135,10 @@ def compute_halo_px(
     pixel_nm: float,
     tile_size: int,
 ) -> int:
-    if pixel_nm <= 0: raise ValueError(...)
-    if tile_size <= 1: raise ValueError(...)
+    if pixel_nm <= 0:
+        raise ValueError(...)
+    if tile_size <= 1:
+        raise ValueError(...)
     if node is None and model is None:
         return min(DEFAULT_HALO_PX, tile_size - 1)  # 128, pre-RFC default
     oir_px = ceil(node.optical_radius_nm / pixel_nm) if node else 0

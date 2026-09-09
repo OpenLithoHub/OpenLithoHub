@@ -74,10 +74,10 @@ shortest path from a layout file to scored results. See
 ```python
 from openlithohub import Mask, LitheEngine
 
-mask      = Mask.from_oasis("design.oas", layer="1:0", pixel_size_nm=1.0)
-engine    = LitheEngine(model="neural-ilt", node="3nm-euv")
+mask = Mask.from_oasis("design.oas", layer="1:0", pixel_size_nm=1.0)
+engine = LitheEngine(model="neural-ilt", node="3nm-euv")
 optimized = engine.optimize(mask)
-report    = engine.evaluate(optimized, target=mask)
+report = engine.evaluate(optimized, target=mask)
 
 print(report.epe_mean_nm, report.pvband_mean_nm, report.drc_violations)
 optimized.to_oasis("optimized.oas")
@@ -112,6 +112,7 @@ print(f"MRC passed: {mrc.passed}")
 import torch
 from openlithohub.models.base import LithographyModel, PredictionResult
 from openlithohub.models.registry import registry
+
 
 @registry.register
 class MyOPCModel(LithographyModel):

@@ -28,6 +28,14 @@ jobs:
         run: ruff format --check src/ tests/ spaces/ scripts/ klayout/ notebooks/
       - name: README bilingual parity (English ⇄ Chinese)
         run: python scripts/check_readme_parity.py
+      - name: Install pre-commit
+        run: pip install pre-commit
+      - name: Pre-commit (all files)
+        # Local hooks (ruff/ruff-format) duplicate the steps above with the
+        # pinned ruff rev; the real additions are the repo hygiene hooks —
+        # trailing whitespace, EOF newline, YAML/TOML validity, large files.
+        # Running them in CI closes the `git commit --no-verify` bypass.
+        run: pre-commit run --all-files
 
   typecheck:
     runs-on: ubuntu-latest
@@ -53,8 +61,20 @@ jobs:
             paths: tests/test_models
             xdist: "-n auto"
           - name: workflow
-            paths: tests/test_workflow
-            xdist: ""  # parallel_tile_inference spawns subprocesses; xdist nesting deadlocks on Linux runners
+            # Serial (no xdist): parallel_tile_inference and test_multiproc
+            # spawn subprocesses; xdist nesting deadlocks on Linux runners.
+            paths: >-
+              tests/test_workflow
+              tests/test_semi_p39.py
+              tests/test_bayesian_stochastic.py
+              tests/test_coverage_gate.py
+              tests/test_plugin_gateway.py
+              tests/test_multiproc.py
+              tests/test_eda_bridge_demo.py
+              tests/test_commercial_sim_demo.py
+              tests/test_topology_simplification.py
+              tests/test_generative_sraf.py
+            xdist: ""
           - name: benchmark
             paths: tests/test_benchmark tests/benchmarks tests/test_simulators
             xdist: "-n auto"
@@ -62,7 +82,21 @@ jobs:
             paths: tests/test_data tests/test_utils tests/test_hackathon_manifest.py tests/test_tokens.py
             xdist: "-n auto"
           - name: other
-            paths: tests/test_cli tests/test_server tests/test_leaderboard tests/test_vis tests/test_synth tests/test_jupyter
+            paths: >-
+              tests/test_cli
+              tests/test_server
+              tests/test_leaderboard
+              tests/test_vis
+              tests/test_synth
+              tests/test_jupyter
+              tests/test_api
+              tests/test_metrics
+              tests/test_baselines
+              tests/test_compliance
+              tests/test_verify
+              tests/test_streaming
+              tests/test_plugins
+              tests/scripts
             xdist: "-n auto"
     name: "test (${{ matrix.python-version }} / ${{ matrix.shard.name }})"
     steps:
@@ -96,6 +130,23 @@ jobs:
           files: ./coverage.xml
           flags: ${{ matrix.shard.name }}
         continue-on-error: true
+
+  coverage-gate:
+    # Per-shard coverage is partial by design (each shard runs a subset of
+    # tests); this job runs the FULL suite once and hard-fails when total
+    # coverage drops below the floor. Optional physics plugins are omitted
+    # from the denominator (see [tool.coverage.run] omit in pyproject).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install package with dev + workflow + export extras
+        run: pip install -e ".[dev,workflow,export]"
+      - name: Full-suite coverage gate (>= 80%)
+        run: pytest -q --cov=openlithohub --cov-report=xml --cov-report=term --cov-fail-under=80
 
   security:
     runs-on: ubuntu-latest

@@ -231,6 +231,15 @@ filterwarnings = [
 [tool.coverage.run]
 source = ["openlithohub"]
 branch = true
+# Optional physics plugins need heavy third-party deps (diffnano/diffcfd)
+# that the coverage gate does not install; their tests only run when the
+# extras are present. Omit them so the core-coverage threshold is stable
+# across environments (the modules keep their own opt-in test shards).
+omit = [
+    "src/openlithohub/plugins/diffnano_em.py",
+    "src/openlithohub/plugins/diffnano_resist.py",
+    "src/openlithohub/plugins/diffcfd_process.py",
+]
 
 [tool.coverage.report]
 show_missing = true

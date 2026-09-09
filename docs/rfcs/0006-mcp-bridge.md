@@ -433,19 +433,21 @@ def run_tiled(layout, model, halo_px, *, cancel_token):
     tiles = tile_layout(layout, halo_px=halo_px)
     results = []
     for tile in tiles:
-        cancel_token.check()                    # boundary 1: per tile
+        cancel_token.check()  # boundary 1: per tile
         result = model.predict(tile, cancel_token=cancel_token)
         results.append(result)
     return stitch(results)
 
+
 # models/<engine>.py — kernel-level checkpoint
 def predict(self, tile, *, cancel_token):
     for corner in self.process_window_corners:
-        cancel_token.check()                    # boundary 2: per corner
-        aerial = simulate_aerial_image(...)     # ~100ms-1s on GPU
+        cancel_token.check()  # boundary 2: per corner
+        aerial = simulate_aerial_image(...)  # ~100ms-1s on GPU
     # boundary 3: if simulate_aerial_image is itself >1s, it owns
     # an internal token check before the GPU launch and after each
     # batch — the kernel API takes cancel_token as a kwarg.
+
 
 # bridge — token lifecycle tied to MCP request
 def evaluate_handler(request, mcp_session):
@@ -540,8 +542,10 @@ loop's iteration counter stops advancing, assert job state is
 ```python
 def test_byte_identity_through_paths():
     fixture = "tests/fixtures/asap7_small.oas"
-    direct = subprocess.run(["openlithohub", "eval", "--report-level=detailed",
-                             "--format=json", fixture], capture_output=True).stdout
+    direct = subprocess.run(
+        ["openlithohub", "eval", "--report-level=detailed", "--format=json", fixture],
+        capture_output=True,
+    ).stdout
     in_proc = mcp_client_inproc.call("evaluate", {"layout": fixture, "report_level": "detailed"})
     sub_proc = mcp_client_subproc.call("evaluate", {"layout": fixture, "report_level": "detailed"})
     assert json.loads(direct) == in_proc["result"] == sub_proc["result"]

@@ -142,13 +142,19 @@ To add a new test pattern:
 ```python
 from scripts.run_stochastic_benchmark import run_single, PATTERNS
 
+
 def my_pattern(size=64):
     # ... return torch.Tensor (H, W), binary {0, 1}
     return mask
 
+
 row = run_single(
-    "my_pattern", my_pattern(), "EUV N7",
-    dose=30.0, sigma_px=2.0, pixel_size_nm=1.0,
+    "my_pattern",
+    my_pattern(),
+    "EUV N7",
+    dose=30.0,
+    sigma_px=2.0,
+    pixel_size_nm=1.0,
 )
 ```
 

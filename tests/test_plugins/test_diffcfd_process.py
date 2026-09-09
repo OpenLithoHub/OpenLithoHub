@@ -1,7 +1,9 @@
 """Tests for DiffCFD process simulation adapters (P3).
 
 DiffCFD v0.7.0 is installed in the test environment, so these tests
-exercise the real solvers end-to-end.
+exercise the real solvers end-to-end. When the optional extra is absent
+(default CI), the whole module skips — the adapters are only reachable
+with `pip install openlithohub[diffcfd]`.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import torch
 from openlithohub.simulators.base import SimulatorConfig
 from openlithohub.simulators.registry import get_simulator
 
+pytest.importorskip("diffcfd", reason="DiffCFD not installed (pip install openlithohub[diffcfd])")
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 

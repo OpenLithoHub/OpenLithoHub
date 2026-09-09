@@ -122,6 +122,7 @@ OpenLithoHub 的光刻前向模型充当耦合层，将上游设计求解器（E
 from diff_surrogate import CoDesignWorkflow, CoupledLoss
 from openlithohub.simulators import HopkinsSimulator, SimulatorConfig
 
+
 # 光刻前向函数将可打印性梯度回传给设计端
 def litho_coupling(merged_outputs):
     design_mask = merged_outputs["design"]["mask"]
@@ -129,6 +130,7 @@ def litho_coupling(merged_outputs):
     result = sim.simulate(design_mask)
     merged_outputs["litho"] = {"aerial": result.aerial}
     return merged_outputs
+
 
 wf = CoDesignWorkflow(
     design_params=torch.rand(64, 64),
@@ -231,10 +233,10 @@ curl -X POST http://localhost:8000/v1/optimize \
 ```python
 from openlithohub import Mask, LitheEngine
 
-mask      = Mask.from_oasis("design.oas", layer="1:0", pixel_size_nm=1.0)
-engine    = LitheEngine(model="neural-ilt", node="3nm-euv")
+mask = Mask.from_oasis("design.oas", layer="1:0", pixel_size_nm=1.0)
+engine = LitheEngine(model="neural-ilt", node="3nm-euv")
 optimized = engine.optimize(mask)
-report    = engine.evaluate(optimized, target=mask)
+report = engine.evaluate(optimized, target=mask)
 
 print(report.epe_mean_nm, report.pvband_mean_nm, report.drc_violations)
 optimized.to_oasis("optimized.oas")
@@ -269,6 +271,7 @@ print(f"MRC 通过: {mrc.passed}（{mrc.violation_count} 个违规）")
 import torch
 from openlithohub.models.base import LithographyModel, PredictionResult
 from openlithohub.models.registry import registry
+
 
 @registry.register
 class MyOPCModel(LithographyModel):
@@ -536,7 +539,11 @@ model = LevelSetILTModel(
     iterations=200,
     forward_model="hopkins",
     hopkins_params=HopkinsParams(
-        wavelength_nm=193.0, na=1.35, sigma=0.7, num_kernels=24, pixel_size_nm=2.0,
+        wavelength_nm=193.0,
+        na=1.35,
+        sigma=0.7,
+        num_kernels=24,
+        pixel_size_nm=2.0,
     ),
 )
 ```

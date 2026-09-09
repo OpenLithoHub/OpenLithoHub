@@ -110,6 +110,7 @@ Implement the `LithographyModel` interface:
 from openlithohub.models.base import LithographyModel, PredictionResult
 from openlithohub.models.registry import registry
 
+
 @registry.register
 class MyModel(LithographyModel):
     @property
@@ -132,15 +133,13 @@ Implement the `DatasetAdapter` interface in `src/openlithohub/data/`:
 ```python
 from openlithohub.data.base import DatasetAdapter, LithoSample
 
+
 class MyDataset(DatasetAdapter):
-    def __len__(self) -> int:
-        ...
+    def __len__(self) -> int: ...
 
-    def __getitem__(self, index: int) -> LithoSample:
-        ...
+    def __getitem__(self, index: int) -> LithoSample: ...
 
-    def download(self, root: str) -> None:
-        ...
+    def download(self, root: str) -> None: ...
 ```
 
 ## Pull Request Process

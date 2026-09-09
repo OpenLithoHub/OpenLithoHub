@@ -276,7 +276,7 @@ from openlithohub.data import GanOpcDataset
 ds = GanOpcDataset("data/ganopc/extracted")  # parent of ganopc-data/
 sample = ds[0]
 sample.design  # (2048, 2048) torch.float32, {0., 1.}
-sample.mask    # (2048, 2048) torch.float32, {0., 1.}
+sample.mask  # (2048, 2048) torch.float32, {0., 1.}
 ```
 
 The pairs are `(design_layout, OPC_mask)` so this dataset is suitable

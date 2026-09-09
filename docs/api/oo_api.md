@@ -13,10 +13,10 @@ shape fits the task.
 ```python
 from openlithohub import Mask, LitheEngine
 
-mask     = Mask.from_oasis("design.oas", layer="1:0", pixel_size_nm=1.0)
-engine   = LitheEngine(model="neural-ilt", node="3nm-euv")
+mask = Mask.from_oasis("design.oas", layer="1:0", pixel_size_nm=1.0)
+engine = LitheEngine(model="neural-ilt", node="3nm-euv")
 optimized = engine.optimize(mask)
-report    = engine.evaluate(optimized, target=mask)
+report = engine.evaluate(optimized, target=mask)
 
 print(report.epe_mean_nm, report.pvband_mean_nm, report.drc_violations)
 optimized.to_oasis("optimized.oas")
@@ -41,7 +41,7 @@ Mask.from_npy("design.npy")
 Mask.from_oasis("design.oas", layer="1:0")
 Mask.from_gds("design.gds", layer="1:0")
 Mask.from_def("routed.def", layer="1:0", lef_files=["stdcells.lef"])
-Mask.load("design.oas", layer="1:0")    # dispatches by file suffix
+Mask.load("design.oas", layer="1:0")  # dispatches by file suffix
 ```
 
 `Mask` is a frozen dataclass — once constructed, the `(tensor, pixel_size_nm,

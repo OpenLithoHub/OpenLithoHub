@@ -33,6 +33,7 @@ from openlithohub.workflow import BridgeRules, emit_bridge_bundle
 # Step 1: Create a simple mask pattern
 # ---------------------------------------------------------------------------
 
+
 def make_test_mask(size: int = 64) -> torch.Tensor:
     """Create a simple test mask with a centered rectangle."""
     mask = torch.zeros(size, size)
@@ -44,6 +45,7 @@ def make_test_mask(size: int = 64) -> torch.Tensor:
 # ---------------------------------------------------------------------------
 # Step 2: Run co-design optimisation (Hopkins gradients + Calibre oracle)
 # ---------------------------------------------------------------------------
+
 
 def run_co_design(
     mask: torch.Tensor,
@@ -74,7 +76,8 @@ def run_co_design(
         with torch.no_grad():
             oracle_result = oracle.simulate(mask_var.detach().clamp(0, 1))
             oracle_loss = torch.nn.functional.mse_loss(
-                oracle_result.aerial, target,
+                oracle_result.aerial,
+                target,
             ).item()
 
         if step % 2 == 0 or step == steps - 1:
@@ -89,6 +92,7 @@ def run_co_design(
 # ---------------------------------------------------------------------------
 # Step 3: Cross-check with Tachyon mock simulator
 # ---------------------------------------------------------------------------
+
 
 def cross_check_tachyon(mask: torch.Tensor, target: torch.Tensor) -> dict:
     """Validate optimised mask against Tachyon mock simulator."""
@@ -116,6 +120,7 @@ def cross_check_tachyon(mask: torch.Tensor, target: torch.Tensor) -> dict:
 # ---------------------------------------------------------------------------
 # Step 4: Export mask and emit EDA bridge bundle
 # ---------------------------------------------------------------------------
+
 
 def export_to_eda(
     mask: torch.Tensor,
@@ -147,6 +152,7 @@ def export_to_eda(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main(output_dir: str | Path | None = None) -> dict:
     """Run the full end-to-end demo.
