@@ -82,8 +82,7 @@ class TestLithoBenchSubdirectory:
             "sample_0000": {"process_node": "45nm", "pitch": 90},
             "sample_0001": {"process_node": "45nm", "pitch": 64},
         }
-        with open(tmp_path / "metadata.json", "w") as f:
-            json.dump(metadata, f)
+        (tmp_path / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
 
         return tmp_path
 

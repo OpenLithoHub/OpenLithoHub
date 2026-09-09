@@ -21,6 +21,7 @@ Key ideas
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -140,10 +141,10 @@ def _reparameterized_poisson(lambda_map: torch.Tensor, n_samples: int) -> torch.
     differentiable with respect to ``lambda_map`` (and hence with respect to
     the aerial image and mask).
 
-    Uses ``lambda_soft = softplus(lambda_raw)`` instead of ``clamp(min=0)``
-    to avoid the zero-gradient region of the clamp, and computes
-    ``sqrt(lambda_soft)`` with a minimum floor to prevent the gradient
-    ``0.5/sqrt(x)`` from diverging.
+    Uses ``lambda = clamp(lambda_raw, min=0)`` so dark regions of the
+    aerial image (intensity ~ 0) keep their physical photon counts; a
+    softplus here would bias every dark pixel up to ``ln(2) * dose``
+    photons and print spurious resist in unexposed areas.
 
     Returns:
         Tensor of shape ``(n_samples, H, W)`` with noised photon counts
@@ -152,13 +153,14 @@ def _reparameterized_poisson(lambda_map: torch.Tensor, n_samples: int) -> torch.
     eps = torch.randn(
         n_samples, *lambda_map.shape, device=lambda_map.device, dtype=lambda_map.dtype
     )
-    # softplus avoids the flat-gradient region of clamp(min=0) for negative
-    # aerial-image values (possible near frame edges after convolution).
-    lambda_soft = torch.nn.functional.softplus(lambda_map)
+    # clamp(min=0) guards against tiny negative aerial values from
+    # convolution ringing; gradient w.r.t. physically valid (>= 0) values
+    # is unaffected.
+    lambda_pos = lambda_map.clamp(min=0.0)
     # Floor sigma to prevent 0.5/sqrt(0) divergence; the floor only
     # activates when lambda < 1 (far below any realistic EUV dose per pixel).
-    sigma = torch.sqrt(lambda_soft + 1e-3)
-    samples = lambda_soft.unsqueeze(0) + eps * sigma.unsqueeze(0)
+    sigma = torch.sqrt(lambda_pos + 1e-3)
+    samples = lambda_pos.unsqueeze(0) + eps * sigma.unsqueeze(0)
     return samples.clamp(min=0.0)
 
 
@@ -195,7 +197,7 @@ def differentiable_edge_error(
     """
     pixel_area_nm2 = pixel_size_nm * pixel_size_nm
     dose_scale = dose_photons_per_nm2 * pixel_area_nm2
-    lambda_map = torch.nn.functional.softplus(aerial_nominal) * dose_scale
+    lambda_map = aerial_nominal.clamp(min=0.0) * dose_scale
 
     noised_photons = _reparameterized_poisson(lambda_map, n_samples)
     noised_intensity = noised_photons / max(dose_scale, 1e-12)
@@ -250,7 +252,7 @@ def differentiable_lcdu(
     """
     pixel_area_nm2 = pixel_size_nm * pixel_size_nm
     dose_scale = dose_photons_per_nm2 * pixel_area_nm2
-    lambda_map = torch.nn.functional.softplus(aerial_nominal) * dose_scale
+    lambda_map = aerial_nominal.clamp(min=0.0) * dose_scale
 
     noised_photons = _reparameterized_poisson(lambda_map, n_samples)
     noised_intensity = noised_photons / max(dose_scale, 1e-12)
@@ -347,7 +349,7 @@ class StochasticAwareLoss:
 
         pixel_area_nm2 = self.pixel_size_nm * self.pixel_size_nm
         dose_scale = self.dose_photons_per_nm2 * pixel_area_nm2
-        lambda_map = torch.nn.functional.softplus(aerial_nominal) * dose_scale
+        lambda_map = aerial_nominal.clamp(min=0.0) * dose_scale
 
         noised_photons = _reparameterized_poisson(lambda_map, self.n_mc_samples)
         noised_intensity = noised_photons / max(dose_scale, 1e-12)
@@ -385,6 +387,10 @@ class StochasticAwareLoss:
             lcdu = edge_loss.new_zeros(())
 
         return self.weight_edge_error * edge_loss + self.weight_lcdu * lcdu
+
+    # The class-level docstring documents ``loss = loss_fn(mask, ...)``;
+    # honour that calling convention instead of requiring ``.forward``.
+    __call__ = forward
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +463,7 @@ class StochasticProcessWindow:
     def compute(
         self,
         mask: torch.Tensor,
-        aerial_image_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
+        aerial_image_fn: Callable[..., torch.Tensor] | None = None,
         focus_range_nm: tuple[float, float, float] = (-50.0, 50.0, 10.0),
     ) -> StochasticProcessWindowResult:
         """Compute the stochastic process window.
@@ -465,6 +471,10 @@ class StochasticProcessWindow:
         Args:
             mask: Continuous mask tensor (H, W).
             aerial_image_fn: Optional override for the aerial image function.
+                Called as ``fn(mask, defocus_nm)`` when it accepts two
+                positional arguments (so the focus sweep varies defocus),
+                otherwise as ``fn(mask)`` — in that fallback the same
+                nominal image is reused for every focus point.
                 If ``None``, uses the built-in defocus model.
             focus_range_nm: ``(start, stop, step)`` in nm for the focus sweep.
 
@@ -478,16 +488,30 @@ class StochasticProcessWindow:
         mean_epe = []
         worst_epe = []
 
+        # Custom forward models may or may not accept a defocus argument;
+        # detect by signature so the sweep actually varies focus when
+        # supported (otherwise the same nominal image is reused for every
+        # focus point).
+        takes_defocus = False
+        if aerial_image_fn is not None:
+            try:
+                takes_defocus = len(inspect.signature(aerial_image_fn).parameters) >= 2
+            except (TypeError, ValueError):
+                takes_defocus = False
+
         pixel_area_nm2 = self.pixel_size_nm * self.pixel_size_nm
         dose_scale = self.dose_photons_per_nm2 * pixel_area_nm2
 
         for defocus_nm in focus_values:
             if aerial_image_fn is not None:
-                aerial_nominal = aerial_image_fn(mask)
+                if takes_defocus:
+                    aerial_nominal = aerial_image_fn(mask, defocus_nm)
+                else:
+                    aerial_nominal = aerial_image_fn(mask)
             else:
                 aerial_nominal = self._aerial_with_defocus(mask, defocus_nm)
 
-            lambda_map = torch.nn.functional.softplus(aerial_nominal) * dose_scale
+            lambda_map = aerial_nominal.clamp(min=0.0) * dose_scale
             noised_photons = _reparameterized_poisson(lambda_map, self.n_samples)
             noised_intensity = noised_photons / max(dose_scale, 1e-12)
 
@@ -509,14 +533,26 @@ class StochasticProcessWindow:
             mean_epe.append(sum(per_sample_epe) / len(per_sample_epe))
             worst_epe.append(max(per_sample_epe))
 
-        # Find window bounds: contiguous focus range where mean EPE < tolerance.
-        lower = min(focus_values)
-        upper = max(focus_values)
+        # Find window bounds: the longest *contiguous* run of focus points
+        # whose mean EPE stays below tolerance. Taking min/max over all
+        # passing points would report a wide window even when an interior
+        # focus fails (e.g. ±50 nm pass but best focus fails). When no
+        # point passes, the window collapses to zero width.
         in_window = [m < self.epe_tolerance for m in mean_epe]
-        passing = [f for f, ok in zip(focus_values, in_window, strict=False) if ok]
-        if passing:
-            lower = min(passing)
-            upper = max(passing)
+        lower = focus_values[0]
+        upper = focus_values[0]
+        best_width = 0
+        run_start = None
+        for idx, ok in enumerate(in_window + [False]):
+            if ok and run_start is None:
+                run_start = idx
+            elif not ok and run_start is not None:
+                width = idx - run_start
+                if width > best_width:
+                    best_width = width
+                    lower = focus_values[run_start]
+                    upper = focus_values[idx - 1]
+                run_start = None
 
         return StochasticProcessWindowResult(
             focus_values_nm=focus_values,

@@ -171,6 +171,9 @@ def generate_layout(
 
     rules = pdk if isinstance(pdk, PdkRules) else get_pdk(pdk)
     kind = PatternKind(pattern) if isinstance(pattern, str) else pattern
+    # Seeded PRNG is the point: reproducible synthetic pattern synthesis,
+    # not a security-sensitive randomness source (see pyproject per-file
+    # ignore rationale).
     rng = random.Random(seed)
 
     if kind == PatternKind.SRAM:

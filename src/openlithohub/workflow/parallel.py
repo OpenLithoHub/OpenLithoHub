@@ -145,18 +145,19 @@ def parallel_tile_inference(
             try:
                 item = queue.get(timeout=_DEFAULT_TIMEOUT_SECONDS)
             except queue_mod.Empty:
-                if any(not p.is_alive() for p in processes) and queue.empty():
-                    dead = [p for p in processes if not p.is_alive()]
-                    if dead:
-                        codes = ", ".join(
-                            f"rank={i} exit={p.exitcode}"
-                            for i, p in enumerate(processes)
-                            if not p.is_alive()
-                        )
-                        raise RuntimeError(
-                            f"parallel_tile_inference: worker(s) exited ({codes}), "
-                            f"received {len(results)}/{expected} results"
-                        ) from None
+                # Only declare failure when *every* worker is dead and the
+                # queue is drained: a single fast worker finishing early
+                # must not abort the run while others are still computing.
+                if all(not p.is_alive() for p in processes) and queue.empty():
+                    codes = ", ".join(
+                        f"rank={i} exit={p.exitcode}"
+                        for i, p in enumerate(processes)
+                        if not p.is_alive()
+                    )
+                    raise RuntimeError(
+                        f"parallel_tile_inference: worker(s) exited ({codes}), "
+                        f"received {len(results)}/{expected} results"
+                    ) from None
                 continue
 
             if isinstance(item, tuple) and item and item[0] == "error":

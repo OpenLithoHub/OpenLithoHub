@@ -156,7 +156,10 @@ def stitch_tiles(
 
         blend = torch.ones(tile_h, tile_w, device=device)
 
-        if tile.overlap > 0:
+        # A single-column overlap cannot be blended (the linear ramp would
+        # assign weight 0 to both sides, leaving a black seam); fall back
+        # to unblended averaging via the weight map.
+        if tile.overlap > 1:
             ramp = torch.linspace(0.0, 1.0, tile.overlap, device=device)
 
             if tile.origin_x > 0:
@@ -335,38 +338,40 @@ def _inject_boundary_data(
 ) -> torch.Tensor:
     """Copy overlap-region data from neighbours into the current tile.
 
-    For each adjacent tile whose overlap region intersects this tile's extent,
-    overwrite the corresponding overlap strip in the current tile's tensor
-    with data from the neighbour's most recent result.  This implements the
+    For every other tile whose extent intersects this tile's extent, the
+    neighbour's most recent result inside the shared region is written into
+    the current tile's tensor. Overlap geometry is derived from tile
+    origins and extents, so anchored edge tiles (whose origin is pulled
+    back to fit the layout and which therefore overlap their neighbour by
+    more than ``overlap``) exchange boundary data too. This implements the
     multiplicative Schwarz information exchange.
+
+    The iteration starts from the tile's own latest solution
+    (``all_results[idx]``) so successive Schwarz rounds accumulate instead
+    of restarting from the input layout.
     """
-    current = tile.tensor.clone()
+    current = all_results[idx].clone()
     th, tw = current.shape[-2], current.shape[-1]
+
+    x0, y0 = tile.origin_x, tile.origin_y
+    x1, y1 = x0 + tw, y0 + th
 
     for jdx, other in enumerate(all_tiles):
         if jdx == idx:
             continue
 
-        # Horizontal adjacency: same row band, columns overlap
-        if tile.origin_y == other.origin_y:
-            # neighbour is to the right
-            if other.origin_x == tile.origin_x + tw - overlap:
-                patch = all_results[jdx][..., :, :overlap]
-                current[..., :, -overlap:] = patch
-            # neighbour is to the left
-            elif tile.origin_x == other.origin_x + other.width - overlap:
-                patch = all_results[jdx][..., :, -overlap:]
-                current[..., :, :overlap] = patch
+        ox0, oy0 = other.origin_x, other.origin_y
+        ox1, oy1 = ox0 + other.width, oy0 + other.height
 
-        # Vertical adjacency: same column band, rows overlap
-        if tile.origin_x == other.origin_x:
-            # neighbour is below
-            if other.origin_y == tile.origin_y + th - overlap:
-                patch = all_results[jdx][..., :overlap, :]
-                current[..., -overlap:, :] = patch
-            # neighbour is above
-            elif tile.origin_y == other.origin_y + other.height - overlap:
-                patch = all_results[jdx][..., -overlap:, :]
-                current[..., :overlap, :] = patch
+        ix0, iy0 = max(x0, ox0), max(y0, oy0)
+        ix1, iy1 = min(x1, ox1), min(y1, oy1)
+        if ix1 <= ix0 or iy1 <= iy0:
+            continue
+
+        current[..., iy0 - y0 : iy1 - y0, ix0 - x0 : ix1 - x0] = all_results[jdx][
+            ...,
+            iy0 - oy0 : iy1 - oy0,
+            ix0 - ox0 : ix1 - ox0,
+        ]
 
     return current

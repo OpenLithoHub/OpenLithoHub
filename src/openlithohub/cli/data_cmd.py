@@ -47,10 +47,11 @@ def _save_png(arr: np.ndarray[Any, Any], out_path: Path) -> None:
     from PIL import Image
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    # Flip Y so the GDS origin (bottom-left) is at the bottom of the PNG —
-    # matches what reviewers expect when they cross-reference klayout.
-    img = np.flipud(arr)
-    img8 = (np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8)
+    # Adapter arrays are already in viewer orientation (arr[0] = layout
+    # top, y-down — see rasterize_cell_layer / load_layout), so they map
+    # straight onto the PNG surface with no flip. The historical flipud
+    # here predates that convention fix and mirrored the export.
+    img8 = (np.clip(arr, 0.0, 1.0) * 255.0).astype(np.uint8)
     Image.fromarray(img8, mode="L").save(out_path)
 
 

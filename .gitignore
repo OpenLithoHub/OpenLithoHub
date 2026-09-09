@@ -57,3 +57,5 @@ checkpoints/*.metadata.json
 
 # Training cache
 cache/
+.venv-review/
+.mimosa/

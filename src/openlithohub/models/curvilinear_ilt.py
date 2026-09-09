@@ -127,13 +127,16 @@ class CurvilinearMaskRepresentation:
 
     @staticmethod
     def _approx_distance(
-        binary: torch.Tensor, device: torch.device, n_passes: int = 4
+        binary: torch.Tensor, device: torch.device, n_passes: int | None = None
     ) -> torch.Tensor:
-        """Approximate Euclidean distance transform via iterative convolution.
+        """Approximate Euclidean distance transform via chamfer min-propagation.
 
-        Uses a 3x3 chamfer kernel iterated multiple times. This is not an
-        exact EDT but is sufficient for SDF initialization and fully
-        differentiable.
+        Follows the standard EDT convention: foreground pixels
+        (``binary == 1``) hold the distance to the nearest background pixel;
+        background pixels are 0. Neighbours cost 1 (orthogonal) or sqrt(2)
+        (diagonal); distances are exact up to ``n_passes`` pixels from the
+        nearest seed. The min-relaxation is differentiable a.e., so the
+        result can seed gradient-based optimization.
 
         Parameters
         ----------
@@ -141,33 +144,42 @@ class CurvilinearMaskRepresentation:
             Binary foreground mask (H, W).
         device : torch.device
             Torch device.
-        n_passes : int
-            Number of chamfer passes (more passes = better approximation).
+        n_passes : int | None
+            Number of propagation passes. Defaults to ``max(H, W)`` so the
+            transform covers the full grid.
 
         Returns
         -------
         Distance tensor of shape (H, W).
         """
-        # Chamfer 3-4 kernel weights.
-        kernel = torch.tensor(
-            [[3, 4, 3], [4, 0, 4], [3, 4, 3]],
-            dtype=torch.float32,
-            device=device,
-        )
-        kernel = kernel / 4.0  # Normalize so 4-connected neighbor = 1.0
-        kernel = kernel.unsqueeze(0).unsqueeze(0)
+        b = binary.to(device).float().unsqueeze(0).unsqueeze(0)
+        h, w = b.shape[-2:]
+        large_val = float(h + w)
+        if n_passes is None:
+            n_passes = max(h, w)
 
-        dist = binary.clone().unsqueeze(0).unsqueeze(0)
-        large_val = float(dist.shape[-1] + dist.shape[-2])
+        # Seeds: 0 on the background, large on the foreground.
+        dist = torch.where(b > 0.5, torch.full_like(b, large_val), torch.zeros_like(b))
+
+        diag = 2.0**0.5
+        offsets = (
+            (-1, 0, 1.0),
+            (1, 0, 1.0),
+            (0, -1, 1.0),
+            (0, 1, 1.0),
+            (-1, -1, diag),
+            (-1, 1, diag),
+            (1, -1, diag),
+            (1, 1, diag),
+        )
 
         for _ in range(n_passes):
-            padded = functional.pad(dist, [1, 1, 1, 1], mode="constant", value=0.0)
-            neighbor_min = functional.conv2d(padded, kernel)
-            dist = torch.where(
-                dist > 0.5,
-                torch.ones_like(dist),
-                torch.clamp(neighbor_min + 1.0, max=large_val),
-            )
+            padded = functional.pad(dist, [1, 1, 1, 1], mode="constant", value=large_val)
+            candidates = [
+                padded[:, :, 1 + dy : 1 + dy + h, 1 + dx : 1 + dx + w] + cost
+                for dy, dx, cost in offsets
+            ]
+            dist = torch.minimum(torch.stack(candidates).min(dim=0).values, dist)
 
         return dist.squeeze(0).squeeze(0)
 
@@ -816,6 +828,7 @@ class CurvilinearMaskILT:
         self.pareto.reset()
 
         loss_history: list[float] = []
+        epe_history: list[float] = []
 
         for _step in range(steps):
             optimizer.zero_grad()
@@ -843,12 +856,13 @@ class CurvilinearMaskILT:
 
             total_loss = pw_loss + smooth_loss + sc_penalty
 
-            total_loss.backward()
+            total_loss.backward()  # type: ignore[no-untyped-call]
             optimizer.step()
 
             # Track Pareto point.
             with torch.no_grad():
                 epe_at_nominal = pw_info["mean_epe"]
+                epe_history.append(float(epe_at_nominal))
                 shots = self.pareto.estimate_curvilinear_shots(mask)
                 self.pareto.record(shots, epe_at_nominal)
                 loss_history.append(total_loss.item())
@@ -860,7 +874,7 @@ class CurvilinearMaskILT:
         frontier = self.pareto.compute_pareto_frontier()
         info: dict[str, Any] = {
             "pareto_frontier": frontier,
-            "final_epe": loss_history[-1] if loss_history else float("inf"),
+            "final_epe": epe_history[-1] if epe_history else float("inf"),
             "final_shots": self.pareto._history[-1][0] if self.pareto._history else 0.0,
             "loss_history": loss_history,
             "n_steps": steps,
@@ -877,8 +891,9 @@ class CurvilinearMaskILT:
         """Run rectilinear (Manhattan) ILT for comparison baseline.
 
         Same optimization as ``optimize`` but constrains the SDF to produce
-        only axis-aligned edges by applying a Manhattan projection step after
-        each gradient update. This simulates traditional pixel-based ILT.
+        only axis-aligned edges by applying a soft diagonal-edge penalty on
+        top of the same losses as ``optimize`` (no hard projection step is
+        applied, so the result is an axis-aligned-biased approximation).
 
         Parameters
         ----------
@@ -906,6 +921,7 @@ class CurvilinearMaskILT:
         optimizer = torch.optim.Adam([sdf], lr=learning_rate)
         pareto_rect = ShotCountPareto()
         loss_history: list[float] = []
+        epe_history: list[float] = []
 
         for _step in range(steps):
             optimizer.zero_grad()
@@ -941,11 +957,12 @@ class CurvilinearMaskILT:
 
             total_loss = pw_loss + smooth_loss + sc_penalty + 0.5 * diagonal_penalty
 
-            total_loss.backward()
+            total_loss.backward()  # type: ignore[no-untyped-call]
             optimizer.step()
 
             with torch.no_grad():
                 epe_at_nominal = pw_info["mean_epe"]
+                epe_history.append(float(epe_at_nominal))
                 shots = pareto_rect.estimate_curvilinear_shots(mask)
                 pareto_rect.record(shots, epe_at_nominal)
                 loss_history.append(total_loss.item())
@@ -956,7 +973,7 @@ class CurvilinearMaskILT:
         frontier = pareto_rect.compute_pareto_frontier()
         info: dict[str, Any] = {
             "pareto_frontier": frontier,
-            "final_epe": loss_history[-1] if loss_history else float("inf"),
+            "final_epe": epe_history[-1] if epe_history else float("inf"),
             "final_shots": pareto_rect._history[-1][0] if pareto_rect._history else 0.0,
             "loss_history": loss_history,
             "n_steps": steps,

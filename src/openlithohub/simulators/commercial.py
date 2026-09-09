@@ -88,11 +88,10 @@ def write_mask_gdsii(mask: torch.Tensor, path: str | Path, pixel_size_um: float 
     binary = (mask_np > 0.5).astype("uint8")
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        f.write(f"# OpenLithoHub mask export  pixel_size_um={pixel_size_um}\n")
-        f.write(f"# shape={binary.shape[0]} {binary.shape[1]}\n")
-        for row in binary:
-            f.write("".join(str(v) for v in row) + "\n")
+    lines = [f"# OpenLithoHub mask export  pixel_size_um={pixel_size_um}\n"]
+    lines.append(f"# shape={binary.shape[0]} {binary.shape[1]}\n")
+    lines.extend("".join(str(v) for v in row) + "\n" for row in binary)
+    path.write_text("".join(lines), encoding="utf-8")
     return path
 
 

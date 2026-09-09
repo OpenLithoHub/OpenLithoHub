@@ -55,6 +55,13 @@ _CACHE_LOCK = threading.Lock()
 # instance would interleave reads and writes. Stored in a sidecar dict
 # keyed identically to _MODEL_CACHE.
 _MODEL_LOCKS: dict[tuple[str, frozenset[tuple[str, Any]]], threading.Lock] = {}
+# In-flight request count per key, and models evicted from the LRU while
+# still in use. Calling teardown() on a model another request is
+# mid-predict() on frees its weights underneath the running forward pass,
+# so an evicted-but-busy model is parked in _PENDING_TEARDOWN until the
+# last holder releases it.
+_MODEL_REFCOUNTS: dict[tuple[str, frozenset[tuple[str, Any]]], int] = {}
+_PENDING_TEARDOWN: OrderedDict[tuple[str, frozenset[tuple[str, Any]]], Any] = OrderedDict()
 
 # Hard cap on multipart upload size for /v1/optimize. Mirrors the 2 GB ceiling
 # enforced by ``ModelHub._download_url`` for incoming weights — uniform
@@ -65,15 +72,42 @@ _MODEL_LOCKS: dict[tuple[str, frozenset[tuple[str, Any]]], threading.Lock] = {}
 _MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
 
-def _get_or_load_model(name: str, kwargs: dict[str, Any]) -> tuple[Any, threading.Lock]:
-    """Return a cached LithographyModel + its predict-serialisation lock.
+def _teardown_model(key: tuple[str, frozenset[tuple[str, Any]]], model: Any) -> None:
+    """Tear down an evicted model and release its CUDA memory."""
+    try:
+        model.teardown()
+    except Exception:  # noqa: BLE001 — teardown failure shouldn't block eviction
+        logger.exception("teardown failed while evicting %r", key)
+    finally:
+        # teardown() drops Python refs, but CUDA caching allocator holds
+        # the freed VRAM until empty_cache(). Without this, an
+        # LRU-bounded cache still leaks GPU memory on a long-running
+        # worker.
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        logger.info("evicted model %r from cache (capacity=%d)", key, _MODEL_CACHE_CAP)
+
+
+def _acquire(
+    key: tuple[str, frozenset[tuple[str, Any]]], model: Any, lock: threading.Lock
+) -> tuple[Any, threading.Lock, tuple[str, frozenset[tuple[str, Any]]]]:
+    _MODEL_REFCOUNTS[key] = _MODEL_REFCOUNTS.get(key, 0) + 1
+    return model, lock, key
+
+
+def _get_or_load_model(
+    name: str, kwargs: dict[str, Any]
+) -> tuple[Any, threading.Lock, tuple[str, frozenset[tuple[str, Any]]]]:
+    """Return a cached LithographyModel, its predict-serialisation lock, and
+    the cache key to pass to :func:`_release_model` when done.
 
     Two concurrent requests for the same (name, kwargs) pair must not both
     build the model — the second would either double-load weights or race
     to evict the first. We resolve that by holding ``_CACHE_LOCK`` across
     the lookup *and* the insertion of a placeholder lock; the heavy
     ``model.setup()`` happens outside the cache lock under that per-key
-    lock so unrelated requests stay unblocked.
+    lock so unrelated requests stay unblocked. Acquired models are
+    refcounted; callers MUST call ``_release_model(key)`` when finished.
     """
     from openlithohub.models.registry import register_builtin_models, registry
 
@@ -83,7 +117,7 @@ def _get_or_load_model(name: str, kwargs: dict[str, Any]) -> tuple[Any, threadin
     with _CACHE_LOCK:
         if key in _MODEL_CACHE:
             _MODEL_CACHE.move_to_end(key)
-            return _MODEL_CACHE[key], _MODEL_LOCKS[key]
+            return _acquire(key, _MODEL_CACHE[key], _MODEL_LOCKS[key])
         # Reserve a per-key lock so a second concurrent caller for the same
         # key blocks on it instead of double-loading.
         per_key_lock = _MODEL_LOCKS.setdefault(key, threading.Lock())
@@ -94,7 +128,14 @@ def _get_or_load_model(name: str, kwargs: dict[str, Any]) -> tuple[Any, threadin
         with _CACHE_LOCK:
             if key in _MODEL_CACHE:
                 _MODEL_CACHE.move_to_end(key)
-                return _MODEL_CACHE[key], per_key_lock
+                return _acquire(key, _MODEL_CACHE[key], per_key_lock)
+            # A previous holder may have gotten this key evicted while it
+            # was still in use; reuse the parked model instead of
+            # reloading weights from disk.
+            parked = _PENDING_TEARDOWN.pop(key, None)
+            if parked is not None:
+                _MODEL_CACHE[key] = parked
+                return _acquire(key, parked, per_key_lock)
 
         model = registry.get(name, **kwargs)
         model.setup()
@@ -103,24 +144,35 @@ def _get_or_load_model(name: str, kwargs: dict[str, Any]) -> tuple[Any, threadin
             _MODEL_CACHE[key] = model
             while len(_MODEL_CACHE) > _MODEL_CACHE_CAP:
                 evicted_key, evicted = _MODEL_CACHE.popitem(last=False)
-                _MODEL_LOCKS.pop(evicted_key, None)
-                try:
-                    evicted.teardown()
-                except Exception:  # noqa: BLE001 — teardown failure shouldn't block eviction
-                    logger.exception("teardown failed while evicting %r", evicted_key)
-                # teardown() drops Python refs, but CUDA caching
-                # allocator holds the freed VRAM until empty_cache().
-                # Without this, an LRU-bounded cache still leaks
-                # GPU memory on a long-running worker.
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                logger.info(
-                    "evicted model %r from cache (capacity=%d)",
-                    evicted_key,
-                    _MODEL_CACHE_CAP,
-                )
+                if _MODEL_REFCOUNTS.get(evicted_key, 0) > 0:
+                    # Still in flight — defer teardown to _release_model.
+                    _PENDING_TEARDOWN[evicted_key] = evicted
+                    logger.info(
+                        "parked in-flight model %r pending teardown (capacity=%d)",
+                        evicted_key,
+                        _MODEL_CACHE_CAP,
+                    )
+                    continue
+                _teardown_model(evicted_key, evicted)
         logger.info("loaded model %r (kwargs=%s) into resident cache", name, kwargs)
-        return model, per_key_lock
+        return _acquire(key, model, per_key_lock)
+
+
+def _release_model(key: tuple[str, frozenset[tuple[str, Any]]]) -> None:
+    """Drop the caller's reference acquired from ``_get_or_load_model``.
+
+    The last release for an evicted-but-parked model performs the deferred
+    teardown.
+    """
+    with _CACHE_LOCK:
+        count = _MODEL_REFCOUNTS.get(key, 0) - 1
+        if count > 0:
+            _MODEL_REFCOUNTS[key] = count
+            return
+        _MODEL_REFCOUNTS.pop(key, None)
+        model = _PENDING_TEARDOWN.pop(key, None)
+    if model is not None:
+        _teardown_model(key, model)
 
 
 def _run_optimize(
@@ -147,47 +199,55 @@ def _run_optimize(
     node_config = get_node(node)
     if pixel_nm is None:
         pixel_nm = node_config.pixel_size_nm
+    if writer not in ("mbmw", "vsb"):
+        raise ValueError(f"unknown writer {writer!r}; expected 'mbmw' or 'vsb'")
 
     model_kwargs: dict[str, Any] = {"pretrained": True} if pretrained else {}
-    model, model_lock = _get_or_load_model(model_name, model_kwargs)
+    model, model_lock, model_key = _get_or_load_model(model_name, model_kwargs)
 
-    layout_tensor = load_layout(input_path, pixel_nm, layer=layer)
-    halo_px = compute_halo_px(
-        node=node_config,
-        model=model,
-        pixel_nm=pixel_nm,
-        tile_size=tile_size,
-    )
-
-    tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=halo_px)
-    tile_results = []
-    # Hold the per-model lock across all tiles for one request so a
-    # concurrent request cannot interleave its predict() calls with ours
-    # and corrupt the model's per-tile state (caches, RNG cursors, etc.).
-    with model_lock:
-        for tile in tiles:
-            result = model.predict(tile.tensor)
-            tile_results.append((tile, result.mask))
-
-    h, w = layout_tensor.shape
-    optimized = stitch_tiles(tile_results, (h, w))
-    optimized = (optimized > 0.5).float()
-
-    export_mode = "curvilinear" if writer == "mbmw" else "manhattan"
     try:
-        export_oasis(
-            optimized,
-            output_path,
-            mode=export_mode,
-            pixel_size_nm=pixel_nm,
-            min_area_nm2=min_area_nm2,
+        layout_tensor = load_layout(input_path, pixel_nm, layer=layer)
+        halo_px = compute_halo_px(
+            node=node_config,
+            model=model,
+            pixel_nm=pixel_nm,
+            tile_size=tile_size,
         )
-        export_format = "oasis"
-    except ImportError:
-        fallback = output_path.with_suffix(".pt")
-        torch.save(optimized, str(fallback))
-        output_path = fallback
-        export_format = "torch"
+
+        tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=halo_px)
+        tile_results = []
+        # Hold the per-model lock across all tiles for one request so a
+        # concurrent request cannot interleave its predict() calls with ours
+        # and corrupt the model's per-tile state (caches, RNG cursors, etc.).
+        with model_lock:
+            for tile in tiles:
+                result = model.predict(tile.tensor)
+                tile_results.append((tile, result.mask))
+
+        h, w = layout_tensor.shape
+        optimized = stitch_tiles(tile_results, (h, w))
+        optimized = (optimized > 0.5).float()
+
+        export_mode = "curvilinear" if writer == "mbmw" else "manhattan"
+        try:
+            export_oasis(
+                optimized,
+                output_path,
+                mode=export_mode,
+                pixel_size_nm=pixel_nm,
+                min_area_nm2=min_area_nm2,
+            )
+            export_format = "oasis"
+        except ImportError:
+            fallback = output_path.with_suffix(".pt")
+            torch.save(optimized, str(fallback))
+            output_path = fallback
+            export_format = "torch"
+    finally:
+        # Release the refcount before dropping request-local tensors so a
+        # concurrent eviction is free to teardown this model once we are
+        # no longer using it.
+        _release_model(model_key)
 
     n_tiles = len(tiles)
     # Drop request-local tensors and flush the CUDA caching allocator so

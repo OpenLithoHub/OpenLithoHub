@@ -382,7 +382,8 @@ def simulate_aerial_image_hopkins(
 
     Args:
         mask: Real-valued mask (H, W) or (B, 1, H, W), values in [0, 1].
-            Differentiable: gradients flow back through the kernels.
+            Differentiable w.r.t. the mask. The SOCS kernels are cached
+            detached, so gradients do *not* flow into kernel parameters.
         params: Optical parameters. Required if `kernels`/`weights` are None.
         kernels: Pre-computed complex SOCS kernels (K, H, W). If provided,
             `params` is only used for `dose` (and may be None).

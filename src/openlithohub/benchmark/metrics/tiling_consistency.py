@@ -92,14 +92,18 @@ def tile_boundary_consistency(
                 mse_accum.append(float(diff.pow(2).mean().item()))
                 max_diff_accum.append(float(diff.abs().max().item()))
 
-                # SRAF consistency: both classify as SRAF or both don't
+                # SRAF consistency: fraction of pixels where at least one
+                # tile classifies the pixel as SRAF that agree across the
+                # boundary. Counting all patch pixels would dilute the
+                # metric towards 1.0 for sparse SRAF features.
                 sraf_a = (ra > 0.1) & (ra < 0.5)
                 sraf_b = (rb > 0.1) & (rb < 0.5)
-                n_sraf = float((sraf_a | sraf_b).sum().item())
+                union = sraf_a | sraf_b
+                n_sraf = float(union.sum().item())
                 if n_sraf > 0:
-                    matches = float((sraf_a == sraf_b).sum().item())
+                    matches = float((sraf_a == sraf_b)[union].sum().item())
                     sraf_match_accum.append(matches)
-                    sraf_total_accum.append(float(sraf_a.numel()))
+                    sraf_total_accum.append(n_sraf)
 
     if not mse_accum:
         return {"boundary_mse": 0.0, "boundary_max_diff": 0.0, "sraf_consistency": 1.0}
@@ -181,8 +185,19 @@ def cross_tile_sraf_consistency(
 
 
 def _squeeze(t: torch.Tensor) -> torch.Tensor:
-    """Remove leading singleton dims to get a 2D (H, W) tensor."""
+    """Remove leading singleton dims to get a 2D (H, W) tensor.
+
+    Raises:
+        ValueError: If the tensor has more than one non-singleton leading
+            dimension (e.g. a batch dimension > 1), which cannot be
+            unambiguously reduced to a single 2D image.
+    """
     while t.ndim > 2:
+        if t.shape[0] != 1:
+            raise ValueError(
+                f"Cannot squeeze tensor of shape {tuple(t.shape)} to 2D: "
+                "leading batch dimension is not a singleton"
+            )
         t = t.squeeze(0)
     return t
 
@@ -338,6 +353,7 @@ def cross_tile_epe_residual(
     tile_results: list[torch.Tensor],
     overlap: int,
     pixel_size_nm: float = 1.0,
+    origins: list[tuple[int, int]] | None = None,
 ) -> dict[str, float | list[float]]:
     """Compute edge placement error at tile boundaries.
 
@@ -351,6 +367,12 @@ def cross_tile_epe_residual(
         tile_results: Optimised / simulated tensors, one per tile.
         overlap: Overlap width in pixels used when tiling.
         pixel_size_nm: Physical pixel pitch for converting distances to nm.
+        origins: Optional ``(origin_x, origin_y)`` global position of each
+            tile. When given, only geometrically adjacent tile pairs are
+            compared and the strips are located via the shared overlap
+            region. When omitted, every same-shaped pair is compared with
+            right/left and bottom/top strip heuristics, which can include
+            non-adjacent pairs.
 
     Returns:
         Dictionary with:
@@ -376,8 +398,11 @@ def cross_tile_epe_residual(
             ti_2d = _squeeze(tiles[i])
             tj_2d = _squeeze(tiles[j])
 
-            # Extract overlap strips from each tile's result
-            strips = _boundary_strips(ti_2d, tj_2d, ri, rj, overlap)
+            if origins is not None:
+                strips = _overlap_strips(ti_2d, tj_2d, ri, rj, overlap, origins[i], origins[j])
+            else:
+                # Extract overlap strips from each tile's result
+                strips = _boundary_strips(ti_2d, tj_2d, ri, rj, overlap)
             for sa, sb in strips:
                 if sa is None or sb is None:
                     continue
@@ -400,6 +425,7 @@ def cross_tile_contour_residual(
     tile_results: list[torch.Tensor],
     overlap: int,
     threshold: float = 0.5,
+    origins: list[tuple[int, int]] | None = None,
 ) -> dict[str, float]:
     """Compute contour difference at tile boundaries.
 
@@ -412,6 +438,11 @@ def cross_tile_contour_residual(
         tile_results: Optimised / simulated tensors, one per tile.
         overlap: Overlap width in pixels.
         threshold: Binarisation threshold for contour extraction.
+        origins: Optional ``(origin_x, origin_y)`` global position of each
+            tile. When given, only geometrically adjacent tile pairs are
+            compared. When omitted, every same-shaped pair is compared with
+            right/left and bottom/top strip heuristics, which can include
+            non-adjacent pairs.
 
     Returns:
         Dictionary with:
@@ -437,7 +468,10 @@ def cross_tile_contour_residual(
             ti_2d = _squeeze(tiles[i])
             tj_2d = _squeeze(tiles[j])
 
-            strips = _boundary_strips(ti_2d, tj_2d, ri, rj, overlap)
+            if origins is not None:
+                strips = _overlap_strips(ti_2d, tj_2d, ri, rj, overlap, origins[i], origins[j])
+            else:
+                strips = _boundary_strips(ti_2d, tj_2d, ri, rj, overlap)
             for sa, sb in strips:
                 if sa is None or sb is None:
                     continue
@@ -513,14 +547,18 @@ def sweep_overlap_convergence(
         tile_data = [t.tensor.clone() for t in tiles]
 
         cumulative_results = list(tile_data)
+        prev_iter = 0
 
         for n_iter in schwarz_iter_range:
             t0 = time.perf_counter()
 
-            # Run additional iterations (cumulative)
-            cumulative_results = _run_schwarz_iteration(
-                tiles, cumulative_results, forward_fn, overlap
-            )
+            # Run iterations up to the sweep point (cumulative), so the
+            # result labelled ``n_iter`` really reflects n_iter rounds.
+            for _ in range(n_iter - prev_iter):
+                cumulative_results = _run_schwarz_iteration(
+                    tiles, cumulative_results, forward_fn, overlap
+                )
+            prev_iter = n_iter
 
             elapsed = time.perf_counter() - t0
 
@@ -529,14 +567,20 @@ def sweep_overlap_convergence(
 
             # Measure EPE residual
             epe_result = cross_tile_epe_residual(
-                [t.tensor for t in tiles], cumulative_results, overlap=overlap
+                [t.tensor for t in tiles],
+                cumulative_results,
+                overlap=overlap,
+                origins=[(t.origin_x, t.origin_y) for t in tiles],
             )
             mean_epe = epe_result["mean_epe"]
             assert isinstance(mean_epe, float)
 
             # Measure contour residual
             contour_result = cross_tile_contour_residual(
-                [t.tensor for t in tiles], cumulative_results, overlap=overlap
+                [t.tensor for t in tiles],
+                cumulative_results,
+                overlap=overlap,
+                origins=[(t.origin_x, t.origin_y) for t in tiles],
             )
 
             results[ol_key][str(n_iter)] = {
@@ -638,6 +682,42 @@ def _run_schwarz_iteration(
         updated = forward_fn(updated)
         new_results.append(updated)
     return new_results
+
+
+def _overlap_strips(
+    ti: torch.Tensor,
+    tj: torch.Tensor,
+    ri: torch.Tensor,
+    rj: torch.Tensor,
+    overlap: int,
+    origin_i: tuple[int, int],
+    origin_j: tuple[int, int],
+) -> list[tuple[torch.Tensor | None, torch.Tensor | None]]:
+    """Extract the shared boundary strips for a tile pair with known origins.
+
+    Builds lightweight :class:`Tile` descriptors from the origins and reuses
+    ``_overlap_regions`` so only geometrically adjacent tiles (same row or
+    same column band with overlapping extents) are compared.
+    """
+    oi_x, oi_y = origin_i
+    oj_x, oj_y = origin_j
+    tile_i = Tile(
+        tensor=ri,
+        origin_x=oi_x,
+        origin_y=oi_y,
+        width=ri.shape[-1],
+        height=ri.shape[-2],
+        overlap=overlap,
+    )
+    tile_j = Tile(
+        tensor=rj,
+        origin_x=oj_x,
+        origin_y=oj_y,
+        width=rj.shape[-1],
+        height=rj.shape[-2],
+        overlap=overlap,
+    )
+    return _overlap_regions(tile_i, tile_j, ri, rj, overlap)
 
 
 def _boundary_strips(

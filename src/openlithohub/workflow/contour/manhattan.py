@@ -44,20 +44,18 @@ def extract_manhattan_contour(
     h_edges: set[tuple[int, int, int, int]] = set()
     v_edges: set[tuple[int, int, int, int]] = set()
 
-    ph, pw = padded.shape
-
     # Horizontal edges: edge from (j, i) to (j+1, i) in vertex space
-    # A horizontal edge at grid row i exists between pixel rows i-1 and i
-    for i in range(ph - 1):
-        for j in range(pw - 1):
-            if padded[i, j] != padded[i + 1, j]:
-                h_edges.add((j, i + 1, j + 1, i + 1))  # (x1, y1, x2, y2) left to right
+    # A horizontal edge at grid row i exists between pixel rows i-1 and i.
+    # Vectorized diff over rows — a per-pixel Python loop costs ~33M
+    # iterations on a 4096² layout.
+    diff_rows = padded[:-1, :] != padded[1:, :]
+    for i, j in zip(*np.nonzero(diff_rows), strict=False):
+        h_edges.add((int(j), int(i) + 1, int(j) + 1, int(i) + 1))  # left to right
 
     # Vertical edges: edge from (j, i) to (j, i+1) in vertex space
-    for i in range(ph - 1):
-        for j in range(pw - 1):
-            if padded[i, j] != padded[i, j + 1]:
-                v_edges.add((j + 1, i, j + 1, i + 1))  # top to bottom
+    diff_cols = padded[:, :-1] != padded[:, 1:]
+    for i, j in zip(*np.nonzero(diff_cols), strict=False):
+        v_edges.add((int(j) + 1, int(i), int(j) + 1, int(i) + 1))  # top to bottom
 
     all_edges = h_edges | v_edges
     if not all_edges:

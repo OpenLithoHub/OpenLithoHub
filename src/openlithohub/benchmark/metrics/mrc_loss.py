@@ -185,7 +185,12 @@ def curvilinear_mrc_loss(
         raise ValueError(f"pixel_size_nm must be positive, got {pixel_nm}.")
 
     m, _ = _ensure_b1hw(mask)
-    m = m.clamp(0.0, 1.0)
+    # Clamp out-of-range values, but skip the op when the mask already
+    # lies in [0, 1]: clamp's backward is zero AT the boundary values in
+    # current torch, so clamping a binary (0/1) mask would sever the
+    # gradient to exactly the violating pixels this loss must push.
+    if bool(m.min().item() < 0.0) or bool(m.max().item() > 1.0):
+        m = m.clamp(0.0, 1.0)
 
     radius_width = max(0, int(width_nm // (2.0 * pixel_nm)))
     radius_spacing = max(0, int(spacing_nm // (2.0 * pixel_nm)))

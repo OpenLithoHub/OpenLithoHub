@@ -155,10 +155,19 @@ class TestOrfsArtifactDataset:
         assert ds[0].design.shape == (4500, 4500)
 
     def test_tile_origin_offsets(self, orfs_gds):
-        # 4 tiles at 2 µm each: lower-left corners at (0,0), (2000,0), (0,2000), (2000,2000) nm.
+        # 4 tiles at 2 µm each. tile_origin_nm reports each tile's
+        # lower-left corner in layout nm (y-up): the raster cutter works
+        # top-down, so the two tile rows sit at y = H-4000 and y = H-2000
+        # relative to the bbox bottom (H = total layout height in px).
+        full = OrfsArtifactDataset(gds_path=orfs_gds, pixel_nm=1.0, tile_nm=None)
+        total_h_px = full[0].design.shape[0]
         ds = OrfsArtifactDataset(gds_path=orfs_gds, pixel_nm=1.0)
         origins = sorted(tuple(ds[i].metadata["tile_origin_nm"]) for i in range(len(ds)))
-        assert origins == sorted([(0, 0), (2000, 0), (0, 2000), (2000, 2000)])
+        assert len(origins) == 4
+        xs = sorted({o[0] for o in origins})
+        ys = sorted({o[1] for o in origins})
+        assert xs == [0.0, 2000.0]
+        assert ys == [float(total_h_px - 4000), float(total_h_px - 2000)]
 
     def test_index_out_of_range(self, orfs_gds):
         ds = OrfsArtifactDataset(gds_path=orfs_gds, pixel_nm=1.0)

@@ -35,7 +35,7 @@ Licensed under the Apache License, Version 2.0 (clean-room implementation).
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import torch
@@ -105,16 +105,27 @@ class AnamorphicImaging:
         self.polarization = polarization
         self.triple_beam = triple_beam
 
-    def compute_psf(self, grid_size: int, device: torch.device | None = None) -> torch.Tensor:
+    def compute_psf(
+        self, grid_size: int, device: torch.device | None = None, soft_pupil: bool = False
+    ) -> torch.Tensor:
         """Compute the anamorphic point spread function.
 
         Builds a pupil function with elliptical NA and central obscuration,
         then inverse-FFTs to get the spatial PSF. The PSF is normalised
         so that an open-frame mask produces unit aerial intensity.
 
+        The anamorphic magnification is applied in the frequency domain:
+        mapping the wafer-side PSF back onto the mask grid rescales the
+        y-axis cutoff by ``mag_y / mag_x``, which keeps the PSF in the
+        corner-centred (circular-convolution) layout produced by
+        ``ifft2`` and avoids resampling artefacts.
+
         Args:
             grid_size: Spatial grid size (pixels).
             device: Torch device.
+            soft_pupil: If True, use sigmoid transitions instead of hard
+                aperture edges so gradients flow through pupil parameters
+                (needed for source optimisation).
 
         Returns:
             PSF tensor of shape (grid_size, grid_size), float32, normalised.
@@ -127,79 +138,46 @@ class AnamorphicImaging:
         fy, fx = torch.meshgrid(freq, freq, indexing="ij")
 
         f_cutoff_x = p.na_x / p.wavelength_nm
-        f_cutoff_y = p.na_y / p.wavelength_nm
+        # Anamorphic mask-grid rescale: wafer y maps back through mag_y,
+        # so the y cutoff on the mask grid widens by mag_y / mag_x.
+        f_cutoff_y = (p.na_y / p.wavelength_nm) * (p.mag_y / p.mag_x)
 
         # Elliptical pupil normalised to [0, 1] within the NA ellipse.
-        r_norm = torch.sqrt((fx / f_cutoff_x) ** 2 + (fy / f_cutoff_y) ** 2)
+        # The epsilon keeps dr/df finite at the DC bin (fx = fy = 0);
+        # without it the soft-pupil backward pass produces 0 * inf = NaN
+        # gradients w.r.t. the source parameters.
+        r_norm = torch.sqrt((fx / f_cutoff_x) ** 2 + (fy / f_cutoff_y) ** 2 + 1e-12)
 
         # Annular pupil: pass between obscuration ratio and 1.0.
-        outer_mask = r_norm <= 1.0
-        inner_mask = r_norm >= p.central_obscuration_ratio
-        pupil = (outer_mask & inner_mask).float()
+        if soft_pupil:
+            # Smooth aperture edges keep the pupil differentiable w.r.t.
+            # its parameters; the transition width is small enough that
+            # the passband closely matches the hard pupil.
+            edge = 0.02
+            outer = torch.sigmoid((1.0 - r_norm) / edge)
+            inner = torch.sigmoid((r_norm - p.central_obscuration_ratio) / edge)
+            pupil = outer * inner
+        else:
+            outer_mask = r_norm <= 1.0
+            inner_mask = r_norm >= p.central_obscuration_ratio
+            pupil = (outer_mask & inner_mask).float()
 
         # PSF = |IFFT(pupil)|^2 (incoherent imaging).
         field = torch.fft.ifft2(pupil.to(torch.complex64))
-        psf = field.real**2 + field.imag**2
+        psf: torch.Tensor = field.real**2 + field.imag**2
         psf_sum = psf.sum()
         if psf_sum > 0:
             psf = psf / psf_sum
 
-        # Apply anamorphic magnification scaling: the mask-to-wafer
-        # demagnification differs in x and y. The PSF on the mask grid
-        # must be stretched by the magnification ratio.
-        if p.mag_x != p.mag_y:
-            psf = self._anamorphic_scale(psf, p.mag_x / p.mag_y)
-
         return psf
 
-    @staticmethod
-    def _anamorphic_scale(psf: torch.Tensor, scale_y: float) -> torch.Tensor:
-        """Scale PSF along one axis to account for anamorphic magnification.
-
-        Uses bilinear interpolation to stretch/compress the PSF.
-
-        Args:
-            psf: Square PSF tensor (N, N).
-            scale_y: Scaling factor in y relative to x.
-
-        Returns:
-            Scaled PSF tensor of the same spatial size.
-        """
-        if abs(scale_y - 1.0) < 1e-6:
-            return psf
-
-        n = psf.shape[0]
-        # Build sampling grid centered at origin.
-        coords = torch.linspace(-1.0, 1.0, n, device=psf.device)
-        gy, gx = torch.meshgrid(coords, coords, indexing="ij")
-
-        # Scale y coordinates.
-        gy_scaled = gy / scale_y
-        gy_scaled = gy_scaled.clamp(-1.0, 1.0)
-
-        grid = torch.stack([gx, gy_scaled], dim=-1).unsqueeze(0)  # (1, N, N, 2)
-
-        inp = psf.unsqueeze(0).unsqueeze(0)  # (1, 1, N, N)
-        scaled = functional.grid_sample(
-            inp,
-            grid,
-            mode="bilinear",
-            padding_mode="zeros",
-            align_corners=True,
-        )
-        result = scaled.squeeze(0).squeeze(0)
-
-        # Re-normalise.
-        s = result.sum()
-        if s > 0:
-            result = result / s
-        return result
-
-    def simulate_aerial(self, mask: torch.Tensor) -> torch.Tensor:
+    def simulate_aerial(self, mask: torch.Tensor, soft_pupil: bool = False) -> torch.Tensor:
         """Simulate anamorphic aerial image.
 
         Args:
             mask: Mask tensor (H, W), values in [0, 1].
+            soft_pupil: If True, compute the PSF with a differentiable soft
+                pupil (see :meth:`compute_psf`).
 
         Returns:
             Aerial image tensor of shape (H, W).
@@ -209,13 +187,15 @@ class AnamorphicImaging:
         if h != w:
             raise ValueError(f"Expected square mask; got {h}x{w}")
 
-        psf = self.compute_psf(h, m.device)
+        psf = self.compute_psf(h, m.device, soft_pupil=soft_pupil)
 
-        # Circular convolution via FFT.
+        # Circular convolution via FFT. The PSF from |IFFT(pupil)|^2 is
+        # already in circular-convolution (corner-centred) layout, so its
+        # FFT is the optical transfer function directly.
         mask_c = m.to(torch.complex64)
         psf_c = psf.to(torch.complex64)
-        aerial_f = torch.fft.fft2(mask_c) * torch.fft.fft2(torch.fft.ifftshift(psf_c))
-        aerial = torch.fft.ifft2(aerial_f).real
+        aerial_f = torch.fft.fft2(mask_c) * torch.fft.fft2(psf_c)
+        aerial: torch.Tensor = torch.fft.ifft2(aerial_f).real
 
         aerial = aerial.clamp(min=0.0)
 
@@ -269,9 +249,9 @@ class AnamorphicImaging:
         shift_y = shift_px / self.params.mag_y
 
         m_f = torch.fft.fft2(m.to(torch.complex64))
-        fx, fy = torch.meshgrid(freq_x, freq_y, indexing="ij")
+        fy, fx = torch.meshgrid(freq_y, freq_x, indexing="ij")
         phase = torch.exp(-2j * math.pi * (fx * shift_x + fy * shift_y)).to(torch.complex64)
-        shifted = torch.fft.ifft2(m_f * phase).real
+        shifted: torch.Tensor = torch.fft.ifft2(m_f * phase).real
 
         # Blend with original to model partial shadow transmission.
         shadow_attenuation = math.exp(-0.5 * absorber_nm / self.params.wavelength_nm)
@@ -315,9 +295,15 @@ class ShotCountCost:
     contour-density proxy from the morphology module.
     """
 
-    def __init__(self, weight: float = 0.01, writer_type: str = "mbmw") -> None:
+    def __init__(
+        self,
+        weight: float = 0.01,
+        writer_type: str = "mbmw",
+        pixel_size_nm: float = 1.0,
+    ) -> None:
         self.weight = weight
         self.writer_type = writer_type
+        self.pixel_size_nm = pixel_size_nm
 
     def forward(self, mask: torch.Tensor) -> torch.Tensor:
         """Compute weighted shot-count cost.
@@ -353,7 +339,7 @@ class ShotCountCost:
         return estimate_shot_count(
             m,
             writer_type=self.writer_type,
-            pixel_size_nm=1.0,
+            pixel_size_nm=self.pixel_size_nm,
         )
 
 
@@ -381,7 +367,9 @@ class AnamorphicSMO:
     ) -> None:
         self.params = params or AnamorphicParams()
         self.imaging = AnamorphicImaging(self.params)
-        self.shot_count = ShotCountCost(weight=shot_count_weight)
+        self.shot_count = ShotCountCost(
+            weight=shot_count_weight, pixel_size_nm=self.params.pixel_size_nm
+        )
         self.pareto_history: list[tuple[float, float]] = []
 
     def optimize_source_mask(
@@ -395,6 +383,8 @@ class AnamorphicSMO:
         The mask is initialised as the target design and iteratively
         refined. The source is represented as a small set of parameters
         that control the anamorphic sigma and central obscuration ratio.
+        The imaging pupil uses smooth transitions so gradients flow from
+        the aerial image back to the source parameters.
 
         Args:
             target: Target design pattern (H, W), binary {0, 1}.
@@ -418,26 +408,37 @@ class AnamorphicSMO:
 
         self.pareto_history = []
 
+        def _step_params() -> tuple[AnamorphicImaging, torch.Tensor]:
+            """Build per-step imaging with source-dependent, soft-edged NA."""
+            sig = source_param.sigmoid()
+            # The NA fields deliberately carry 0-dim tensors here so the
+            # autograd graph survives into the soft pupil.
+            step_p = replace(
+                self.params,
+                na_x=(0.55 * sig[0]).clamp(max=0.55),  # type: ignore[arg-type]
+                na_y=(0.55 * sig[1]).clamp(max=0.55),  # type: ignore[arg-type]
+            )
+            return AnamorphicImaging(step_p), sig
+
         for _step in range(n_steps):
             optimizer.zero_grad()
 
             # Clamp mask to [0, 1] via sigmoid proxy.
             mask_opt = torch.sigmoid(mask_param)
 
-            # Source-controlled anamorphic PSF.
-            self.params.na_x = 0.55 * source_param[0].sigmoid()
-            self.params.na_y = 0.55 * source_param[1].sigmoid()
-            self.imaging = AnamorphicImaging(self.params)
+            # Source-controlled anamorphic PSF (soft pupil keeps the
+            # gradient path from aerial image back to source parameters).
+            imaging, _sig = _step_params()
 
             # Forward model.
-            aerial = self.imaging.simulate_aerial(mask_opt)
+            aerial = imaging.simulate_aerial(mask_opt, soft_pupil=True)
 
             # EPE loss: MSE between aerial image of mask and target.
-            aerial_target = self.imaging.simulate_aerial(t)
+            aerial_target = imaging.simulate_aerial(t, soft_pupil=True)
             epe_loss = ((aerial - aerial_target) ** 2).mean()
 
-            # PVB proxy loss: penalise gradient magnitude ( encourages
-            # steep edges = narrow process window band).
+            # PVB proxy loss: penalise aerial-image gradient magnitude
+            # (smoother aerial image → narrower exposure-latitude band).
             gy = aerial[1:, :] - aerial[:-1, :]
             gx = aerial[:, 1:] - aerial[:, :-1]
             pvb_loss = gy.abs().mean() + gx.abs().mean()
@@ -447,7 +448,7 @@ class AnamorphicSMO:
 
             total_loss = epe_loss + 0.1 * pvb_loss + sc_cost
 
-            total_loss.backward()
+            total_loss.backward()  # type: ignore[no-untyped-call]
             optimizer.step()
 
             # Track Pareto point.
@@ -772,17 +773,27 @@ class StitchingAwareSMO(AnamorphicSMO):
         proximity = torch.exp(-0.5 * ((y_coords.expand(h, w) - boundary_y) / sigma) ** 2)
         inv_proximity = 1.0 - proximity
 
+        def _step_params() -> AnamorphicImaging:
+            """Build per-step imaging with source-dependent, soft-edged NA."""
+            sig = source_param.sigmoid()
+            # The NA fields deliberately carry 0-dim tensors here so the
+            # autograd graph survives into the soft pupil.
+            step_p = replace(
+                self.params,
+                na_x=(0.55 * sig[0]).clamp(max=0.55),  # type: ignore[arg-type]
+                na_y=(0.55 * sig[1]).clamp(max=0.55),  # type: ignore[arg-type]
+            )
+            return AnamorphicImaging(step_p)
+
         for _step in range(n_steps):
             optimizer.zero_grad()
 
             mask_opt = torch.sigmoid(mask_param)
 
-            self.params.na_x = 0.55 * source_param[0].sigmoid()
-            self.params.na_y = 0.55 * source_param[1].sigmoid()
-            self.imaging = AnamorphicImaging(self.params)
+            imaging = _step_params()
 
-            aerial = self.imaging.simulate_aerial(mask_opt)
-            aerial_target = self.imaging.simulate_aerial(t)
+            aerial = imaging.simulate_aerial(mask_opt, soft_pupil=True)
+            aerial_target = imaging.simulate_aerial(t, soft_pupil=True)
             aerial_diff2 = (aerial - aerial_target) ** 2
 
             epe_loss = aerial_diff2.mean()
@@ -802,7 +813,7 @@ class StitchingAwareSMO(AnamorphicSMO):
                 epe_loss + 0.1 * pvb_loss + sc_cost + self.stitching_weight * stitch_penalty
             )
 
-            total_loss.backward()
+            total_loss.backward()  # type: ignore[no-untyped-call]
             optimizer.step()
 
             with torch.no_grad():
@@ -897,9 +908,11 @@ class PolarizationState:
         sin_theta = min(na, 0.99)
         cos_theta = math.sqrt(1.0 - sin_theta**2)
 
-        # TM contrast is cos(theta), TE is 1/cos(theta) (obliquity)
+        # Simplified obliquity model: both polarisations lose contrast with
+        # increasing incidence angle. TM (E in the scanning plane) retains
+        # more contrast than TE, and unpolarized light falls in between.
         tm_factor = cos_theta
-        te_factor = 1.0 / max(cos_theta, 1e-6)
+        te_factor = cos_theta**2
 
         angle_rad = math.radians(self.angle_deg)
         s = math.sin(angle_rad)
@@ -1019,8 +1032,12 @@ class TripleBeamIllumination:
         pitch_px = self.pitch_nm / self.pixel_size_nm
         spatial_freq = 2.0 * math.pi / max(pitch_px, 1.0)
 
-        # Modulation envelope: polarisation-weighted
-        modulation = 1.0 + 2.0 * eta * pc * torch.cos(spatial_freq * x)
+        # Modulation envelope: polarisation-weighted. Clamp the modulation
+        # depth to 1 so the envelope stays non-negative (depth > 1 would
+        # invert the sign of dim fringes and carve black bands after
+        # clamping).
+        modulation_depth = min(2.0 * eta * pc, 1.0)
+        modulation = 1.0 + modulation_depth * torch.cos(spatial_freq * x)
         modulation = modulation / modulation.max().clamp(min=1e-6)
 
         # Apply row-wise (broadcast along y)

@@ -121,6 +121,23 @@ class GPUTileBatchProcessor:
             )
             return out.squeeze(0).squeeze(0)
 
+        def _forward_batch(batch: torch.Tensor) -> torch.Tensor:
+            """Batched 3x3 mean filter; accepts (H, W), (B, H, W) or (B, 1, H, W)."""
+            if batch.ndim == 2:
+                batch = batch.unsqueeze(0).unsqueeze(0)
+            elif batch.ndim == 3:
+                batch = batch.unsqueeze(1)
+            kernel = torch.ones(1, 1, 3, 3, device=batch.device) / 9.0
+            padded = torch.nn.functional.pad(batch.float(), (1, 1, 1, 1), mode="reflect")
+            return torch.nn.functional.conv2d(padded, kernel)
+
+        # Peak-memory stats must be scoped to *this* config run; without a
+        # reset the counter reports the process-wide maximum (including
+        # any earlier, larger config) and every subsequent run looks
+        # identical.
+        if device.startswith("cuda"):
+            torch.cuda.reset_peak_memory_stats()
+
         t_total_start = time.perf_counter()
 
         # Batch forward pass timing
@@ -132,8 +149,11 @@ class GPUTileBatchProcessor:
             if stacked.ndim == 3:
                 stacked = stacked.unsqueeze(1)
             with torch.no_grad():
-                _ = stacked
-        torch.cuda.synchronize() if device.startswith("cuda") else None
+                # Actually run the forward model — timing only the
+                # H2D copies / stack would understate per-tile cost.
+                _forward_batch(stacked)
+        if device.startswith("cuda"):
+            torch.cuda.synchronize()
         forward_time_ms = (time.perf_counter() - t_fwd_start) * 1000.0
 
         # Schwarz iteration timing
@@ -150,8 +170,12 @@ class GPUTileBatchProcessor:
                     tiles,
                     config.overlap,
                 )
-                updated = _forward(updated)
-                new_results.append(updated)
+                # Respect the requested device for the Schwarz loop;
+                # computing on CPU while reporting "gpu" numbers would
+                # misattribute the timing entirely.
+                updated_dev = updated.to(device).float()
+                updated_dev = _forward_batch(updated_dev)
+                new_results.append(updated_dev.cpu())
             tile_results = new_results
 
             consistency = tile_boundary_consistency(
@@ -444,15 +468,24 @@ def _extract_edges(tensor: torch.Tensor) -> torch.Tensor:
 
 
 def _min_run_length(line: torch.Tensor) -> int:
-    min_run = 0
-    current = 0
-    for v in line:
-        if v.item() > 0.5:
-            current += 1
-        else:
-            if current > 0 and (min_run == 0 or current < min_run):
-                min_run = current
-            current = 0
-    if current > 0 and (min_run == 0 or current < min_run):
-        min_run = current
-    return min_run
+    """Length of the shortest run of consecutive foreground pixels.
+
+    Vectorized via a cumulative-reset scan — the per-pixel ``.item()``
+    loop it replaces cost one device sync per pixel on GPU tensors.
+    """
+    v = (line > 0.5).to(torch.int32)
+    n = v.numel()
+    if n == 0:
+        return 0
+    idx = torch.arange(1, n + 1, device=line.device, dtype=torch.int32)
+    # c[i] = length of the consecutive-ones run ending at i (cumsum-reset
+    # trick): distance from i to the last zero before it, masked by v.
+    last_zero = torch.cummax(torch.where(v == 1, torch.zeros_like(idx), idx), dim=0).values
+    c = v * (idx - last_zero)
+    # Only run-ending positions carry the full run length.
+    ends = torch.ones_like(v, dtype=torch.bool)
+    ends[:-1] = v[1:] == 0
+    run_lengths = c[(c > 0) & ends]
+    if run_lengths.numel() == 0:
+        return 0
+    return int(run_lengths.min().item())

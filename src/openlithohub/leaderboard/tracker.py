@@ -16,6 +16,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import secrets
 import tempfile
 import time
@@ -252,7 +253,11 @@ def _require_no_diffusion(result: BenchmarkResult) -> None:
 
 
 def _generate_id(model_name: str) -> str:
-    safe_name = model_name.replace(" ", "-").lower()[:_ID_NAME_PREFIX_LEN]
+    # Whitelist alphanumeric/dash/underscore (the charset the schema's
+    # submission-id validation enforces) so a crafted model_name cannot
+    # smuggle path separators into the on-disk entry id.
+    safe_name = re.sub(r"[^a-z0-9_-]+", "-", model_name.lower())[:_ID_NAME_PREFIX_LEN]
+    safe_name = safe_name.strip("-") or "model"
     return f"{safe_name}-{secrets.token_hex(4)}"
 
 

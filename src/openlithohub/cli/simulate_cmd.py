@@ -123,7 +123,9 @@ def list_backends_cmd(
 
 def _load_mask(path: Path) -> torch.Tensor:
     if path.suffix == ".npy":
-        arr = np.load(path)
+        # allow_pickle=False: a crafted .npy can execute arbitrary code via
+        # pickle deserialization — same strict contract as data.io.
+        arr = np.load(path, allow_pickle=False)
     else:
         from PIL import Image
 

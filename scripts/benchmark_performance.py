@@ -20,6 +20,7 @@ import statistics
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -292,9 +293,9 @@ def main() -> int:
             "environment": asdict(env),
             "results": [asdict(r) for r in all_results],
         }
-        with open(args.json, "w") as f:
-            json.dump(payload, f, indent=2)
-        print(f"\nResults exported to {args.json}")
+        json_path = Path(args.json)
+        json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        print(f"\nResults exported to {json_path}")
 
     return 0
 

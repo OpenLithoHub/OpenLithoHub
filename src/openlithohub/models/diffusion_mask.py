@@ -31,8 +31,8 @@ License: Apache 2.0 — clean-room implementation.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
@@ -40,7 +40,6 @@ import torch.nn.functional as functional
 
 from openlithohub._utils.forward_model import simulate_aerial_image
 from openlithohub._utils.resist_model import apply_differentiable_resist
-
 
 # ---------------------------------------------------------------------------
 # Sinusoidal time-step embedding
@@ -117,7 +116,7 @@ class MaskLatentDecoder(nn.Module):
         self.n_up_layers = n_up_layers
         layers: list[nn.Module] = []
         ch_in = latent_channels
-        for i in range(n_up_layers):
+        for _ in range(n_up_layers):
             ch_out = hidden_channels
             layers.append(nn.ConvTranspose2d(ch_in, ch_out, 4, stride=2, padding=1))
             layers.append(nn.ReLU(inplace=True))
@@ -125,11 +124,17 @@ class MaskLatentDecoder(nn.Module):
         self.backbone = nn.Sequential(*layers)
         self.to_out = nn.Conv2d(hidden_channels, out_channels, 1)
 
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        z: torch.Tensor,
+        target_size: int | tuple[int, int] | None = None,
+    ) -> torch.Tensor:
         h = self.backbone(z)
         h = self.to_out(h)
-        if self.target_size is not None:
-            h = functional.interpolate(h, size=(self.target_size, self.target_size), mode="bilinear", align_corners=False)
+        size = target_size if target_size is not None else self.target_size
+        if size is not None:
+            wh = (size, size) if isinstance(size, int) else (int(size[0]), int(size[1]))
+            h = functional.interpolate(h, size=wh, mode="bilinear", align_corners=False)
         return torch.sigmoid(h)
 
 
@@ -160,10 +165,11 @@ class _ResidualBlock(nn.Module):
         self.residual = nn.Conv2d(in_ch, out_ch, 1) if in_ch != out_ch else nn.Identity()
 
     def forward(self, x: torch.Tensor, t_emb: torch.Tensor) -> torch.Tensor:
-        h = self.norm1(self.conv1(x)).relu()
+        h: torch.Tensor = self.norm1(self.conv1(x)).relu()
         h = h + self.time_proj(t_emb).unsqueeze(-1).unsqueeze(-1)
         h = self.norm2(self.conv2(h)).relu()
-        return h + self.residual(x)
+        residual_out: torch.Tensor = self.residual(x)
+        return h + residual_out
 
 
 class _CrossAttentionBlock(nn.Module):
@@ -185,7 +191,8 @@ class _CrossAttentionBlock(nn.Module):
         attn_out, _ = self.attn(q, ctx, ctx, need_weights=False)
         attn_out = self.proj(attn_out)
         attn_out = attn_out.transpose(1, 2).reshape(b, c, h, w)
-        return query + attn_out
+        out: torch.Tensor = query + attn_out
+        return out
 
 
 class _DownBlock(nn.Module):
@@ -195,7 +202,9 @@ class _DownBlock(nn.Module):
         self.cross_attn = _CrossAttentionBlock(out_ch, context_dim)
         self.downsample = nn.Conv2d(out_ch, out_ch, 3, stride=2, padding=1)
 
-    def forward(self, x: torch.Tensor, t_emb: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, t_emb: torch.Tensor, context: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         h = self.res_block(x, t_emb)
         h = self.cross_attn(h, context)
         skip = h
@@ -204,13 +213,21 @@ class _DownBlock(nn.Module):
 
 
 class _UpBlock(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, skip_ch: int, time_dim: int, context_dim: int) -> None:
+    def __init__(
+        self, in_ch: int, out_ch: int, skip_ch: int, time_dim: int, context_dim: int
+    ) -> None:
         super().__init__()
         self.upsample = nn.ConvTranspose2d(in_ch, in_ch, 4, stride=2, padding=1)
         self.res_block = _ResidualBlock(in_ch + skip_ch, out_ch, time_dim)
         self.cross_attn = _CrossAttentionBlock(out_ch, context_dim)
 
-    def forward(self, x: torch.Tensor, skip: torch.Tensor, t_emb: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        skip: torch.Tensor,
+        t_emb: torch.Tensor,
+        context: torch.Tensor,
+    ) -> torch.Tensor:
         h = self.upsample(x)
         dy = skip.shape[2] - h.shape[2]
         dx = skip.shape[3] - h.shape[3]
@@ -218,7 +235,8 @@ class _UpBlock(nn.Module):
         h = torch.cat([h, skip], dim=1)
         h = self.res_block(h, t_emb)
         h = self.cross_attn(h, context)
-        return h
+        out: torch.Tensor = h
+        return out
 
 
 class MaskDiffusionUNet(nn.Module):
@@ -254,9 +272,15 @@ class MaskDiffusionUNet(nn.Module):
         self.mid = _ResidualBlock(ch[3], ch[3], time_embed_dim)
         self.mid_cross = _CrossAttentionBlock(ch[3], context_channels)
 
-        self.up3 = _UpBlock(ch[3], ch[2], skip_ch=ch[3], time_dim=time_embed_dim, context_dim=context_channels)
-        self.up2 = _UpBlock(ch[2], ch[1], skip_ch=ch[2], time_dim=time_embed_dim, context_dim=context_channels)
-        self.up1 = _UpBlock(ch[1], ch[0], skip_ch=ch[1], time_dim=time_embed_dim, context_dim=context_channels)
+        self.up3 = _UpBlock(
+            ch[3], ch[2], skip_ch=ch[3], time_dim=time_embed_dim, context_dim=context_channels
+        )
+        self.up2 = _UpBlock(
+            ch[2], ch[1], skip_ch=ch[2], time_dim=time_embed_dim, context_dim=context_channels
+        )
+        self.up1 = _UpBlock(
+            ch[1], ch[0], skip_ch=ch[1], time_dim=time_embed_dim, context_dim=context_channels
+        )
 
         self.output_proj = nn.Conv2d(ch[0], latent_channels, 1)
 
@@ -266,7 +290,10 @@ class MaskDiffusionUNet(nn.Module):
         timesteps: torch.Tensor,
         context: torch.Tensor,
     ) -> torch.Tensor:
-        t_emb = _sinusoidal_embedding(timesteps, self.time_mlp[0].in_features)
+        # nn.Sequential indexing is untyped without the torch mypy plugin;
+        # cast keeps the linear-layer feature count explicit.
+        first_layer = cast(nn.Linear, self.time_mlp[0])
+        t_emb = _sinusoidal_embedding(timesteps, first_layer.in_features)
         t_emb = self.time_mlp(t_emb)
 
         h = self.input_proj(z_noisy)
@@ -282,7 +309,8 @@ class MaskDiffusionUNet(nn.Module):
         h = self.up2(h, s2, t_emb, context)
         h = self.up1(h, s1, t_emb, context)
 
-        return self.output_proj(h)
+        out: torch.Tensor = self.output_proj(h)
+        return out
 
 
 # ---------------------------------------------------------------------------
@@ -346,10 +374,7 @@ class LithoGuidance:
         """
         z = z.detach().requires_grad_(True)
         mask = self.decoder(z)
-        if mask.ndim == 4 and mask.shape[1] == 1:
-            mask_2d = mask.squeeze(1)
-        else:
-            mask_2d = mask
+        mask_2d = mask.squeeze(1) if mask.ndim == 4 and mask.shape[1] == 1 else mask
 
         target_2d = target_aerial.detach().float()
         if target_2d.ndim > 2:
@@ -371,11 +396,15 @@ class LithoGuidance:
 # ---------------------------------------------------------------------------
 
 
-def _linear_beta_schedule(n_steps: int, beta_start: float = 1e-4, beta_end: float = 0.02) -> torch.Tensor:
+def _linear_beta_schedule(
+    n_steps: int, beta_start: float = 1e-4, beta_end: float = 0.02
+) -> torch.Tensor:
     return torch.linspace(beta_start, beta_end, n_steps)
 
 
-def _extract_at(coeffs: torch.Tensor, timesteps: torch.Tensor, shape: tuple[int, ...]) -> torch.Tensor:
+def _extract_at(
+    coeffs: torch.Tensor, timesteps: torch.Tensor, shape: tuple[int, ...]
+) -> torch.Tensor:
     batch_size = timesteps.shape[0]
     out = coeffs.gather(-1, timesteps)
     return out.reshape(batch_size, *((1,) * (len(shape) - 1)))
@@ -411,6 +440,13 @@ class DiffusionMaskSynthesis(nn.Module):
     candidates guided by the differentiable lithography forward model.
     """
 
+    # Registered in __init__ via register_buffer; declared here so mypy
+    # sees Tensor types without the (unshipped) torch mypy plugin.
+    betas: torch.Tensor
+    alphas_cumprod: torch.Tensor
+    sqrt_alphas_cumprod: torch.Tensor
+    sqrt_one_minus_alphas_cumprod: torch.Tensor
+
     def __init__(
         self,
         encoder: MaskLatentEncoder | None = None,
@@ -442,13 +478,11 @@ class DiffusionMaskSynthesis(nn.Module):
 
         betas = _linear_beta_schedule(cfg.n_diffusion_steps, cfg.beta_start, cfg.beta_end)
         alphas = 1.0 - betas
+        alphas_cumprod = torch.cumprod(alphas, dim=0)
         self.register_buffer("betas", betas)
-        self.register_buffer("alphas_cumprod", torch.cumprod(alphas, dim=0))
-        self.register_buffer("sqrt_alphas_cumprod", torch.sqrt(torch.cumprod(alphas, dim=0)))
-        self.register_buffer(
-            "sqrt_one_minus_alphas_cumprod",
-            torch.sqrt(1.0 - torch.cumprod(alphas, dim=0)),
-        )
+        self.register_buffer("alphas_cumprod", alphas_cumprod)
+        self.register_buffer("sqrt_alphas_cumprod", torch.sqrt(alphas_cumprod))
+        self.register_buffer("sqrt_one_minus_alphas_cumprod", torch.sqrt(1.0 - alphas_cumprod))
 
     # ----- training -----
 
@@ -458,10 +492,16 @@ class DiffusionMaskSynthesis(nn.Module):
     ) -> tuple[torch.Tensor, dict[str, float]]:
         mean, logvar = self.encoder(masks)
         z = _reparameterize(mean, logvar)
-        recon = self.decoder(z)
+        # Match the reconstruction to the input size: the strided
+        # encoder/decoder stack only inverts exactly when H and W are
+        # multiples of spatial_stride, so interpolate otherwise.
+        recon = self.decoder(z, target_size=masks.shape[-2:])
         recon_loss = functional.mse_loss(recon, masks, reduction="sum") / masks.shape[0]
         kl_loss = -0.5 * (1 + logvar - mean.pow(2) - logvar.exp()).sum(dim=(1, 2, 3)).mean()
-        return recon_loss + 0.01 * kl_loss, {"vae_recon": recon_loss.item(), "vae_kl": kl_loss.item()}
+        return recon_loss + 0.01 * kl_loss, {
+            "vae_recon": recon_loss.item(),
+            "vae_kl": kl_loss.item(),
+        }
 
     def _diffusion_loss(
         self,
@@ -519,7 +559,7 @@ class DiffusionMaskSynthesis(nn.Module):
         context: torch.Tensor,
     ) -> torch.Tensor:
         t_tensor = torch.full((z.shape[0],), t, device=z.device, dtype=torch.long)
-        noise_pred = self.unet(z, t_tensor, context)
+        noise_pred: torch.Tensor = self.unet(z, t_tensor, context)
 
         beta_t = self.betas[t]
         alpha_t = self.alphas_cumprod[t]
@@ -570,7 +610,10 @@ class DiffusionMaskSynthesis(nn.Module):
         latent_h = target_hw[0] // self.config.spatial_stride
         latent_w = target_hw[1] // self.config.spatial_stride
         z = torch.randn(
-            n_candidates, self.config.latent_channels, latent_h, latent_w,
+            n_candidates,
+            self.config.latent_channels,
+            latent_h,
+            latent_w,
             device=context.device,
         )
 
@@ -585,10 +628,18 @@ class DiffusionMaskSynthesis(nn.Module):
                 grad = self.guidance.compute_guidance(z, target_2d, guidance_scale=gs)
                 z = z + grad
 
-        masks = self.decoder(z)
+        # Force decoder output to the requested size — the strided stack
+        # only inverts exactly when H, W are multiples of spatial_stride.
+        masks = self.decoder(z, target_size=target_hw)
 
         candidates_list = [masks[i, 0] for i in range(n_candidates)]
-        scores = self._score_candidates(candidates_list, target[0, 0])
+        scores = self._score_candidates(
+            candidates_list,
+            target[0, 0],
+            sigma_px=self.config.sigma_px,
+            dose=self.config.dose,
+            resist_steepness=self.config.resist_steepness,
+        )
         manufacturable = self._filter_manufacturable(candidates_list)
 
         best_idx = int(min(range(len(scores)), key=lambda i: scores[i]))
@@ -622,7 +673,7 @@ class DiffusionMaskSynthesis(nn.Module):
         results: list[bool] = []
         r = min_feature_px // 2
         for mask in candidates:
-            m = (mask.detach().float() > 0.5)
+            m = mask.detach().float() > 0.5
             if m.ndim > 2:
                 m = m.squeeze()
             if r < 1:
@@ -708,7 +759,9 @@ class DiffusionMaskSynthesis(nn.Module):
             diff_result = self.synthesize(target_layout, n_candidates=16)
             diff_s = diff_result["scores"]
             diff_scores_all.extend(diff_s)
-            diff_mfr = self._filter_manufacturable(diff_result["candidates"], self.config.min_feature_px)
+            diff_mfr = self._filter_manufacturable(
+                diff_result["candidates"], self.config.min_feature_px
+            )
             diff_mrc_violations.append(sum(1 for v in diff_mfr if not v))
             if len(diff_result["candidates"]) > 1:
                 stack = torch.stack([c.flatten() for c in diff_result["candidates"]])
@@ -784,9 +837,7 @@ class DiffusionMaskBenchmark:
         """
         per_target: list[dict[str, Any]] = []
         for tgt in targets:
-            result = self.diffusion.compare_vs_grpo(
-                tgt, self.grpo_model, n_seeds=n_seeds
-            )
+            result = self.diffusion.compare_vs_grpo(tgt, self.grpo_model, n_seeds=n_seeds)
             per_target.append(result)
 
         if not per_target:

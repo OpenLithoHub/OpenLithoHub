@@ -286,6 +286,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`workflow.gauges`** — refuses Calibre `.gg` files without a
   recognizable header (was silent fallback to canonical column
   order producing wrong EPE numbers).
+- **Comprehensive code-review pass (2026-09)** — full-repo audit fixing
+  30+ confirmed defects:
+
+  - *Curvilinear SDF init* — `_approx_distance` convolved instead of
+    min-relaxing, collapsing the signed distance field to zero after one
+    pass; replaced with a proper chamfer min-propagation EDT (interior
+    negative, exterior positive). `final_epe` in the optimize info dict
+    now records the process-window EPE instead of the total loss.
+  - *Anamorphic SMO* — removed the extra `ifftshift` that shifted the
+    aerial image by half a field; anamorphic magnification now applied in
+    the frequency domain (y cutoff × `mag_y/mag_x`) instead of a
+    center-based `grid_sample` resampling that smeared a corner-aligned
+    PSF; source parameters get gradients through a soft-edged pupil
+    (previously the hard aperture comparison cut the graph and the joint
+    "source-mask" optimisation never updated the source); fixed the x/y
+    meshgrid axis swap in `mask_3d_shadow_correction`; corrected the TE/TM
+    contrast-factor ordering to match the documented physics; clamped the
+    three-beam modulation depth so the envelope stays non-negative;
+    `ShotCountCost.evaluate` respects the configured pixel size.
+  - *Stochastic metrics* — dropped the `softplus` on the aerial image in
+    the Poisson rate model (it biased every dark pixel to `ln 2 × dose`
+    photons, printing spurious resist in unexposed areas) in
+    `stochastic_loss` and `coverage_gate`; the conformal coverage gate now
+    computes the calibration quantile on the external-predictor path too
+    (it silently degraded to 1.0) and predicts over the same defocus range
+    it calibrated on; `StochasticProcessWindow` reports the longest
+    contiguous passing focus range and passes defocus to custom forward
+    models that accept it; `StochasticAwareLoss` is callable as
+    documented.
+  - *Tiling / Schwarz* — `_inject_boundary_data` now derives overlaps
+    from tile origins (anchored edge tiles never exchanged boundary data
+    before) and starts each Schwarz round from the tile's own previous
+    solution; `sweep_overlap_convergence` labels results with the true
+    cumulative iteration count; `cross_tile_epe/contour_residual` accept
+    tile origins to compare only geometrically adjacent pairs; the SRAF
+    consistency denominator counts union-of-SRAF pixels instead of the
+    whole patch; `_squeeze` raises on non-singleton batch dims instead of
+    looping forever; `stitch_tiles` no longer leaves a black seam at
+    `overlap=1`.
+  - *Data adapters* — `Iccad16Dataset` rasterization now delegates to the
+    canonical `rasterize_cell_layer` (the in-house y-up fill produced
+    vertically mirrored masks vs. `load_layout`, and trapezoid-bbox
+    filling over-filled non-Manhattan geometry); ORFS tile origins report
+    the correct lower-left y in layout nm; `load_layout` rasterizes GDS
+    path shapes instead of dropping them and rejects `pixel_nm <= 0`;
+    `data show` PNG export is no longer vertically mirrored; an invalid
+    user-supplied layermap JSON now warns instead of breaking the
+    package import.
+  - *Server / CLI / leaderboard* — the model-cache LRU no longer tears
+    down a model another request is using (refcount + deferred teardown);
+    `--quencher > 0` is now rejected with `--submit` (matching the
+    documented incompatibility); `--limit` and `--writer` validate their
+    values; submission IDs are generated from a path-safe charset;
+    `simulate` loads `.npy` with `allow_pickle=False`; macOS
+    `multiproc_predict` no longer crashes/deadlocks — shared-memory block
+    names are hashed under the 31-char POSIX limit and workers are
+    spawned (fork of a torch-initialised process deadlocks on darwin).
+  - *3D stochastic model* — SE-kernel device placement (CUDA convolutions
+    no longer crash), even kernel sizes honoured, LCDU ensemble statistics
+    no longer mix pattern variance into trial variance, Pearson
+    correlation uses matching population moments, line-collapse
+    monotonicity check direction corrected, failure-correlation length
+    reports the half-window for strongly correlated maps.
+  - *Performance* — Manhattan contour edge detection vectorised (was a
+    ~33M-iteration Python loop on 4096² layouts); ASAP7 / FreePDK45
+    adapters parse the GDS once instead of per cell; GPU benchmark runs
+    the real forward model on the requested device and resets peak-memory
+    stats per config; shortest-run helper vectorised without per-pixel
+    device syncs; diffusion β-schedule `cumprod` computed once.
+  - *Train script* — the GAN-OPC memmap cache is built in a temp file and
+    atomically renamed (an interrupted run no longer leaves a truncated
+    cache silently treated as valid); `component_history` is actually
+    populated so the PVB plateau monitor and saved metadata work.
 
 ## [0.1.0a2] - 2026-05-19
 

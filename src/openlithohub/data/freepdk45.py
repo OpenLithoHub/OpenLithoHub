@@ -110,6 +110,18 @@ class FreePdk45Dataset(DatasetAdapter):
                 f"Did you clone {FREEPDK45_UPSTREAM_URL} into {self.root}?"
             )
         self._cache: dict[str, LithoSample] = {}
+        # Parse the GDS once and reuse it across cells — re-reading the
+        # whole library file per cell is O(cells x file_size).
+        self._layout: Any = None
+
+    def _ensure_layout(self) -> Any:
+        import klayout.db as kdb
+
+        if self._layout is None:
+            layout = kdb.Layout()
+            layout.read(str(self._gds_path))
+            self._layout = layout
+        return self._layout
 
     def __len__(self) -> int:
         return len(self.cells)
@@ -125,10 +137,7 @@ class FreePdk45Dataset(DatasetAdapter):
         return sample
 
     def _load_cell(self, name: str) -> LithoSample:
-        import klayout.db as kdb
-
-        layout = kdb.Layout()
-        layout.read(str(self._gds_path))
+        layout = self._ensure_layout()
         cell = layout.cell(name)
         if cell is None:
             available = sorted(c.name for c in layout.each_cell())[:10]

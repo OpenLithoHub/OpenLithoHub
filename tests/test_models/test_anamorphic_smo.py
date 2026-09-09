@@ -10,21 +10,21 @@ import torch
 from openlithohub.models.anamorphic_smo import (
     AnamorphicImaging,
     AnamorphicParams,
-    AnamorphicSMOBenchmark,
     AnamorphicSMO,
+    AnamorphicSMOBenchmark,
     ShotCountCost,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _simple_target(size: int = 32) -> torch.Tensor:
     """Create a simple square-contact-hole target pattern."""
     t = torch.zeros(size, size)
     margin = size // 4
-    t[margin:size - margin, margin:size - margin] = 1.0
+    t[margin : size - margin, margin : size - margin] = 1.0
     return t
 
 
@@ -34,13 +34,14 @@ def _line_space_target(size: int = 32) -> torch.Tensor:
     pitch = max(4, size // 8)
     half = pitch // 2
     for x in range(0, size, pitch):
-        t[:, x:x + half] = 1.0
+        t[:, x : x + half] = 1.0
     return t
 
 
 # ---------------------------------------------------------------------------
 # 1. AnamorphicParams defaults
 # ---------------------------------------------------------------------------
+
 
 class TestAnamorphicParams:
     def test_anamorphic_params_defaults(self) -> None:
@@ -64,6 +65,7 @@ class TestAnamorphicParams:
 # 2. AnamorphicImaging PSF shape
 # ---------------------------------------------------------------------------
 
+
 class TestAnamorphicImagingPSF:
     def test_anamorphic_imaging_psf_shape(self) -> None:
         params = AnamorphicParams()
@@ -78,23 +80,34 @@ class TestAnamorphicImagingPSF:
         assert psf.sum().item() == pytest.approx(1.0, abs=1e-4)
 
     def test_psf_central_obscuration_narrows_peak(self) -> None:
-        """Central obscuration narrows the PSF central lobe (annular pupil effect).
+        """Central obscuration redistributes energy out of the central lobe.
 
-        An annular pupil trades contrast for resolution: the central lobe
-        narrows (higher peak) but sidelobe energy increases.
+        An annular pupil trades peak intensity for resolution: coherent
+        energy is blocked, so the (normalised) PSF peak drops and the
+        fraction of energy inside the full-pupil central-lobe radius
+        decreases — sidelobe energy increases.
         """
         p_full = AnamorphicParams(central_obscuration_ratio=0.0)
         p_obs = AnamorphicParams(central_obscuration_ratio=0.3)
         psf_full = AnamorphicImaging(p_full).compute_psf(64)
         psf_obs = AnamorphicImaging(p_obs).compute_psf(64)
-        center = 32
-        # Annular pupil should have a narrower central peak (higher center value).
-        assert psf_obs[center, center] > psf_full[center, center]
+        # PSF from |IFFT(pupil)|^2 is corner-centred: main lobe at (0, 0).
+        assert psf_obs[0, 0] < psf_full[0, 0], "Annular pupil should lower the normalised PSF peak"
+        n = 64
+        yy, xx = torch.meshgrid(torch.arange(n), torch.arange(n), indexing="ij")
+        dx = torch.minimum(xx, n - xx).float()
+        dy = torch.minimum(yy, n - yy).float()
+        r = torch.sqrt(dx**2 + dy**2)
+        r0 = 6.0  # central-lobe radius of the full-pupil PSF
+        core_full = psf_full[r <= r0].sum().item()
+        core_obs = psf_obs[r <= r0].sum().item()
+        assert core_obs < core_full, "Annular pupil should push energy into sidelobes"
 
 
 # ---------------------------------------------------------------------------
 # 3. AnamorphicImaging aerial
 # ---------------------------------------------------------------------------
+
 
 class TestAnamorphicImagingAerial:
     def test_anamorphic_imaging_aerial(self) -> None:
@@ -123,6 +136,45 @@ class TestAnamorphicImagingAerial:
 # 4. Anamorphic vs isotropic
 # ---------------------------------------------------------------------------
 
+
+class TestAerialAlignment:
+    def test_aerial_delta_stays_put(self) -> None:
+        """A point mask must image to a peak at the same pixel.
+
+        Guards against a half-field circular shift: the PSF from
+        ``|IFFT(pupil)|^2`` is already in circular-convolution layout, and
+        applying an extra ``ifftshift`` (a historical bug) would move the
+        aerial peak by (N/2, N/2).
+        """
+        imaging = AnamorphicImaging(AnamorphicParams())
+        mask = torch.zeros(32, 32)
+        mask[16, 16] = 1.0
+        aerial = imaging.simulate_aerial(mask)
+        peak_y, peak_x = divmod(int(aerial.argmax()), 32)
+        assert (peak_y, peak_x) == (16, 16), f"Aerial peak at {(peak_y, peak_x)}, expected (16, 16)"
+
+
+class TestSourceParameterGradient:
+    def test_source_params_move_during_optimisation(self) -> None:
+        """Source parameters must be updated by the joint SMO.
+
+        With the historical hard-threshold pupil the comparison cut the
+        autograd graph and Adam never updated ``source_param``; the soft
+        pupil keeps gradients flowing, so the sigmoid-ed source params
+        must drift away from their initial values. Sensitivity is
+        anisotropic (the anamorphic y cutoff dominates for a square
+        target), so at least one parameter moving substantially is the
+        robust gradient-flow signal.
+        """
+        smo = AnamorphicSMO()
+        target = _simple_target(16)
+        _, info = smo.optimize_source_mask(target, n_steps=20, lr=0.2)
+        initial = 0.7
+        initial_sig = 1.0 / (1.0 + math.exp(-initial))
+        moves = [abs(value - initial_sig) for value in info["source_params"]]
+        assert max(moves) > 1e-6, f"source parameters did not move {moves}; gradient path is broken"
+
+
 class TestAnamorphicVsIsotropic:
     def test_anamorphic_vs_isotropic(self) -> None:
         """Anamorphic imaging should produce different PSFs from isotropic."""
@@ -139,6 +191,7 @@ class TestAnamorphicVsIsotropic:
 # ---------------------------------------------------------------------------
 # 5. Mask 3D shadow correction
 # ---------------------------------------------------------------------------
+
 
 class TestMask3DShadowCorrection:
     def test_mask_3d_shadow_correction(self) -> None:
@@ -170,6 +223,7 @@ class TestMask3DShadowCorrection:
 # ---------------------------------------------------------------------------
 # 6. ShotCountCost gradient
 # ---------------------------------------------------------------------------
+
 
 class TestShotCountCostGradient:
     def test_shot_count_cost_gradient(self) -> None:
@@ -207,6 +261,7 @@ class TestShotCountCostGradient:
 # 7. AnamorphicSMO reduces EPE
 # ---------------------------------------------------------------------------
 
+
 class TestAnamorphicSMO:
     def test_anamorphic_smo_optimization_reduces_epe(self) -> None:
         params = AnamorphicParams()
@@ -233,6 +288,7 @@ class TestAnamorphicSMO:
 # 8. Pareto tracking
 # ---------------------------------------------------------------------------
 
+
 class TestSMOParetoTracking:
     def test_smo_pareto_tracking(self) -> None:
         smo = AnamorphicSMO()
@@ -257,6 +313,7 @@ class TestSMOParetoTracking:
 # ---------------------------------------------------------------------------
 # 9. Benchmark runs
 # ---------------------------------------------------------------------------
+
 
 class TestAnamorphicSMOBenchmark:
     def test_benchmark_runs(self) -> None:

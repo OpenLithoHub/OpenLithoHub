@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as functional
 
 from openlithohub._constants import THRESHOLD_ICCAD16
 from openlithohub._utils.forward_model import apply_resist_threshold, simulate_aerial_image
@@ -81,6 +81,7 @@ class SecondaryElectronKernel:
         self,
         grid_size: int,
         pixel_size_nm: float = 1.0,
+        device: torch.device | None = None,
     ) -> torch.Tensor:
         """Build a 3D spatial correlation kernel.
 
@@ -90,14 +91,18 @@ class SecondaryElectronKernel:
             Spatial extent of the kernel in pixels (same for x, y, z).
         pixel_size_nm : float
             Pixel pitch in nm.
+        device : torch.device or None
+            Device for the returned kernel. Defaults to CPU.
 
         Returns
         -------
         Tensor, shape ``(grid_size, grid_size, grid_size)``, normalised so
         that the kernel sums to 1.
         """
-        radius = grid_size // 2
-        coords = torch.arange(-radius, radius + 1, dtype=torch.float32)
+        # (grid_size - 1) // 2 keeps the coordinate list at exactly
+        # ``grid_size`` entries for even sizes too.
+        radius = (grid_size - 1) // 2
+        coords = torch.arange(-radius, radius + 1, dtype=torch.float32, device=device)
         # shape (grid_size, 1, 1), (1, grid_size, 1), (1, 1, grid_size)
         dx = coords.unsqueeze(1).unsqueeze(2)
         dy = coords.unsqueeze(0).unsqueeze(2)
@@ -136,6 +141,9 @@ class SecondaryElectronKernel:
         if kernel is None:
             kernel = self.compute_kernel(3)
 
+        # The kernel may be precomputed on a different device (torch.arange
+        # defaults to CPU); conv3d requires input and weight to match.
+        kernel = kernel.to(device=white_noise.device, dtype=torch.float32)
         k = kernel.unsqueeze(0).unsqueeze(0).float()  # (1, 1, kD, kH, kW)
         # F.pad for 5D tensors expects (W_left, W_right, H_left, H_right, D_left, D_right)
         pd = kernel.shape[0] // 2
@@ -143,14 +151,14 @@ class SecondaryElectronKernel:
 
         if white_noise.ndim == 3:
             inp = white_noise.unsqueeze(0).unsqueeze(0).float()  # (1, 1, D, H, W)
-            padded = F.pad(inp, pad3d, mode="replicate")
-            out = F.conv3d(padded, k)
+            padded = functional.pad(inp, pad3d, mode="replicate")
+            out = functional.conv3d(padded, k)
             return out.squeeze(0).squeeze(0)
         elif white_noise.ndim == 4:
             b = white_noise.shape[0]
             inp = white_noise.unsqueeze(1).float()  # (B, 1, D, H, W)
-            padded = F.pad(inp, pad3d, mode="replicate")
-            out = F.conv3d(padded, k.expand(b, -1, -1, -1, -1), groups=b)
+            padded = functional.pad(inp, pad3d, mode="replicate")
+            out = functional.conv3d(padded, k.expand(b, -1, -1, -1, -1), groups=b)
             return out.squeeze(1)
         else:
             raise ValueError(f"white_noise must be 3D or 4D, got {white_noise.ndim}D")
@@ -311,18 +319,21 @@ class ResistProfile3D:
         Tensor, shape ``(D,)`` with per-slice LCDU in pixel units.
         """
         if profile_3d.ndim == 4:
-            # (N, D, H, W): ensemble of trials
+            # (N, D, H, W): ensemble of trials. LCDU is the trial-to-trial
+            # CD variation, so take the std across trials per row first and
+            # then average over rows — a flat std over (N, H) would mix the
+            # deterministic row-to-row (pattern) variation into the metric.
             n, d, h, w = profile_3d.shape
-            lcdu_per_slice = torch.zeros(d)
+            lcdu_per_slice = torch.zeros(d, device=profile_3d.device)
             for z in range(d):
                 # Per-trial CD: sum of resist pixels along columns for each row
-                cds = profile_3d[:, z, :, :].sum(dim=2)  # (N, H)
-                lcdu_per_slice[z] = cds.float().std()
+                cds = profile_3d[:, z, :, :].sum(dim=2).float()  # (N, H)
+                lcdu_per_slice[z] = cds.std(dim=0).mean()
             return lcdu_per_slice
         else:
             # Single (D, H, W) profile: CD per row
             d, h, w = profile_3d.shape
-            lcdu_per_slice = torch.zeros(d)
+            lcdu_per_slice = torch.zeros(d, device=profile_3d.device)
             for z in range(d):
                 row_cds = profile_3d[z, :, :].sum(dim=1).float()
                 lcdu_per_slice[z] = row_cds.std()
@@ -357,8 +368,14 @@ class ResistProfile3D:
             if s1.std() < 1e-8 or s2.std() < 1e-8:
                 correlations.append(torch.tensor(1.0 if torch.equal(s1, s2) else 0.0))
             else:
-                corr = torch.dot(s1 - s1.mean(), s2 - s2.mean()) / (
-                    s1.numel() * s1.std() * s2.std()
+                # Pearson r with population (1/N) moments so the
+                # denominator matches the numerator's normalisation —
+                # torch.std defaults to the unbiased (1/(N-1)) estimate,
+                # which would bias the ratio by (N-1)/N.
+                c1 = s1 - s1.mean()
+                c2 = s2 - s2.mean()
+                corr = torch.dot(c1, c2) / (
+                    s1.numel() * c1.std(unbiased=False) * c2.std(unbiased=False)
                 )
                 correlations.append(corr)
         return torch.stack(correlations)
@@ -447,12 +464,16 @@ class StochasticDefectModel3D:
         pixel_area_nm2 = self.resist.pixel_size_nm**2
         dose_scale = self.dose_photons * pixel_area_nm2
 
-        # Precompute SE correlation kernel for noise generation
+        # Precompute SE correlation kernel for noise generation. Built on
+        # the mask's device so the convolutions below do not hit a
+        # CPU/GPU device mismatch.
         kernel_size = min(5, min(h, w))
         if kernel_size % 2 == 0:
             kernel_size -= 1
         kernel_size = max(3, kernel_size)
-        se_kernel = self.se_kernel.compute_kernel(kernel_size, self.resist.pixel_size_nm)
+        se_kernel = self.se_kernel.compute_kernel(
+            kernel_size, self.resist.pixel_size_nm, device=mask.device
+        )
 
         generator = torch.Generator(device=mask.device)
         generator.manual_seed(seed)
@@ -471,7 +492,7 @@ class StochasticDefectModel3D:
             # Spatial correlation applied slice-by-slice for memory efficiency
             correlated_noise = torch.zeros_like(lambda_3d)
             k2d = se_kernel[kernel_size // 2]  # middle slice = 2D projection
-            k2d_norm = k2d / max(k2d.sum(), 1e-12)
+            k2d_norm = k2d / k2d.sum().clamp(min=1e-12)
             k2d_conv = k2d_norm.unsqueeze(0).unsqueeze(0)
             pad_2d = kernel_size // 2
 
@@ -482,8 +503,8 @@ class StochasticDefectModel3D:
 
                 # Apply 2D spatial correlation via convolution
                 inp = noised_2d.unsqueeze(0).unsqueeze(0)
-                inp_padded = F.pad(inp, (pad_2d, pad_2d, pad_2d, pad_2d), mode="replicate")
-                correlated = F.conv2d(inp_padded, k2d_conv).squeeze(0).squeeze(0)
+                inp_padded = functional.pad(inp, (pad_2d, pad_2d, pad_2d, pad_2d), mode="replicate")
+                correlated = functional.conv2d(inp_padded, k2d_conv).squeeze(0).squeeze(0)
 
                 # Rescale to match original statistics
                 if correlated.std() > 1e-8:
@@ -668,6 +689,7 @@ class ConformalCoverageGate3D:
         self,
         masks: list[torch.Tensor],
         ground_truth_defects: list[torch.Tensor],
+        predicted_defects: list[torch.Tensor] | None = None,
     ) -> None:
         """Calibrate the conformal predictor on a held-out calibration set.
 
@@ -677,16 +699,23 @@ class ConformalCoverageGate3D:
             Calibration mask patterns, each ``(H, W)``.
         ground_truth_defects : list of Tensor
             True defect probability maps, each ``(H, W)`` or ``(D, H, W)``.
+        predicted_defects : list of Tensor or None
+            Model predictions matching what :meth:`evaluate` will feed at
+            inference time. When omitted, the mask mean is used as a
+            self-consistency proxy (matching the historical behaviour).
         """
         from diff_surrogate.conformal import SplitConformalPredictor
         from diff_surrogate.decision import AcceptRejectGate
 
-        # Flatten spatial dims for conformal calibration
+        # Flatten spatial dims for conformal calibration. Calibrate against
+        # the same predictor statistic evaluate() consumes (the predicted
+        # defect mean), otherwise the conformal bands do not apply to the
+        # gated prediction.
+        preds = predicted_defects if predicted_defects is not None else masks
         cal_preds_list = []
         cal_targets_list = []
-        for m, gt in zip(masks, ground_truth_defects, strict=False):
-            # Use mean defect rate as the scalar prediction per mask
-            cal_preds_list.append(m.flatten().float().mean().unsqueeze(0))
+        for _m, p, gt in zip(masks, preds, ground_truth_defects, strict=False):
+            cal_preds_list.append(p.flatten().float().mean().unsqueeze(0))
             cal_targets_list.append(gt.flatten().float().mean().unsqueeze(0))
 
         cal_preds = torch.cat(cal_preds_list)
@@ -729,9 +758,15 @@ class ConformalCoverageGate3D:
         if self._predictor is not None:
             lower, upper = self._predictor.predict(pred_mean)
             achieved_coverage = coverage_score(actual_mean, lower, upper, alpha=self.alpha)
-            cov_value = achieved_coverage.get(
-                "coverage", float(actual_mean >= lower and actual_mean <= upper)
-            )
+            # NOTE: dict.get's default is evaluated eagerly, so computing a
+            # boolean fallback inline would raise on multi-element bounds
+            # even when the "coverage" key exists. Branch explicitly and
+            # reduce elementwise.
+            if "coverage" in achieved_coverage:
+                cov_value = achieved_coverage["coverage"]
+            else:
+                inside = (actual_mean >= lower) & (actual_mean <= upper)
+                cov_value = float(inside.float().mean().item())
         else:
             # Fallback: simple interval around prediction
             bandwidth = max((predicted_defects.flatten().float().std().item(), 0.01))
@@ -986,11 +1021,12 @@ class Stochastic3DBenchmark:
                 )
             )
 
-        # Check monotonicity: collapse risk should increase as CD decreases
+        # Check monotonicity: collapse risk should decrease as CD grows.
+        # _make_test_masks orders patterns from smallest to largest CD, so
+        # a physically consistent model yields a non-increasing risk
+        # sequence.
         risks = [r.model_3d_line_collapse_risk for r in results]
-        # CDs are in decreasing order: cd_12, cd_10, cd_8, cd_6 => cd_4
-        # Actually the masks go from smallest to largest half_cd
-        monotone = all(risks[i] <= risks[i + 1] for i in range(len(risks) - 1))
+        monotone = all(risks[i] >= risks[i + 1] for i in range(len(risks) - 1))
         if not monotone:
             # Risks may not be perfectly monotone on small grids; mark as-is
             results = [
@@ -1077,7 +1113,7 @@ class DefectClusterMetrics:
 
         # Autocorrelation via FFT
         d_fft = torch.fft.fft2(d)
-        autocorr = torch.fft.ifft2(d_fft * torch.conj(d_fft)).real
+        autocorr: torch.Tensor = torch.fft.ifft2(d_fft * torch.conj(d_fft)).real
         autocorr = torch.fft.fftshift(autocorr)
 
         h, w = autocorr.shape
@@ -1089,18 +1125,25 @@ class DefectClusterMetrics:
 
         threshold = peak / math.e
 
-        # Measure correlation length along x
+        # Measure correlation length along x. When the autocorrelation
+        # never drops below 1/e within the half-window the map is strongly
+        # (long-range) correlated — report the full half-window rather
+        # than 0, which would wrongly suggest "no spatial structure".
         row = autocorr[center_y, :]
         cx_left = 0
         for i in range(center_x, -1, -1):
             if row[i].item() < threshold:
                 cx_left = center_x - i
                 break
+        else:
+            cx_left = center_x
         cx_right = 0
         for i in range(center_x, w):
             if row[i].item() < threshold:
                 cx_right = i - center_x
                 break
+        else:
+            cx_right = center_x
         corr_x = (cx_left + cx_right) / 2.0
 
         # Measure correlation length along y
@@ -1110,11 +1153,15 @@ class DefectClusterMetrics:
             if col[i].item() < threshold:
                 cy_top = center_y - i
                 break
+        else:
+            cy_top = center_y
         cy_bottom = 0
         for i in range(center_y, h):
             if col[i].item() < threshold:
                 cy_bottom = i - center_y
                 break
+        else:
+            cy_bottom = center_y
         corr_y = (cy_top + cy_bottom) / 2.0
 
         # Average correlation length in pixels, convert to nm
@@ -1249,7 +1296,7 @@ class DefectClusterMetrics:
             trial = profile_ensemble[trial_idx].float()
             # Compute horizontal gradient to find edges
             grad_x = trial[:, 1:] - trial[:, :-1]
-            grad_x = F.pad(grad_x, (0, 1, 0, 0))  # (H, W)
+            grad_x = functional.pad(grad_x, (0, 1, 0, 0))  # (H, W)
 
             # Edge pixels are where gradient magnitude is nonzero
             edge_mask = grad_x.abs() > 0.5

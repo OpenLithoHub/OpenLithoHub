@@ -17,6 +17,7 @@ import multiprocessing.shared_memory
 import os
 import pickle
 import shutil
+import sys
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -86,8 +87,7 @@ class SharedStateDictServer:
     # -- internals ----------------------------------------------------------
 
     def _shm_name(self, key: str) -> str:
-        safe = hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()[:12]
-        return f"{self._prefix}_{safe}"
+        return _block_name(self._prefix, key)
 
     def _load(self, model: nn.Module) -> None:
         sd = model.state_dict()
@@ -106,6 +106,17 @@ class SharedStateDictServer:
 
     def __del__(self) -> None:
         self.cleanup()
+
+
+def _block_name(prefix: str, key: str) -> str:
+    """Deterministic shared-memory block name for ``(prefix, key)``.
+
+    macOS caps POSIX shm names at 31 chars, and caller-supplied prefixes
+    embed pid + id(model) (35+ chars) — hash the pair into a short,
+    fixed-width name instead. Server and workers must agree on this
+    format, so it lives in exactly one place.
+    """
+    return "olh_" + hashlib.sha256(f"{prefix}_{key}".encode()).hexdigest()[:16]
 
 
 def _dtype_to_numpy(dtype: torch.dtype) -> np.dtype[np.generic]:
@@ -202,10 +213,12 @@ def _worker_fn(
     # Reconstruct model from pickled bytes
     model: nn.Module = pickle.loads(model_bytes)  # noqa: S301  # nosec B301
 
-    # Load shared weights into the model
+    # Load shared weights into the model. Block names must match
+    # ``SharedStateDictServer._shm_name`` — both derive from
+    # :func:`_block_name`.
     sd: dict[str, torch.Tensor] = {}
     for key, (shape, dtype) in meta.items():
-        shm_name = f"{prefix}_{hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()[:12]}"
+        shm_name = _block_name(prefix, key)
         shm = mp.shared_memory.SharedMemory(name=shm_name, create=False)
         arr: _NDArray = np.ndarray(shape, dtype=_dtype_to_numpy(dtype), buffer=shm.buf)
         sd[key] = torch.from_numpy(np.array(arr)).to(dtype)
@@ -280,7 +293,12 @@ def multiproc_predict(
     workers: list[mp.Process] = []
 
     # Use "fork" on CPU for speed and pickling simplicity; "spawn" for CUDA
-    method = "spawn" if device.startswith("cuda") else "fork"
+    # and macOS — forking a process whose torch/OpenMP thread pools are
+    # already initialised deadlocks the child on darwin.
+    if device.startswith("cuda") or sys.platform == "darwin":
+        method = "spawn"
+    else:
+        method = "fork"
     ctx = mp.get_context(method)
     for wid in range(n_workers):
         p = ctx.Process(  # type: ignore[attr-defined]

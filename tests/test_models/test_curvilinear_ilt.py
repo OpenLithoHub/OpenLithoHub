@@ -70,10 +70,37 @@ class TestCurvilinearMaskRepresentation:
         interior_mask = target > 0.5
         exterior_mask = target < 0.5
 
-        # Interior should have negative (or zero) SDF.
-        assert (sdf[interior_mask] <= 0.5).all(), "Interior SDF should be <= 0.5"
-        # Exterior should have positive (or zero) SDF.
-        assert (sdf[exterior_mask] >= -0.5).all(), "Exterior SDF should be >= -0.5"
+        # Interior should have strictly negative SDF (distance transform of
+        # the interior binary is > 0 away from the boundary, and 0-seeded
+        # background makes dist_exterior = 0 inside).
+        assert (sdf[interior_mask] < 0.0).all(), "Interior SDF should be negative"
+        # Exterior should have strictly positive SDF.
+        assert (sdf[exterior_mask] > 0.0).all(), "Exterior SDF should be positive"
+
+        # The distance transform must be non-degenerate: deep interior
+        # pixels are further from the boundary than edge-adjacent ones.
+        eroded = (
+            interior_mask
+            & torch.roll(interior_mask, 1, 0)
+            & torch.roll(interior_mask, -1, 0)
+            & torch.roll(interior_mask, 1, 1)
+            & torch.roll(interior_mask, -1, 1)
+        )
+        if eroded.any():
+            deep = sdf[eroded].abs().min()
+            edge = sdf[interior_mask].abs().min()
+            assert deep >= edge, "Deep-interior |SDF| should exceed boundary |SDF|"
+
+    def test_init_from_target_distance_magnitude(self) -> None:
+        """|SDF| should approximate pixel distance to the feature boundary."""
+        target = torch.zeros(16, 16)
+        target[6:10, 6:10] = 1.0  # 4x4 block, boundary 1px from its edge
+        rep = CurvilinearMaskRepresentation(grid_size=16)
+        sdf = rep.init_from_target(target)
+        # A pixel just inside the boundary is 1px from the background.
+        assert sdf[6, 7].item() == pytest.approx(-1.0, abs=0.1)
+        # A pixel just outside is 1px from the feature.
+        assert sdf[5, 7].item() == pytest.approx(1.0, abs=0.1)
 
     def test_sdf_to_mask_range(self) -> None:
         """Converted mask should be in [0, 1]."""

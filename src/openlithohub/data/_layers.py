@@ -22,7 +22,7 @@ calling :func:`register_layermap` at runtime.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
@@ -48,13 +48,18 @@ def _load_layermap_json(path: Path) -> PdkLayers:
     """Load a layermap JSON file into a :class:`PdkLayers` instance.
 
     Each key is a layer name (``metal1``, ``via1``, etc.) and the value
-    is a ``[layer_number, datatype]`` array.
+    is a ``[layer_number, datatype]`` array. Keys that do not correspond
+    to a :class:`PdkLayers` field are ignored so third-party layermap
+    files may carry extra metadata (``poly``, ``nwell``, ...).
     """
     data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    known = {f.name for f in fields(PdkLayers)}
     kwargs: dict[str, tuple[int, int]] = {}
     for key, value in data.items():
-        if isinstance(value, list) and len(value) == 2:
+        if key in known and isinstance(value, list) and len(value) == 2:
             kwargs[key] = (int(value[0]), int(value[1]))
+    if "metal1" not in kwargs:
+        raise ValueError(f"{path}: layermap is missing the mandatory 'metal1' entry")
     return PdkLayers(**kwargs)
 
 
@@ -66,6 +71,9 @@ def load_layermap(path: Path | str) -> PdkLayers:
 
     Returns:
         A :class:`PdkLayers` instance.
+
+    Raises:
+        ValueError: If the file has no valid ``metal1`` entry.
     """
     return _load_layermap_json(Path(path))
 
@@ -86,9 +94,21 @@ def list_pkds() -> list[str]:
 
 
 # Auto-discover bundled JSON layermaps. Each file in the layermaps/
-# directory becomes a key in LAYERS (filename stem = PDK name).
+# directory becomes a key in LAYERS (filename stem = PDK name). Invalid
+# files are skipped with a warning rather than breaking the package
+# import — a user experimenting with a custom layermap must not lose
+# the whole ``openlithohub.data`` module over it.
 LAYERS: dict[str, PdkLayers] = {}
 _layermap_dir = Path(__file__).parent / "layermaps"
 if _layermap_dir.is_dir():
+    import warnings
+
     for _p in sorted(_layermap_dir.glob("*.json")):
-        LAYERS[_p.stem] = _load_layermap_json(_p)
+        try:
+            LAYERS[_p.stem] = _load_layermap_json(_p)
+        except (ValueError, TypeError, json.JSONDecodeError) as _exc:
+            warnings.warn(
+                f"Skipping invalid layermap {_p.name}: {_exc}",
+                UserWarning,
+                stacklevel=2,
+            )

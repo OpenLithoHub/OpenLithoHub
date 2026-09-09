@@ -143,10 +143,11 @@ def run(
 
         set_deterministic()
 
-    if submit_to_leaderboard and resist_diffusion_nm > 0.0:
+    if submit_to_leaderboard and (resist_diffusion_nm > 0.0 or quencher > 0.0):
         console.print(
-            "[red]Error:[/red] --resist-diffusion-nm > 0 is incompatible with "
-            "--submit. The leaderboard requires a hard-threshold CTR baseline."
+            "[red]Error:[/red] --resist-diffusion-nm > 0 and --quencher > 0 are "
+            "incompatible with --submit. The leaderboard requires a hard-threshold "
+            "CTR baseline."
         )
         raise typer.Exit(1)
 
@@ -219,6 +220,9 @@ def run(
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1) from None
 
+        if limit is not None and limit < 1:
+            console.print(f"[red]Error:[/red] --limit must be >= 1, got {limit}")
+            raise typer.Exit(1)
         n_samples = min(len(adapter), limit) if limit else len(adapter)
         console.print(f"Running on {n_samples} samples...")
 
@@ -344,7 +348,7 @@ def run(
     console.print(report, highlight=False)
 
     if output:
-        output.write_text(report)
+        output.write_text(report, encoding="utf-8")
         console.print(f"Report saved to {output}")
 
     if submit_to_leaderboard:

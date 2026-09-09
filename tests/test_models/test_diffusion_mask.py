@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import math
 from unittest.mock import MagicMock
 
 import pytest
 import torch
-import torch.nn as nn
 
 from openlithohub.models.diffusion_mask import (
     DiffusionMaskBenchmark,
@@ -21,10 +19,10 @@ from openlithohub.models.diffusion_mask import (
     _sinusoidal_embedding,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _random_mask(batch: int = 2, size: int = 32) -> torch.Tensor:
     return (torch.rand(batch, 1, size, size) > 0.5).float()
@@ -162,7 +160,8 @@ def test_manufacturable_filtering() -> None:
     tiny_mask = torch.zeros(32, 32)
     tiny_mask[10, 10] = 1.0
     results = DiffusionMaskSynthesis._filter_manufacturable(
-        [big_mask, tiny_mask], min_feature_px=3,
+        [big_mask, tiny_mask],
+        min_feature_px=3,
     )
     assert results[0] is True
     assert results[1] is False
@@ -178,7 +177,9 @@ def test_candidate_scoring() -> None:
     good_mask = torch.zeros(32, 32)
     bad_mask = torch.ones(32, 32)
     scores = DiffusionMaskSynthesis._score_candidates(
-        [good_mask, bad_mask], target, sigma_px=1.0,
+        [good_mask, bad_mask],
+        target,
+        sigma_px=1.0,
     )
     assert len(scores) == 2
     assert scores[0] < scores[1], "Good mask should score lower (better)"
@@ -265,7 +266,11 @@ def test_with_decision_gate() -> None:
     result = model.synthesize(target, n_candidates=4, n_steps=2)
 
     try:
-        from diff_surrogate.decision import AcceptRejectGate, MultiCandidateDecision, DecisionVerdict
+        from diff_surrogate.decision import (
+            AcceptRejectGate,
+            DecisionVerdict,
+            MultiCandidateDecision,
+        )
 
         gate = AcceptRejectGate(min_coverage=0.8)
         mcd = MultiCandidateDecision()
@@ -277,10 +282,16 @@ def test_with_decision_gate() -> None:
         candidates_t = torch.stack([m.flatten() for m in masks])
 
         verdict, reasons = gate.evaluate(scores, lower, upper, coverage=0.95)
-        assert verdict in (DecisionVerdict.ACCEPT, DecisionVerdict.REJECT, DecisionVerdict.UNCERTAIN)
+        assert verdict in (
+            DecisionVerdict.ACCEPT,
+            DecisionVerdict.REJECT,
+            DecisionVerdict.UNCERTAIN,
+        )
         assert "mean_bandwidth" in reasons
 
-        best_idx, mcd_scores, verdicts = mcd.select(candidates_t, scores, lower, upper, maximize=False)
+        best_idx, mcd_scores, verdicts = mcd.select(
+            candidates_t, scores, lower, upper, maximize=False
+        )
         assert 0 <= best_idx < len(masks)
         assert len(verdicts) == len(masks)
     except ImportError:

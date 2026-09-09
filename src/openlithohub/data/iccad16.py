@@ -201,76 +201,20 @@ class Iccad16Dataset(DatasetAdapter):
     ) -> tuple[np.ndarray[Any, Any], tuple[float, float]]:
         """Rasterize a single OASIS layer into a {0,1} numpy array.
 
-        Decomposes each polygon into trapezoids via klayout's
-        ``Polygon.decompose_trapezoids`` and fills each trapezoid's pixel
-        footprint. For Manhattan polygons every trapezoid is an
-        axis-aligned rectangle, so the fill is exact even for L-shapes
-        and other concave Manhattan geometry — a plain bbox fill would
-        over-fill the concave corner.
+        Delegates to the canonical :func:`openlithohub.data.asap7.rasterize_cell_layer`
+        so ICCAD16 rasters follow the same conventions as the sibling PDK
+        adapters and ``load_layout``:
+
+        - ``arr[0]`` is the top of the layout viewer (largest y_nm) — the
+          earlier in-house fill mapped y-up directly into row order and
+          produced vertically mirrored masks;
+        - polygons are filled through convex decomposition + PIL polygon
+          rasterization, which is faithful for non-Manhattan geometry —
+          the earlier trapezoid-bbox fill over-filled angled trapezoids.
         """
-        import klayout.db as kdb
+        from openlithohub.data.asap7 import rasterize_cell_layer
 
-        layer_index = layout.find_layer(*layer_spec)
-        bbox = top.bbox()
-        origin = (
-            bbox.left * layout.dbu * 1000.0,
-            bbox.bottom * layout.dbu * 1000.0,
-        )
-        w = max(1, int(np.ceil(bbox.width() * layout.dbu * 1000.0 / self.pixel_nm)))
-        h = max(1, int(np.ceil(bbox.height() * layout.dbu * 1000.0 / self.pixel_nm)))
-        if layer_index is None:
-            return np.zeros((h, w), dtype=np.float32), origin
-
-        arr = np.zeros((h, w), dtype=np.float32)
-        ox_nm, oy_nm = origin
-        dbu_um = layout.dbu
-
-        def _fill_box(b: Any) -> None:
-            x0_nm = b.left * dbu_um * 1000.0 - ox_nm
-            y0_nm = b.bottom * dbu_um * 1000.0 - oy_nm
-            x1_nm = b.right * dbu_um * 1000.0 - ox_nm
-            y1_nm = b.top * dbu_um * 1000.0 - oy_nm
-            i0 = max(0, int(np.floor(x0_nm / self.pixel_nm)))
-            j0 = max(0, int(np.floor(y0_nm / self.pixel_nm)))
-            i1 = min(w, int(np.ceil(x1_nm / self.pixel_nm)))
-            j1 = min(h, int(np.ceil(y1_nm / self.pixel_nm)))
-            if i1 > i0 and j1 > j0:
-                arr[j0:j1, i0:i1] = 1.0
-
-        # Recursive iteration so hierarchical layouts (geometry referenced
-        # through cell instances) are not silently dropped. Today's published
-        # ICCAD16 files are flat — single TOPCELL — but matching the canonical
-        # pattern from data/io.py:128 keeps this robust against future
-        # contributions or upstream regenerations that introduce hierarchy.
-        shapes_iter = top.begin_shapes_rec(layer_index)
-        while not shapes_iter.at_end():
-            shape_obj = shapes_iter.shape()
-            trans = shapes_iter.trans()
-            if shape_obj.is_box():
-                _fill_box(shape_obj.box.transformed(trans))
-                shapes_iter.next()
-                continue
-            if shape_obj.is_path():
-                poly = shape_obj.path.polygon()
-            elif shape_obj.is_polygon():
-                poly = shape_obj.polygon
-            else:
-                shapes_iter.next()
-                continue
-            poly = poly.transformed(trans)
-            try:
-                trapezoids = list(poly.decompose_trapezoids(kdb.Polygon.TD_simple))
-            except AttributeError:
-                # Older klayout: fall back to whole-polygon bbox (still over-fills
-                # concavities, but no worse than the historical behavior).
-                _fill_box(poly.bbox())
-                shapes_iter.next()
-                continue
-            for tz in trapezoids:
-                _fill_box(tz.bbox())
-            shapes_iter.next()
-
-        return arr, origin
+        return rasterize_cell_layer(layout, top, layer_spec, self.pixel_nm)
 
     def _collect_clip_sites(
         self,

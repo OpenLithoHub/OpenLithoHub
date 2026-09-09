@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -308,11 +309,11 @@ if __name__ == "__main__":
     md = rows_to_markdown(rows, "Cross-Pattern Stochastic Benchmark") + "\n\n"
     md += rows_to_markdown(dose_rows, "Dose-Response Sweep (line/space, EUV N7)")
 
-    with open("benchmark_stochastic_results.md", "w") as f:
-        f.write(md)
-    print("\nResults written to benchmark_stochastic_results.md")
+    results_md = Path("benchmark_stochastic_results.md")
+    results_md.write_text(md, encoding="utf-8")
+    print(f"\nResults written to {results_md}")
 
     jdata = rows_to_json(all_rows)
-    with open("benchmark_stochastic_results.json", "w") as f:
-        f.write(jdata)
-    print("JSON data written to benchmark_stochastic_results.json")
+    results_json = Path("benchmark_stochastic_results.json")
+    results_json.write_text(jdata, encoding="utf-8")
+    print(f"JSON data written to {results_json}")

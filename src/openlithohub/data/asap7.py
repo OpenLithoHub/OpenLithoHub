@@ -213,14 +213,13 @@ def rasterize_cell_layer(
         # Decompose into convex (hole-free) pieces so a polygon-with-hole
         # cannot erase a separate polygon nested inside its hole — the
         # global-canvas hazard fixed in data.io.load_layout.
+        convex_pieces: list[Any]
         try:
             convex_pieces = list(poly.decompose_convex(kdb.Polygon.PO_any))
         except (AttributeError, TypeError):
             convex_pieces = [poly]
         for piece in convex_pieces:
-            iter_points = (
-                piece.each_point if hasattr(piece, "each_point") else piece.each_point_hull
-            )
+            iter_points = getattr(piece, "each_point", None) or piece.each_point_hull
             hull = [_to_px(p) for p in iter_points()]
             if len(hull) >= 3:
                 drawer.polygon(hull, fill=255)
@@ -291,6 +290,18 @@ class Asap7Dataset(DatasetAdapter):
                 f"under {self.root}?"
             )
         self._cache: dict[str, LithoSample] = {}
+        # Parse the GDS once and reuse it across cells — re-reading the
+        # whole library file per cell is O(cells x file_size).
+        self._layout: Any = None
+
+    def _ensure_layout(self) -> Any:
+        import klayout.db as kdb
+
+        if self._layout is None:
+            layout = kdb.Layout()
+            layout.read(str(self._gds_path))
+            self._layout = layout
+        return self._layout
 
     def _resolve_gds_path(self) -> Path:
         matches = sorted(self.root.glob(_GDS_RELATIVE_GLOB))
@@ -315,10 +326,7 @@ class Asap7Dataset(DatasetAdapter):
         return sample
 
     def _load_cell(self, name: str) -> LithoSample:
-        import klayout.db as kdb
-
-        layout = kdb.Layout()
-        layout.read(str(self._gds_path))
+        layout = self._ensure_layout()
         cell = layout.cell(name)
         resolved_name = name
         if cell is None and self.resolve_shorthand and "_ASAP7_" not in name:

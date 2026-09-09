@@ -98,7 +98,7 @@ class StochasticSampler:
             defocus_nm = focus_range[0] + (focus_range[1] - focus_range[0]) * torch.rand(1).item()
 
             aerial_nominal = self._aerial_with_dose(mask_2d, dose_factor, defocus_nm)
-            lambda_map = torch.nn.functional.softplus(aerial_nominal) * dose_scale
+            lambda_map = aerial_nominal.clamp(min=0.0) * dose_scale
 
             noised_photons = _reparameterized_poisson(lambda_map, 1)
             noised_intensity = noised_photons[0] / max(dose_scale, 1e-12)
@@ -133,7 +133,7 @@ class StochasticSampler:
         dose_scale = self.dose_photons_per_nm2 * pixel_area_nm2
 
         aerial_nominal = self._aerial_with_defocus(mask_2d, 0.0)
-        lambda_map = torch.nn.functional.softplus(aerial_nominal) * dose_scale
+        lambda_map = aerial_nominal.clamp(min=0.0) * dose_scale
         noised_photons = _reparameterized_poisson(lambda_map, n_samples)
         noised_intensity = noised_photons / max(dose_scale, 1e-12)
 
@@ -180,6 +180,7 @@ class ThroughFocusCoverageCalibrator:
         self.n_focus_points = n_focus_points
         self.focus_range_nm = focus_range_nm
         self._calibration_scores: torch.Tensor | None = None
+        self._calibration_quantile: float = 1.0
         self._calibrated: bool = False
 
     def _compute_nonconformity(
@@ -236,16 +237,17 @@ class ThroughFocusCoverageCalibrator:
                 max_score = max(max_score, score.item())
             scores.append(max_score)
 
+        self._calibration_scores = torch.tensor(scores)
+        n = len(scores)
+        q_idx = min(n - 1, int(torch.ceil(torch.tensor((1.0 - alpha) * (n + 1))).item()) - 1)
+        q_idx = max(0, q_idx)
+        sorted_scores, _ = torch.sort(self._calibration_scores)
+        self._calibration_quantile = sorted_scores[q_idx].item()
+
         if self.conformal_predictor is not None:
-            scores_tensor = torch.tensor(scores)
-            self._calibration_scores = self._apply_external_predictor(scores_tensor, alpha)
-        else:
-            self._calibration_scores = torch.tensor(scores)
-            n = len(scores)
-            q_idx = min(n - 1, int(torch.ceil(torch.tensor((1.0 - alpha) * (n + 1))).item()) - 1)
-            q_idx = max(0, q_idx)
-            sorted_scores, _ = torch.sort(self._calibration_scores)
-            self._calibration_quantile = sorted_scores[q_idx].item()
+            # Calibrate the external predictor as well; the band width in
+            # predict_coverage is driven by _calibration_quantile either way.
+            self._apply_external_predictor(self._calibration_scores, alpha)
 
         self._alpha = alpha
         self._calibrated = True
@@ -276,7 +278,11 @@ class ThroughFocusCoverageCalibrator:
         if not self._calibrated:
             raise RuntimeError("Must call calibrate() before predict_coverage()")
 
-        epe_samples = self.sampler.sample_epe(mask, n_samples=self.n_calibration_samples)
+        # Sample EPE across the same defocus range used during calibration
+        # so the conformal bands refer to a matched distribution.
+        epe_samples = self.sampler.sample_epe(
+            mask, n_samples=self.n_calibration_samples, focus_range=self.focus_range_nm
+        )
         lcdu_samples = self.sampler.sample_lcdu(mask, n_samples=self.n_calibration_samples)
 
         epe_median = epe_samples.median().item()
@@ -287,7 +293,7 @@ class ThroughFocusCoverageCalibrator:
         lcdu_std = lcdu_samples.std().item()
         lcdu_std = max(lcdu_std, 1e-8)
 
-        quantile = getattr(self, "_calibration_quantile", 1.0)
+        quantile = self._calibration_quantile
 
         epe_lower = max(0.0, epe_median - quantile * epe_mad)
         epe_upper = epe_median + quantile * epe_mad

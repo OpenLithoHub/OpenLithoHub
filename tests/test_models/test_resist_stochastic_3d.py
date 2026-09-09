@@ -13,7 +13,6 @@ from openlithohub.models.resist_stochastic_3d import (
     StochasticDefectModel3D,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -97,7 +96,9 @@ class TestSecondaryElectronKernel:
 
 class TestResistProfile3D:
     def test_resist_profile_3d_shape(
-        self, resist: ResistProfile3D, line_mask: torch.Tensor,
+        self,
+        resist: ResistProfile3D,
+        line_mask: torch.Tensor,
     ) -> None:
         profile = resist.generate_profile(line_mask)
         assert profile.ndim == 3
@@ -105,7 +106,9 @@ class TestResistProfile3D:
         assert profile.shape[1:] == line_mask.shape
 
     def test_resist_profile_binary_values(
-        self, resist: ResistProfile3D, line_mask: torch.Tensor,
+        self,
+        resist: ResistProfile3D,
+        line_mask: torch.Tensor,
     ) -> None:
         profile = resist.generate_profile(line_mask)
         unique = torch.unique(profile)
@@ -114,7 +117,9 @@ class TestResistProfile3D:
             assert v in (0.0, 1.0)
 
     def test_line_collapse_risk(
-        self, resist: ResistProfile3D, line_mask: torch.Tensor,
+        self,
+        resist: ResistProfile3D,
+        line_mask: torch.Tensor,
     ) -> None:
         profile = resist.generate_profile(line_mask)
         risk = resist.compute_line_collapse_risk(profile)
@@ -145,7 +150,9 @@ class TestResistProfile3D:
         assert torch.isfinite(lcdu).all()
 
     def test_vertical_correlation(
-        self, resist: ResistProfile3D, line_mask: torch.Tensor,
+        self,
+        resist: ResistProfile3D,
+        line_mask: torch.Tensor,
     ) -> None:
         profile = resist.generate_profile(line_mask)
         corr = resist.vertical_correlation(profile)
@@ -165,11 +172,15 @@ class TestResistProfile3D:
 
 class TestStochasticDefectModel3D:
     def test_stochastic_defect_model_runs(
-        self, se_kernel: SecondaryElectronKernel, small_mask: torch.Tensor,
+        self,
+        se_kernel: SecondaryElectronKernel,
+        small_mask: torch.Tensor,
     ) -> None:
         resist = ResistProfile3D(thickness_nm=3.0, pixel_size_nm=1.0)
         model = StochasticDefectModel3D(
-            se_kernel=se_kernel, resist=resist, dose_photons=30.0,
+            se_kernel=se_kernel,
+            resist=resist,
+            dose_photons=30.0,
         )
         defect_map = model.simulate_defects(small_mask, n_mc=5, seed=0)
         assert defect_map.ndim == 3
@@ -178,7 +189,9 @@ class TestStochasticDefectModel3D:
         assert (defect_map <= 1.0).all()
 
     def test_defect_map_deterministic(
-        self, se_kernel: SecondaryElectronKernel, small_mask: torch.Tensor,
+        self,
+        se_kernel: SecondaryElectronKernel,
+        small_mask: torch.Tensor,
     ) -> None:
         resist = ResistProfile3D(thickness_nm=3.0, pixel_size_nm=1.0)
         model = StochasticDefectModel3D(se_kernel=se_kernel, resist=resist)
@@ -187,7 +200,9 @@ class TestStochasticDefectModel3D:
         assert torch.equal(d1, d2)
 
     def test_failure_rate_3d(
-        self, se_kernel: SecondaryElectronKernel, small_mask: torch.Tensor,
+        self,
+        se_kernel: SecondaryElectronKernel,
+        small_mask: torch.Tensor,
     ) -> None:
         resist = ResistProfile3D(thickness_nm=3.0, pixel_size_nm=1.0)
         model = StochasticDefectModel3D(se_kernel=se_kernel, resist=resist)
@@ -197,7 +212,9 @@ class TestStochasticDefectModel3D:
         assert (rates <= 1.0).all()
 
     def test_through_focus_quantile(
-        self, se_kernel: SecondaryElectronKernel, small_mask: torch.Tensor,
+        self,
+        se_kernel: SecondaryElectronKernel,
+        small_mask: torch.Tensor,
     ) -> None:
         resist = ResistProfile3D(thickness_nm=3.0, pixel_size_nm=1.0)
         model = StochasticDefectModel3D(se_kernel=se_kernel, resist=resist)
@@ -290,7 +307,9 @@ class TestStochastic3DBenchmark:
         se = SecondaryElectronKernel(correlation_length_nm=2.0)
         resist = ResistProfile3D(thickness_nm=3.0, pixel_size_nm=1.0)
         benchmark = Stochastic3DBenchmark(
-            se_kernel=se, resist=resist, dose_photons=30.0,
+            se_kernel=se,
+            resist=resist,
+            dose_photons=30.0,
         )
         results = benchmark.run(n_seeds=1)
         assert len(results) > 0

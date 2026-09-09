@@ -219,18 +219,29 @@ class _MemmapGanOpcPairs(Dataset):
         print(f"[memmap] Building cache at {self.path} ({self.inner_n} samples)...")
         t0 = time.time()
         inner = _GanOpcPairs(root, resize_to, resize_mode)
-        arr = np.memmap(self.path, dtype=np.float16, mode="w+", shape=self.shape)
+        # Write to a temp file and atomically rename into place: a run
+        # killed mid-fill must not leave a truncated/zero-filled file at
+        # the final path (it would be silently treated as a valid cache
+        # on the next run).
+        tmp_path = self.path.with_suffix(self.path.suffix + f".tmp{os.getpid()}")
+        try:
+            arr = np.memmap(tmp_path, dtype=np.float16, mode="w+", shape=self.shape)
 
-        # Sequential preprocessing — avoids pickle issues with local functions
-        # and is fast enough (~5 min for 4875 samples at 512²)
-        for i in range(self.inner_n):
-            design, mask = inner[i]
-            arr[i, 0] = design.numpy().astype(np.float16)
-            arr[i, 1] = mask.numpy().astype(np.float16)
-            if (i + 1) % 500 == 0:
-                print(f"  [memmap] {i + 1}/{self.inner_n} samples cached...")
-        arr.flush()
-        del arr
+            # Sequential preprocessing — avoids pickle issues with local functions
+            # and is fast enough (~5 min for 4875 samples at 512²)
+            for i in range(self.inner_n):
+                design, mask = inner[i]
+                arr[i, 0] = design.numpy().astype(np.float16)
+                arr[i, 1] = mask.numpy().astype(np.float16)
+                if (i + 1) % 500 == 0:
+                    print(f"  [memmap] {i + 1}/{self.inner_n} samples cached...")
+            arr.flush()
+            del arr
+            os.replace(tmp_path, self.path)
+        finally:
+            # Clean up the partial temp file if the fill was interrupted.
+            if tmp_path.exists():
+                tmp_path.unlink()
         elapsed = time.time() - t0
         print(f"[memmap] Cache built in {elapsed:.1f}s ({self.path.stat().st_size / 1e9:.2f} GB)")
 
@@ -669,6 +680,7 @@ def train(cfg: TrainConfig) -> dict:
         mean = sum(epoch_losses) / max(1, len(epoch_losses))
         history.append(mean)
         means = {k: sum(v) / max(1, len(v)) for k, v in epoch_components.items()}
+        component_history.append(means)
         mask_mean_epoch = sum(epoch_mask_means) / max(1, len(epoch_mask_means))
         mask_mean_history.append(mask_mean_epoch)
         target_mean_epoch = sum(epoch_target_means) / max(1, len(epoch_target_means))

@@ -220,13 +220,19 @@ class OrfsArtifactDataset(DatasetAdapter):
     def __getitem__(self, index: int) -> LithoSample:
         self._ensure_loaded()
         assert self._tiles is not None
+        assert self._design_arr is not None
         if index < 0 or index >= len(self._tiles):
             raise IndexError(f"Index {index} out of range [0, {len(self._tiles)})")
         tile_arr, (tx_px, ty_px) = self._tiles[index]
         ox_nm, oy_nm = self._origin_nm  # type: ignore[misc]
+        # The design array is y-down (row 0 = viewer top, matching
+        # rasterize_cell_layer / load_layout) while ``ty_px`` is a row
+        # index from the top; ``tile_origin_nm`` reports the tile's
+        # lower-left corner in layout nm (y-up), so flip the row offset.
+        total_h_px = self._design_arr.shape[0]
         tile_origin_nm = (
             ox_nm + tx_px * self.pixel_nm,
-            oy_nm + ty_px * self.pixel_nm,
+            oy_nm + (total_h_px - ty_px - tile_arr.shape[0]) * self.pixel_nm,
         )
         metadata: dict[str, Any] = {
             "dataset": "orfs",

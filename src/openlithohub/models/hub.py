@@ -201,6 +201,15 @@ class ModelHub:
             cache_segment = _safe_cache_segment(model_id, kind="model_id")
         safe_filename = _safe_cache_segment(filename, kind="filename")
         cached_path = self.cache_dir / cache_segment / safe_filename
+        # Defence-in-depth containment check: the write target must stay
+        # inside the cache directory even if a caller-supplied segment
+        # somehow smuggled a traversal component past `_safe_cache_segment`.
+        cache_root = self.cache_dir.resolve()
+        if not cached_path.resolve().is_relative_to(cache_root):
+            raise ValueError(
+                f"Refusing download target outside cache dir: {cached_path} "
+                f"(root {cache_root})"
+            )
         if cached_path.exists():
             if sha256 is not None and self.get_checksum(cached_path) != sha256.lower():
                 raise ChecksumMismatchError(
@@ -264,14 +273,19 @@ class ModelHub:
 
         Resolves the host once, refuses private/non-routable addresses, and
         then forces the TLS connection to that exact IP. This closes the DNS
-        TOCTOU window that a plain ``urlopen(url)`` leaves open: a rebinder
-        cannot return a public IP for the vetting query and a private IP for
-        the actual fetch, because the fetch never re-resolves.
+        rebinding (TOCTOU) window that a naive one-shot fetch leaves open: a
+        rebinder cannot return a public IP for the vetting query and a
+        private IP for the actual fetch, because the fetch never re-resolves.
         """
         if not url.startswith("https://"):
             raise ValueError("Only HTTPS URLs are supported for model downloads")
 
         parsed = urllib.parse.urlparse(url)
+        if parsed.username or parsed.password:
+            # Embedded credentials (`https://user:pass@host/`) are a classic
+            # SSRF/confusion vector and never legitimate for a public
+            # weights fetch.
+            raise ValueError(f"URLs with embedded credentials are not supported: {url}")
         host = parsed.hostname
         if not host:
             raise ValueError(f"URL has no host component: {url}")
@@ -329,7 +343,7 @@ class ModelHub:
                 )
             sha = hashlib.sha256()
             downloaded = 0
-            with open(target, "wb") as f:
+            with target.open("wb") as f:
                 while chunk := response.read(8192):
                     downloaded += len(chunk)
                     if downloaded > max_size:

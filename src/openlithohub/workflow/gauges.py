@@ -145,8 +145,11 @@ def parse_gauge(path: str | Path) -> GaugeTable:
     The dispatch is by extension:
 
     * ``.gg`` / ``.gauge`` / ``.txt`` → whitespace-separated, ``#`` comments.
-      A header line beginning with ``#`` may give column names; otherwise
-      we assume the canonical order ``x y tangent target_cd measured_cd weight``.
+      A header line beginning with ``#`` is **required** and must cover the
+      canonical columns ``x y tangent target_cd measured_cd weight`` (after
+      synonym resolution) — files without a valid header are rejected so a
+      hand-written variant with a different column order cannot silently
+      produce wrong EPE numbers.
     * ``.csv`` → comma-separated, **header row required**. Column names
       are matched against a small synonym table (e.g. ``cd_target`` →
       ``target_cd``); unknown columns are ignored.

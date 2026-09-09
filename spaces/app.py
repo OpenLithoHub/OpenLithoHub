@@ -423,7 +423,10 @@ def load_leaderboard():
                 e.get("paper_url") or e.get("code_url") or "",
             ]
         )
-    rows.sort(key=lambda r: (r[4] is None, r[4]))
+    # Coerce to float before sorting: a leaderboard.json entry with a
+    # string value would otherwise raise TypeError on str/float comparison
+    # and take the whole Space tab down.
+    rows.sort(key=lambda r: (r[4] is None, float(r[4]) if r[4] is not None else 0.0))
     status = f"_{len(rows)} submission(s) — sorted by L2 wafer error (lower is better)._"
     return rows, status
 

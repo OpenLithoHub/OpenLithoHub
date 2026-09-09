@@ -40,6 +40,11 @@ def load_layout(
     if not path.exists():
         raise FileNotFoundError(f"Input file not found: {path}")
 
+    if pixel_nm <= 0:
+        # A non-positive pixel size would make pixels_per_dbu <= 0 and
+        # silently produce a degenerate 1x1 all-zero raster downstream.
+        raise ValueError(f"pixel_nm must be positive, got {pixel_nm}")
+
     suffix = path.suffix.lower()
 
     if suffix == ".pt":
@@ -165,6 +170,11 @@ def load_layout(
         if shape.is_polygon() or shape.is_box():
             poly = shape.polygon if shape.is_polygon() else db.Polygon(shape.box)
             region.insert(poly.transformed(trans))
+        elif shape.is_path():
+            # Routing layers are frequently stored as (thick) paths; a
+            # silent drop here would make wire geometry vanish from the
+            # raster. Convert to the stroked polygon.
+            region.insert(shape.path.polygon().transformed(trans))
         shapes_iter.next()
     region.merge()
 
@@ -179,6 +189,7 @@ def load_layout(
     # hole region (the merged Region keeps them as separate polygons,
     # so A's hole rectangle covers B's pixels).
     for poly in region.each():
+        convex_pieces: list[Any]
         try:
             convex_pieces = list(poly.decompose_convex(db.Polygon.PO_any))
         except (AttributeError, TypeError):
@@ -190,9 +201,7 @@ def load_layout(
             # decompose_convex yields SimplePolygon (no holes); iterate
             # vertices via each_point. Fall back to each_point_hull for
             # the donut-fallback path that yields a Polygon.
-            iter_points = (
-                piece.each_point if hasattr(piece, "each_point") else piece.each_point_hull
-            )
+            iter_points = getattr(piece, "each_point", None) or piece.each_point_hull
             hull = [_project(p) for p in iter_points()]
             if len(hull) >= 3:
                 drawer.polygon(hull, fill=255)

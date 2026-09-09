@@ -156,6 +156,9 @@ def run(
             pixel_nm = node_config.pixel_size_nm
     if pixel_nm is None:
         pixel_nm = 1.0
+    if writer not in ("mbmw", "vsb"):
+        console.print(f"[red]Error:[/red] --writer must be 'mbmw' or 'vsb', got {writer!r}")
+        raise typer.Exit(1)
 
     console.print("[bold]OpenLithoHub Mask Optimization[/bold]")
     console.print(f"  Input:  {input}")

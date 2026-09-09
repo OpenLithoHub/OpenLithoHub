@@ -8,11 +8,10 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.nn.functional as functional
 
 from openlithohub._utils.contour_trace import trace_contour
 from openlithohub._utils.morphology import (
-    binary_dilation,
-    binary_erosion,
     connected_components,
     distance_transform,
 )
@@ -130,12 +129,14 @@ def check_mrc(
     MRC violations are a hard-fail metric — a mask that violates these rules
     cannot be manufactured regardless of optical performance.
 
-    Width check: morphological opening with structuring element of size
-    ``kernel = floor(min_width_nm / pixel_size_nm)`` (i.e. the largest disk
-    that physically fits inside a feature of exactly ``min_width_nm``). The
-    kernel half-width passed to ``binary_erosion`` is therefore
-    ``(kernel - 1) // 2``. Features that disappear under this opening are
-    width violations. A feature exactly ``min_width_nm`` wide passes.
+    Width check: morphological opening with a square structuring element
+    of size ``kernel = floor(min_width_nm / pixel_size_nm)`` — a feature
+    passes iff it can contain that square, so a feature exactly
+    ``min_width_nm`` wide passes and anything narrower is a violation.
+    The check is implemented via exact windowed convolution (see
+    ``_opening_violation_mask``) because the radius-based erosion API
+    only supports odd (2r+1) elements, which let a (kernel-1)-px feature
+    slip through an even kernel size.
 
     Spacing check: same logic on the inverted mask — gaps that disappear
     under opening are too narrow.
@@ -159,15 +160,14 @@ def check_mrc(
 
     violations: list[dict[str, float]] = []
 
-    radius_width = max(0, (int(math.floor(min_width_nm / pixel_size_nm)) - 1) // 2)
-    radius_spacing = max(0, (int(math.floor(min_spacing_nm / pixel_size_nm)) - 1) // 2)
+    kernel_width = max(1, int(math.floor(min_width_nm / pixel_size_nm)))
+    kernel_spacing = max(1, int(math.floor(min_spacing_nm / pixel_size_nm)))
 
     width_violation_count = 0
     spacing_violation_count = 0
 
-    if has_foreground and radius_width >= 1:
-        opened = binary_dilation(binary_erosion(binary, radius=radius_width), radius=radius_width)
-        width_violation_mask = (binary > 0.5) & (opened < 0.5)
+    if has_foreground and kernel_width >= 2:
+        width_violation_mask = _opening_violation_mask(binary, kernel_width)
         width_violation_count = int(width_violation_mask.sum().item())
 
         if width_violation_count > 0:
@@ -175,11 +175,9 @@ def check_mrc(
             ys, xs = torch.where(width_violation_mask)
             _add_violations(violations, "width", ys, xs, fg_dist, pixel_size_nm, min_width_nm)
 
-    if has_foreground and has_background and radius_spacing >= 1:
+    if has_foreground and has_background and kernel_spacing >= 2:
         bg = (binary < 0.5).float()
-        eroded_bg = binary_erosion(bg, radius=radius_spacing)
-        opened_bg = binary_dilation(eroded_bg, radius=radius_spacing)
-        spacing_violation_mask = (bg > 0.5) & (opened_bg < 0.5)
+        spacing_violation_mask = _opening_violation_mask(bg, kernel_spacing)
         spacing_violation_count = int(spacing_violation_mask.sum().item())
 
         if spacing_violation_count > 0:
@@ -198,6 +196,34 @@ def check_mrc(
         width_violation_count=width_violation_count,
         spacing_violation_count=spacing_violation_count,
     )
+
+
+def _opening_violation_mask(binary: torch.Tensor, size_px: int) -> torch.Tensor:
+    """Pixels whose feature cannot contain a ``size_px`` square element.
+
+    Equivalent to ``binary & ~opening(binary, square(size_px))`` but exact
+    for even sizes too: the radius-based erosion in
+    :mod:`openlithohub._utils.morphology` only supports odd (2r+1)
+    elements, which let a (size-1)-px-wide feature pass an even ``size``
+    rule. A pixel survives here iff some fully-foreground ``size_px ×
+    size_px`` window contains it.
+    """
+    k = size_px
+    h, w = binary.shape[-2], binary.shape[-1]
+    if k > h or k > w:
+        # The structuring element is larger than the whole layout: no
+        # feature can contain it, so every foreground pixel violates.
+        return binary > 0.5
+    inp = binary.unsqueeze(0).unsqueeze(0)
+    ones = torch.ones(1, 1, k, k, device=binary.device, dtype=binary.dtype)
+    # windows[a, b] = foreground count of the k×k window anchored at (a, b)
+    windows = functional.conv2d(inp, ones)
+    valid = (windows >= k * k).float()
+    # A pixel is covered iff any valid window overlaps it: box-dilate the
+    # valid-anchor map by (k-1) in each direction.
+    cover = functional.conv2d(valid, ones, padding=k - 1)
+    covered = cover.squeeze(0).squeeze(0) > 0.5
+    return (binary > 0.5) & ~covered
 
 
 def _add_violations(
@@ -260,6 +286,13 @@ def _smooth_loop(loop: np.ndarray[Any, Any], window: int) -> np.ndarray[Any, Any
     """
     if window <= 1 or len(loop) < window:
         return loop
+    if window % 2 == 0:
+        # Even windows make the "valid" convolution emit len+1 samples and
+        # the truncation below shifts the loop by half a sample, biasing
+        # the curvature estimate. Snap to the next odd window.
+        window += 1
+        if len(loop) < window:
+            return loop
     kernel = np.ones(window, dtype=np.float64) / window
     pad = window // 2
     padded = np.concatenate([loop[-pad:], loop, loop[:pad]], axis=0)

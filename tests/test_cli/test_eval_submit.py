@@ -98,10 +98,13 @@ def test_eval_mrc_violation_rate_is_pixel_weighted() -> None:
         design_dir.mkdir()
         mask_dir.mkdir()
 
-        # Sample 0: small mask (16x16) with a 2x2 isolated dot — too narrow
-        # for the 8nm min-feature default at 1nm/px, so it triggers MRC.
+        # Sample 0: small mask (16x16) with a 2x2 isolated dot in the corner
+        # — too narrow for the 8nm min-feature default at 1nm/px, so it
+        # triggers the width rule (~4 violation px). The dot sits in the
+        # corner so the remaining background keeps an 8x8-clean gap and no
+        # spacing violations dilute the expected count.
         small = np.zeros((16, 16), dtype=np.float32)
-        small[7:9, 7:9] = 1.0
+        small[0:2, 0:2] = 1.0
         np.save(design_dir / "s0.npy", small)
         np.save(mask_dir / "s0.npy", small)
         # Sample 1: large clean mask — wide block, no violations.
