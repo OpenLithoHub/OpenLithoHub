@@ -32,6 +32,7 @@ import torch
 from .core_halo import TileRequest, plan_tile_requests, tiling_overhead
 from .geometry import BoundingBox, HaloSpec, halo_actual, read_bbox_for
 from .halo_policy import HaloContext, HaloPolicy, HaloRequirement, LegacyFixedHaloPolicy
+from .ownership import TERMINAL_ACTIVE, TERMINAL_EXACT_SKIP, OwnershipTree, partition_core
 from .screening import TileScreeningPolicy, screen_decision_to_facts
 from .sinks import TileSink
 from .sources import TileSource
@@ -159,10 +160,17 @@ def run_streaming(
     for verifier in verifier_list:
         verifier.prepare(vctx)
 
+    ownership = OwnershipTree()
     for base in plan_tile_requests(source.shape, core_size, halo_px):
-        current = base
+        ownership.add_root(base.tile_id, base.core_bbox)
+        # R17 C3a: explicit work stack.  increase_halo re-plans one leaf;
+        # subdivide retires the leaf and pushes a true area-conserving child
+        # partition whose read windows are reconstructed against the GLOBAL
+        # domain (never the parent's read bbox).
+        pending: list[TileRequest] = [base]
         refinements_left = max_requeues
-        while True:
+        while pending:
+            current = pending.pop()
             screen_decision = None
             if screening_policy is not None:
                 accounting.record_screen_query()
@@ -241,8 +249,9 @@ def run_streaming(
                         )
                         sink.write_core(current.tile_id, current.core_bbox, core_result, tile_meta)
                     accounting.record_screened_out(current.tile_id, current.core_bbox.area)
+                    ownership.set_terminal(current.tile_id, TERMINAL_EXACT_SKIP)
                     report.n_tiles += 1
-                    break
+                    continue
 
                 # Not discharged: fall through to the ordinary active path,
                 # recording the rejected legacy authority as provenance.
@@ -275,6 +284,7 @@ def run_streaming(
 
             result = forward_fn(tile)
             accounting.record_forward(current.read_bbox.area)
+            ownership.mark_forward(current.tile_id)
             ys, xs = _core_slices(current)
             core_result = result[ys, xs]
 
@@ -304,6 +314,7 @@ def run_streaming(
                         )
 
             if refinement is None:
+                ownership.set_terminal(current.tile_id, TERMINAL_ACTIVE)
                 sink.write_core(
                     current.tile_id,
                     current.core_bbox,
@@ -311,7 +322,7 @@ def run_streaming(
                     tile_meta,
                 )
                 report.n_tiles += 1
-                break
+                continue
 
             refinements_left -= 1
             report.n_requeued += 1
@@ -320,7 +331,40 @@ def run_streaming(
                 current.tile_id,
                 current.core_bbox.area,
             )
-            current = _grown_request(current, refinement, source.shape)
+            if refinement.action == "subdivide":
+                # R17 C3a: retire the parent everywhere and push a true
+                # area-conserving partition.  Child read windows are
+                # reconstructed against the GLOBAL domain (F3/§10.2), never
+                # clipped to the parent read bbox.
+                child_cores = [
+                    (f"{current.tile_id}#q{index}", box)
+                    for index, box in enumerate(
+                        partition_core(current.core_bbox, refinement.subdivision)
+                    )
+                ]
+                ownership.subdivide(current.tile_id, child_cores)
+                for session in sessions:
+                    # R17 C3b: no automatic restriction theorem — every
+                    # verifier must reach a fresh verdict on every child,
+                    # including verifiers that had PASSed the parent.
+                    session.retire(current.tile_id)
+                for child_id, child_core in child_cores:
+                    child_read = read_bbox_for(
+                        child_core,
+                        current.halo,
+                        width=source.shape[1],
+                        height=source.shape[0],
+                    )
+                    pending.append(
+                        TileRequest(
+                            core_bbox=child_core,
+                            read_bbox=child_read,
+                            halo=halo_actual(child_core, child_read),
+                            tile_id=child_id,
+                        )
+                    )
+            else:
+                pending.append(_grown_request(current, refinement, source.shape))
             del tile, result, core_result
 
     report.overhead = tiling_overhead(plan_tile_requests(source.shape, core_size, halo_px))
