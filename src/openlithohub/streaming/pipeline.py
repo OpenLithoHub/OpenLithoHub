@@ -135,6 +135,16 @@ def run_streaming(
         refinements_left = max_requeues
         while True:
             tile = source.read_window(current.read_bbox)
+            source_meta: dict[str, Any] = {}
+            metadata_fn = getattr(source, "verification_metadata", None)
+            if callable(metadata_fn):
+                source_meta = dict(
+                    metadata_fn(
+                        current.read_bbox,
+                        tile_id=current.tile_id,
+                        core_bbox=current.core_bbox,
+                    )
+                )
             result = forward_fn(tile)
             ys, xs = _core_slices(current)
             core_result = result[ys, xs]
@@ -148,6 +158,7 @@ def run_streaming(
                     read_bbox=current.read_bbox,
                     halo=current.halo,
                     tensor=tile,
+                    metadata=source_meta,
                 )
                 verdict = verifier.verify_tile(tctx)
                 reducer.add(verdict)
