@@ -203,9 +203,7 @@ def main() -> None:
             public_cert = certify_source(public, sx_frac=0.0, sy_frac=0.0)
             public_status = (
                 "PASS_PUBLIC_FIXED_SOURCE_ARB"
-                if public_replay[
-                    "max_continuous_vs_point_moment_sinc_error"
-                ] < 1e-9
+                if public_replay["max_continuous_vs_point_moment_sinc_error"] < 1e-9
                 and public_cert["finite"]
                 and public_cert["max_component_radius"] < 1e-5
                 else "FAIL"
@@ -213,9 +211,7 @@ def main() -> None:
         else:
             public_status = (
                 "PASS_PUBLIC_CONTINUOUS_LIFT_ARB_SKIPPED_COMPLEXITY"
-                if public_replay[
-                    "max_continuous_vs_point_moment_sinc_error"
-                ] < 1e-9
+                if public_replay["max_continuous_vs_point_moment_sinc_error"] < 1e-9
                 else "FAIL"
             )
         result["public_gds"] = {
