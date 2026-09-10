@@ -169,3 +169,36 @@ class OwnershipTree:
                 f"subdivision is not area-conserving: children cover {total} "
                 f"of {parent_core.area} px"
             )
+
+    # ------------------------------------------------------------------
+    # R17 C4a — terminal coverage ledger
+    # ------------------------------------------------------------------
+
+    def terminal_pixel_counts(self) -> dict[str, int]:
+        """Area per terminal disposition over the FINAL leaves.
+
+        Fails closed on an unterminated final leaf or an unknown
+        disposition; combined with the area-conserving partition invariant
+        this makes ``sum(counts) == full_chip_pixels`` checkable.
+        """
+        counts = {
+            TERMINAL_ACTIVE: 0,
+            TERMINAL_EXACT_SKIP: 0,
+            TERMINAL_VERIFY_SKIP: 0,
+        }
+        for leaf in self.final_leaves():
+            if leaf.terminal_disposition is None:
+                raise ValueError(f"final leaf {leaf.leaf_id!r} has no terminal disposition")
+            counts[leaf.terminal_disposition] += leaf.core_bbox.area
+        return counts
+
+    def verify_total_coverage(self, full_chip_pixels: int) -> dict[str, int]:
+        """Fail-closed coverage check: final leaves partition the chip."""
+        counts = self.terminal_pixel_counts()
+        total = sum(counts.values())
+        if total != full_chip_pixels:
+            raise ValueError(
+                "terminal coverage ledger does not partition the chip: "
+                f"{counts} sums to {total}, expected {full_chip_pixels}"
+            )
+        return counts

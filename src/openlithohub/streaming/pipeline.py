@@ -32,7 +32,13 @@ import torch
 from .core_halo import TileRequest, plan_tile_requests, tiling_overhead
 from .geometry import BoundingBox, HaloSpec, halo_actual, read_bbox_for
 from .halo_policy import HaloContext, HaloPolicy, HaloRequirement, LegacyFixedHaloPolicy
-from .ownership import TERMINAL_ACTIVE, TERMINAL_EXACT_SKIP, OwnershipTree, partition_core
+from .ownership import (
+    TERMINAL_ACTIVE,
+    TERMINAL_EXACT_SKIP,
+    TERMINAL_VERIFY_SKIP,
+    OwnershipTree,
+    partition_core,
+)
 from .screening import TileScreeningPolicy, screen_decision_to_facts
 from .sinks import TileSink
 from .sources import TileSource
@@ -284,6 +290,7 @@ def run_streaming(
 
             result = forward_fn(tile)
             accounting.record_forward(current.read_bbox.area)
+            accounting.record_forward_core(current.core_bbox)
             ownership.mark_forward(current.tile_id)
             ys, xs = _core_slices(current)
             core_result = result[ys, xs]
@@ -343,6 +350,7 @@ def run_streaming(
                     )
                 ]
                 ownership.subdivide(current.tile_id, child_cores)
+                accounting.record_subdivision(current.core_bbox)
                 for session in sessions:
                     # R17 C3b: no automatic restriction theorem — every
                     # verifier must reach a fresh verdict on every child,
@@ -367,6 +375,9 @@ def run_streaming(
                 pending.append(_grown_request(current, refinement, source.shape))
             del tile, result, core_result
 
+    # R17 C4a: the terminal coverage ledger must partition the chip exactly
+    # — gap, overlap, unterminated or double-disposition leaves fail closed.
+    terminal = ownership.verify_total_coverage(int(source.shape[0] * source.shape[1]))
     report.overhead = tiling_overhead(plan_tile_requests(source.shape, core_size, halo_px))
     if sessions:
         report.verification_results = {session.identity: session.finalize() for session in sessions}
@@ -376,7 +387,15 @@ def run_streaming(
             # R17 C1a: multi-verifier facade carries cross-metric-safe data
             # only — never a generic numeric upper bound.
             report.verification = fold_global(report.verification_results)
-    report.work_accounting = accounting.summary()
+    summary = accounting.summary()
+    summary.update(
+        {
+            "terminal_active_pixels": terminal[TERMINAL_ACTIVE],
+            "terminal_exact_skip_pixels": terminal[TERMINAL_EXACT_SKIP],
+            "terminal_verification_skip_pixels": terminal[TERMINAL_VERIFY_SKIP],
+        }
+    )
+    report.work_accounting = summary
     return report
 
 

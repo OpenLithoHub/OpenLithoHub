@@ -75,7 +75,11 @@ def _canonical_run() -> tuple[
 
 def test_inc28_summary_projection_is_frozen():
     accounting, source, forward, _sink = _canonical_run()
-    assert accounting.summary() == FROZEN_SUMMARY
+    summary = accounting.summary()
+    # R17 C4b adds canonical ledger keys additively; every Inc28 key must
+    # keep its exact frozen value.
+    for key, expected in FROZEN_SUMMARY.items():
+        assert summary[key] == expected, f"{key}: {summary[key]!r} != {expected!r}"
     assert source.read_calls == 1
     assert forward.calls == 1
 
