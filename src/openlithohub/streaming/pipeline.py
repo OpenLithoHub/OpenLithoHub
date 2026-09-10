@@ -64,6 +64,7 @@ class StreamingRunReport:
     overhead: dict[str, float] = field(default_factory=dict)
     verification: Any = None
     verification_results: dict[Any, GlobalVerificationResult] = field(default_factory=dict)
+    metric_descriptors: dict[Any, Any] = field(default_factory=dict)
     work_accounting: dict[str, float | int] = field(default_factory=dict)
 
 
@@ -128,8 +129,16 @@ def run_streaming(
     max_halo_px: int = 1024,
     pixel_nm: float = 1.0,
     max_requeues: int = 4,
+    tolerance_nm: float | None = None,
 ) -> StreamingRunReport:
-    """Process a full chip tile-by-tile under core/halo ownership."""
+    """Process a full chip tile-by-tile under core/halo ownership.
+
+    ``tolerance_nm`` (R17 C5) is a legacy convenience: it flows down only
+    when there is at most one verifier.  With several verifiers the error
+    budget gate requires per-verifier tolerances on each verifier's own
+    :class:`MetricDescriptor` — a scalar cannot be a shared tolerance for
+    heterogeneous metrics.
+    """
     policy = halo_policy or LegacyFixedHaloPolicy()
     verifier_list = list(verifiers)
 
@@ -152,8 +161,14 @@ def run_streaming(
     # R17 C1a: one verifier instance → one session → one reducer.  Verifier
     # results never share reduction state; the pipeline only schedules and
     # folds the per-verifier outcomes.
+    if tolerance_nm is not None and len(verifier_list) > 1:
+        raise ValueError(
+            "tolerance_nm is a single-verifier legacy convenience; attach a "
+            "MetricDescriptor with its own tolerance to each verifier instead"
+        )
     sessions: list[VerifierSession] = [
-        make_verifier_session(verifier, vctx) for verifier in verifier_list
+        make_verifier_session(verifier, vctx, fallback_tolerance=tolerance_nm)
+        for verifier in verifier_list
     ]
     report = StreamingRunReport(halo_requirement=requirement)
     accounting = work_accounting or WorkAccounting()
@@ -381,6 +396,9 @@ def run_streaming(
     report.overhead = tiling_overhead(plan_tile_requests(source.shape, core_size, halo_px))
     if sessions:
         report.verification_results = {session.identity: session.finalize() for session in sessions}
+        report.metric_descriptors = {
+            session.identity: session.metric_descriptor for session in sessions
+        }
         if len(sessions) == 1:
             report.verification = next(iter(report.verification_results.values()))
         else:

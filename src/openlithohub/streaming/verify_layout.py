@@ -19,7 +19,11 @@ from .pipeline import run_streaming
 from .screening import TileScreeningPolicy
 from .sinks import MetricOnlyTileSink
 from .sources import TileSource
-from .verification import MultiVerifierSummary, VerificationPlugin
+from .verification import (
+    MultiVerifierSummary,
+    VerificationPlugin,
+    project_metric_bound,
+)
 from .work_accounting import WorkAccounting
 
 
@@ -61,6 +65,11 @@ def verify_layout(
     reflected in ``work_accounting``; the underlying pipeline refuses to skip
     plugin verification unless the screen explicitly certifies those
     verifiers.
+
+    R17 C5: ``continuous_epe_upper_nm`` / ``hausdorff_upper_nm`` are typed
+    projections of the unique verifier owning each (quantity, unit) metric —
+    ``None`` when no verifier owns it, an explicit error when two do.  A
+    generic worst-across-metrics bound is never exposed.
     """
     sink = MetricOnlyTileSink(source.shape)
     accounting = WorkAccounting(full_chip_pixels=int(source.shape[0] * source.shape[1]))
@@ -76,20 +85,40 @@ def verify_layout(
         max_halo_px=max_halo_px,
         pixel_nm=pixel_nm,
         max_requeues=max_requeues,
+        tolerance_nm=tolerance_nm if len(tuple(verifiers)) == 1 else None,
     )
     vres = report.verification
     multi = isinstance(vres, MultiVerifierSummary)
-    # R17 C1a/C5: EPE/Hausdorff projections are only meaningful for a single
-    # verifier result; a multi-verifier summary deliberately carries no
-    # generic numeric upper bound, so the convenience fields become None.
-    worst_upper = vres.worst_upper_bound if (vres and not multi) else None
+    # R17 C5: typed projections — the unique verifier owning each
+    # (quantity, unit) metric; never a generic worst-across-metrics bound.
+    descriptors = {
+        identity: descriptor
+        for identity, descriptor in report.metric_descriptors.items()
+        if descriptor is not None
+    }
+    if not report.verification_results:
+        epe_upper = None
+        hausdorff_upper = None
+    elif not descriptors:
+        # no verifier declares a metric: legacy single-result projection
+        # (a multi-verifier summary deliberately carries no numeric bound)
+        own_bound = None if multi else (vres.worst_upper_bound if vres else None)
+        epe_upper = own_bound
+        hausdorff_upper = own_bound
+    else:
+        epe_upper = project_metric_bound(
+            report.verification_results, descriptors, quantity="epe", unit="nm"
+        )
+        hausdorff_upper = project_metric_bound(
+            report.verification_results, descriptors, quantity="hausdorff", unit="nm"
+        )
     screen_name = (
         getattr(screening_policy, "name", "none") if screening_policy is not None else "none"
     )
     return VerificationResult(
         status=vres.status if vres else "INCONCLUSIVE",
-        continuous_epe_upper_nm=worst_upper,
-        hausdorff_upper_nm=worst_upper,
+        continuous_epe_upper_nm=epe_upper,
+        hausdorff_upper_nm=hausdorff_upper,
         error_budget=vres.error_budget if (vres and not multi) else {},
         coverage=vres.coverage if (vres and not multi) else "INCONCLUSIVE",
         inconclusive_tiles=vres.n_inconclusive if vres else 0,

@@ -258,6 +258,70 @@ class VerifierIdentity:
 
 
 @dataclass(frozen=True)
+class MetricDescriptor:
+    """The metric a verifier owns: quantity, unit and its own tolerance.
+
+    R17 C5: metric identity and tolerance live with the verifier, never in
+    the pipeline.  Public conveniences (``continuous_epe_upper_nm`` …) are
+    *typed projections* of the unique verifier whose descriptor matches.
+    """
+
+    quantity: str
+    unit: str | None = None
+    tolerance: float | None = None
+
+
+class AmbiguousMetricProjectionError(ValueError):
+    """Two or more verifiers own the same (quantity, unit) convenience slot."""
+
+
+def discover_metric_descriptor(plugin: VerificationPlugin) -> MetricDescriptor | None:
+    """Read a verifier's optional ``metric_descriptor`` (value or callable)."""
+    raw = getattr(plugin, "metric_descriptor", None)
+    if raw is None:
+        return None
+    if callable(raw):
+        raw = raw()
+    if not isinstance(raw, MetricDescriptor):
+        raise TypeError(f"verifier {plugin.name!r} metric_descriptor must be a MetricDescriptor")
+    return raw
+
+
+def project_metric_bound(
+    results: dict[VerifierIdentity, GlobalVerificationResult],
+    descriptors: dict[VerifierIdentity, MetricDescriptor],
+    *,
+    quantity: str,
+    unit: str,
+) -> float | None:
+    """Typed public projection: worst upper bound of the UNIQUE owner.
+
+    Zero matching verifiers project to ``None``; more than one matching
+    verifier is an explicit ambiguity failure (fail closed) — a generic
+    worst-across-metrics bound is not a theorem.
+    """
+    owners = 0
+    bounds: list[float] = []
+    for identity, descriptor in descriptors.items():
+        if descriptor.quantity != quantity or descriptor.unit != unit:
+            continue
+        if identity not in results:
+            continue
+        owners += 1
+        bound = results[identity].worst_upper_bound
+        if bound is not None:
+            bounds.append(bound)
+    if owners > 1:
+        raise AmbiguousMetricProjectionError(
+            f"{owners} verifiers own the {quantity}/{unit} metric; the "
+            "convenience projection requires exactly one owner"
+        )
+    if not bounds:
+        return None
+    return max(bounds)
+
+
+@dataclass(frozen=True)
 class MultiVerifierSummary:
     """Cross-verifier facade for ``report.verification`` when n > 1 (R17 C1a).
 
@@ -290,6 +354,7 @@ class VerifierSession:
         self.identity = identity
         self.plugin = plugin
         self.reducer = reducer
+        self.metric_descriptor = discover_metric_descriptor(plugin)
 
     def add(self, result: TileVerificationResult) -> None:
         self.reducer.add(result)
@@ -308,6 +373,8 @@ class VerifierSession:
 def make_verifier_session(
     plugin: VerificationPlugin,
     context: VerificationContext,
+    *,
+    fallback_tolerance: float | None = None,
 ) -> VerifierSession:
     """Create the session for one verifier instance (R17 C1a).
 
@@ -315,12 +382,18 @@ def make_verifier_session(
     reducer construction; the stock per-session
     :class:`StreamingVerificationReducer` is the fallback.  The legacy batch
     ``reduce(results)`` method is *not* given new streaming semantics.
+
+    R17 C5 tolerance ownership: the stock fallback reducer receives the
+    verifier's own ``MetricDescriptor.tolerance`` when declared, else the
+    caller's ``fallback_tolerance`` (which ``run_streaming`` only sets for
+    a single/default nm-metric verifier).
     """
     identity = VerifierIdentity(
         name=str(plugin.name),
         version=str(getattr(plugin, "version", "0")),
         instance_key=str(getattr(plugin, "instance_key", "default")),
     )
+    descriptor = discover_metric_descriptor(plugin)
     factory = getattr(plugin, "make_reducer", None)
     if callable(factory):
         reducer = factory(context, identity)
@@ -329,7 +402,8 @@ def make_verifier_session(
                 f"verifier {identity!r} make_reducer must return a StreamingVerificationReducer"
             )
     else:
-        reducer = StreamingVerificationReducer()
+        tolerance = (descriptor.tolerance if descriptor is not None else None) or fallback_tolerance
+        reducer = StreamingVerificationReducer(tolerance=tolerance)
     return VerifierSession(plugin=plugin, identity=identity, reducer=reducer)
 
 
