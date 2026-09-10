@@ -1,65 +1,116 @@
-# QDM / B04 Plugin Readiness Checklist
+# B04 / QDM Readiness Scoreboard
 
-Status after RFC 0008 foundation + B04 Increment 14 integration
-(2026-09-10). This checklist is the honest scoreboard required by the
-B04 architecture brief (§23). The Increment 14 mathematical closure
-(Theorem/corollary statements for the contour-reconstruction bound) is
-available as LaTeX source in
-[`docs/notes/b04-increment14-extracted-closure.tex`](notes/b04-increment14-extracted-closure.tex).
+**Current increment:** 26 (Exact-Vector Proof-Facing Cutover + Global Finite Spectral Statistic)
+**Current HEAD:** `4c3de99` (post-Inc25) + streaming architecture (RFC 0008) + Inc16–26 proof modules
+**Last updated:** 2026-09-10
 
-## Foundation statuses
+This is the canonical live scoreboard required by the B04 architecture brief (§18/§22).
+Historical per-increment notes remain in `proof_artifacts/README_B04_PATCH.md`.
+
+---
+
+## Status summary
 
 ```text
-STREAMING FOUNDATION:            PASS
-CERTIFIED-HALO FOUNDATION:       PASS
-PLUGIN FOUNDATION:               PASS
-SOURCE-NATIVE VERIFIER FOUNDATION: PASS (interfaces + reference shell only)
-CONTINUOUS-METRIC FIREWALL:      PASS
-B04 ACTUAL-MODEL READINESS:      READY
-QDM READINESS:                   CONDITIONAL
+EXACT-VECTOR PROOF PATH:            PASS
+STREAMING FOUNDATION:               PASS
+CERTIFIED-HALO FOUNDATION:          PARTIAL (brackets exist, tight closure open)
+PLUGIN FOUNDATION:                  PASS
+SOURCE-NATIVE VERIFIER FOUNDATION:  PASS (interfaces + reference shell)
+CONTINUOUS CERTIFICATION:           PARTIAL (bridge characterized, interval eval OPEN)
+FULL-CHIP DENSE ALLOCATION:         ABSENT (MetricOnlyTileSink path verified)
+ACTIVE-WORK INSTRUMENTATION:        PASS (WorkAccounting added)
+LARGE-LAYOUT MEMORY SCALING:        PASS (memmap in/out, O(tile+batch) verified)
+LARGE-LAYOUT SPEED CROSSOVER:       MEASURED (benchmark_b04_inc21/22/23/24/26)
+REAL GDS/OAS SEMANTICS:             PASS (KLayout-gated semantic tests)
+SIMULATOR INTEROPERABILITY:         PASS (backend contract + reference Hopkins)
+PHYSICS DOMAIN VALIDATION:          OPEN (synthetic Hopkins, not foundry-calibrated)
+INDUSTRIAL VALUE:                   PROMISING
+QDM READINESS:                      CONDITIONAL
 ```
 
-## Evidence map
+---
 
-| Requirement | Evidence |
-| --- | --- |
-| A. big-layout streaming under budget | `tests/test_streaming/test_pipeline.py::TestStreamingMemoryAcceptance` (memmap in/out, 2048² layout, 256 px tiles) |
-| B. no full input+output+weight trio | `MetricOnlyTileSink` / `MemmapTileSink`; pipeline writes cores only — no weight map exists on the path |
-| C. no seam/gap | `TestIdentityRoundTrip` (bitwise round-trip, one-write-per-core); exact-core-cover property tests |
-| D. halo selector with provenance | `HaloRequirement` (halo/reason/provenance/error_bound/status); `KernelTailHaloPolicy`, `PhysicalInteractionHaloPolicy` |
-| E. dummy verifier end-to-end | `DummyVerifier` + `TestVerifierIntegration` (halo request, verify, PASS/FAIL/INCONCLUSIVE, refinement, stream reduce) |
-| F. existing tests pass | full suite green (1533+ pre-refactor tests untouched) |
-| G. old vs streaming benchmark | `benchmarks/benchmark_streaming.py` |
-| H. source-native foundation | `verify/source_snapshot.py`, `verify/source_native.py` (opt-in `source_native_full` backend, no top-K dependency) |
-| I. continuous metric firewall | `tests/test_streaming/test_metric_firewall.py`; `epe_max_nm` semantics unchanged |
-| J. budget composition | `StreamingVerificationReducer.error_budget` + `test_error_budget_composition` |
-| K. coverage semantics | `PARTIAL_COVER != PASS` pinned in reducer tests and `verify/spatial.reduce_coverage` |
-| B04 actual model | `tests/test_verify/` replays the frozen Increment 11–14 artifacts (164 cells, 148 seeded, `ALL_COMPONENTS_COVERED`, Hausdorff uppers 0.976/1.056/2.032 nm) |
-| Certified-halo brackets | `verify/halo.py` + Increment 15 artifact: on the 72×72 ArF K=24 snapshot, ε=2.916392e-3 gives only `29 ≤ h* ≤ 36` px (PARTIAL). The unrestricted-binary lower bound proves no smaller halo can be certified — a useful large-layout certified halo for arbitrary binary exteriors is **not yet obtained** and is honestly reported as `PARTIAL_NONTRIVIAL_SUFFICIENT_HALO_NOT_OBTAINED` |
+## What is proved (with evidence)
 
-## Why QDM READINESS is CONDITIONAL
+### Exact-vector proof path
+`EXACT_VECTOR_PIXEL_CENTER_INDICATOR` is enforced by contract
+(`ExactVectorMaskContract.__post_init__` rejects `dense_loader_used=True`
+and nonzero `representation_bridge_upper`).  The dense/PIL loader is absent
+from the proof path.  Quantization and pixel-center convention remain
+explicit provenance assumptions, not zero-error claims to continuous polygons.
 
-- No QDM mathematics is implemented (explicitly out of scope this round).
-- `OutwardRoundedCPUBackend` is a reference shell: enclosures are
-  placeholder bounds, not interval evaluation of the frozen Hopkins
-  operator.
-- The actual-model MVP replay (§10D) runs the **exact-source expanded-band
-  gate** on pinned artifacts, but not yet an end-to-end outward-rounded
-  certificate computed inside OpenLithoHub on a freshly generated mask.
+### Streaming foundation
+`TileSource` (`Tensor`, `Memmap`, `VectorLayout`), `TileSink`
+(`Tensor`, `Memmap`, `MetricOnly`), `TileScheduler` with verifier-driven
+refinement, and `run_streaming` pipeline with `O(tile area + active batch)`
+peak memory.  Verified: memmap in/out on 2048² layout, 256 px tiles,
+`max_owned_duplicate_views = 0`, no full-chip dense allocation.
+
+### Certified halo (bracket, not tight closure)
+`verify/halo.py` provides `socs_absolute_tail_upper` (sufficient) and
+`unrestricted_binary_tail_lower` (necessary).  On the 72×72 ArF K=24
+snapshot, ε=2.916392e-3 gives only the bracket `29 ≤ h* ≤ 36` px — a useful
+large-layout certified halo for arbitrary binary exteriors is **not yet
+obtained**.  For *known* layouts, Increments 16–19 close the gap via run
+compression + direct spectrum.
+
+### Global finite spectral statistic (Inc 26)
+`global_finite_spectral_summary` streams the complete finite layout into
+arbitrary-frequency Fourier moments with `spatial_halo_error_upper = 0` for
+the declared finite plane-wave quadrature model.  This eliminates the spatial
+halo as an error source for that model — the proof obligation moves to
+pupil/source quadrature.
+
+### Semantic hardening (Inc 22)
+`PhysicalInstanceKey` distinguishes source repetition from read repetition.
+`KLayoutAlignedRunSource` stamps `physical:<sha256>` owner ids.
+PATH normalization (round caps → trunk + discs) is parser-visible and tested.
+One-way reference-enclosure acceptance criterion in `verify/replay_contract.py`.
+
+### Raster-bridge characterization (Inc 23)
+On the 512² fixture, the dense loader's 6226-pixel symmetric difference is
+entirely false positives (zero false negatives), mutual Chebyshev radius 1 px,
+Hausdorff upper 11.31 nm @ 8 nm pixels.  The module does not assert
+loader/exact-vector equivalence.
+
+### Optical raster-to-contour bridge (Inc 24)
+SOCS modewise intensity bridge `Σ w_j(2A_jB_j+B_j²)`, `delta_I/κ` contour
+transfer, `ProcessWindowBridgeBudget` additive composition.  Periodic 128 px
+Hopkins tile diagnostic: max intensity delta ~0.17, EPE ~24 nm.  Claim
+firewall: all results are `NUMERICAL_DIAGNOSTIC`, not interval-certified.
+
+### Proof-carrying verification replay chain
+Increment 11–15 frozen artifacts replay in CI:
+164 active cells, 148 seeded, `ALL_COMPONENTS_COVERED`,
+Hausdorff uppers 0.976/1.056/2.032 nm.
+`EXTRACTED_CONTOUR_EPE` requires `ALL_COMPONENTS_COVERED` plus the
+reconstruction artifact.  `epe_max_nm` semantics untouched.
+
+---
 
 ## Remaining blockers to QDM READY
 
-1. Interval/outward-rounded evaluator for the frozen source-native Hopkins
-   operator (CPU, dyadic-exact import path exists).
-2. Certified oriented-slab spatial extraction (`η_sp` from the seed/slab
-   theorem) wired into `TileVerificationResult.spatial_extraction_error`.
-3. `SourceNativeVerificationBackend` consumed by a real verifier plugin on
-   a pinned mask + pinned forward model, machine-replayed in CI.
-4. Input adapter: KLayout/GDS/OASIS geometry must emit canonical
-   horizontal runs *before* full-canvas rasterization, so the Increment 19
-   direct run-spectrum accumulator can stream the layout-conditioned
-   spectrum end-to-end. (Increment 19 itself closed the previous
-   `OPEN_IMPLEMENTATION`: direct streamed spectral construction now
-   replays `PASS_DIRECT_STREAMED_SPECTRAL_CONSTRUCTION` with the corrected
-   spatial grid never materialized, and matches Increment 18's spectra to
-   <1e-14.)
+1. **Pupil/source quadrature remainder**: interval-certified evaluation of
+   the frozen Hopkins/SOCS operator on the compact optical frequency domain
+   (Increment 26 defines the finite moment vector; quadrature error bound is
+   the next proof obligation).
+2. **Certified oriented-slab spatial extraction**: wire the seed/slab
+   theorem's `η_sp` into `TileVerificationResult.spatial_extraction_error`.
+3. **Real verifier plugin**: `SourceNativeVerificationBackend` consumed by a
+   verifier on a pinned mask + forward model, machine-replayed in CI.
+4. **Continuous Hopkins equivalence**: prove that the finite plane-wave
+   quadrature converges to the continuous Hopkins integral within a
+   certified bound (Increment 26 defines the model; the bound is open).
+5. **Foundry calibration**: independent validation against wafer/SEM data
+   before any industrial physics claim.
+
+---
+
+## What is explicitly NOT proved
+
+- zero error to arbitrary continuous polygon/wafer models
+- foundry-calibrated optical accuracy
+- practical full-chip speedup over dense raster at production scale
+- certified process-window on real layouts
+- complete GDS/OASIS semantic coverage

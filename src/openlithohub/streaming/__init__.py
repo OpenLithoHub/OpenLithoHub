@@ -54,6 +54,8 @@ from .verification import (
     VerificationRegistry,
     verification_registry,
 )
+from .verify_layout import VerificationResult, verify_layout
+from .work_accounting import WorkAccounting
 
 __all__ = [
     "DEFAULT_HALO_PX",
@@ -85,7 +87,9 @@ __all__ = [
     "VerificationContext",
     "VerificationPlugin",
     "VerificationRegistry",
+    "VerificationResult",
     "VectorLayoutTileSource",
+    "WorkAccounting",
     "combine_requirements",
     "estimate_minimum_halo",
     "halo_actual",
@@ -98,4 +102,5 @@ __all__ = [
     "subdivide_request",
     "tiling_overhead",
     "verification_registry",
+    "verify_layout",
 ]
