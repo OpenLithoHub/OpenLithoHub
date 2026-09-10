@@ -65,6 +65,7 @@ class StreamingRunReport:
     verification: Any = None
     verification_results: dict[Any, GlobalVerificationResult] = field(default_factory=dict)
     metric_descriptors: dict[Any, Any] = field(default_factory=dict)
+    ownership: Any = None
     work_accounting: dict[str, float | int] = field(default_factory=dict)
 
 
@@ -393,6 +394,7 @@ def run_streaming(
     # R17 C4a: the terminal coverage ledger must partition the chip exactly
     # — gap, overlap, unterminated or double-disposition leaves fail closed.
     terminal = ownership.verify_total_coverage(int(source.shape[0] * source.shape[1]))
+    report.ownership = ownership
     report.overhead = tiling_overhead(plan_tile_requests(source.shape, core_size, halo_px))
     if sessions:
         report.verification_results = {session.identity: session.finalize() for session in sessions}
