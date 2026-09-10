@@ -20,7 +20,7 @@ SOURCE-NATIVE VERIFIER FOUNDATION:  PASS (interfaces + reference shell)
 CONTINUOUS CERTIFICATION:           PARTIAL (bridge characterized, interval eval OPEN)
 PRE-FORWARD SCREENING:              PASS (fail-closed, certified decisions only)
 VERIFICATION EXECUTION SEMANTICS:   R17 HARDENED (per-verifier sessions, true subdivision, dual ledgers)
-REAL-DENSITY SCREENING VALIDITY:    GATE RUNNING (Inc29 Ibex routed crops)
+REAL-DENSITY SCREENING VALIDITY:    MEASURED (Inc29 Ibex routed crops, MODERATE verdict)
 FULL-CHIP DENSE ALLOCATION:         ABSENT (MetricOnlyTileSink path verified)
 ACTIVE-WORK INSTRUMENTATION:        PASS (WorkAccounting driven by run_streaming)
 LARGE-LAYOUT MEMORY SCALING:        PASS (memmap in/out, O(tile+batch) verified)
@@ -85,6 +85,21 @@ plugins.  `WorkAccounting` is driven by the actual `run_streaming` loop
 (512²–16384², `dense_full`/`tiled_raster`/`b04_vector`/`b04_selective`)
 measures wall time, peak RSS and crossover fields with zero dense-allocation
 events on the selective path.
+
+### Realistic-density routed-block validity (Inc 29)
+On the pinned public PDB Sky130HD **Ibex** routed GDS (15515 cells, 0.579
+utilization) via deterministic nested center crops, exact-empty-context
+screening still discharges real work at every scale: active fraction
+0.3125 (4096²) → 0.5391 (8192²) → 0.5117 (16384²), with a stable 0.570
+screen-only diagnostic at 32768²; peak RSS stays flat (~1.4 GB) while the
+dense baseline already needs 2.0 GB at 4096²; zero dense allocations on
+the selective path; correctness witness `max_abs_error = 0.0`.  Verdict:
+**MODERATE_ON_REALISTIC_DENSITY** — empty screening is retained, and the
+next work-avoidance mainline adds nonempty-tile (sensitivity-collar)
+screening.  Honest negative: **no wall-time crossover at real density**
+in the tested range (selective is slower than dense/tiled per common-size
+comparison); the B04 claim at realistic density is certified work
+avoidance and bounded memory, not speed.
 
 ### Semantic hardening (Inc 22)
 `PhysicalInstanceKey` distinguishes source repetition from read repetition.
