@@ -19,6 +19,7 @@ PLUGIN FOUNDATION:                  PASS
 SOURCE-NATIVE VERIFIER FOUNDATION:  PASS (interfaces + reference shell)
 CONTINUOUS CERTIFICATION:           PARTIAL (bridge characterized, interval eval OPEN)
 PRE-FORWARD SCREENING:              PASS (fail-closed, certified decisions only)
+VERIFICATION EXECUTION SEMANTICS:   R17 HARDENED (per-verifier sessions, true subdivision, dual ledgers)
 REAL-DENSITY SCREENING VALIDITY:    GATE RUNNING (Inc29 Ibex routed crops)
 FULL-CHIP DENSE ALLOCATION:         ABSENT (MetricOnlyTileSink path verified)
 ACTIVE-WORK INSTRUMENTATION:        PASS (WorkAccounting driven by run_streaming)
