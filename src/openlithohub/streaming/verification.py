@@ -146,6 +146,16 @@ class StreamingVerificationReducer:
         """Record one verdict; a later verdict for the same tile replaces it."""
         self._latest[result.tile_id] = result
 
+    def retire(self, tile_id: str) -> None:
+        """Remove a tile from final completeness (R17 C1a parent retirement).
+
+        Subdivision retires the parent: its result must cease to participate
+        in finalization.  This is a different operation from replacement —
+        a halo refinement *replaces* a leaf's latest result, while
+        subdivision *retires* the parent and introduces new child leaves.
+        """
+        self._latest.pop(tile_id, None)
+
     @property
     def n_tiles(self) -> int:
         return len(self._latest)
@@ -232,6 +242,117 @@ class StreamingVerificationReducer:
             certificate_refs=tuple(refs),
             metrics=dict(metrics),
         )
+
+
+@dataclass(frozen=True, order=True)
+class VerifierIdentity:
+    """Stable per-instance verifier identity (R17 C1a).
+
+    Two instances of the same verifier class are distinct verifiers and must
+    never share reduction state; ``instance_key`` separates them.
+    """
+
+    name: str
+    version: str
+    instance_key: str = "default"
+
+
+@dataclass(frozen=True)
+class MultiVerifierSummary:
+    """Cross-verifier facade for ``report.verification`` when n > 1 (R17 C1a).
+
+    Deliberately carries only cross-metric-safe data.  There is **no**
+    ``worst_upper_bound`` here on purpose: a generic numeric upper bound
+    across heterogeneous metrics is not a theorem.
+    """
+
+    status: Literal["PASS", "FAIL", "INCONCLUSIVE"]
+    n_verifiers: int
+    n_pass: int
+    n_fail: int
+    n_inconclusive: int
+
+
+class VerifierSession:
+    """One verifier instance → exactly one session → exactly one reducer.
+
+    The session owns this verifier's per-tile results.  A halo refinement
+    replaces a leaf's latest result; ``retire`` implements parent removal
+    after subdivision.  Results of different verifier instances never mix.
+    """
+
+    def __init__(
+        self,
+        plugin: VerificationPlugin,
+        identity: VerifierIdentity,
+        reducer: StreamingVerificationReducer,
+    ) -> None:
+        self.identity = identity
+        self.plugin = plugin
+        self.reducer = reducer
+
+    def add(self, result: TileVerificationResult) -> None:
+        self.reducer.add(result)
+
+    def retire(self, tile_id: str) -> None:
+        self.reducer.retire(tile_id)
+
+    def finalize(self) -> GlobalVerificationResult:
+        return self.reducer.finalize()
+
+    def results(self) -> list[TileVerificationResult]:
+        """Latest result per non-retired tile (legacy batch-reduce input)."""
+        return list(self.reducer._latest.values())
+
+
+def make_verifier_session(
+    plugin: VerificationPlugin,
+    context: VerificationContext,
+) -> VerifierSession:
+    """Create the session for one verifier instance (R17 C1a).
+
+    Verifiers may provide ``make_reducer(context, identity)`` to own their
+    reducer construction; the stock per-session
+    :class:`StreamingVerificationReducer` is the fallback.  The legacy batch
+    ``reduce(results)`` method is *not* given new streaming semantics.
+    """
+    identity = VerifierIdentity(
+        name=str(plugin.name),
+        version=str(getattr(plugin, "version", "0")),
+        instance_key=str(getattr(plugin, "instance_key", "default")),
+    )
+    factory = getattr(plugin, "make_reducer", None)
+    if callable(factory):
+        reducer = factory(context, identity)
+        if not isinstance(reducer, StreamingVerificationReducer):
+            raise TypeError(
+                f"verifier {identity!r} make_reducer must return a StreamingVerificationReducer"
+            )
+    else:
+        reducer = StreamingVerificationReducer()
+    return VerifierSession(plugin=plugin, identity=identity, reducer=reducer)
+
+
+def fold_global(
+    results: dict[VerifierIdentity, GlobalVerificationResult],
+) -> MultiVerifierSummary:
+    """Apply the PASS/FAIL/INCONCLUSIVE firewall across verifier outcomes."""
+    n_pass = sum(r.status == "PASS" for r in results.values())
+    n_fail = sum(r.status == "FAIL" for r in results.values())
+    n_inconclusive = sum(r.status == "INCONCLUSIVE" for r in results.values())
+    if n_fail:
+        status: Literal["PASS", "FAIL", "INCONCLUSIVE"] = "FAIL"
+    elif n_inconclusive or not results:
+        status = "INCONCLUSIVE"
+    else:
+        status = "PASS"
+    return MultiVerifierSummary(
+        status=status,
+        n_verifiers=len(results),
+        n_pass=n_pass,
+        n_fail=n_fail,
+        n_inconclusive=n_inconclusive,
+    )
 
 
 class VerificationRegistry:

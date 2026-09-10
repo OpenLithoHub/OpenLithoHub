@@ -19,7 +19,7 @@ from .pipeline import run_streaming
 from .screening import TileScreeningPolicy
 from .sinks import MetricOnlyTileSink
 from .sources import TileSource
-from .verification import VerificationPlugin
+from .verification import MultiVerifierSummary, VerificationPlugin
 from .work_accounting import WorkAccounting
 
 
@@ -78,7 +78,11 @@ def verify_layout(
         max_requeues=max_requeues,
     )
     vres = report.verification
-    worst_upper = vres.worst_upper_bound if vres else None
+    multi = isinstance(vres, MultiVerifierSummary)
+    # R17 C1a/C5: EPE/Hausdorff projections are only meaningful for a single
+    # verifier result; a multi-verifier summary deliberately carries no
+    # generic numeric upper bound, so the convenience fields become None.
+    worst_upper = vres.worst_upper_bound if (vres and not multi) else None
     screen_name = (
         getattr(screening_policy, "name", "none") if screening_policy is not None else "none"
     )
@@ -86,8 +90,8 @@ def verify_layout(
         status=vres.status if vres else "INCONCLUSIVE",
         continuous_epe_upper_nm=worst_upper,
         hausdorff_upper_nm=worst_upper,
-        error_budget=vres.error_budget if vres else {},
-        coverage=vres.coverage if vres else "INCONCLUSIVE",
+        error_budget=vres.error_budget if (vres and not multi) else {},
+        coverage=vres.coverage if (vres and not multi) else "INCONCLUSIVE",
         inconclusive_tiles=vres.n_inconclusive if vres else 0,
         total_tiles=report.n_tiles,
         model_provenance=(

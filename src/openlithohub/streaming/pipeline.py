@@ -36,12 +36,15 @@ from .screening import TileScreeningPolicy
 from .sinks import TileSink
 from .sources import TileSource
 from .verification import (
+    GlobalVerificationResult,
     RefinementRequest,
-    StreamingVerificationReducer,
     TileContext,
     TileVerificationResult,
     VerificationContext,
     VerificationPlugin,
+    VerifierSession,
+    fold_global,
+    make_verifier_session,
 )
 from .work_accounting import WorkAccounting
 
@@ -53,6 +56,7 @@ class StreamingRunReport:
     halo_requirement: HaloRequirement | None = None
     overhead: dict[str, float] = field(default_factory=dict)
     verification: Any = None
+    verification_results: dict[Any, GlobalVerificationResult] = field(default_factory=dict)
     work_accounting: dict[str, float | int] = field(default_factory=dict)
 
 
@@ -138,7 +142,12 @@ def run_streaming(
         requirement = physical
     halo_px = min(requirement.halo_px, max_halo_px)
 
-    reducer = StreamingVerificationReducer()
+    # R17 C1a: one verifier instance → one session → one reducer.  Verifier
+    # results never share reduction state; the pipeline only schedules and
+    # folds the per-verifier outcomes.
+    sessions: list[VerifierSession] = [
+        make_verifier_session(verifier, vctx) for verifier in verifier_list
+    ]
     report = StreamingRunReport(halo_requirement=requirement)
     accounting = work_accounting or WorkAccounting()
     full_pixels = int(source.shape[0] * source.shape[1])
@@ -188,16 +197,16 @@ def run_streaming(
                 }
 
                 if verifier_list:
-                    reducer.add(
-                        TileVerificationResult(
-                            tile_id=current.tile_id,
-                            core_bbox=current.core_bbox,
-                            status="PASS",
-                            upper_bound=screen_decision.verification_upper_bound,
-                            certificate_ref=screen_decision.certificate_ref,
-                            metrics=dict(screen_decision.metrics),
-                        )
+                    screen_pass = TileVerificationResult(
+                        tile_id=current.tile_id,
+                        core_bbox=current.core_bbox,
+                        status="PASS",
+                        upper_bound=screen_decision.verification_upper_bound,
+                        certificate_ref=screen_decision.certificate_ref,
+                        metrics=dict(screen_decision.metrics),
                     )
+                    for session in sessions:
+                        session.add(screen_pass)
 
                 sink.write_core(
                     current.tile_id,
@@ -238,7 +247,8 @@ def run_streaming(
             # Type already declared on the screened-out path above.
             tile_meta = {}
             refinement: RefinementRequest | None = None
-            for verifier in verifier_list:
+            for session in sessions:
+                verifier = session.plugin
                 tctx = TileContext(
                     tile_id=current.tile_id,
                     core_bbox=current.core_bbox,
@@ -248,7 +258,7 @@ def run_streaming(
                     metadata=source_meta,
                 )
                 verdict = verifier.verify_tile(tctx)
-                reducer.add(verdict)
+                session.add(verdict)
                 tile_meta[f"{verifier.name}_status"] = verdict.status
                 if verdict.status == "INCONCLUSIVE" and refinement is None:
                     if refinements_left > 0:
@@ -279,8 +289,14 @@ def run_streaming(
             del tile, result, core_result
 
     report.overhead = tiling_overhead(plan_tile_requests(source.shape, core_size, halo_px))
-    if verifier_list:
-        report.verification = reducer.finalize()
+    if sessions:
+        report.verification_results = {session.identity: session.finalize() for session in sessions}
+        if len(sessions) == 1:
+            report.verification = next(iter(report.verification_results.values()))
+        else:
+            # R17 C1a: multi-verifier facade carries cross-metric-safe data
+            # only — never a generic numeric upper bound.
+            report.verification = fold_global(report.verification_results)
     report.work_accounting = accounting.summary()
     return report
 

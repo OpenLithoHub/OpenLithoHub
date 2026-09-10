@@ -7,6 +7,7 @@ from typing import Any
 
 from openlithohub.streaming.vector_runs import OwnedRunSlice
 from openlithohub.streaming.verification import (
+    StreamingVerificationReducer,
     TileContext,
     TileVerificationResult,
     VerificationContext,
@@ -90,9 +91,16 @@ class RunOwnershipVerifier:
             },
         )
 
+    def make_reducer(self, context: Any, identity: Any) -> StreamingVerificationReducer:
+        # R17 C1a: this verifier owns an independent reducer per session.  It
+        # must never share reducer state with process / contour / EPE /
+        # Hausdorff verifiers; its PASS only means the ownership contract is
+        # internally valid, never a process-window PASS.
+        return StreamingVerificationReducer()
+
     def reduce(self, results: Any) -> Any:
-        # The repository's existing StreamingVerificationReducer remains
-        # authoritative; this plugin does not create a parallel reducer.
+        # Legacy batch hook retained for direct callers; the streaming
+        # pipeline uses per-session reducers (see make_reducer above).
         return results
 
     def finalize(self) -> None:
