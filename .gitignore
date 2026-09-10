@@ -49,6 +49,11 @@ site/
 checkpoints/*.pt
 checkpoints/*.metadata.json
 
+# B04 pinned proof grids — small (<500 KB large-file gate) and required by
+# the verify artifact-replay tests on fresh clones; tracked despite *.npz.
+!proof_artifacts/B04_ExactSource_ExpandedBand_Grid_2026-09-09.npz
+!proof_artifacts/B04_ExactSource_CoefficientCache_2026-09-09.npz
+
 # Claude harness internals
 .claude/
 
