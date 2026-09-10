@@ -30,6 +30,7 @@ import numpy as np
 import torch
 
 from .geometry import BoundingBox
+from .physical_identity import InstancePathElement, PhysicalInstanceKey
 
 Point = tuple[int, int]
 
@@ -471,6 +472,7 @@ class KLayoutAlignedRunSource(ExactVectorRunSource):
         *,
         pixel_size_nm: float,
         layer: str | None = None,
+        top_cell: str | None = None,
     ) -> KLayoutAlignedRunSource:
         try:
             import klayout.db as db
@@ -483,9 +485,17 @@ class KLayoutAlignedRunSource(ExactVectorRunSource):
         layout = db.Layout()
         layout.read(str(path))
         tops = list(layout.top_cells())
-        if len(tops) != 1:
-            raise ValueError("theorem-facing adapter requires exactly one top cell")
-        top = tops[0]
+        if top_cell is None:
+            if len(tops) != 1:
+                raise ValueError(
+                    "theorem-facing adapter requires exactly one top cell "
+                    "or an explicit top_cell name"
+                )
+            top = tops[0]
+        else:
+            top = layout.cell(top_cell)
+            if top is None:
+                raise ValueError(f"unknown top cell {top_cell!r}")
         bbox = top.bbox()
         layer_index = _select_layer(layout, layer)
 
@@ -505,21 +515,112 @@ class KLayoutAlignedRunSource(ExactVectorRunSource):
         width = bbox.width() // step
         height = bbox.height() // step
 
+        def _call_or_attr(obj: Any, name: str, default: Any = None) -> Any:
+            value = getattr(obj, name, default)
+            return value() if callable(value) else value
+
+        def _transform_token(trans: Any) -> str:
+            if trans is None:
+                return "none"
+            to_s = getattr(trans, "to_s", None)
+            if callable(to_s):
+                return str(to_s())
+            return str(trans)
+
+        def _instance_path(it_obj: Any) -> tuple[InstancePathElement, ...]:
+            path_value = _call_or_attr(it_obj, "path", ())
+            out = []
+            for elem in tuple(path_value):
+                cell_inst = _call_or_attr(elem, "cell_inst", None)
+                cell_index = int(_call_or_attr(cell_inst, "cell_index", -1))
+                ia = int(_call_or_attr(elem, "ia", 0))
+                ib = int(_call_or_attr(elem, "ib", 0))
+                specific = _call_or_attr(elem, "specific_cplx_trans", None)
+                out.append(
+                    InstancePathElement(
+                        source_cell_index=cell_index,
+                        array_i=ia,
+                        array_j=ib,
+                        specific_transform=_transform_token(specific),
+                    )
+                )
+            return tuple(out)
+
+        def _shape_fingerprint(shape_obj: Any) -> str:
+            prop_id = int(_call_or_attr(shape_obj, "prop_id", 0) or 0)
+            payload: tuple[Any, ...]
+            if shape_obj.is_path():
+                path_obj = _call_or_attr(shape_obj, "path")
+                pts = tuple((int(p.x), int(p.y)) for p in _call_or_attr(path_obj, "each_point", ()))
+                payload = (
+                    "PATH",
+                    pts,
+                    int(_call_or_attr(path_obj, "width", 0)),
+                    int(_call_or_attr(path_obj, "bgn_ext", 0)),
+                    int(_call_or_attr(path_obj, "end_ext", 0)),
+                    bool(_call_or_attr(path_obj, "is_round", False)),
+                    prop_id,
+                )
+            elif shape_obj.is_box():
+                b = _call_or_attr(shape_obj, "box")
+                payload = (
+                    "BOX",
+                    int(b.left),
+                    int(b.bottom),
+                    int(b.right),
+                    int(b.top),
+                    prop_id,
+                )
+            else:
+                p = _call_or_attr(shape_obj, "polygon")
+                outer0 = tuple(
+                    (int(q.x), int(q.y)) for q in _call_or_attr(p, "each_point_hull", ())
+                )
+                holes0 = []
+                holes_n = int(_call_or_attr(p, "holes", 0) or 0)
+                for hi0 in range(holes_n):
+                    holes0.append(tuple((int(q.x), int(q.y)) for q in p.each_point_hole(hi0)))
+                payload = ("POLYGON", outer0, tuple(holes0), prop_id)
+            return hashlib.sha256(repr(payload).encode()).hexdigest()[:24]
+
+        source_format = path.suffix.lower().lstrip(".") or "unknown"
+        quant_policy = f"exact-integer-dbu-per-pixel:{step}"
         polys: list[PolygonWithHoles] = []
+        occurrence: dict[tuple[int, tuple[InstancePathElement, ...], str], int] = {}
         it = top.begin_shapes_rec(layer_index)
-        idx = 0
         while not it.at_end():
             shape = it.shape()
             trans_attr = getattr(it, "itrans", None)
             if trans_attr is None:
                 trans_attr = it.trans
             trans = trans_attr() if callable(trans_attr) else trans_attr
+
             poly = None
             if shape.is_polygon() or shape.is_box():
                 poly = shape.polygon if shape.is_polygon() else db.Polygon(shape.box)
             elif shape.is_path():
-                poly = shape.path.polygon()
+                # KLayout's own path->polygon semantics carry width,
+                # begin/end extensions and round-end state.  The resulting
+                # polygon must still pass exact pixel-edge quantization below.
+                path_obj = shape.path
+                poly = path_obj.polygon()
+
             if poly is not None:
+                source_cell_index = int(_call_or_attr(it, "cell_index", -1))
+                ipath = _instance_path(it)
+                fingerprint = _shape_fingerprint(shape)
+                base = (source_cell_index, ipath, fingerprint)
+                ordinal = occurrence.get(base, 0)
+                occurrence[base] = ordinal + 1
+
+                physical_key = PhysicalInstanceKey(
+                    source_format=source_format,
+                    source_cell_index=source_cell_index,
+                    source_shape_fingerprint=f"{fingerprint}:{ordinal}",
+                    instance_path=ipath,
+                    quantization_policy=quant_policy,
+                )
+
                 poly = poly.transformed(trans)
 
                 def project(pt: Any) -> Point:
@@ -527,10 +628,10 @@ class KLayoutAlignedRunSource(ExactVectorRunSource):
                     dy = int(pt.y) - int(bbox.bottom)
                     if dx % step or dy % step:
                         raise ValueError(
-                            "GDS/OASIS vertex is not exactly aligned to verifier pixel edges"
+                            "GDS/OASIS transformed vertex is not exactly aligned "
+                            "to verifier pixel edges"
                         )
                     x = dx // step
-                    # mathematical y-up -> raster y-down, using edge coordinates
                     y = height - dy // step
                     return x, y
 
@@ -540,15 +641,14 @@ class KLayoutAlignedRunSource(ExactVectorRunSource):
                 n_holes = int(holes_fn()) if callable(holes_fn) else 0
                 for hi in range(n_holes):
                     holes_out.append(tuple(project(p) for p in poly.each_point_hole(hi)))
-                digest = hashlib.sha256(repr((outer, tuple(holes_out))).encode()).hexdigest()[:20]
+
                 polys.append(
                     PolygonWithHoles(
-                        object_id=f"klayout:{digest}",
+                        object_id=f"physical:{physical_key.owner_id}",
                         outer=outer,
                         holes=tuple(holes_out),
                     )
                 )
-                idx += 1
             it.next()
 
         cells = {"TOP": VectorCell(name="TOP", polygons=tuple(polys), instances=())}

@@ -29,6 +29,10 @@ def test_all_cells_have_positive_fixed_normal_margin():
     assert max(c["graph_slope_upper"] for c in raw["cells"]) < 0.57
 
 
+@pytest.mark.skipif(
+    not (PROOF / "B04_ExactSource_ExpandedBand_Grid_2026-09-09.npz").exists(),
+    reason="B04 expanded-band proof grid npz not installed",
+)
 def test_reconstruction_hash_is_bound_to_manifest(tmp_path):
     raw = json.loads(MANIFEST.read_text(encoding="utf-8"))
     fake = tmp_path / "manifest.json"
@@ -43,6 +47,10 @@ def test_reconstruction_hash_is_bound_to_manifest(tmp_path):
         )
 
 
+@pytest.mark.skipif(
+    not (PROOF / "B04_ExactSource_ExpandedBand_Grid_2026-09-09.npz").exists(),
+    reason="B04 expanded-band proof grid npz not installed",
+)
 def test_extracted_target_dependency_contains_reconstruction():
     c = certify_mvp1_manifest(
         MANIFEST,
