@@ -183,7 +183,7 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "onnxscript.*", "fastapi", "fastapi.*", "uvicorn", "gdown", "multivolumefile", "py7zr", "pyarrow", "pyarrow.*", "PIL", "PIL.*", "yaml", "diff_surrogate", "diff_surrogate.*"]
+module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "onnxscript.*", "fastapi", "fastapi.*", "uvicorn", "gdown", "multivolumefile", "py7zr", "pyarrow", "pyarrow.*", "PIL", "PIL.*", "yaml", "diff_surrogate", "diff_surrogate.*", "flint", "flint.*"]
 ignore_missing_imports = true
 
 # server/app.py uses fastapi decorators which mypy flags as untyped when
