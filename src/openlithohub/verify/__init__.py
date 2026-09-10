@@ -45,6 +45,7 @@ from .interface_runs import (
     zero_padded_horizontal_variation,
 )
 from .mvp1 import certify_mvp1_manifest
+from .reconstruction import replay_reconstruction_artifact, verify_reconstruction_artifact
 from .replay import ExpandedBandReplay, replay_expanded_band, sha256_file
 from .run_spectrum import (
     ComplexDiskGrid,
