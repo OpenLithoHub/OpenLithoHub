@@ -222,12 +222,24 @@ def run_streaming(
                     for session, verdict in zip(sessions, accepted, strict=True):
                         session.add(verdict)
 
-                    core_result = torch.full(
-                        (current.core_bbox.height, current.core_bbox.width),
-                        exact_output.fill_value,
-                        dtype=torch.float32,
-                    )
-                    sink.write_core(current.tile_id, current.core_bbox, core_result, tile_meta)
+                    # R17 C2: prefer the tensor-free certified commit; legacy
+                    # sinks without the capability fall back to a synthesized
+                    # exact-fill write_core.
+                    recorder = getattr(sink, "record_certified_core", None)
+                    if callable(recorder):
+                        recorder(
+                            current.tile_id,
+                            current.core_bbox,
+                            exact_fill=exact_output.fill_value,
+                            metadata=tile_meta,
+                        )
+                    else:
+                        core_result = torch.full(
+                            (current.core_bbox.height, current.core_bbox.width),
+                            exact_output.fill_value,
+                            dtype=torch.float32,
+                        )
+                        sink.write_core(current.tile_id, current.core_bbox, core_result, tile_meta)
                     accounting.record_screened_out(current.tile_id, current.core_bbox.area)
                     report.n_tiles += 1
                     break

@@ -42,6 +42,16 @@ class TileSink(Protocol):
     def finalize(self) -> Any: ...
 
 
+class CertifiedCommitNotRepresentableError(ValueError):
+    """A sink was asked to commit a certified core it cannot represent.
+
+    R17 C2: a verifier PASS (or a screening fact) without a known output
+    tensor is a *verification-only* disposition.  Metric-only sinks can
+    record it; tensor-materializing sinks must reject it, because
+    ``verifier PASS does not imply a known output tensor``.
+    """
+
+
 class TensorTileSink:
     """Assemble the full dense output tensor in host memory."""
 
@@ -68,6 +78,23 @@ class TensorTileSink:
         if tuple(tensor.shape) != expected:
             raise ValueError(f"core tensor shape {tuple(tensor.shape)} != bbox {expected}")
         self.output[bbox.y0 : bbox.y1, bbox.x0 : bbox.x1] = tensor
+
+    def record_certified_core(
+        self,
+        tile_id: str,
+        bbox: BoundingBox,
+        *,
+        exact_fill: float | None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """R17 C2 certified commit: synthesize the exact fill, or reject."""
+        if exact_fill is None:
+            raise CertifiedCommitNotRepresentableError(
+                "verification-only skip cannot be represented in a tensor "
+                "output sink; verifier PASS does not imply a known tensor"
+            )
+        fill = torch.full((bbox.height, bbox.width), float(exact_fill), dtype=self.output.dtype)
+        self.write_core(tile_id, bbox, fill, metadata)
 
     def finalize(self) -> torch.Tensor:
         return self.output
@@ -106,6 +133,23 @@ class MemmapTileSink:
         window = tensor.detach().cpu().numpy().astype(self._map.dtype, copy=False)
         self._map[bbox.y0 : bbox.y1, bbox.x0 : bbox.x1] = window
 
+    def record_certified_core(
+        self,
+        tile_id: str,
+        bbox: BoundingBox,
+        *,
+        exact_fill: float | None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """R17 C2 certified commit: synthesize the exact fill, or reject."""
+        if exact_fill is None:
+            raise CertifiedCommitNotRepresentableError(
+                "verification-only skip cannot be represented in a memmap "
+                "output sink; verifier PASS does not imply a known tensor"
+            )
+        fill = torch.full((bbox.height, bbox.width), float(exact_fill), dtype=torch.float32)
+        self.write_core(tile_id, bbox, fill, metadata)
+
     def finalize(self) -> np.memmap:
         self._map.flush()
         return self._map
@@ -125,6 +169,8 @@ class MetricOnlyTileSink:
         self.covered_pixels = 0
         self.metrics: dict[str, float] = {}
         self.metadata: dict[str, Any] = {}
+        self.certified_records: dict[str, str] = {}
+        self.certified_pixels = 0
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -144,6 +190,28 @@ class MetricOnlyTileSink:
             if isinstance(value, (int, float)):
                 prev = self.metrics.get(f"max_{key}", float("-inf"))
                 self.metrics[f"max_{key}"] = max(prev, float(value))
+
+    def record_certified_core(
+        self,
+        tile_id: str,
+        bbox: BoundingBox,
+        *,
+        exact_fill: float | None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """R17 C2 tensor-free certified commit (the QDM-critical mode).
+
+        No raster is materialised for a certified core — with or without an
+        exact output fill.  ``exact_fill`` is recorded as provenance only.
+        """
+        disposition = "EXACT_OUTPUT_SKIP" if exact_fill is not None else "VERIFICATION_ONLY_SKIP"
+        meta = dict(metadata or {})
+        meta.setdefault("screen_disposition", disposition)
+        if exact_fill is not None:
+            meta.setdefault("certified_exact_fill", float(exact_fill))
+        self.write_core(tile_id, bbox, torch.empty(0), meta)
+        self.certified_records[tile_id] = disposition
+        self.certified_pixels += bbox.area
 
     def finalize(self) -> dict[str, Any]:
         return {
