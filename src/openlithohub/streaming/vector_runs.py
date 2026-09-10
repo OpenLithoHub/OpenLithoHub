@@ -35,6 +35,17 @@ from .physical_identity import InstancePathElement, PhysicalInstanceKey
 Point = tuple[int, int]
 
 
+def exact_dbu_nm(dbu_um: float) -> Fraction:
+    """Exact database-unit size in nanometers as a rational.
+
+    ``layout.dbu`` is a float in micrometers.  Files written by foreign
+    tools can carry a units literal whose nearest binary double prints as
+    ``0.0009999999999999998`` instead of ``0.001``; snap the short decimal
+    repr back to its intended rational so pixel-ratio arithmetic stays exact.
+    """
+    return Fraction(str(dbu_um)).limit_denominator(10**6) * 1000
+
+
 @dataclass(frozen=True)
 class PolygonWithHoles:
     object_id: str
@@ -499,7 +510,11 @@ class KLayoutAlignedRunSource(ExactVectorRunSource):
         bbox = top.bbox()
         layer_index = _select_layer(layout, layer)
 
-        dbu_nm = Fraction(str(layout.dbu)) * 1000
+        # layout.dbu is a float in micrometers; binary round-trips through
+        # foreign GDS/OASIS readers can turn a decimal 0.001 into
+        # 0.0009999999999999998, so snap to the intended short decimal before
+        # building the exact rational (see exact_dbu_nm).
+        dbu_nm = exact_dbu_nm(layout.dbu)
         pixel_nm = Fraction(str(pixel_size_nm))
         dbu_per_pixel = pixel_nm / dbu_nm
         if dbu_per_pixel.denominator != 1:

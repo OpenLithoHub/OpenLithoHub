@@ -1,9 +1,10 @@
 """Streaming core/halo full-chip architecture (RFC 0008).
 
 Layout growth turns into tile count, not single-allocation size: the
-pipeline reads only core+halo windows from a :class:`TileSource`, runs the
-forward model, lets optional :class:`VerificationPlugin`\\s inspect the
-tile, and commits only the trusted core to a :class:`TileSink`.
+pipeline reads only core+halo windows from a :class:`TileSource`, can apply
+an optional certified pre-forward screen, runs the forward model on survivors,
+lets optional :class:`VerificationPlugin`\\s inspect the tile, and commits only
+the trusted core to a :class:`TileSink`.
 """
 
 from .core_halo import (
@@ -36,6 +37,11 @@ from .halo_policy import (
     kernel_tail_mass,
 )
 from .pipeline import StreamingRunReport, run_streaming
+from .screening import (
+    ExactEmptyContextScreeningPolicy,
+    TileScreenDecision,
+    TileScreeningPolicy,
+)
 from .sinks import MemmapTileSink, MetricOnlyTileSink, TensorTileSink, TileSink
 from .sources import (
     MemmapTensorTileSource,
@@ -60,6 +66,7 @@ from .work_accounting import WorkAccounting
 __all__ = [
     "DEFAULT_HALO_PX",
     "BoundingBox",
+    "ExactEmptyContextScreeningPolicy",
     "GlobalVerificationResult",
     "HaloContext",
     "HaloPolicy",
@@ -81,6 +88,8 @@ __all__ = [
     "TileContext",
     "TileRequest",
     "TileScheduler",
+    "TileScreenDecision",
+    "TileScreeningPolicy",
     "TileSink",
     "TileSource",
     "TileVerificationResult",

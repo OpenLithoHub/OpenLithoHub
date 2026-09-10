@@ -2,16 +2,23 @@
 
 Runs the per-tile loop::
 
-    TileSource.read_window(core+halo)
-        → forward model
-        → optional VerificationPlugin(s)
-        → TileSink.write_core(trusted core only)
-        → discard tile tensors
+    optional certified pre-forward screen
+        -> TileSource.read_window(core+halo) only for survivors
+        -> forward model
+        -> optional VerificationPlugin(s)
+        -> TileSink.write_core(trusted core only)
+        -> discard tile tensors
 
 Peak memory is O(tile area + active batch), never O(full-chip raster).
 Every core is written exactly once; an inconclusive verdict re-runs the
 same core with a larger halo (bounded by ``max_requeues``) before the
 best-effort result is committed.
+
+Increment 28 integrates work accounting into the actual pipeline and adds a
+fail-closed screening hook.  Screening may skip expensive work only when its
+decision is certified; with verification plugins present, the screen must also
+explicitly certify those verifiers or the pipeline falls back to the ordinary
+active path.
 """
 
 from __future__ import annotations
@@ -25,15 +32,18 @@ import torch
 from .core_halo import TileRequest, plan_tile_requests, tiling_overhead
 from .geometry import BoundingBox, HaloSpec, halo_actual, read_bbox_for
 from .halo_policy import HaloContext, HaloPolicy, HaloRequirement, LegacyFixedHaloPolicy
+from .screening import TileScreeningPolicy
 from .sinks import TileSink
 from .sources import TileSource
 from .verification import (
     RefinementRequest,
     StreamingVerificationReducer,
     TileContext,
+    TileVerificationResult,
     VerificationContext,
     VerificationPlugin,
 )
+from .work_accounting import WorkAccounting
 
 
 @dataclass
@@ -43,6 +53,7 @@ class StreamingRunReport:
     halo_requirement: HaloRequirement | None = None
     overhead: dict[str, float] = field(default_factory=dict)
     verification: Any = None
+    work_accounting: dict[str, float | int] = field(default_factory=dict)
 
 
 def _default_refinement(
@@ -101,6 +112,8 @@ def run_streaming(
     core_size: int,
     halo_policy: HaloPolicy | None = None,
     verifiers: Iterable[VerificationPlugin] = (),
+    screening_policy: TileScreeningPolicy | None = None,
+    work_accounting: WorkAccounting | None = None,
     max_halo_px: int = 1024,
     pixel_nm: float = 1.0,
     max_requeues: int = 4,
@@ -127,6 +140,13 @@ def run_streaming(
 
     reducer = StreamingVerificationReducer()
     report = StreamingRunReport(halo_requirement=requirement)
+    accounting = work_accounting or WorkAccounting()
+    full_pixels = int(source.shape[0] * source.shape[1])
+    if accounting.full_chip_pixels == 0:
+        accounting.full_chip_pixels = full_pixels
+    elif accounting.full_chip_pixels != full_pixels:
+        raise ValueError("WorkAccounting.full_chip_pixels does not match the source domain")
+
     for verifier in verifier_list:
         verifier.prepare(vctx)
 
@@ -134,7 +154,68 @@ def run_streaming(
         current = base
         refinements_left = max_requeues
         while True:
+            screen_decision = None
+            if screening_policy is not None:
+                accounting.record_screen_query()
+                screen_decision = screening_policy.screen(source, current)
+
+            can_skip = (
+                screen_decision is not None
+                and screen_decision.status == "SCREENED_OUT"
+                and (not verifier_list or screen_decision.certifies_verifiers)
+            )
+            if can_skip and screen_decision is not None:
+                if not screen_decision.certified or screen_decision.fill_value is None:
+                    raise ValueError("uncertified screening decision attempted to skip work")
+
+                core_result = torch.full(
+                    (
+                        current.core_bbox.height,
+                        current.core_bbox.width,
+                    ),
+                    float(screen_decision.fill_value),
+                    dtype=torch.float32,
+                )
+                tile_meta: dict[str, Any] = {
+                    "screening_status": "SCREENED_OUT",
+                    "screening_policy": getattr(
+                        screening_policy, "name", type(screening_policy).__name__
+                    ),
+                    "screening_reason": screen_decision.reason,
+                    "screening_certified": True,
+                    "screening_certificate_ref": screen_decision.certificate_ref,
+                    **screen_decision.metrics,
+                }
+
+                if verifier_list:
+                    reducer.add(
+                        TileVerificationResult(
+                            tile_id=current.tile_id,
+                            core_bbox=current.core_bbox,
+                            status="PASS",
+                            upper_bound=screen_decision.verification_upper_bound,
+                            certificate_ref=screen_decision.certificate_ref,
+                            metrics=dict(screen_decision.metrics),
+                        )
+                    )
+
+                sink.write_core(
+                    current.tile_id,
+                    current.core_bbox,
+                    core_result,
+                    tile_meta,
+                )
+                accounting.record_screened_out(
+                    current.tile_id,
+                    current.core_bbox.area,
+                )
+                report.n_tiles += 1
+                break
+
+            accounting.record_active_core(current.tile_id, current.core_bbox)
             tile = source.read_window(current.read_bbox)
+            accounting.record_read_window(current.read_bbox.area)
+
             source_meta: dict[str, Any] = {}
             metadata_fn = getattr(source, "verification_metadata", None)
             if callable(metadata_fn):
@@ -145,11 +226,17 @@ def run_streaming(
                         core_bbox=current.core_bbox,
                     )
                 )
+            if screen_decision is not None:
+                source_meta["screening_status"] = screen_decision.status
+                source_meta["screening_reason"] = screen_decision.reason
+
             result = forward_fn(tile)
+            accounting.record_forward(current.read_bbox.area)
             ys, xs = _core_slices(current)
             core_result = result[ys, xs]
 
-            tile_meta: dict[str, Any] = {}
+            # Type already declared on the screened-out path above.
+            tile_meta = {}
             refinement: RefinementRequest | None = None
             for verifier in verifier_list:
                 tctx = TileContext(
@@ -172,18 +259,29 @@ def run_streaming(
                         )
 
             if refinement is None:
-                sink.write_core(current.tile_id, current.core_bbox, core_result, tile_meta)
+                sink.write_core(
+                    current.tile_id,
+                    current.core_bbox,
+                    core_result,
+                    tile_meta,
+                )
                 report.n_tiles += 1
                 break
 
             refinements_left -= 1
             report.n_requeued += 1
+            accounting.record_refinement(
+                current.tile_id,
+                current.tile_id,
+                current.core_bbox.area,
+            )
             current = _grown_request(current, refinement, source.shape)
             del tile, result, core_result
 
     report.overhead = tiling_overhead(plan_tile_requests(source.shape, core_size, halo_px))
     if verifier_list:
         report.verification = reducer.finalize()
+    report.work_accounting = accounting.summary()
     return report
 
 

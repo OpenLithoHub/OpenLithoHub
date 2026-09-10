@@ -1,7 +1,7 @@
 # B04 / QDM Readiness Scoreboard
 
-**Current increment:** 26 (Exact-Vector Proof-Facing Cutover + Global Finite Spectral Statistic)
-**Current HEAD:** `4c3de99` (post-Inc25) + streaming architecture (RFC 0008) + Inc16–26 proof modules
+**Current increment:** 28 (Scale-First Work Avoidance: certified pre-forward screening + integrated work accounting)
+**Current HEAD:** `5284b04` (post-Inc27) + streaming architecture (RFC 0008) + Inc16–28 proof modules
 **Last updated:** 2026-09-10
 
 This is the canonical live scoreboard required by the B04 architecture brief (§18/§22).
@@ -18,10 +18,11 @@ CERTIFIED-HALO FOUNDATION:          PARTIAL (brackets exist, tight closure open)
 PLUGIN FOUNDATION:                  PASS
 SOURCE-NATIVE VERIFIER FOUNDATION:  PASS (interfaces + reference shell)
 CONTINUOUS CERTIFICATION:           PARTIAL (bridge characterized, interval eval OPEN)
+PRE-FORWARD SCREENING:              PASS (fail-closed, certified decisions only)
 FULL-CHIP DENSE ALLOCATION:         ABSENT (MetricOnlyTileSink path verified)
-ACTIVE-WORK INSTRUMENTATION:        PASS (WorkAccounting added)
+ACTIVE-WORK INSTRUMENTATION:        PASS (WorkAccounting driven by run_streaming)
 LARGE-LAYOUT MEMORY SCALING:        PASS (memmap in/out, O(tile+batch) verified)
-LARGE-LAYOUT SPEED CROSSOVER:       MEASURED (benchmark_b04_inc21/22/23/24/26)
+LARGE-LAYOUT SPEED CROSSOVER:       MEASURED (benchmark_b04_inc21/22/23/24/26/28)
 REAL GDS/OAS SEMANTICS:             PASS (KLayout-gated semantic tests)
 SIMULATOR INTEROPERABILITY:         PASS (backend contract + reference Hopkins)
 PHYSICS DOMAIN VALIDATION:          OPEN (synthetic Hopkins, not foundry-calibrated)
@@ -62,6 +63,27 @@ the declared finite plane-wave quadrature model.  This eliminates the spatial
 halo as an error source for that model — the proof obligation moves to
 pupil/source quadrature.
 
+### Continuous mask lift + fixed-source Arb pupil (Inc 27)
+`continuous_square_mask.py` gives the exact lift
+`M̂_c(f) = p² sinc_π(p fₓ) sinc_π(p f_y) M_point(f)` with
+`representation_bridge_upper = 0` for the declared square-aperture semantics.
+`arb_fixed_source_pupil.py` certifies the one-source-point coherent field as
+a rigorous complex ball (python-flint `acb.integral`, hard pupil mapped to a
+fixed rectangle).  Independent proof backend; source-plane quadrature and
+partial-coherence enclosure remain open.
+
+### Scale-first work avoidance (Inc 28)
+`screening.py` adds a fail-closed pre-forward screen: tiles may be skipped
+only with a certified `SCREENED_OUT` decision carrying an exact fill value,
+and only when the screen explicitly certifies any attached verification
+plugins.  `WorkAccounting` is driven by the actual `run_streaming` loop
+(unique active area, screened-out area, read-window/forward/screen counters,
+`accounted_pct` closure).  `verify_layout()` surfaces
+`VerificationResult.work_accounting`.  The Inc28 scale-first ladder
+(512²–16384², `dense_full`/`tiled_raster`/`b04_vector`/`b04_selective`)
+measures wall time, peak RSS and crossover fields with zero dense-allocation
+events on the selective path.
+
 ### Semantic hardening (Inc 22)
 `PhysicalInstanceKey` distinguishes source repetition from read repetition.
 `KLayoutAlignedRunSource` stamps `physical:<sha256>` owner ids.
@@ -93,8 +115,9 @@ reconstruction artifact.  `epe_max_nm` semantics untouched.
 
 1. **Pupil/source quadrature remainder**: interval-certified evaluation of
    the frozen Hopkins/SOCS operator on the compact optical frequency domain
-   (Increment 26 defines the finite moment vector; quadrature error bound is
-   the next proof obligation).
+   (Increment 26 defines the finite moment vector; Increment 27 certifies the
+   single-fixed-source coherent field ball — composing it over a certified
+   source-plane quadrature is the next proof obligation).
 2. **Certified oriented-slab spatial extraction**: wire the seed/slab
    theorem's `η_sp` into `TileVerificationResult.spatial_extraction_error`.
 3. **Real verifier plugin**: `SourceNativeVerificationBackend` consumed by a

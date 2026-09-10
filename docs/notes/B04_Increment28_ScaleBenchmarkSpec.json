@@ -1,0 +1,48 @@
+{
+  "base_commit": "5284b04bba5ec708ada3326c2d40506bc89a8ff3",
+  "claim_rule": "speed crossover may be claimed only when measured contender wall time is lower at a common size",
+  "dense_max_size_px": 4096,
+  "forward_model": {
+    "kernel_size_px": 9,
+    "kind": "synthetic finite-support separable blur",
+    "physics_claim": "NONE",
+    "support_radius_px": 4,
+    "zero_preserving": true
+  },
+  "industrial_stop_go": "PENDING_LOCAL_RETURN",
+  "modes": [
+    "dense_full",
+    "tiled_raster",
+    "b04_vector",
+    "b04_selective"
+  ],
+  "public_core_px": 512,
+  "public_sky130_sparse_hierarchy_sizes_px": [
+    4096,
+    8192,
+    16384
+  ],
+  "required_metrics": [
+    "wall_time_s",
+    "peak_rss_bytes",
+    "full_chip_pixels",
+    "active_pixels",
+    "active_fraction",
+    "screened_out_pixels",
+    "screened_fraction",
+    "forward_simulator_calls",
+    "forward_simulator_input_pixels",
+    "read_window_calls",
+    "read_window_pixels",
+    "dense_allocation_events",
+    "global_run_count"
+  ],
+  "schema": "B04.increment28.scale_first_benchmark_spec.v1",
+  "synthetic_core_px": 256,
+  "synthetic_sizes_px": [
+    512,
+    2048,
+    4096,
+    8192
+  ]
+}

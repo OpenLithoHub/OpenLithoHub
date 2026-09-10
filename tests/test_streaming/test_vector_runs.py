@@ -152,3 +152,15 @@ def test_verify_layout_run_source_protocol_shape():
     assert runs
     assert all(r.y == 6 for r in runs)
     assert sum(r.length for r in runs) == 12
+
+
+def test_exact_dbu_nm_snaps_foreign_reader_float_artifacts():
+    from openlithohub.streaming.vector_runs import exact_dbu_nm
+
+    # The pinned ORFS sky130hd GDS stores a units literal whose nearest
+    # binary double reads back as 0.0009999999999999998 (intended: 1 nm).
+    assert exact_dbu_nm(0.0009999999999999998) == Fraction(1, 1)
+    assert exact_dbu_nm(0.001) == Fraction(1, 1)
+    assert exact_dbu_nm(0.0005) == Fraction(1, 2)
+    assert exact_dbu_nm(0.002) == Fraction(2, 1)
+    assert exact_dbu_nm(0.005) == Fraction(5, 1)
