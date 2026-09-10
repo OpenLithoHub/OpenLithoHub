@@ -1,7 +1,7 @@
 # B04 / QDM Readiness Scoreboard
 
-**Current increment:** 28 (Scale-First Work Avoidance: certified pre-forward screening + integrated work accounting)
-**Current HEAD:** `5284b04` (post-Inc27) + streaming architecture (RFC 0008) + Inc16–28 proof modules
+**Current increment:** 29 (Realistic-density routed-block external validity: ExactVectorCropSource + Ibex gate)
+**Current HEAD:** `d9d0f8a` (post-Inc28) + streaming architecture (RFC 0008) + Inc16–29 proof modules
 **Last updated:** 2026-09-10
 
 This is the canonical live scoreboard required by the B04 architecture brief (§18/§22).
@@ -19,6 +19,7 @@ PLUGIN FOUNDATION:                  PASS
 SOURCE-NATIVE VERIFIER FOUNDATION:  PASS (interfaces + reference shell)
 CONTINUOUS CERTIFICATION:           PARTIAL (bridge characterized, interval eval OPEN)
 PRE-FORWARD SCREENING:              PASS (fail-closed, certified decisions only)
+REAL-DENSITY SCREENING VALIDITY:    GATE RUNNING (Inc29 Ibex routed crops)
 FULL-CHIP DENSE ALLOCATION:         ABSENT (MetricOnlyTileSink path verified)
 ACTIVE-WORK INSTRUMENTATION:        PASS (WorkAccounting driven by run_streaming)
 LARGE-LAYOUT MEMORY SCALING:        PASS (memmap in/out, O(tile+batch) verified)

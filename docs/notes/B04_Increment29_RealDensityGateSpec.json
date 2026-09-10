@@ -1,0 +1,30 @@
+{
+  "base_commit": "d9d0f8a8c1a457ab49b92aeed0c3d8b99f8bba67",
+  "decision_thresholds": {
+    "moderate_max_active_fraction": 0.8,
+    "strong_max_active_fraction": 0.5
+  },
+  "fixture": {
+    "cell_count": 15515,
+    "core_area_um2": 300532,
+    "design": "ibex",
+    "gds_size_bytes_from_github": 25251340,
+    "pdk": "sky130hd",
+    "stdcell_area_um2": 173954,
+    "stdcell_utilization": 0.578821,
+    "topcell": "ibex_core"
+  },
+  "layer_datatype": "66:44",
+  "nested_center_crops_px": [
+    4096,
+    8192,
+    16384
+  ],
+  "next_if_weak": "nonempty tile theorem-safe metric-margin screening",
+  "pdb_commit": "9e1e3399b1b707f26fee853bce1ff91ab466ce24",
+  "pixel_nm": 1.0,
+  "schema": "B04.increment29.real_density_gate.v1",
+  "screen_only_px": [
+    32768
+  ]
+}
