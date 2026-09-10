@@ -32,7 +32,7 @@ import torch
 from .core_halo import TileRequest, plan_tile_requests, tiling_overhead
 from .geometry import BoundingBox, HaloSpec, halo_actual, read_bbox_for
 from .halo_policy import HaloContext, HaloPolicy, HaloRequirement, LegacyFixedHaloPolicy
-from .screening import TileScreeningPolicy
+from .screening import TileScreeningPolicy, screen_decision_to_facts
 from .sinks import TileSink
 from .sources import TileSource
 from .verification import (
@@ -168,58 +168,80 @@ def run_streaming(
                 accounting.record_screen_query()
                 screen_decision = screening_policy.screen(source, current)
 
-            can_skip = (
-                screen_decision is not None
-                and screen_decision.status == "SCREENED_OUT"
-                and (not verifier_list or screen_decision.certifies_verifiers)
-            )
-            if can_skip and screen_decision is not None:
-                if not screen_decision.certified or screen_decision.fill_value is None:
-                    raise ValueError("uncertified screening decision attempted to skip work")
-
-                core_result = torch.full(
-                    (
-                        current.core_bbox.height,
-                        current.core_bbox.width,
-                    ),
-                    float(screen_decision.fill_value),
-                    dtype=torch.float32,
+            tile_meta_rejected: dict[str, Any] = {}
+            if screen_decision is not None and screen_decision.status == "SCREENED_OUT":
+                # R17 C1b: the screen produces typed proof facts; it has no
+                # authority over verifiers.  A tile may skip the expensive
+                # path only when (a) there are no verifiers to discharge, or
+                # (b) every attached verifier accepts the facts itself.
+                exact_output, proof_facts, deprecated_authority = screen_decision_to_facts(
+                    screen_decision
                 )
-                tile_meta: dict[str, Any] = {
-                    "screening_status": "SCREENED_OUT",
-                    "screening_policy": getattr(
-                        screening_policy, "name", type(screening_policy).__name__
-                    ),
-                    "screening_reason": screen_decision.reason,
-                    "screening_certified": True,
-                    "screening_certificate_ref": screen_decision.certificate_ref,
-                    **screen_decision.metrics,
-                }
 
-                if verifier_list:
-                    screen_pass = TileVerificationResult(
+                accepted: list[TileVerificationResult] = []
+                discharged = True
+                for session in sessions:
+                    accept = getattr(session.plugin, "accept_screen_facts", None)
+                    if not callable(accept):
+                        discharged = False
+                        break
+                    fact_ctx = TileContext(
                         tile_id=current.tile_id,
                         core_bbox=current.core_bbox,
-                        status="PASS",
-                        upper_bound=screen_decision.verification_upper_bound,
-                        certificate_ref=screen_decision.certificate_ref,
-                        metrics=dict(screen_decision.metrics),
+                        read_bbox=current.read_bbox,
+                        halo=current.halo,
+                        tensor=None,
+                        metadata={
+                            "screening_status": screen_decision.status,
+                            "screening_reason": screen_decision.reason,
+                        },
                     )
-                    for session in sessions:
-                        session.add(screen_pass)
+                    verdict = accept(fact_ctx, proof_facts)
+                    if verdict is None or verdict.status != "PASS":
+                        discharged = False
+                        break
+                    accepted.append(verdict)
 
-                sink.write_core(
-                    current.tile_id,
-                    current.core_bbox,
-                    core_result,
-                    tile_meta,
-                )
-                accounting.record_screened_out(
-                    current.tile_id,
-                    current.core_bbox.area,
-                )
-                report.n_tiles += 1
-                break
+                if discharged:
+                    tile_meta: dict[str, Any] = {
+                        "screen_disposition": "EXACT_OUTPUT_SKIP",
+                        "screening_status": "SCREENED_OUT",
+                        "screening_policy": getattr(
+                            screening_policy, "name", type(screening_policy).__name__
+                        ),
+                        "screening_reason": screen_decision.reason,
+                        "screening_certified": True,
+                        "screening_certificate_ref": screen_decision.certificate_ref,
+                        **screen_decision.metrics,
+                    }
+                    if deprecated_authority:
+                        tile_meta["screen_authority"] = (
+                            "deprecated-blanket-input-recorded-not-honored"
+                        )
+
+                    for session, verdict in zip(sessions, accepted, strict=True):
+                        session.add(verdict)
+
+                    core_result = torch.full(
+                        (current.core_bbox.height, current.core_bbox.width),
+                        exact_output.fill_value,
+                        dtype=torch.float32,
+                    )
+                    sink.write_core(current.tile_id, current.core_bbox, core_result, tile_meta)
+                    accounting.record_screened_out(current.tile_id, current.core_bbox.area)
+                    report.n_tiles += 1
+                    break
+
+                # Not discharged: fall through to the ordinary active path,
+                # recording the rejected legacy authority as provenance.
+                tile_meta_rejected = {
+                    "screening_status": "SCREENED_OUT_NOT_DISCHARGED",
+                    "screening_reason": screen_decision.reason,
+                }
+                if deprecated_authority:
+                    tile_meta_rejected["screen_authority"] = (
+                        "deprecated-blanket-input-recorded-not-honored"
+                    )
 
             accounting.record_active_core(current.tile_id, current.core_bbox)
             tile = source.read_window(current.read_bbox)
@@ -244,8 +266,9 @@ def run_streaming(
             ys, xs = _core_slices(current)
             core_result = result[ys, xs]
 
-            # Type already declared on the screened-out path above.
-            tile_meta = {}
+            # Screen-fact provenance (e.g. a rejected SCREENED_OUT) rides on
+            # the committed core metadata.
+            tile_meta = dict(tile_meta_rejected)
             refinement: RefinementRequest | None = None
             for session in sessions:
                 verifier = session.plugin

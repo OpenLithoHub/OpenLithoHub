@@ -14,16 +14,68 @@ conservative.  It screens an exact-vector source only when:
   trusted-core response.
 
 This is an architecture hook, not a universal Hopkins empty-tile theorem.
+
+R17 C1b — authority migration: a screen is a *proof-fact producer*, not a
+verifier authority.  ``TileScreenDecision.certifies_verifiers`` is
+**deprecated**: the pipeline never reads it as a bypass authority, and an
+attached verifier discharges a screened tile only by accepting the typed
+proof facts itself (``accept_screen_facts``).
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from .core_halo import TileRequest
 
 ScreenStatus = Literal["ACTIVE", "SCREENED_OUT", "INCONCLUSIVE"]
+
+
+@dataclass(frozen=True)
+class ScreenProofFact:
+    """A typed, verifier-consumable fact produced by a screening policy."""
+
+    kind: str
+    certificate_ref: str | None = None
+    payload: Mapping[str, float] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ExactOutputFact:
+    """Certified exact trusted-core output: the core needs no forward model."""
+
+    fill_value: float
+    certificate_ref: str | None = None
+
+
+def screen_decision_to_facts(
+    decision: TileScreenDecision,
+) -> tuple[ExactOutputFact, list[ScreenProofFact], bool]:
+    """Adapt a legacy ``SCREENED_OUT`` decision into typed facts (R17 C1b).
+
+    Returns ``(exact_output, proof_facts, deprecated_authority_input)``.
+    The third element records — provenance only — that the legacy decision
+    carried the deprecated blanket ``certifies_verifiers`` authority flag;
+    that flag is never consulted as authority.
+    """
+    if decision.status != "SCREENED_OUT":
+        raise ValueError("only SCREENED_OUT decisions adapt to exact-output facts")
+    if not decision.certified or decision.fill_value is None:
+        raise ValueError("uncertified screening decision attempted to skip work")
+    exact = ExactOutputFact(
+        fill_value=float(decision.fill_value),
+        certificate_ref=decision.certificate_ref,
+    )
+    facts = [
+        ScreenProofFact(
+            kind="EXACT_OUTPUT_SKIP",
+            certificate_ref=decision.certificate_ref,
+            payload=dict(decision.metrics),
+        )
+    ]
+    return exact, facts, bool(decision.certifies_verifiers)
 
 
 @dataclass(frozen=True)
@@ -45,6 +97,16 @@ class TileScreenDecision:
                 raise ValueError("SCREENED_OUT requires an exact fill_value")
             if self.certifies_verifiers and self.verification_upper_bound is None:
                 raise ValueError("verifier-certified screening requires verification_upper_bound")
+
+    @property
+    def deprecation_notice(self) -> str | None:
+        """R17 C1b: blanket ``certifies_verifiers`` is provenance, not power."""
+        if self.certifies_verifiers:
+            return (
+                "deprecated blanket screen authority (certifies_verifiers) "
+                "recorded but not honored; verifiers discharge facts themselves"
+            )
+        return None
 
 
 @runtime_checkable
