@@ -19,6 +19,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from .source_snapshot import (
     SourceSnapshot,
+    SourceSnapshotV2,
     outward_round_interval,
 )
 from .types import CertificationCapability, ProofLevel
@@ -152,11 +153,12 @@ class OutwardRoundedCPUBackend:
     certification_capability = CertificationCapability.DIAGNOSTIC_ONLY
     proof_level_ceiling = ProofLevel.NUMERICAL_DIAGNOSTIC
 
-    def freeze_snapshot(self, context: Any) -> SourceSnapshot:
+    def freeze_snapshot(self, context: Any) -> Any:
+        """Return the frozen snapshot (v1 or v2) attached to ``context``."""
         snapshot = getattr(context, "snapshot", None)
-        if not isinstance(snapshot, SourceSnapshot):
-            raise ValueError("context must expose a frozen SourceSnapshot")
-        return snapshot
+        if isinstance(snapshot, (SourceSnapshot, SourceSnapshotV2)):
+            return snapshot
+        raise ValueError("context must expose a frozen SourceSnapshot")
 
     def enclose_field(
         self,

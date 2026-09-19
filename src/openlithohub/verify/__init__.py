@@ -60,7 +60,6 @@ from .source_native import (
     BACKEND_ID as SOURCE_NATIVE_BACKEND_ID,
 )
 from .source_native import (
-    CertificationCapability,
     FieldEnclosure,
     OutwardRoundedCPUBackend,
     ProcessBox,
@@ -72,9 +71,16 @@ from .source_snapshot import (
     FORWARD_MODEL_ID as SOURCE_NATIVE_FORWARD_MODEL_ID,
 )
 from .source_snapshot import (
+    ExactDyadic,
+    NormalizationRecord,
+    SourceSample,
     SourceSnapshot,
+    SourceSnapshotV2,
+    SpectralRepresentation,
     dyadic_from_float,
     freeze_source_snapshot,
+    freeze_source_snapshot_v2,
+    migrate_v1_to_v2,
     outward_round_interval,
 )
 from .spatial import curvature_scale_nm, hidden_loop_excluded, reduce_coverage
@@ -85,6 +91,7 @@ from .types import (
     CellDisposition,
     CertificateStatus,
     CertificateTarget,
+    CertificationCapability,
     ContinuousFocusCertificate,
     CoverageStatus,
     DependencyRecord,
@@ -136,10 +143,17 @@ __all__ = [
     "SOURCE_NATIVE_BACKEND_ID",
     "SOURCE_NATIVE_FORWARD_MODEL_ID",
     "SourceNativeVerificationBackend",
+    "SourceSample",
     "SourceSnapshot",
+    "SourceSnapshotV2",
+    "SpectralRepresentation",
+    "ExactDyadic",
+    "NormalizationRecord",
     "SpatialDerivativeEnclosure",
     "TileProofStatus",
     "TileSource",
+    "freeze_source_snapshot_v2",
+    "migrate_v1_to_v2",
     "aggregate_full_chip_status",
     "assemble_continuous_focus_certificate",
     "LEGACY_PINNED_UPSTREAM",
