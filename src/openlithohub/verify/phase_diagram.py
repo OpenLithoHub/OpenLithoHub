@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import zipfile
 from dataclasses import dataclass, field
 from enum import Enum
@@ -447,6 +448,82 @@ def _event_from_catalog(entry: dict[str, Any], proof_level: ProofLevel) -> Any:
     )
 
 
+def _numeric_event_from_bundle(
+    structural_event: Any,
+    declared: dict[str, Any],
+    artifact_sha256: str,
+) -> Any:
+    """Total structural+bundle -> numeric event conversion (PR-5C).
+
+    Covers all three layers.  The bundle declaration must agree with the
+    structural catalog on identity (event_id, layer, kind, multiplicity)
+    and carry a finite, ordered focus interval — any mismatch is a
+    corrupted proof package, not a partial replay.
+    """
+    if declared.get("event_id") != structural_event.event_id:
+        raise ValueError(
+            f"bundle event_id {declared.get('event_id')!r} != structural "
+            f"{structural_event.event_id!r}"
+        )
+    if declared.get("layer") != structural_event.layer.value:
+        raise ValueError(
+            f"event {structural_event.event_id}: bundle layer "
+            f"{declared.get('layer')!r} != structural "
+            f"{structural_event.layer.value}"
+        )
+    if declared.get("kind") != structural_event.kind.value:
+        raise ValueError(
+            f"event {structural_event.event_id}: bundle kind "
+            f"{declared.get('kind')!r} != structural {structural_event.kind.value}"
+        )
+    if int(declared.get("multiplicity", -1)) != structural_event.multiplicity:
+        raise ValueError(
+            f"event {structural_event.event_id}: bundle multiplicity "
+            f"{declared.get('multiplicity')!r} != structural "
+            f"{structural_event.multiplicity}"
+        )
+    interval = declared.get("focus_interval_nm")
+    if (
+        not isinstance(interval, list)
+        or len(interval) != 2
+        or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in interval)
+        or interval[0] >= interval[1]
+    ):
+        raise ValueError(
+            f"event {structural_event.event_id}: bundle focus interval "
+            f"{interval!r} must be finite and ordered"
+        )
+    common = dict(
+        event_id=structural_event.event_id,
+        kind=structural_event.kind,
+        focus_interval_nm=(float(interval[0]), float(interval[1])),
+        multiplicity=structural_event.multiplicity,
+        proof_level=structural_event.proof_level,
+        artifact_sha256=artifact_sha256,
+    )
+    if structural_event.layer is PhaseLayer.CRITICAL_SET:
+        assert isinstance(structural_event, CriticalSetEventCertificate)
+        return CriticalSetEventCertificate(
+            transversality_lower=structural_event.transversality_lower,
+            morse_signature=structural_event.morse_signature,
+            **common,
+        )
+    if structural_event.layer is PhaseLayer.OWNERSHIP:
+        assert isinstance(structural_event, OwnershipEventCertificate)
+        return OwnershipEventCertificate(
+            owner_before=structural_event.owner_before,
+            owner_after=structural_event.owner_after,
+            invisible_to_lower_owner=structural_event.invisible_to_lower_owner,
+            **common,
+        )
+    assert isinstance(structural_event, TargetTopologyEventCertificate)
+    return TargetTopologyEventCertificate(
+        component_count_before=structural_event.component_count_before,
+        component_count_after=structural_event.component_count_after,
+        **common,
+    )
+
+
 def load_verified_frozen_phase_diagram(
     profile: str = "p054-arf37",
     *,
@@ -505,32 +582,14 @@ def load_verified_frozen_phase_diagram(
         raise ValueError("bundle proof level is downgraded")
 
     bundle_events = {e["event_id"]: e for e in replay.get("events", [])}
-    numeric_events = []
-    for event in structure.events:
-        declared = bundle_events.get(event.event_id)
-        if declared is None or declared.get("focus_interval_nm") is None:
-            raise ValueError(f"numeric replay requires a frozen interval for {event.event_id}")
-        lo, hi = declared["focus_interval_nm"]
-        numeric_events.append(
-            CriticalSetEventCertificate(
-                event_id=event.event_id,
-                kind=event.kind,
-                focus_interval_nm=(lo, hi),
-                multiplicity=event.multiplicity,
-                transversality_lower=event.transversality_lower
-                if isinstance(event, CriticalSetEventCertificate)
-                else None,
-                morse_signature=(
-                    event.morse_signature
-                    if isinstance(event, CriticalSetEventCertificate)
-                    else None
-                ),
-                proof_level=event.proof_level,
-                artifact_sha256=artifact_sha,
-            )
-            if event.layer is PhaseLayer.CRITICAL_SET
-            else event
+    if set(bundle_events) != {e.event_id for e in structure.events}:
+        raise ValueError(
+            f"bundle event set differs from the frozen catalog (bundle: {sorted(bundle_events)})"
         )
+    numeric_events = [
+        _numeric_event_from_bundle(event, bundle_events[event.event_id], artifact_sha)
+        for event in structure.events
+    ]
 
     bundle_chambers = {c["chamber_id"]: c for c in replay.get("chambers", [])}
     numeric_chambers = []
@@ -571,7 +630,10 @@ def load_verified_frozen_phase_diagram(
         artifact_sha256=artifact_sha,
         artifact_bytes=len(raw),
         implementation_commit=structure.implementation_commit,
-        manifest_sha256=structure.manifest.get("manifest_sha256", ""),
+        # real provenance hashes, from bytes (PR-5C): the repo manifest
+        # file and the live replay engine (this module)
+        manifest_sha256=hashlib.sha256((base / "p054" / "manifest.json").read_bytes()).hexdigest(),
+        replay_engine_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         mode=ReplayState.IMPORTED_CERTIFICATE_VERIFIED,
     )
     numeric = FrozenPhaseDiagram(
