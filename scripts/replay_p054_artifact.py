@@ -51,18 +51,44 @@ def atomic_write_json(path: Path, payload: dict) -> Path:
 
 
 def result_digest(diagram) -> str:
-    """Deterministic digest of the replayed numeric surface."""
+    """Deterministic digest of the FULL theorem-facing replay surface."""
     payload = {
+        "schema": diagram.model_schema,
+        "implementation_commit": diagram.implementation_commit,
         "events": [
-            [e.event_id, e.layer.value, e.kind.value, list(e.focus_interval_nm or ())]
+            [
+                e.event_id,
+                e.layer.value,
+                e.kind.value,
+                e.multiplicity,
+                list(e.focus_interval_nm or ()),
+                getattr(e, "owner_before", None),
+                getattr(e, "owner_after", None),
+                getattr(e, "component_count_before", None),
+                getattr(e, "component_count_after", None),
+            ]
             for e in diagram.events
         ],
         "chambers": [
-            [c.chamber_id, list(c.focus_interval_nm or ()), c.target_component_count]
+            [
+                c.chamber_id,
+                list(c.focus_interval_nm or ()),
+                c.lower_owner,
+                c.upper_owner,
+                c.target_component_count,
+                list(c.bounded_by_events),
+            ]
             for c in diagram.chambers
         ],
         "witnesses": [
-            [w.critical_event_id, w.owner_before, w.owner_after] for w in diagram.witnesses
+            [
+                w.critical_event_id,
+                w.owner_before,
+                w.owner_after,
+                w.left_chamber_id,
+                w.right_chamber_id,
+            ]
+            for w in diagram.witnesses
         ],
         "target_component_sequence": list(diagram.target_component_sequence),
     }

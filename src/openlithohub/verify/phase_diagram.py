@@ -544,6 +544,108 @@ def _numeric_event_from_bundle(
     )
 
 
+def _verify_bundle_semantics(
+    replay: dict[str, Any],
+    members: dict[str, bytes],
+    structure: FrozenPhaseDiagram,
+    fixture: dict[str, Any],
+    artifact_sha256: str,
+) -> None:
+    """Canonical Contract-B semantic checks (PR-5D).
+
+    Both the release producer and the scheduled shard depend on this
+    function, so a passing factory implies the shard's semantic gates:
+    complete fixture identity, member hashes declared by the bundle
+    manifest, collection closure against the frozen catalogs, and
+    layer-specific declarations.
+    """
+    identity_fields = (
+        ("model_schema", "model_schema"),
+        ("wavelength_nm", "wavelength_nm"),
+        ("na", "na"),
+        ("sigma", "sigma"),
+        ("grid_shape", "grid_shape"),
+        ("pixel_size_nm", "pixel_size_nm"),
+        ("pupil_support_count", "pupil_support_count"),
+        ("boundary", "boundary"),
+    )
+    for replay_key, fixture_key in identity_fields:
+        if replay.get(replay_key) != fixture.get(fixture_key):
+            raise ValueError(
+                f"bundle {replay_key} {replay.get(replay_key)!r} != frozen "
+                f"fixture {fixture.get(fixture_key)!r}"
+            )
+    for declared_key in ("source_snapshot_sha256", "coefficient_tensor_sha256"):
+        declared = replay.get(declared_key)
+        if not declared:
+            raise ValueError(f"bundle manifest lacks {declared_key}")
+        matches = [
+            hashlib.sha256(payload).hexdigest()
+            for name, payload in members.items()
+            if declared_key.split("_")[0] in name
+        ]
+        if declared not in matches:
+            raise ValueError(f"bundle {declared_key} does not match any member content hash")
+    catalog = structure.events
+    raw_events: list[dict[str, Any]] = list(replay.get("events", []))
+    raw_ids = [e.get("event_id") for e in raw_events]
+    if len(raw_ids) != len(set(raw_ids)):
+        raise ValueError("duplicate event ids in the bundle")
+    if set(raw_ids) != {e.event_id for e in catalog}:
+        raise ValueError("bundle event set differs from the frozen catalog")
+    catalog_by_id = {e.event_id: e for e in catalog}
+    bundle_by_id = {e["event_id"]: e for e in raw_events}
+    for event_id, declared in bundle_by_id.items():
+        structural = catalog_by_id[event_id]
+        if declared.get("layer") != structural.layer.value:
+            raise ValueError(f"bundle layer mismatch for {event_id}")
+        if declared.get("kind") != structural.kind.value:
+            raise ValueError(f"bundle kind mismatch for {event_id}")
+        if declared.get("multiplicity") != structural.multiplicity:
+            raise ValueError(f"bundle multiplicity mismatch for {event_id}")
+        if isinstance(structural, OwnershipEventCertificate) and (
+            declared.get("owner_before") != structural.owner_before
+            or declared.get("owner_after") != structural.owner_after
+        ):
+            raise ValueError(f"bundle ownership mismatch for {event_id}")
+        if isinstance(structural, TargetTopologyEventCertificate) and (
+            declared.get("component_count_before") != structural.component_count_before
+            or declared.get("component_count_after") != structural.component_count_after
+        ):
+            raise ValueError(f"bundle component counts mismatch for {event_id}")
+    raw_chambers: list[dict[str, Any]] = list(replay.get("chambers", []))
+    raw_chamber_ids = [c.get("chamber_id") for c in raw_chambers]
+    if len(raw_chamber_ids) != len(set(raw_chamber_ids)):
+        raise ValueError("duplicate chamber ids in the bundle")
+    catalog_chambers = {c.chamber_id: c for c in structure.chambers}
+    if set(raw_chamber_ids) != set(catalog_chambers):
+        raise ValueError("bundle chamber set differs from the frozen catalog")
+    for declared in raw_chambers:
+        structural_chamber = catalog_chambers[declared["chamber_id"]]
+        interval = declared.get("focus_interval_nm")
+        if (
+            not isinstance(interval, list)
+            or len(interval) != 2
+            or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in interval)
+            or interval[0] >= interval[1]
+        ):
+            raise ValueError(
+                f"bundle chamber {declared['chamber_id']!r} interval must be finite and ordered"
+            )
+        if list(declared.get("bounded_by_events", ())) != list(
+            structural_chamber.bounded_by_events
+        ):
+            raise ValueError(f"bundle bounded_by_events mismatch for {declared['chamber_id']!r}")
+        if declared.get("target_component_count") != structural_chamber.target_component_count:
+            raise ValueError(
+                f"bundle target component count mismatch for {declared['chamber_id']!r}"
+            )
+    raw_witness_ids = [w.get("critical_event_id") for w in replay.get("witnesses", [])]
+    catalog_witness_ids = [w.critical_event_id for w in structure.witnesses]
+    if sorted(raw_witness_ids) != sorted(catalog_witness_ids):
+        raise ValueError("bundle witness set differs from the frozen catalog")
+
+
 def load_verified_frozen_phase_diagram(
     profile: str = "p054-arf37",
     *,
@@ -589,17 +691,26 @@ def load_verified_frozen_phase_diagram(
         raise ValueError(f"artifact sha256 {artifact_sha} != registry {expected_sha}")
 
     structure = load_frozen_phase_diagram(profile, root=root)
+    fixture = json.loads((base / "p054" / "fixture.json").read_text())
     with zipfile.ZipFile(artifact) as zf:
-        names = set(zf.namelist())
+        names = zf.namelist()
+        if len(names) != len(set(names)):
+            raise ValueError("frozen artifact has duplicate ZIP member names")
+        if len(names) > 64:
+            raise ValueError("frozen artifact exceeds the member count limit")
         if "replay_manifest.json" not in names:
             raise ValueError("frozen artifact lacks replay_manifest.json")
         replay = json.loads(zf.read("replay_manifest.json"))
+        members = {name: zf.read(name) for name in names if name != "replay_manifest.json"}
     if replay.get("fixture_id") != profile:
         raise ValueError("bundle fixture_id mismatch")
     if replay.get("implementation_commit") != structure.implementation_commit:
         raise ValueError("bundle implementation_commit mismatch")
     if replay.get("proof_level") != ProofLevel.IMPORTED_QDM_CERTIFIED.value:
         raise ValueError("bundle proof level is downgraded")
+    # PR-5D: complete frozen fixture identity, verified here (not only in
+    # the shard) so a passing factory implies a passing shard fixture gate
+    _verify_bundle_semantics(replay, members, structure, fixture, artifact_sha)
 
     bundle_events = {e["event_id"]: e for e in replay.get("events", [])}
     if set(bundle_events) != {e.event_id for e in structure.events}:
