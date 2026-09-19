@@ -41,8 +41,11 @@ class TestSourceSnapshot:
         assert sum(snap.source_weights) == pytest.approx(1.0, abs=1e-12)
         assert snap.source_bin_indices == (0, 1, 2, 3)
 
-    def test_topk_flag_is_false_on_source_native_path(self):
-        assert _snapshot().is_topk_truncated is False
+    def test_topk_flag_is_honestly_unknown_on_v1_schema(self):
+        # P-054 repo integration: the v1 schema carries no truncation
+        # metadata, so the flag answers None (unknown) — never a false
+        # "proven full".
+        assert _snapshot().is_topk_truncated is None
 
     def test_hash_pinned_and_stable(self):
         snap = _snapshot()

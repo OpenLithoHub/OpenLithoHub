@@ -21,6 +21,7 @@ from .source_snapshot import (
     SourceSnapshot,
     outward_round_interval,
 )
+from .types import CertificationCapability, ProofLevel
 
 BACKEND_ID = "source_native_full"
 
@@ -83,9 +84,18 @@ class SpatialDerivativeEnclosure:
 
 @runtime_checkable
 class SourceNativeVerificationBackend(Protocol):
-    """Contract for a theorem-facing, source-native evaluation backend."""
+    """Contract for a theorem-facing, source-native evaluation backend.
+
+    P-054 repo integration: a backend must declare what it is *engineered*
+    to certify.  ``certification_capability`` and ``proof_level_ceiling``
+    are enforced by the certificate assembler — a DIAGNOSTIC_ONLY backend
+    can never support an INTERVAL_CERTIFIED PASS, no matter what its
+    callers believe.
+    """
 
     backend_id: str
+    certification_capability: CertificationCapability
+    proof_level_ceiling: ProofLevel
 
     def freeze_snapshot(self, context: Any) -> SourceSnapshot: ...
 
@@ -103,16 +113,44 @@ class SourceNativeVerificationBackend(Protocol):
     ) -> SpatialDerivativeEnclosure: ...
 
 
+_LEVEL_RANK = {
+    ProofLevel.HEURISTIC: 0,
+    ProofLevel.NUMERICAL_DIAGNOSTIC: 1,
+    ProofLevel.INTERVAL_CERTIFIED: 2,
+    ProofLevel.IMPORTED_QDM_CERTIFIED: 3,
+}
+
+
+def assert_backend_supports(backend: Any, proof_level: ProofLevel) -> None:
+    """Fail closed when the requested proof level exceeds the backend ceiling."""
+    capability = getattr(backend, "certification_capability", None)
+    ceiling = getattr(backend, "proof_level_ceiling", None)
+    if capability is None or ceiling is None:
+        raise TypeError(
+            f"backend {backend!r} does not declare a certification capability; "
+            "it cannot back theorem-facing certificates"
+        )
+    if _LEVEL_RANK[proof_level] > _LEVEL_RANK[ceiling]:
+        raise ValueError(
+            f"backend {backend.backend_id!r} capability "
+            f"{capability.value} ceilings at {ceiling.value}; it cannot back "
+            f"{proof_level.value} claims"
+        )
+
+
 class OutwardRoundedCPUBackend:
     """Minimal deterministic CPU backend over the frozen discrete model.
 
     Encloses the field by outward-rounded evaluation of the snapshot's
     per-bin intensity contributions over ``spatial_region`` — the full
     discrete source, no dynamic top-K branch.  This is a foundation for
-    real interval backends, not a substitute for them.
+    real interval backends, not a substitute for them: its enclosure is a
+    placeholder band, so it is engineering-enforced DIAGNOSTIC_ONLY.
     """
 
     backend_id = BACKEND_ID
+    certification_capability = CertificationCapability.DIAGNOSTIC_ONLY
+    proof_level_ceiling = ProofLevel.NUMERICAL_DIAGNOSTIC
 
     def freeze_snapshot(self, context: Any) -> SourceSnapshot:
         snapshot = getattr(context, "snapshot", None)

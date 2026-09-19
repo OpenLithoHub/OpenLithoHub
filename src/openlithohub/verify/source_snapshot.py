@@ -64,15 +64,16 @@ class SourceSnapshot:
             raise ValueError("pixel_size_nm must be positive")
 
     @property
-    def is_topk_truncated(self) -> bool:
-        """True only if the caller explicitly built a truncated snapshot.
+    def is_topk_truncated(self) -> bool | None:
+        """Whether the frozen spectral representation is top-K truncated.
 
-        The source-native path freezes the *full* discrete source; a
-        truncated top-K representation must carry an explicit
-        truncation/equivalence error bound before its numbers may be
-        promoted to a continuous certificate (prompt §B04-A).
+        P-054 repo integration: the v1 schema carries **no** truncation
+        metadata, so v1 honestly answers ``None`` (unknown) — it can no
+        longer claim ``False`` (proven full) without evidence.  The v2
+        schema (``B04.source_snapshot.v2``) declares
+        ``spectral_representation`` explicitly and derives a real answer.
         """
-        return False
+        return None
 
     def to_dict(self) -> dict[str, Any]:
         out = asdict(self)

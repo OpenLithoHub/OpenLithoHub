@@ -19,9 +19,26 @@ class ProofLevel(str, Enum):
     IMPORTED_QDM_CERTIFIED = "IMPORTED-QDM-CERTIFIED"
 
 
+class CertificationCapability(str, Enum):
+    """What a backend is *engineered* to certify (P-054 repo integration).
+
+    Backend identity and capability identity are separate: a backend may be
+    the canonical implementation of a model while still being unable to back
+    a rigorous certificate.  Enforced, not documented.
+    """
+
+    DIAGNOSTIC_ONLY = "DIAGNOSTIC_ONLY"
+    RIGOROUS_INTERVAL = "RIGOROUS_INTERVAL"
+    IMPORTED_FROZEN_CERTIFICATE = "IMPORTED_FROZEN_CERTIFICATE"
+
+
 class CertificateTarget(str, Enum):
     LEVEL_SET_STABILITY = "LEVEL_SET_STABILITY"
     EXTRACTED_CONTOUR_EPE = "EXTRACTED_CONTOUR_EPE"
+    CRITICAL_SET_STRATIFICATION = "CRITICAL_SET_STRATIFICATION"
+    OWNERSHIP_STRATIFICATION = "OWNERSHIP_STRATIFICATION"
+    FIXED_TARGET_TOPOLOGY = "FIXED_TARGET_TOPOLOGY"
+    FOCUS_DOSE_CHAMBER = "FOCUS_DOSE_CHAMBER"
 
 
 class CertificateStatus(str, Enum):
@@ -69,6 +86,12 @@ class DependencyRecord:
     method: str
     artifact_sha256: str | None = None
     note: str = ""
+    # R17/P-054 capability firewall: which backend produced this dependency
+    # and what it is engineered to certify.  A certifying-level dependency
+    # whose backend declares DIAGNOSTIC_ONLY capability corrupts the proof
+    # package and fails closed in the assembler.
+    backend_id: str | None = None
+    certification_capability: CertificationCapability | None = None
 
 
 @dataclass(frozen=True)
@@ -113,6 +136,9 @@ class ContinuousFocusCertificate:
     certified_violation_lower_nm: float | None = None
     proof_artifact_sha256: str | None = None
     nominal_reconstruction_upper_nm: float | None = None
+    # P-054 repo integration: the frozen model this certificate names.  None
+    # only on the legacy replay path (which records that fact in `note`).
+    model_identity: Any = None
     note: str = ""
 
     def to_dict(self) -> dict[str, Any]:

@@ -11,7 +11,10 @@ from .cellwise_fourier import (
     local_cell_geometry,
     transfer_center_gradient_to_cell,
 )
-from .certifier import assemble_continuous_focus_certificate
+from .certifier import (
+    LEGACY_PINNED_UPSTREAM,
+    assemble_continuous_focus_certificate,
+)
 from .coverage import replay_boundary_coverage, verify_boundary_artifact
 from .derivative_runs import (
     CenterJetCertificate,
@@ -44,6 +47,7 @@ from .interface_runs import (
     split_runs_outside_chebyshev,
     zero_padded_horizontal_variation,
 )
+from .model_identity import ModelIdentity
 from .mvp1 import certify_mvp1_manifest
 from .reconstruction import replay_reconstruction_artifact, verify_reconstruction_artifact
 from .replay import ExpandedBandReplay, replay_expanded_band, sha256_file
@@ -56,11 +60,13 @@ from .source_native import (
     BACKEND_ID as SOURCE_NATIVE_BACKEND_ID,
 )
 from .source_native import (
+    CertificationCapability,
     FieldEnclosure,
     OutwardRoundedCPUBackend,
     ProcessBox,
     SourceNativeVerificationBackend,
     SpatialDerivativeEnclosure,
+    assert_backend_supports,
 )
 from .source_snapshot import (
     FORWARD_MODEL_ID as SOURCE_NATIVE_FORWARD_MODEL_ID,
@@ -136,6 +142,10 @@ __all__ = [
     "TileSource",
     "aggregate_full_chip_status",
     "assemble_continuous_focus_certificate",
+    "LEGACY_PINNED_UPSTREAM",
+    "ModelIdentity",
+    "CertificationCapability",
+    "assert_backend_supports",
     "center_jet_certificate_from_json",
     "certify_mvp1_manifest",
     "coherent_spectrum_from_layout",
