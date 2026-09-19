@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -120,11 +121,17 @@ def outward_round_interval(lo: float, hi: float) -> tuple[float, float]:
 
 
 class SpectralRepresentation(str, Enum):
-    """What the frozen spectral representation actually is."""
+    """What the frozen spectral representation actually is.
+
+    ``LEGACY_UNKNOWN`` is the honest state of a v1 migration: the v1
+    schema carried no truncation metadata, so the representation is
+    unknown and never theorem-facing admissible (PR-2C).
+    """
 
     FULL_DISCRETE_SOURCE = "FULL_DISCRETE_SOURCE"
     SOCS_TRUNCATED = "SOCS_TRUNCATED"
     IMPORTED_FROZEN_FINITE_OPERATOR = "IMPORTED_FROZEN_FINITE_OPERATOR"
+    LEGACY_UNKNOWN = "LEGACY_UNKNOWN"
 
 
 @dataclass(frozen=True)
@@ -167,16 +174,26 @@ class ExactDyadic:
 
 @dataclass(frozen=True)
 class SourceSample:
-    """One source-plane sample: grid position plus raw/normalized weights."""
+    """One source-plane sample: position plus raw/normalized weights.
 
-    sy: int
-    sx: int
+    Position semantics (P-054 re-audit PR-2C): ``sy``/``sx`` are populated
+    only when the source-grid mapping is *known* — either frozen directly
+    or supplied by an explicit, bijective ``source_index_map``.  A legacy
+    v1 migration never invents coordinates: it records the stored flat
+    index in ``legacy_flat_index`` and leaves ``sy``/``sx`` as ``None``.
+    """
+
+    sy: int | None
+    sx: int | None
     raw_weight: ExactDyadic | None
     normalized_weight: ExactDyadic | None
+    legacy_flat_index: int | None = None
 
     def __post_init__(self) -> None:
         if self.raw_weight is None and self.normalized_weight is None:
-            raise ValueError(f"source sample ({self.sy},{self.sx}) carries no weights")
+            raise ValueError("source sample carries no weights")
+        if (self.sy is None) != (self.sx is None):
+            raise ValueError("source sample coordinates must be both known or both unknown")
 
 
 @dataclass(frozen=True)
@@ -197,12 +214,14 @@ class SourceSnapshotV2:
     normalization factor and the normalized model, and declares the
     spectral representation explicitly (P-054 audit P0.2/P0.3).  Truncated
     representations may not back theorem-facing certificates unless they
-    ship a certified truncation error bound.
+    ship a certified truncation error bound.  A ``LEGACY_UNKNOWN``
+    representation (v1 migration without spectral evidence) is likewise
+    inadmissible — unknown is never promoted to certified (PR-2C).
     """
 
     forward_model_id: str
     git_commit: str
-    source_bins: tuple[tuple[int, int], ...]
+    source_bins: tuple[tuple[int, int] | None, ...]
     samples: tuple[SourceSample, ...]
     pupil_support_bits: tuple[int, ...]
     pupil_shape: tuple[int, int]
@@ -228,13 +247,44 @@ class SourceSnapshotV2:
             raise ValueError("pupil bits do not match pupil shape")
         if self.pixel_size_nm <= 0.0:
             raise ValueError("pixel_size_nm must be positive")
-        if self.spectral_representation is SpectralRepresentation.SOCS_TRUNCATED and (
-            self.truncation_error_upper is None or self.truncation_rank is None
+        if self.spectral_representation is SpectralRepresentation.SOCS_TRUNCATED:
+            self._validate_truncation()
+        if self.spectral_representation is SpectralRepresentation.FULL_DISCRETE_SOURCE and (
+            self.normalization.policy == "LEGACY_NORMALIZED_FLOAT_ONLY"
         ):
+            # M6: a legacy-normalized snapshot cannot claim a full discrete
+            # spectral representation — the upgrade was never discharged.
+            raise ValueError(
+                "LEGACY_NORMALIZED_FLOAT_ONLY provenance is incompatible with "
+                "FULL_DISCRETE_SOURCE; the representation is LEGACY_UNKNOWN"
+            )
+        # when coordinates are declared known, bins and samples must agree
+        for index, (bin_pos, sample) in enumerate(zip(self.source_bins, self.samples, strict=True)):
+            if (
+                bin_pos is not None
+                and sample.sy is not None
+                and tuple(bin_pos)
+                != (
+                    sample.sy,
+                    sample.sx,
+                )
+            ):
+                raise ValueError(f"source bin {index} disagrees with its sample coordinates")
+
+    def _validate_truncation(self) -> None:
+        if self.truncation_error_upper is None or self.truncation_rank is None:
             raise ValueError(
                 "a truncated spectral representation must carry its rank "
                 "and a truncation error bound"
             )
+        if self.truncation_rank <= 0:
+            raise ValueError("truncation rank must be positive")
+        if not math.isfinite(self.truncation_error_upper):
+            raise ValueError("truncation error bound must be finite")
+        if self.truncation_error_upper < 0.0:
+            raise ValueError("truncation error bound must be nonnegative")
+        if self.truncation_error_proof_level is None:
+            raise ValueError("a truncation error bound must declare its proof level")
 
     @property
     def is_topk_truncated(self) -> bool:
@@ -264,7 +314,14 @@ class SourceSnapshotV2:
         return path
 
     def source_native_certificate_admissible(self) -> bool:
-        """Theorem-facing admissibility rule (audit P0.3 verification rule)."""
+        """Theorem-facing admissibility rule (audit P0.3 + re-audit PR-2C).
+
+        A truncated representation needs a certified error bound; a
+        ``LEGACY_UNKNOWN`` representation (v1 migration) is never
+        admissible — unknown is not certified.
+        """
+        if self.spectral_representation is SpectralRepresentation.LEGACY_UNKNOWN:
+            return False
         if self.spectral_representation is SpectralRepresentation.SOCS_TRUNCATED:
             return self.truncation_bound_is_certified()
         return True
@@ -336,32 +393,64 @@ def freeze_source_snapshot_v2(
     )
 
 
-def migrate_v1_to_v2(v1: SourceSnapshot) -> SourceSnapshotV2:
-    """v1 → v2 migration with honest provenance fidelity.
+def migrate_v1_to_v2(
+    v1: SourceSnapshot,
+    *,
+    source_index_map: dict[int, tuple[int, int]] | None = None,
+) -> SourceSnapshotV2:
+    """v1 → v2 migration with honest provenance fidelity (PR-2C).
 
-    The v1 schema kept only normalized Python floats: the raw bits are
-    gone and are never fabricated.  The migration marks every record
+    The v1 schema kept only normalized Python floats and flat source-bin
+    indices, with no truncation metadata and no source-grid shape.  The
+    migration therefore:
+
+    - marks the spectral representation ``LEGACY_UNKNOWN`` (never
+      ``FULL_DISCRETE_SOURCE`` — unknown is not silently upgraded);
+    - preserves the stored flat indices verbatim in
+      ``SourceSample.legacy_flat_index``;
+    - leaves ``sy``/``sx`` as ``None`` unless the caller supplies an
+      explicit, bijective ``source_index_map`` from flat index to source
+      coordinates — the spatial image grid is *not* a source grid.
+
+    Raw bits are gone and are never fabricated; every record is marked
     ``LEGACY_NORMALIZED_FLOAT_ONLY``.
     """
     if v1.schema != "B04.source_snapshot.v1":
         raise ValueError("migrate_v1_to_v2 expects a v1 snapshot")
-    grid_h, grid_w = v1.grid_shape
+
+    indices = [int(i) for i in v1.source_bin_indices]
+    if len(indices) != len(v1.source_weights):
+        raise ValueError("v1 bins and weights disagree")
+    if source_index_map is not None:
+        mapped_keys = sorted(source_index_map)
+        if mapped_keys != sorted(set(indices)):
+            raise ValueError("source_index_map must cover exactly the stored v1 flat indices")
+        if len(set(source_index_map.values())) != len(source_index_map):
+            raise ValueError("source_index_map must be bijective")
+
     samples = []
-    for index, weight in enumerate(v1.source_weights):
-        sy, sx = divmod(int(index), grid_w)
+    bins: list[tuple[int, int] | None] = []
+    for flat_index, weight in zip(indices, v1.source_weights, strict=True):
+        mapped = source_index_map.get(flat_index) if source_index_map else None
+        if mapped:
+            sy: int | None = mapped[0]
+            sx: int | None = mapped[1]
+        else:
+            sy, sx = None, None
         samples.append(
             SourceSample(
                 sy=sy,
                 sx=sx,
                 raw_weight=None,
                 normalized_weight=ExactDyadic.from_float(weight),
+                legacy_flat_index=flat_index,
             )
         )
-    bins = tuple(divmod(i, grid_w) for i in range(len(v1.source_weights)))
+        bins.append((mapped[0], mapped[1]) if mapped else None)
     return SourceSnapshotV2(
         forward_model_id=v1.forward_model_id,
         git_commit=v1.git_commit,
-        source_bins=bins,
+        source_bins=tuple(bins),
         samples=tuple(samples),
         pupil_support_bits=v1.pupil_support_bits,
         pupil_shape=v1.pupil_shape,
@@ -378,7 +467,7 @@ def migrate_v1_to_v2(v1: SourceSnapshot) -> SourceSnapshotV2:
             open_frame_factor=None,
             policy="LEGACY_NORMALIZED_FLOAT_ONLY",
         ),
-        spectral_representation=SpectralRepresentation.FULL_DISCRETE_SOURCE,
+        spectral_representation=SpectralRepresentation.LEGACY_UNKNOWN,
         process_parameters=dict(v1.process_parameters),
     )
 

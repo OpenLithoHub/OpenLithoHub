@@ -13,6 +13,7 @@ from openlithohub.verify.source_snapshot import (
     ExactDyadic,
     NormalizationRecord,
     SourceSample,
+    SourceSnapshotV2,
     SpectralRepresentation,
     dyadic_from_float,
     freeze_source_snapshot,
@@ -106,10 +107,10 @@ def test_full_discrete_source_is_admissible():
     assert snap.spectral_representation is SpectralRepresentation.FULL_DISCRETE_SOURCE
 
 
-def test_v1_migration_records_legacy_fidelity_without_fabricating_bits():
-    v1 = freeze_source_snapshot(
-        source_bin_indices=[0, 1],
-        source_weights=[1.0, 3.0],
+def _v1(indices):
+    return freeze_source_snapshot(
+        source_bin_indices=indices,
+        source_weights=[1.0, 3.0, 2.0][: len(indices)],
         pupil_support=[1, 1, 0, 1],
         pupil_shape=(2, 2),
         wavelength_nm=193.0,
@@ -120,16 +121,91 @@ def test_v1_migration_records_legacy_fidelity_without_fabricating_bits():
         mask_bytes=b"mask-bytes",
         git_commit="0" * 40,
     )
-    v2 = migrate_v1_to_v2(v1)
-    assert v2.schema == "B04.source_snapshot.v2"
-    assert v2.normalization.policy == "LEGACY_NORMALIZED_FLOAT_ONLY"
-    assert v2.normalization.raw_weight_sum is None
-    assert v2.normalization.source_normalization_factor is None
-    for sample in v2.samples:
-        assert sample.raw_weight is None
-        assert sample.normalized_weight is not None
-    # bin layout is reconstructed from the flat index and grid width
-    assert v2.source_bins == ((0, 0), (0, 1))
+
+
+def test_v1_migration_keeps_unknown_representation_m1():
+    v2 = migrate_v1_to_v2(_v1([0, 1]))
+    assert v2.spectral_representation is SpectralRepresentation.LEGACY_UNKNOWN
+    assert v2.source_native_certificate_admissible() is False
+
+
+def test_v1_migration_preserves_flat_source_ids_m3():
+    # nonconsecutive indices are preserved verbatim — never re-enumerated
+    v2 = migrate_v1_to_v2(_v1([5, 17, 42]))
+    assert [s.legacy_flat_index for s in v2.samples] == [5, 17, 42]
+    assert all(s.sy is None and s.sx is None for s in v2.samples)  # M4
+    assert v2.source_bins == (None, None, None)
+
+
+def test_migration_with_explicit_map_populates_coordinates_m5():
+    v2 = migrate_v1_to_v2(_v1([5, 17]), source_index_map={5: (0, 2), 17: (3, 1)})
+    assert v2.source_bins == ((0, 2), (3, 1))
+    assert all(s.sy is not None and s.sx is not None for s in v2.samples)
+    # bijectivity/coverage violations fail closed
+    with pytest.raises(ValueError, match="cover exactly"):
+        migrate_v1_to_v2(_v1([5, 17]), source_index_map={5: (0, 0)})
+    with pytest.raises(ValueError, match="bijective"):
+        migrate_v1_to_v2(_v1([5, 17]), source_index_map={5: (1, 1), 17: (1, 1)})
+
+
+def test_legacy_normalized_cannot_claim_full_discrete_m6():
+    v2 = migrate_v1_to_v2(_v1([0, 1]))
+    with pytest.raises(ValueError, match="LEGACY_NORMALIZED_FLOAT_ONLY"):
+        SourceSnapshotV2(
+            forward_model_id=v2.forward_model_id,
+            git_commit=v2.git_commit,
+            source_bins=v2.source_bins,
+            samples=v2.samples,
+            pupil_support_bits=v2.pupil_support_bits,
+            pupil_shape=v2.pupil_shape,
+            wavelength_nm=v2.wavelength_nm,
+            na_x=v2.na_x,
+            na_y=v2.na_y,
+            pixel_size_nm=v2.pixel_size_nm,
+            grid_shape=v2.grid_shape,
+            focus_dose_convention=v2.focus_dose_convention,
+            mask_sha256=v2.mask_sha256,
+            normalization=v2.normalization,
+            spectral_representation=SpectralRepresentation.FULL_DISCRETE_SOURCE,
+        )
+
+
+def test_truncation_metadata_validation():
+    base = dict(
+        spectral_representation=SpectralRepresentation.SOCS_TRUNCATED,
+        truncation_rank=0,
+        truncation_error_upper=1e-3,
+        truncation_error_proof_level=ProofLevel.INTERVAL_CERTIFIED,
+    )
+    with pytest.raises(ValueError, match="rank must be positive"):
+        freeze_source_snapshot_v2(**_kwargs(**base))
+    with pytest.raises(ValueError, match="finite"):
+        freeze_source_snapshot_v2(
+            **_kwargs(
+                spectral_representation=SpectralRepresentation.SOCS_TRUNCATED,
+                truncation_rank=4,
+                truncation_error_upper=float("inf"),
+                truncation_error_proof_level=ProofLevel.INTERVAL_CERTIFIED,
+            )
+        )
+    with pytest.raises(ValueError, match="nonnegative"):
+        freeze_source_snapshot_v2(
+            **_kwargs(
+                spectral_representation=SpectralRepresentation.SOCS_TRUNCATED,
+                truncation_rank=4,
+                truncation_error_upper=-1.0,
+                truncation_error_proof_level=ProofLevel.INTERVAL_CERTIFIED,
+            )
+        )
+    with pytest.raises(ValueError, match="declare its proof level"):
+        freeze_source_snapshot_v2(
+            **_kwargs(
+                spectral_representation=SpectralRepresentation.SOCS_TRUNCATED,
+                truncation_rank=4,
+                truncation_error_upper=1e-3,
+                truncation_error_proof_level=None,
+            )
+        )
 
 
 def test_exact_dyadic_round_trip_and_validation():
