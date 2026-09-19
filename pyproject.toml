@@ -201,6 +201,7 @@ markers = [
     "requires_klayout: marks tests that need klayout installed",
     "benchmark: performance benchmarks (deselect with -m 'not benchmark')",
     "gpu: marks tests that require >=2 CUDA GPUs (skipped in default CI)",
+    "proof_artifact_required: proof-replay tests that hard-fail (never skip) when a frozen artifact is missing",
 ]
 filterwarnings = [
     # data-root manifest warnings: production bytes get a one-shot
