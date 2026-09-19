@@ -49,6 +49,18 @@ from .interface_runs import (
 )
 from .model_identity import ModelIdentity
 from .mvp1 import certify_mvp1_manifest
+from .phase_diagram import (
+    CriticalSetEventCertificate,
+    EventKind,
+    FocusChamber,
+    FrozenPhaseDiagram,
+    OwnershipEventCertificate,
+    PhaseArtifactNotAvailableError,
+    PhaseDiagramCertificate,
+    PhaseLayer,
+    TargetTopologyEventCertificate,
+    load_frozen_phase_diagram,
+)
 from .reconstruction import replay_reconstruction_artifact, verify_reconstruction_artifact
 from .replay import ExpandedBandReplay, replay_expanded_band, sha256_file
 from .run_spectrum import (
@@ -156,6 +168,16 @@ __all__ = [
     "migrate_v1_to_v2",
     "aggregate_full_chip_status",
     "assemble_continuous_focus_certificate",
+    "CriticalSetEventCertificate",
+    "EventKind",
+    "FocusChamber",
+    "FrozenPhaseDiagram",
+    "load_frozen_phase_diagram",
+    "OwnershipEventCertificate",
+    "PhaseArtifactNotAvailableError",
+    "PhaseDiagramCertificate",
+    "PhaseLayer",
+    "TargetTopologyEventCertificate",
     "LEGACY_PINNED_UPSTREAM",
     "ModelIdentity",
     "CertificationCapability",
