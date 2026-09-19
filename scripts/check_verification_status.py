@@ -126,15 +126,15 @@ def verify_frozen_state(
 
     # activation gate (PR-3C/3D): a passing full_artifact_replay requires a
     # replay receipt whose identity is bound end-to-end; unknown status
-    # values hard-fail instead of silently skipping the binding
+    # values are failures (PR-3E: verify_frozen_state always returns
+    # list[str] — never an int)
     replay_state = status.get("finite_declared_model", {}).get("full_artifact_replay", "")
     if replay_state and replay_state not in STATUS_REQUIRED_STRENGTH:
-        print(
-            f"FAIL: unknown full_artifact_replay state {replay_state!r}; "
-            f"allowed: {sorted(STATUS_REQUIRED_STRENGTH)}",
-            file=sys.stderr,
+        failures.append(
+            f"unknown full_artifact_replay state {replay_state!r}; "
+            f"allowed: {sorted(STATUS_REQUIRED_STRENGTH)}"
         )
-        return 1
+        return failures
     if replay_state in _PASSING_REPLAY_STATES:
         failures.extend(
             _verify_replay_binding(

@@ -128,7 +128,7 @@ jobs:
             --report-out /tmp/p054-replay-report.json
           cp /tmp/p054-replay-receipt.json replay-receipt-fresh.json
           cp /tmp/p054-replay-report.json replay-report-fresh.json
-      - name: Compare fresh receipt with the committed one (if the status is passing)
+      - name: Compare fresh receipt with the committed one (exact equality)
         run: |
           python - <<'PY'
           import json, pathlib, sys
@@ -136,7 +136,7 @@ jobs:
           committed = pathlib.Path("proof_artifacts/p054/replay-receipt.json")
           status = json.loads(pathlib.Path("proof_artifacts/verification-status.json").read_text())
           state = status.get("finite_declared_model", {}).get("full_artifact_replay", "")
-          passing = state in {"IMPORTED_CERTIFICATE_VERIFIED", "FULL_REPLAY_PASSED"}
+          passing = state in {"IMPORTED_CERTIFICATE_VERIFIED", "SOURCE_NATIVE_RECOMPUTED", "FULL_REPLAY_PASSED"}
           if not passing:
               print(f"status {state!r} is not passing; fresh receipt recorded for review")
               sys.exit(0)
@@ -144,12 +144,15 @@ jobs:
               print("FAIL: passing status requires a committed replay receipt", file=sys.stderr)
               sys.exit(1)
           committed_doc = json.loads(committed.read_text())
-          keys = ["artifact_sha256", "artifact_bytes", "implementation_commit", "replay_mode"]
-          diff = {k: (committed_doc.get(k), fresh.get(k)) for k in keys if committed_doc.get(k) != fresh.get(k)}
-          if diff:
-              print(f"FAIL: committed receipt disagrees with the fresh replay: {diff}", file=sys.stderr)
+          # PR-3E: the receipt is deterministic given the artifact, so the
+          # release condition is EXACT whole-receipt equality — every key.
+          if committed_doc != fresh:
+              diff = {k: (committed_doc.get(k), fresh.get(k))
+                      for k in set(committed_doc) | set(fresh)
+                      if committed_doc.get(k) != fresh.get(k)}
+              print(f"FAIL: committed receipt != fresh replay: {diff}", file=sys.stderr)
               sys.exit(1)
-          print("committed receipt matches the fresh replay")
+          print("committed receipt is exactly equal to the fresh replay")
           PY
       - name: Status manifest against the fresh evidence
         run: python scripts/check_verification_status.py --report-head
