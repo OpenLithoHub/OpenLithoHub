@@ -1,0 +1,43 @@
+{
+  "schema": "P054.manifest.v1",
+  "paper": {
+    "id": "P-054",
+    "title": "Certified Stratified Phase Diagrams for Finite Hopkins Lithography",
+    "author": "Lin Tao",
+    "doi": "10.5281/zenodo.22843141",
+    "version_frozen": true
+  },
+  "implementation_commit": "348fa5d86d5355465af98e2c4ce3deac60081a4c",
+  "canonical_model_id": "openlithohub.source_native_full.hopkins.discrete.p054-arf37",
+  "model_schema": "P054.frozen-arf37.v1",
+  "fixture": {
+    "fixture_id": "p054-arf37",
+    "source_count": 37,
+    "wavelength_nm": 193.0,
+    "na": 1.35,
+    "sigma": 0.7,
+    "grid_shape": [72, 72],
+    "pixel_size_nm": 8.0,
+    "pupil_support_count": 49,
+    "boundary": "PERIODIC_FINITE_TILE",
+    "scope": "FINITE_DECLARED_AERIAL_MODEL"
+  },
+  "external_values": {
+    "note": "content hashes and exact numeric intervals live in the frozen Zenodo artifact; this manifest references them without copying the archive into git",
+    "mask_sha256": {"source": "zenodo", "key": "mask_sha256", "value": null},
+    "source_snapshot_sha256": {"source": "zenodo", "key": "source_snapshot_sha256", "value": null},
+    "coefficient_tensor_sha256": {"source": "zenodo", "key": "coefficient_tensor_sha256", "value": null}
+  },
+  "declared_proof_levels": {
+    "finite_declared_model_phase_diagram": "IMPORTED-QDM-CERTIFIED",
+    "continuous_hopkins_bridge": "OPEN",
+    "foundry_calibration": "OPEN"
+  },
+  "does_not_prove": [
+    "continuous Hopkins operator equivalence",
+    "continuous source-plane integral certification",
+    "foundry or process qualification",
+    "wafer-accurate prediction",
+    "anything about layouts outside the declared frozen fixture"
+  ]
+}

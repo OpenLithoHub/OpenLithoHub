@@ -1,0 +1,21 @@
+{
+  "schema": "P054.registry.v1",
+  "note": "Registry of external proof artifacts. Artifacts are downloaded by scripts/fetch_proof_artifacts.py, SHA-256 verified BEFORE use, and never committed to git. sha256 must be non-null for required artifacts; --verify-only hard-fails on missing or unverified entries.",
+  "artifacts": [
+    {
+      "name": "p054-arf37-frozen-artifact.zip",
+      "sha256": null,
+      "bytes": null,
+      "source": "zenodo",
+      "url_or_doi": "10.5281/zenodo.22843141",
+      "destination": "proof_artifacts/p054/external/",
+      "required_for": ["p054-full-replay"],
+      "unblocks": [
+        "p054-full-replay",
+        "event-interval-replay",
+        "chamber-boundary-replay",
+        "coefficient-tensor-symmetry-replay"
+      ]
+    }
+  ]
+}

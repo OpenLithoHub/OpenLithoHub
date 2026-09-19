@@ -1,8 +1,11 @@
 # B04 / QDM Readiness Scoreboard
 
 **Current increment:** 29 (Realistic-density routed-block external validity: ExactVectorCropSource + Ibex gate)
-**Current HEAD:** `d9d0f8a` (post-Inc28) + streaming architecture (RFC 0008) + Inc16–29 proof modules
+**Current HEAD:** `d9b2c36` (post-Inc29, R17-hardened) + streaming architecture (RFC 0008) + Inc16–29 proof modules
 **Last updated:** 2026-09-10
+
+Canonical frozen-proof entry point: `proof_artifacts/p054/README.md`
+(machine-readable status: `proof_artifacts/verification-status.json`).
 
 This is the canonical live scoreboard required by the B04 architecture brief (§18/§22).
 Historical per-increment notes remain in `proof_artifacts/README_B04_PATCH.md`.

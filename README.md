@@ -47,10 +47,10 @@ Dose-response is **monotonically decreasing** (19.4× from 10→100 ph/nm²), ma
 - **OASIS / GDSII workflow** — end-to-end tensor→fab-ready mask (manhattan & curvilinear)
 - **Model-agnostic evaluation** — plug any OPC/ILT model via minimal interface
 - **Streaming full-chip pipeline** — core/halo tiling with out-of-core sources/sinks; layout growth adds tiles, not memory (RFC 0008)
-- **Proof-carrying verification** — theorem-facing `PASS`/`FAIL`/`INCONCLUSIVE` certificates with certified-halo brackets, coverage contract, and an opt-in source-native backend (RFC 0007 / B04)
+- **Proof-carrying verification** — theorem-facing `PASS`/`FAIL`/`INCONCLUSIVE` certificates with certified-halo brackets, coverage contract, and the source-native verification contract and replay infrastructure; rigorous certification capability is profile/backend-specific (RFC 0007 / B04 / P-054)
 - **Optional physics plugins** — DiffNano (EM solvers) and DiffCFD (litho + spin-coat) as opt-in extras
 
-**Honesty boundaries:** All benchmarks use synthetic 64×64 layouts. No foundry validation, no production tapeout. CPU-only timing. See [BENCHMARKS.md](BENCHMARKS.md) for full methodology.
+**Honesty boundaries:** Leaderboard/reference model-quality numbers remain benchmark-relative and are not foundry validation. The repository also contains public-layout engineering benchmarks (sky130 / Ibex routed GDS) for scaling, semantics, and work-avoidance studies. No result should be interpreted as wafer-process qualification without external calibration/SEM validation. CPU-only timing. See [BENCHMARKS.md](BENCHMARKS.md) for full methodology and [proof_artifacts/p054/README.md](proof_artifacts/p054/README.md) for the canonical frozen proof entry point.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐

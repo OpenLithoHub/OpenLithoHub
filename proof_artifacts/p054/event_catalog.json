@@ -1,0 +1,107 @@
+{
+  "schema": "P054.phase-events.v1",
+  "fixture_id": "p054-arf37",
+  "note": "Event classifications and ownership data are frozen by P-054. Exact focus intervals are carried by the external Zenodo artifact (see external_artifacts.json); entries here record the stratification structure that offline replay tests enforce. The three layers are distinct: a critical-set event is not an ownership event, and neither is a fixed-target topology event.",
+  "events": [
+    {
+      "event_id": "z1",
+      "layer": "CRITICAL_SET",
+      "kind": "GENERIC_FOLD",
+      "multiplicity": 1,
+      "transversality_lower": null,
+      "morse_signature": null,
+      "owner_before": null,
+      "owner_after": null,
+      "focus_interval_nm": null,
+      "value_source": "external_artifact"
+    },
+    {
+      "event_id": "z2",
+      "layer": "CRITICAL_SET",
+      "kind": "GENERIC_FOLD",
+      "multiplicity": 1,
+      "transversality_lower": null,
+      "morse_signature": null,
+      "owner_before": null,
+      "owner_after": null,
+      "focus_interval_nm": null,
+      "value_source": "external_artifact",
+      "note": "second fold; becomes a terminal fold cliff in the ownership layer"
+    },
+    {
+      "event_id": "z3",
+      "layer": "OWNERSHIP",
+      "kind": "TRANSVERSE_OWNERSHIP_CROSSING",
+      "multiplicity": 1,
+      "transversality_lower": null,
+      "morse_signature": null,
+      "owner_before": "C",
+      "owner_after": "E",
+      "focus_interval_nm": null,
+      "value_source": "external_artifact",
+      "note": "envelope kink; not a target-topology event"
+    },
+    {
+      "event_id": "z4",
+      "layer": "CRITICAL_SET",
+      "kind": "REFLECTION_PITCHFORK",
+      "multiplicity": 1,
+      "transversality_lower": null,
+      "morse_signature": null,
+      "owner_before": null,
+      "owner_after": null,
+      "focus_interval_nm": null,
+      "value_source": "external_artifact",
+      "note": "visible in the ownership layer"
+    },
+    {
+      "event_id": "z5",
+      "layer": "CRITICAL_SET",
+      "kind": "OWNERSHIP_INVISIBLE_PITCHFORK",
+      "multiplicity": 1,
+      "transversality_lower": null,
+      "morse_signature": null,
+      "owner_before": null,
+      "owner_after": null,
+      "focus_interval_nm": null,
+      "value_source": "external_artifact",
+      "note": "pitchfork that does NOT change the lower-owner envelope"
+    },
+    {
+      "event_id": "zV",
+      "layer": "TARGET_TOPOLOGY",
+      "kind": "TARGET_MAX_EVENT",
+      "multiplicity": 1,
+      "transversality_lower": null,
+      "morse_signature": null,
+      "owner_before": null,
+      "owner_after": null,
+      "focus_interval_nm": null,
+      "value_source": "external_artifact"
+    },
+    {
+      "event_id": "zH",
+      "layer": "TARGET_TOPOLOGY",
+      "kind": "TARGET_MAX_EVENT",
+      "multiplicity": 1,
+      "transversality_lower": null,
+      "morse_signature": null,
+      "owner_before": null,
+      "owner_after": null,
+      "focus_interval_nm": null,
+      "value_source": "external_artifact"
+    },
+    {
+      "event_id": "zP",
+      "layer": "TARGET_TOPOLOGY",
+      "kind": "TARGET_SADDLE_EVENT",
+      "multiplicity": 1,
+      "component_count_before": 5,
+      "component_count_after": 4,
+      "owner_before": null,
+      "owner_after": null,
+      "focus_interval_nm": null,
+      "value_source": "external_artifact"
+    }
+  ]
+}

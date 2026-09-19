@@ -1,0 +1,27 @@
+{
+  "schema": "P054.external-artifacts.v1",
+  "paper": {
+    "id": "P-054",
+    "doi": "10.5281/zenodo.22843141"
+  },
+  "artifacts": [
+    {
+      "name": "p054-arf37-frozen-artifact.zip",
+      "kind": "coefficient_tensor+fixture+event_intervals",
+      "sha256": null,
+      "bytes": null,
+      "source": "zenodo",
+      "url_or_doi": "10.5281/zenodo.22843141",
+      "status": "UNFETCHED",
+      "required_for": ["p054-full-replay"],
+      "provides": [
+        "mask_sha256",
+        "source_snapshot_sha256",
+        "coefficient_tensor_sha256",
+        "event focus intervals (z1,z2,z3,z4,z5,zV,zH,zP)",
+        "chamber focus boundaries"
+      ]
+    }
+  ],
+  "policy": "Proof replay hard-fails on missing artifacts, hash mismatches, or model-identity mismatches. Unit CI may skip artifact-dependent tests with an explicit reason; the proof-replay workflow may not."
+}

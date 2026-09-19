@@ -1,0 +1,20 @@
+{
+  "schema": "P054.fixture.v1",
+  "fixture_id": "p054-arf37",
+  "scope": "FINITE_DECLARED_AERIAL_MODEL",
+  "boundary": "PERIODIC_FINITE_TILE",
+  "source": "FROZEN_37_SOURCE",
+  "wavelength_nm": 193.0,
+  "na": 1.35,
+  "sigma": 0.7,
+  "grid_shape": [72, 72],
+  "pixel_size_nm": 8.0,
+  "pupil_support_count": 49,
+  "mask_shape": [72, 72],
+  "honesty": {
+    "foundry_calibrated": false,
+    "continuous_source_integral_certified": false,
+    "wafer_process_qualified": false,
+    "continuous_hopkins_equivalent": false
+  }
+}

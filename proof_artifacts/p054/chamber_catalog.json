@@ -1,0 +1,44 @@
+{
+  "schema": "P054.phase-chambers.v1",
+  "fixture_id": "p054-arf37",
+  "note": "Event-free chambers of the frozen fixture. Chamber focus boundaries are frozen by the external artifact; the offline-checked structure is the target component sequence 1 -> 3 -> 5 -> 4 across the target-topology events, and chamber adjacency without crossing an event.",
+  "target_component_sequence": [1, 3, 5, 4],
+  "chambers": [
+    {
+      "chamber_id": "chamber-0",
+      "focus_interval_nm": null,
+      "lower_owner": null,
+      "upper_owner": null,
+      "target_component_count": 1,
+      "bounded_by_events": ["zV"],
+      "value_source": "external_artifact"
+    },
+    {
+      "chamber_id": "chamber-1",
+      "focus_interval_nm": null,
+      "lower_owner": null,
+      "upper_owner": null,
+      "target_component_count": 3,
+      "bounded_by_events": ["zV", "zH"],
+      "value_source": "external_artifact"
+    },
+    {
+      "chamber_id": "chamber-2",
+      "focus_interval_nm": null,
+      "lower_owner": null,
+      "upper_owner": null,
+      "target_component_count": 5,
+      "bounded_by_events": ["zH", "zP"],
+      "value_source": "external_artifact"
+    },
+    {
+      "chamber_id": "chamber-3",
+      "focus_interval_nm": null,
+      "lower_owner": null,
+      "upper_owner": null,
+      "target_component_count": 4,
+      "bounded_by_events": ["zP"],
+      "value_source": "external_artifact"
+    }
+  ]
+}
