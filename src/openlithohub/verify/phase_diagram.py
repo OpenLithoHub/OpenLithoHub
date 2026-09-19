@@ -121,6 +121,26 @@ class FocusChamber:
 
 
 @dataclass(frozen=True)
+class OwnershipInvisibilityWitness:
+    """Cross-layer witness: a critical-set pitchfork keeps the owner.
+
+    The correct ontology is ``critical-set event + witness => ownership
+    invisibility`` — the critical-set event never becomes an ownership
+    statement by itself.  ``owner_before == owner_after`` is the theorem;
+    chamber adjacency across the event is the structural witness.  Fields
+    frozen by the external artifact stay ``None`` until numeric replay.
+    """
+
+    critical_event_id: str
+    owner_before: str | None = None
+    owner_after: str | None = None
+    left_chamber_id: str | None = None
+    right_chamber_id: str | None = None
+    proof_level: ProofLevel = ProofLevel.IMPORTED_QDM_CERTIFIED
+    artifact_sha256: str | None = None
+
+
+@dataclass(frozen=True)
 class PhaseDiagramCertificate:
     """Frozen phase-diagram certificate: proof level + artifact identity."""
 
@@ -152,6 +172,7 @@ class FrozenPhaseDiagram:
     ]
     chambers: tuple[FocusChamber, ...]
     target_component_sequence: tuple[int, ...]
+    witnesses: tuple[OwnershipInvisibilityWitness, ...] = ()
     manifest: dict[str, Any] = field(default_factory=dict)
     replay_state: str = "STRUCTURE_ONLY"
 
@@ -229,6 +250,63 @@ class FrozenPhaseDiagram:
                 f"target component sequence {sequence} contradicts the frozen "
                 f"sequence {self.target_component_sequence}"
             )
+        self._verify_ownership_invisibility_witnesses()
+
+    def _verify_ownership_invisibility_witnesses(self) -> None:
+        """Cross-layer witness firewall (PR-4B).
+
+        Ontology: ``critical-set event + cross-layer witness => ownership
+        invisibility`` — the critical-set event itself never carries
+        ownership fields.  Every ``OWNERSHIP_INVISIBLE_PITCHFORK`` must have
+        exactly one witness; the witness must keep the owner, reference
+        existing chambers adjacent across that event, and carry artifact
+        identity matching the replay bundle.
+        """
+        invisible_events = [
+            event for event in self.events if event.kind is EventKind.OWNERSHIP_INVISIBLE_PITCHFORK
+        ]
+        invisible_ids = {event.event_id for event in invisible_events}
+        # every witness must point at an OWNERSHIP_INVISIBLE_PITCHFORK
+        for witness in self.witnesses:
+            if witness.critical_event_id not in invisible_ids:
+                raise ValueError(
+                    f"witness {witness.critical_event_id} does not refer to an "
+                    "OWNERSHIP_INVISIBLE_PITCHFORK event"
+                )
+        by_event: dict[str, list[OwnershipInvisibilityWitness]] = {}
+        for witness in self.witnesses:
+            by_event.setdefault(witness.critical_event_id, []).append(witness)
+        chamber_ids = {chamber.chamber_id for chamber in self.chambers}
+        for event in invisible_events:
+            witnesses = by_event.get(event.event_id, [])
+            if len(witnesses) != 1:
+                raise ValueError(
+                    f"event {event.event_id}: an ownership-invisible pitchfork "
+                    f"requires exactly one cross-layer witness, found {len(witnesses)}"
+                )
+            witness = witnesses[0]
+            if (
+                witness.owner_before is not None
+                and witness.owner_after is not None
+                and witness.owner_before != witness.owner_after
+            ):
+                raise ValueError(
+                    f"witness {witness.critical_event_id}: ownership-invisibility "
+                    f"broken ({witness.owner_before} -> {witness.owner_after})"
+                )
+            if witness.left_chamber_id is not None and witness.right_chamber_id is not None:
+                for chamber_id in (witness.left_chamber_id, witness.right_chamber_id):
+                    if chamber_id not in chamber_ids:
+                        raise ValueError(
+                            f"witness {witness.critical_event_id} references "
+                            f"unknown chamber {chamber_id!r}"
+                        )
+                    chamber = next(c for c in self.chambers if c.chamber_id == chamber_id)
+                    if event.event_id not in chamber.bounded_by_events:
+                        raise ValueError(
+                            f"witness {witness.critical_event_id}: chamber "
+                            f"{chamber_id!r} is not adjacent across the event"
+                        )
 
 
 def _event_from_catalog(entry: dict[str, Any], proof_level: ProofLevel) -> Any:
@@ -324,6 +402,17 @@ def load_frozen_phase_diagram(
         )
         for entry in chambers_doc.get("chambers", [])
     )
+    witnesses = tuple(
+        OwnershipInvisibilityWitness(
+            critical_event_id=w["critical_event_id"],
+            owner_before=w.get("owner_before"),
+            owner_after=w.get("owner_after"),
+            left_chamber_id=w.get("left_chamber_id"),
+            right_chamber_id=w.get("right_chamber_id"),
+            artifact_sha256=w.get("artifact_sha256"),
+        )
+        for w in chambers_doc.get("witnesses", [])
+    )
     diagram = FrozenPhaseDiagram(
         fixture_id=profile,
         model_schema=manifest["model_schema"],
@@ -331,6 +420,7 @@ def load_frozen_phase_diagram(
         events=events,
         chambers=chambers,
         target_component_sequence=tuple(chambers_doc.get("target_component_sequence", ())),
+        witnesses=witnesses,
         manifest=manifest,
     )
     diagram.verify_manifest()

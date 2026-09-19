@@ -13,6 +13,7 @@ from openlithohub.verify.phase_diagram import (
     CriticalSetEventCertificate,
     FrozenPhaseDiagram,
     OwnershipEventCertificate,
+    OwnershipInvisibilityWitness,
     PhaseArtifactNotAvailableError,
     PhaseLayer,
     TargetTopologyEventCertificate,
@@ -119,3 +120,63 @@ def test_verify_manifest_rejects_layer_mixing(tmp_path=None):
 def test_unknown_profile_fails_closed():
     with pytest.raises(KeyError):
         load_frozen_phase_diagram("p054-made-up")
+
+
+def test_z5_carries_exactly_one_cross_layer_witness():
+    assert len(PD.witnesses) == 1
+    witness = PD.witnesses[0]
+    assert witness.critical_event_id == "z5"
+    # structural values frozen by the external artifact are None until
+    # numeric replay; the invariant itself is enforced below
+    PD.verify_manifest()  # does not raise
+
+
+def test_witness_owner_mutation_hard_fails():
+    # H8: changing the owner across the cross-layer witness is a firewall
+    # violation, not a catalog update
+    mutated = OwnershipInvisibilityWitness(
+        critical_event_id="z5", owner_before="C", owner_after="D"
+    )
+    broken = FrozenPhaseDiagram(
+        fixture_id=PD.fixture_id,
+        model_schema=PD.model_schema,
+        implementation_commit=PD.implementation_commit,
+        events=PD.events,
+        chambers=PD.chambers,
+        target_component_sequence=PD.target_component_sequence,
+        witnesses=(mutated,),
+        manifest=PD.manifest,
+    )
+    with pytest.raises(ValueError, match="ownership-invisibility broken"):
+        broken.verify_manifest()
+
+
+def test_witness_must_reference_invisible_pitchfork():
+    stray = OwnershipInvisibilityWitness(critical_event_id="z3")
+    broken = FrozenPhaseDiagram(
+        fixture_id=PD.fixture_id,
+        model_schema=PD.model_schema,
+        implementation_commit=PD.implementation_commit,
+        events=PD.events,
+        chambers=PD.chambers,
+        target_component_sequence=PD.target_component_sequence,
+        witnesses=(stray,),
+        manifest=PD.manifest,
+    )
+    with pytest.raises(ValueError, match="OWNERSHIP_INVISIBLE_PITCHFORK"):
+        broken.verify_manifest()
+
+
+def test_missing_witness_hard_fails():
+    broken = FrozenPhaseDiagram(
+        fixture_id=PD.fixture_id,
+        model_schema=PD.model_schema,
+        implementation_commit=PD.implementation_commit,
+        events=PD.events,
+        chambers=PD.chambers,
+        target_component_sequence=PD.target_component_sequence,
+        witnesses=(),
+        manifest=PD.manifest,
+    )
+    with pytest.raises(ValueError, match="exactly one cross-layer witness"):
+        broken.verify_manifest()

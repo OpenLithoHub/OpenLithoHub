@@ -3,6 +3,17 @@
   "fixture_id": "p054-arf37",
   "note": "Event-free chambers of the frozen fixture. Chamber focus boundaries are frozen by the external artifact; the offline-checked structure is the target component sequence 1 -> 3 -> 5 -> 4 across the target-topology events, and chamber adjacency without crossing an event.",
   "target_component_sequence": [1, 3, 5, 4],
+  "witnesses": [
+    {
+      "critical_event_id": "z5",
+      "owner_before": null,
+      "owner_after": null,
+      "left_chamber_id": null,
+      "right_chamber_id": null,
+      "value_source": "external_artifact",
+      "note": "cross-layer ownership-invisibility witness; the frozen artifact supplies the owner pair and the adjacent chambers (which must be equal / bound z5 respectively)"
+    }
+  ],
   "chambers": [
     {
       "chamber_id": "chamber-0",
