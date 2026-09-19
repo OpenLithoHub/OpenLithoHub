@@ -133,7 +133,15 @@ class PhaseDiagramCertificate:
 
 @dataclass(frozen=True)
 class FrozenPhaseDiagram:
-    """Query surface over the frozen P-054 stratification."""
+    """Query surface over the frozen P-054 stratification.
+
+    ``replay_state`` separates two facts that must never be conflated
+    (P-054 re-audit, PR-4B): the paper's declared claim level stays
+    ``IMPORTED-QDM-CERTIFIED`` regardless, but the *repository runtime*
+    has either only structurally replayed the catalogs (``STRUCTURE_ONLY``)
+    or verified the numeric frozen artifact (``ARTIFACT_VERIFIED_NUMERIC``).
+    Numeric chamber queries answer only in the latter state.
+    """
 
     fixture_id: str
     model_schema: str
@@ -145,6 +153,7 @@ class FrozenPhaseDiagram:
     chambers: tuple[FocusChamber, ...]
     target_component_sequence: tuple[int, ...]
     manifest: dict[str, Any] = field(default_factory=dict)
+    replay_state: str = "STRUCTURE_ONLY"
 
     def events_by_layer(
         self, layer: PhaseLayer
@@ -165,7 +174,16 @@ class FrozenPhaseDiagram:
 
         Requires the frozen numeric chamber boundaries from the external
         artifact; without it this is a fail-closed error, never a guess.
+        A STRUCTURE_ONLY diagram must never answer a numeric query even if
+        someone hand-injects intervals into a copy — use the
+        ``ARTIFACT_VERIFIED_NUMERIC`` state produced by the replay shard.
         """
+        if self.replay_state != "ARTIFACT_VERIFIED_NUMERIC":
+            raise PhaseArtifactNotAvailableError(
+                "numeric chamber queries require the verified frozen artifact "
+                "(replay_state=STRUCTURE_ONLY); run "
+                "scripts/fetch_proof_artifacts.py --profile p054-arf37"
+            )
         for chamber in self.chambers:
             interval = chamber.focus_interval_nm
             if interval is not None and interval[0] <= z_nm < interval[1]:

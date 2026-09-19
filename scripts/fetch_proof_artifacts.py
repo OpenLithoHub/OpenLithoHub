@@ -5,14 +5,17 @@ Reads ``proof_artifacts/registry.json``.  Every artifact is SHA-256
 verified BEFORE it may be used by a replay.
 
 Modes:
-- ``--verify-only``: fail on any entry that is missing on disk, unfetched
-  (``sha256`` null), or present with a mismatching hash.  Used by CI to
-  make silent skips impossible for proof replay.
-- default (fetch): download entries that are declared but missing, verify
-  their hashes, and place them under their declared destination.
+- default (fetch): download declared artifacts that are absent locally,
+  then verify sha256 and byte length.  A fetch requires a *file-level*
+  ``download_url`` (a DOI landing page is not a transport locator) and a
+  non-null ``sha256``; without them the entry is UNFETCHED and the script
+  fails loudly.
+- ``--verify-only``: never downloads; fails on any required entry that is
+  missing on disk, unfetched (``sha256`` null), or hash-mismatched.
+  Used by CI to make silent skips impossible for proof replay.
 
-Exit codes: 0 verified; 1 verification failure; 2 download unsupported
-(no resolvable URL for an entry).
+Exit codes: 0 verified; 1 verification failure; 2 download unsupported or
+failed.
 """
 
 from __future__ import annotations
@@ -36,68 +39,101 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def resolve_url(entry: dict) -> str | None:
-    if entry.get("source") == "zenodo":
-        doi = entry.get("url_or_doi", "")
-        if doi:
-            return f"https://doi.org/{doi}"
-        return None
-    return entry.get("url_or_doi")
-
-
 def fetch(entry: dict, destination: Path) -> int:
-    url = resolve_url(entry)
-    if not url:
-        print(f"FETCH-UNSUPPORTED: {entry['name']} has no resolvable URL", file=sys.stderr)
+    """Download one entry and verify it before declaring success."""
+    download_url = entry.get("download_url")
+    expected = entry.get("sha256")
+    if not download_url or not expected:
+        print(
+            f"FETCH-UNSUPPORTED: {entry['name']} has no file-level download_url "
+            "and/or sha256; it cannot be fetched until the frozen publication "
+            "provides its exact content identity",
+            file=sys.stderr,
+        )
         return 2
     destination.parent.mkdir(parents=True, exist_ok=True)
-    print(f"fetching {entry['name']} from {url} ...")
+    print(f"fetching {entry['name']} from {download_url} ...")
     proc = subprocess.run(  # noqa: S603 — fixed argv from the registry
-        ["curl", "-L", "--fail", "--retry", "3", url, "-o", str(destination)],
+        ["curl", "-L", "--fail", "--retry", "3", download_url, "-o", str(destination)],
         check=False,
     )
     if proc.returncode != 0:
         print(f"FETCH-FAILED: {entry['name']}", file=sys.stderr)
         return 2
+    if entry.get("bytes") is not None and destination.stat().st_size != entry["bytes"]:
+        print(
+            f"BYTE-LENGTH-MISMATCH: {name_of(entry)} "
+            f"{destination.stat().st_size} != {entry['bytes']}",
+            file=sys.stderr,
+        )
+        return 1
+    actual = sha256_of(destination)
+    if actual != expected:
+        print(f"HASH-MISMATCH: {entry['name']} {actual} != {expected}", file=sys.stderr)
+        return 1
+    print(f"VERIFIED after fetch: {entry['name']} [{actual[:12]}…]")
     return 0
+
+
+def name_of(entry: dict) -> str:
+    return entry.get("name", "<unnamed>")
+
+
+def verify_entry(entry: dict) -> tuple[int, str]:
+    """Verify one entry without downloading. Returns (rc, state)."""
+    name = name_of(entry)
+    expected = entry.get("sha256")
+    destination = ROOT / entry.get("destination", "proof_artifacts/external") / name
+    if expected is None:
+        print(f"UNFETCHED: {name} (sha256 pending upstream publication)")
+        return (1, "UNFETCHED")
+    if not destination.exists():
+        print(f"MISSING: {name} expected at {destination}", file=sys.stderr)
+        return (1, "MISSING")
+    actual = sha256_of(destination)
+    if actual != expected:
+        print(f"HASH-MISMATCH: {name} {actual} != {expected}", file=sys.stderr)
+        return (1, "HASH_MISMATCH")
+    if entry.get("bytes") is not None and destination.stat().st_size != entry["bytes"]:
+        print(
+            f"BYTE-LENGTH-MISMATCH: {name} {destination.stat().st_size} != {entry['bytes']}",
+            file=sys.stderr,
+        )
+        return (1, "BYTE_LENGTH_MISMATCH")
+    print(f"VERIFIED: {name} [{actual[:12]}…]")
+    return (0, "VERIFIED")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--profile", default="p054-arf37", help="frozen profile to fetch for")
     ap.add_argument("--verify-only", action="store_true")
     args = ap.parse_args()
 
     registry = json.loads(REGISTRY.read_text())
     failures = 0
     for entry in registry.get("artifacts", []):
-        required = "p054-full-replay" in entry.get("required_for", [])
-        name = entry["name"]
-        destination = ROOT / entry.get("destination", "proof_artifacts/external") / name
-        expected = entry.get("sha256")
-
-        if expected is None:
-            # Unfetched: acceptable in unit CI, fatal for proof replay.
-            print(f"UNFETCHED: {name} (sha256 pending upstream publication)")
-            if args.verify_only and required:
-                failures += 1
+        if args.profile not in entry.get("profiles", ["p054-arf37"]):
             continue
-        if not destination.exists():
-            if args.verify_only:
-                print(f"MISSING: {name} expected at {destination}", file=sys.stderr)
-                failures += 1
-                continue
-            rc = fetch(entry, destination)
+        if args.verify_only:
+            rc, _state = verify_entry(entry)
             if rc:
                 failures += 1
-                continue
-        actual = sha256_of(destination)
-        if actual != expected:
-            print(f"HASH-MISMATCH: {name} {actual} != {expected}", file=sys.stderr)
-            failures += 1
         else:
-            print(f"VERIFIED: {name} [{actual[:12]}…]")
+            destination = (
+                ROOT / entry.get("destination", "proof_artifacts/external") / entry["name"]
+            )
+            if destination.exists():
+                rc, state = verify_entry(entry)
+                if rc == 0:
+                    continue
+                # present but wrong: re-fetch only with a declared identity
+                if entry.get("sha256") is None:
+                    failures += 1
+                    continue
+            failures += fetch(entry, destination)
     if failures:
-        print(f"{failures} artifact verification failure(s)", file=sys.stderr)
+        print(f"{failures} artifact failure(s)", file=sys.stderr)
         return 1
     return 0
 
