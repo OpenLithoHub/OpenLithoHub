@@ -49,9 +49,22 @@ REQUIRED_SECTIONS = ("finite_declared_model", "repository_engineering", "bridges
 # Contract B (re-audit PR-5B): the repository implements imported
 # frozen-certificate verification; SOURCE_NATIVE_RECOMPUTED requires a
 # pinned recomputation engine (Contract A) and backs FULL_REPLAY_PASSED.
+# PR-3D: strict status/mode lattices.  Unknown values hard-fail.
 _PASSING_REPLAY_STATES = {
     "IMPORTED_CERTIFICATE_VERIFIED",
-    "FULL_REPLAY_PASSED",
+    "SOURCE_NATIVE_RECOMPUTED",
+    "FULL_REPLAY_PASSED",  # legacy alias; requires source-native strength
+}
+MODE_STRENGTH = {
+    "STRUCTURE_ONLY": 0,
+    "IMPORTED_CERTIFICATE_VERIFIED": 1,
+    "SOURCE_NATIVE_RECOMPUTED": 2,
+}
+STATUS_REQUIRED_STRENGTH = {
+    "BLOCKED_ARTIFACT_UNFETCHED": 0,
+    "IMPORTED_CERTIFICATE_VERIFIED": 1,
+    "SOURCE_NATIVE_RECOMPUTED": 2,
+    "FULL_REPLAY_PASSED": 2,
 }
 
 
@@ -111,9 +124,17 @@ def verify_frozen_state(
                 f"!= {expected[:12]}…); regenerate frozen-basis.json in review"
             )
 
-    # activation gate (PR-3C): a passing full_artifact_replay requires a
-    # replay receipt whose identity is bound end-to-end
+    # activation gate (PR-3C/3D): a passing full_artifact_replay requires a
+    # replay receipt whose identity is bound end-to-end; unknown status
+    # values hard-fail instead of silently skipping the binding
     replay_state = status.get("finite_declared_model", {}).get("full_artifact_replay", "")
+    if replay_state and replay_state not in STATUS_REQUIRED_STRENGTH:
+        print(
+            f"FAIL: unknown full_artifact_replay state {replay_state!r}; "
+            f"allowed: {sorted(STATUS_REQUIRED_STRENGTH)}",
+            file=sys.stderr,
+        )
+        return 1
     if replay_state in _PASSING_REPLAY_STATES:
         failures.extend(
             _verify_replay_binding(
@@ -183,15 +204,17 @@ def _verify_replay_binding(
     # S4: replay engine drift
     if engine_engine_hash and receipt.get("replay_engine_sha256") != engine_engine_hash:
         failures.append("receipt replay engine hash drifted from the live engine (S4)")
-    # S5: mode must be strong enough for the claimed status
+    # S5 (PR-3D lattice): receipt mode strength must satisfy the claimed
+    # status; unknown modes hard-fail
     mode = receipt.get("replay_mode")
-    if replay_state == "SOURCE_NATIVE_RECOMPUTED" and mode != "SOURCE_NATIVE_RECOMPUTED":
-        failures.append("status claims source-native replay but the receipt mode is weaker (S5)")
-    if replay_state == "IMPORTED_CERTIFICATE_VERIFIED" and mode not in (
-        "IMPORTED_CERTIFICATE_VERIFIED",
-        "SOURCE_NATIVE_RECOMPUTED",
-    ):
-        failures.append(f"receipt replay mode {mode!r} is too weak for a passing status (S5)")
+    if mode not in MODE_STRENGTH:
+        failures.append(f"unknown receipt replay mode {mode!r} (S5)")
+    elif MODE_STRENGTH[mode] < STATUS_REQUIRED_STRENGTH.get(replay_state, 99):
+        failures.append(
+            f"receipt mode {mode!r} (strength {MODE_STRENGTH[mode]}) is too weak "
+            f"for status {replay_state!r} "
+            f"(required {STATUS_REQUIRED_STRENGTH.get(replay_state)})"
+        )
     # S6: byte binding
     if registry_bytes is not None and receipt_bytes != registry_bytes:
         failures.append("receipt artifact bytes != registry bytes (S6)")

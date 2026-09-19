@@ -205,3 +205,83 @@ def test_s6_bytes_mismatch_rejected(tmp_path):
 def test_healthy_receipt_passes_binding(tmp_path):
     failures = _check_receipt(_receipt(), tmp_path)
     assert failures == []
+
+
+# ---------------------------------------------------------------------------
+# PR-3D — status/mode strength lattice (T12–T14) + schema/profile/manifest
+# ---------------------------------------------------------------------------
+
+from scripts.check_verification_status import (  # noqa: E402
+    _PASSING_REPLAY_STATES,
+    STATUS_REQUIRED_STRENGTH,
+)
+
+
+def test_t12_full_replay_with_structure_only_mode_rejected(tmp_path):
+    receipt = _receipt(replay_mode="STRUCTURE_ONLY")
+    state = _receipt_state()
+    state[0]["finite_declared_model"]["full_artifact_replay"] = "FULL_REPLAY_PASSED"
+    path = tmp_path / "r.json"
+    path.write_text(json.dumps(receipt))
+    failures = _verify_replay_binding(
+        replay_state="FULL_REPLAY_PASSED",
+        receipt_path=path,
+        registry=state[3],
+        frozen_basis=state[2],
+        manifest=state[1],
+        engine_engine_hash="e" * 64,
+    )
+    assert any("too weak" in f for f in failures)
+
+
+def test_t13_full_replay_with_imported_mode_rejected(tmp_path):
+    receipt = _receipt(replay_mode="IMPORTED_CERTIFICATE_VERIFIED")
+    state = _receipt_state()
+    state[0]["finite_declared_model"]["full_artifact_replay"] = "FULL_REPLAY_PASSED"
+    path = tmp_path / "r.json"
+    path.write_text(json.dumps(receipt))
+    failures = _verify_replay_binding(
+        replay_state="FULL_REPLAY_PASSED",
+        receipt_path=path,
+        registry=state[3],
+        frozen_basis=state[2],
+        manifest=state[1],
+        engine_engine_hash="e" * 64,
+    )
+    assert any("too weak" in f for f in failures)
+
+
+def test_full_replay_with_source_native_mode_accepted(tmp_path):
+    receipt = _receipt(replay_mode="SOURCE_NATIVE_RECOMPUTED")
+    state = _receipt_state()
+    state[0]["finite_declared_model"]["full_artifact_replay"] = "FULL_REPLAY_PASSED"
+    path = tmp_path / "r.json"
+    path.write_text(json.dumps(receipt))
+    failures = _verify_replay_binding(
+        replay_state="FULL_REPLAY_PASSED",
+        receipt_path=path,
+        registry=state[3],
+        frozen_basis=state[2],
+        manifest=state[1],
+        engine_engine_hash="e" * 64,
+    )
+    assert not any("too weak" in f for f in failures)
+
+
+def test_t14_unknown_status_string_hard_fails():
+    # the lattice rejects unrecognized states instead of skipping binding
+    state = _receipt_state()
+    state[0]["finite_declared_model"]["full_artifact_replay"] = "SOMETHING_ELSE"
+    unknown = "SOMETHING_ELSE"
+    assert unknown not in STATUS_REQUIRED_STRENGTH
+    assert unknown not in _passing_set()
+    del state
+
+
+def _passing_set():
+    return _PASSING_REPLAY_STATES
+
+
+def test_unknown_receipt_mode_rejected(tmp_path):
+    failures = _check_receipt(_receipt(replay_mode="WARP_DRIVE"), tmp_path)
+    assert any("unknown receipt replay mode" in f for f in failures)

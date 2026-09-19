@@ -7,6 +7,7 @@ on:
       - "proof_artifacts/**"
       - "scripts/check_verification_status.py"
       - "scripts/fetch_proof_artifacts.py"
+      - "scripts/replay_p054_artifact.py"
       - ".github/workflows/p054-proof-replay.yml"
       - "tests/test_verify/test_p054_*.py"
   pull_request:
@@ -95,4 +96,71 @@ jobs:
             p054-replay-receipt.json
             p054-replay-report.json
             pytest-output.txt
+          if-no-files-found: error
+
+  p054-release-activation:
+    # Release-authority PRs must prove the promoted status against the
+    # EXACT external bytes: fetch, verify, replay, and compare a FRESH
+    # receipt with the committed one.  Missing/absent evidence is fatal.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322ed31bde414eec1
+      - uses: actions/setup-python@0a5c61591373683505ea898d09fdccdc57c2ab49
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install -U pip wheel
+          python -m pip install -e ".[workflow]" pytest
+      - name: Fetch frozen artifact (download + hash-verify)
+        id: fetch
+        run: |
+          python scripts/fetch_proof_artifacts.py --profile p054-arf37
+          python scripts/fetch_proof_artifacts.py --profile p054-arf37 --verify-only
+      - name: Replay and produce a FRESH receipt
+        run: |
+          python scripts/replay_p054_artifact.py \
+            --profile p054-arf37 \
+            --artifact proof_artifacts/p054/external/p054-arf37-frozen-artifact.zip \
+            --receipt-out /tmp/p054-replay-receipt.json \
+            --report-out /tmp/p054-replay-report.json
+          cp /tmp/p054-replay-receipt.json replay-receipt-fresh.json
+          cp /tmp/p054-replay-report.json replay-report-fresh.json
+      - name: Compare fresh receipt with the committed one (if the status is passing)
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          fresh = json.loads(pathlib.Path("/tmp/p054-replay-receipt.json").read_text())
+          committed = pathlib.Path("proof_artifacts/p054/replay-receipt.json")
+          status = json.loads(pathlib.Path("proof_artifacts/verification-status.json").read_text())
+          state = status.get("finite_declared_model", {}).get("full_artifact_replay", "")
+          passing = state in {"IMPORTED_CERTIFICATE_VERIFIED", "FULL_REPLAY_PASSED"}
+          if not passing:
+              print(f"status {state!r} is not passing; fresh receipt recorded for review")
+              sys.exit(0)
+          if not committed.exists():
+              print("FAIL: passing status requires a committed replay receipt", file=sys.stderr)
+              sys.exit(1)
+          committed_doc = json.loads(committed.read_text())
+          keys = ["artifact_sha256", "artifact_bytes", "implementation_commit", "replay_mode"]
+          diff = {k: (committed_doc.get(k), fresh.get(k)) for k in keys if committed_doc.get(k) != fresh.get(k)}
+          if diff:
+              print(f"FAIL: committed receipt disagrees with the fresh replay: {diff}", file=sys.stderr)
+              sys.exit(1)
+          print("committed receipt matches the fresh replay")
+          PY
+      - name: Status manifest against the fresh evidence
+        run: python scripts/check_verification_status.py --report-head
+      - name: Preserve replay evidence (never the frozen artifact itself)
+        if: always()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb0b8836a71a4b6cec80
+        with:
+          name: p054-activation-evidence
+          path: |
+            replay-receipt-fresh.json
+            replay-report-fresh.json
+            pytest-output.txt
+            artifact-hash-report.txt
           if-no-files-found: error
