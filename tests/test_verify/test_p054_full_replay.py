@@ -1,4 +1,4 @@
-"""P-054 full numeric replay — the artifact-required shard (PR-5A).
+"""P-054 frozen-certificate consistency replay — artifact-required shard (PR-5A).
 
 Every test here is marked ``proof_artifact_required``: in normal unit CI a
 missing artifact is an explicit skip; in the proof-replay workflow
@@ -8,7 +8,7 @@ HARD failure — the replay must never pass silently.
 The shard closes the chain audited as open:
 
     frozen artifact -> registry identity -> verified local bytes
-    -> numeric replay tests -> replay_state = ARTIFACT_VERIFIED_NUMERIC
+    -> imported-certificate verification -> receipt = IMPORTED_CERTIFICATE_VERIFIED
 """
 
 import hashlib

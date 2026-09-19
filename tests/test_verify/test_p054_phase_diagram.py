@@ -83,7 +83,7 @@ def test_target_component_sequence_1_3_5_4():
 
 
 def test_chamber_query_fails_closed_without_external_artifact():
-    with pytest.raises(PhaseArtifactNotAvailableError, match="fetch_proof_artifacts"):
+    with pytest.raises(PhaseArtifactNotAvailableError, match="verified frozen artifact"):
         PD.chamber_at_focus(40.0)
     with pytest.raises(PhaseArtifactNotAvailableError):
         PD.target_component_count(279.0)

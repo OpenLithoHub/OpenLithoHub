@@ -238,3 +238,25 @@ def test_source_native_recomputed_not_yet_producible():
     # value exists as the Contract A seam only.
     assert ReplayState.SOURCE_NATIVE_RECOMPUTED.value == "SOURCE_NATIVE_RECOMPUTED"
     assert ProofLevel  # keep import honest
+
+
+def test_pr4d_verified_type_answers_structural_type_refuses():
+    from openlithohub.verify.phase_diagram import VerifiedFrozenPhaseDiagram
+
+    numeric = _numeric_diagram()
+    verified = VerifiedFrozenPhaseDiagram(
+        fixture_id=numeric.fixture_id,
+        model_schema=numeric.model_schema,
+        implementation_commit=numeric.implementation_commit,
+        events=numeric.events,
+        chambers=numeric.chambers,
+        target_component_sequence=numeric.target_component_sequence,
+        witnesses=numeric.witnesses,
+        manifest=numeric.manifest,
+        receipt=numeric.receipt,
+    )
+    mid = sum(verified.chambers[1].focus_interval_nm) / 2
+    assert verified.chamber_at_focus(mid).target_component_count == 3
+    # the plain structural type refuses even with an identical receipt
+    with pytest.raises(PhaseArtifactNotAvailableError):
+        numeric.chamber_at_focus(mid)

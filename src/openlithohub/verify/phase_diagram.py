@@ -208,7 +208,7 @@ class FrozenPhaseDiagram:
     (P-054 re-audit, PR-4B): the paper's declared claim level stays
     ``IMPORTED-QDM-CERTIFIED`` regardless, but the *repository runtime*
     has either only structurally replayed the catalogs (``STRUCTURE_ONLY``)
-    or verified the numeric frozen artifact (``ARTIFACT_VERIFIED_NUMERIC``).
+    or verified the frozen artifact's declarations (``IMPORTED_CERTIFICATE_VERIFIED``).
     Numeric chamber queries answer only in the latter state.
     """
 
@@ -245,32 +245,25 @@ class FrozenPhaseDiagram:
         raise KeyError(f"unknown event {event_id!r}")
 
     def chamber_at_focus(self, z_nm: float) -> FocusChamber:
-        """The event-free chamber containing ``z_nm``.
+        """Structural surface: numeric queries are refused, always.
 
-        Requires the frozen numeric chamber boundaries from the external
-        artifact; without it this is a fail-closed error, never a guess.
-        A STRUCTURE_ONLY diagram must never answer a numeric query even if
-        someone hand-injects intervals into a copy — use the
-        ``ARTIFACT_VERIFIED_NUMERIC`` state produced by the replay shard.
+        Numeric answers live on :class:`VerifiedFrozenPhaseDiagram`,
+        produced only by ``load_verified_frozen_phase_diagram()``.  A
+        receipt on a plain structural diagram does not upgrade it.
         """
-        if self.receipt is None or self.receipt.mode not in _NUMERIC_REPLAY_STATES:
-            raise PhaseArtifactNotAvailableError(
-                "numeric chamber queries require a verified frozen artifact "
-                "receipt (replay_state=STRUCTURE_ONLY); run "
-                "scripts/fetch_proof_artifacts.py --profile p054-arf37"
-            )
-        for chamber in self.chambers:
-            interval = chamber.focus_interval_nm
-            if interval is not None and interval[0] <= z_nm < interval[1]:
-                return chamber
+        del z_nm
         raise PhaseArtifactNotAvailableError(
-            "chamber focus boundaries live in the external frozen artifact; "
-            "run scripts/fetch_proof_artifacts.py (proof replay hard-fails "
-            "without it)"
+            "this is a structural phase diagram; numeric chamber queries "
+            "require the verified frozen artifact — use "
+            "load_verified_frozen_phase_diagram()"
         )
 
     def target_component_count(self, z_nm: float) -> int:
-        return self.chamber_at_focus(z_nm).target_component_count or 0
+        del z_nm
+        raise PhaseArtifactNotAvailableError(
+            "this is a structural phase diagram; numeric queries require "
+            "load_verified_frozen_phase_diagram()"
+        )
 
     def verify_manifest(self) -> None:
         """Structural replay: ordering, layers, ownership invariants."""
@@ -446,6 +439,30 @@ def _event_from_catalog(entry: dict[str, Any], proof_level: ProofLevel) -> Any:
         component_count_after=entry.get("component_count_after"),
         **common,
     )
+
+
+class VerifiedFrozenPhaseDiagram(FrozenPhaseDiagram):
+    """Numeric query surface, produced only by the verified factory.
+
+    The base class refuses numeric queries outright; only this subclass —
+    which ``load_verified_frozen_phase_diagram()`` returns, receipt-bound —
+    can answer them, and still only in an evidence-backed numeric state.
+    """
+
+    def chamber_at_focus(self, z_nm: float) -> FocusChamber:
+        if self.receipt is None or self.receipt.mode not in _NUMERIC_REPLAY_STATES:
+            raise PhaseArtifactNotAvailableError(
+                "numeric chamber queries require a verified frozen artifact; "
+                "run scripts/fetch_proof_artifacts.py --profile p054-arf37"
+            )
+        for chamber in self.chambers:
+            interval = chamber.focus_interval_nm
+            if interval is not None and interval[0] <= z_nm < interval[1]:
+                return chamber
+        raise PhaseArtifactNotAvailableError("focus does not fall inside any frozen chamber")
+
+    def target_component_count(self, z_nm: float) -> int:
+        return self.chamber_at_focus(z_nm).target_component_count or 0
 
 
 def _numeric_event_from_bundle(
@@ -639,7 +656,7 @@ def load_verified_frozen_phase_diagram(
         replay_engine_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         mode=ReplayState.IMPORTED_CERTIFICATE_VERIFIED,
     )
-    numeric = FrozenPhaseDiagram(
+    numeric = VerifiedFrozenPhaseDiagram(
         fixture_id=structure.fixture_id,
         model_schema=structure.model_schema,
         implementation_commit=structure.implementation_commit,
