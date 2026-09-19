@@ -31,8 +31,8 @@ jobs:
     # claim firewall, status manifest.  No external artifacts needed.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322ed31bde414eec1
+      - uses: actions/setup-python@0a5c61591373683505ea898d09fdccdc57c2ab49
         with:
           python-version: "3.12"
       - name: Install
@@ -63,8 +63,8 @@ jobs:
     env:
       B04_PROOF_REPLAY_STRICT: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322ed31bde414eec1
+      - uses: actions/setup-python@0a5c61591373683505ea898d09fdccdc57c2ab49
         with:
           python-version: "3.12"
       - name: Install
@@ -79,12 +79,13 @@ jobs:
         run: pytest -q tests/test_verify/test_p054_full_replay.py -m proof_artifact_required
       - name: Status manifest after replay
         run: python scripts/check_verification_status.py
-      - name: Preserve replay logs
+      - name: Preserve replay evidence (never the frozen artifact itself)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb0b8836a71a4b6cec80
         with:
           name: p054-replay-logs
           path: |
-            proof_artifacts/p054/external/
+            replay-receipt.json
             pytest-output/
+            hash-report.txt
           if-no-files-found: ignore

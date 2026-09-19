@@ -43,14 +43,25 @@ the declared frozen fixture.
 | `fixture.json` | the frozen fixture profile with explicit honesty flags |
 | `event_catalog.json` | the three-layer event stratification (z1–z5, zV, zH, zP) |
 | `chamber_catalog.json` | event-free chambers; target component sequence `1 → 3 → 5 → 4` |
-| `external_artifacts.json` | registry of large frozen artifacts (SHA-256 + DOI, never copied into git) |
+| `frozen-basis.json` | immutable release anchor: content hashes of the profile files + external artifact identity |
+| `../registry.json` | **single source of truth** for external artifact identity (DOI provenance + file-level download URL + SHA-256) |
 | `../verification-status.json` | machine-readable status consumed by CI (`scripts/check_verification_status.py`) |
 
 ## Replay
 
 - **Offline (PR fast gate):** manifest/fixture/catalog schema and
   stratification-structure tests — `pytest tests/test_verify -q`.
-- **Full:** requires the external artifact
-  (`scripts/fetch_proof_artifacts.py` downloads and SHA-256-verifies it).
+- **Frozen-certificate consistency replay** (Contract B semantics — this
+  verifies the frozen artifact's declarations against the catalogs; it is
+  **not** source-native recomputation):
+
+  ```bash
+  python scripts/fetch_proof_artifacts.py --profile p054-arf37
+  python scripts/fetch_proof_artifacts.py --profile p054-arf37 --verify-only
+  B04_PROOF_REPLAY_STRICT=1 pytest -q tests/test_verify/test_p054_full_replay.py -m proof_artifact_required
+  ```
+
   Missing artifacts or hash/model-identity mismatches are **hard failures**
-  in the proof-replay workflow — never silent skips.
+  in the proof-replay workflow — never silent skips.  The replay engine
+  (`src/openlithohub/verify/phase_diagram.py`) is part of the frozen
+  release contract; its hash is bound into the replay receipt.

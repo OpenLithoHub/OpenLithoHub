@@ -33,9 +33,12 @@ pupil_support    = 49 bins
 # offline structural replay (CI fast gate)
 pytest -q tests/test_verify
 
-# full numeric replay (hard-fails on missing/mismatched artifacts)
-python scripts/fetch_proof_artifacts.py --verify-only
-pytest -q tests/test_verify -m proof_artifact_required
+# frozen-certificate consistency replay (Contract B; hard-fails on
+# missing/mismatched artifacts; NOT source-native recomputation)
+python scripts/fetch_proof_artifacts.py --profile p054-arf37
+python scripts/fetch_proof_artifacts.py --profile p054-arf37 --verify-only
+B04_PROOF_REPLAY_STRICT=1 \
+  pytest -q tests/test_verify/test_p054_full_replay.py -m proof_artifact_required
 ```
 
 ## Limitations (explicit)

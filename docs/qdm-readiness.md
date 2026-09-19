@@ -1,8 +1,8 @@
 # B04 / QDM Readiness Scoreboard
 
 **Current increment:** 29 (Realistic-density routed-block external validity: ExactVectorCropSource + Ibex gate)
-**Current HEAD:** `d9b2c36` (post-Inc29, R17-hardened) + streaming architecture (RFC 0008) + Inc16–29 proof modules
-**Last updated:** 2026-09-10
+**Current HEAD:** post-Inc29 + R17 + P-054 integration (see git log; the frozen paper basis stays `348fa5d`, tracked in `proof_artifacts/p054/frozen-basis.json`)
+**Last updated:** 2026-09-19
 
 Canonical frozen-proof entry point: `proof_artifacts/p054/README.md`
 (machine-readable status: `proof_artifacts/verification-status.json`).

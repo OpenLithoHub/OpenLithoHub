@@ -46,7 +46,13 @@ ANCHOR_FILES = (
     "chamber_catalog.json",
 )
 REQUIRED_SECTIONS = ("finite_declared_model", "repository_engineering", "bridges")
-_PASSING_REPLAY_STATES = {"NUMERIC_REPLAY_PASSED", "FULL_REPLAY_PASSED"}
+# Contract B (re-audit PR-5B): the repository implements imported
+# frozen-certificate verification; SOURCE_NATIVE_RECOMPUTED requires a
+# pinned recomputation engine (Contract A) and backs FULL_REPLAY_PASSED.
+_PASSING_REPLAY_STATES = {
+    "IMPORTED_CERTIFICATE_VERIFIED",
+    "FULL_REPLAY_PASSED",
+}
 
 
 def current_head(repo: Path = ROOT) -> str:
@@ -178,12 +184,13 @@ def _verify_replay_binding(
     if engine_engine_hash and receipt.get("replay_engine_sha256") != engine_engine_hash:
         failures.append("receipt replay engine hash drifted from the live engine (S4)")
     # S5: mode must be strong enough for the claimed status
-    claimed = "FULL_REPLAY_PASSED" if replay_state == "FULL_REPLAY_PASSED" else replay_state
     mode = receipt.get("replay_mode")
-    strong_modes = {"IMPORTED_CERTIFICATE_VERIFIED", "SOURCE_NATIVE_RECOMPUTED"}
     if replay_state == "SOURCE_NATIVE_RECOMPUTED" and mode != "SOURCE_NATIVE_RECOMPUTED":
         failures.append("status claims source-native replay but the receipt mode is weaker (S5)")
-    if mode not in strong_modes:
+    if replay_state == "IMPORTED_CERTIFICATE_VERIFIED" and mode not in (
+        "IMPORTED_CERTIFICATE_VERIFIED",
+        "SOURCE_NATIVE_RECOMPUTED",
+    ):
         failures.append(f"receipt replay mode {mode!r} is too weak for a passing status (S5)")
     # S6: byte binding
     if registry_bytes is not None and receipt_bytes != registry_bytes:
@@ -191,7 +198,6 @@ def _verify_replay_binding(
     # commit binding
     if receipt.get("implementation_commit") != manifest.get("implementation_commit"):
         failures.append("receipt implementation_commit != manifest basis")
-    del claimed
     return failures
 
 

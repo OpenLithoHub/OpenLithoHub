@@ -52,25 +52,48 @@ def fetch(entry: dict, destination: Path) -> int:
         )
         return 2
     destination.parent.mkdir(parents=True, exist_ok=True)
+    # Atomic download: a failed/cancelled transfer must never leave a
+    # plausible final artifact path (re-audit §10.2).
+    part = destination.with_suffix(destination.suffix + ".part")
     print(f"fetching {entry['name']} from {download_url} ...")
     proc = subprocess.run(  # noqa: S603 — fixed argv from the registry
-        ["curl", "-L", "--fail", "--retry", "3", download_url, "-o", str(destination)],
+        [
+            "curl",
+            "-L",
+            "--fail",
+            "--retry",
+            "3",
+            "--proto",
+            "=https",
+            "--proto-redir",
+            "=https",
+            "--connect-timeout",
+            "30",
+            "--max-time",
+            "1800",
+            download_url,
+            "-o",
+            str(part),
+        ],
         check=False,
     )
     if proc.returncode != 0:
+        part.unlink(missing_ok=True)
         print(f"FETCH-FAILED: {entry['name']}", file=sys.stderr)
         return 2
-    if entry.get("bytes") is not None and destination.stat().st_size != entry["bytes"]:
+    if entry.get("bytes") is not None and part.stat().st_size != entry["bytes"]:
+        part.unlink(missing_ok=True)
         print(
-            f"BYTE-LENGTH-MISMATCH: {name_of(entry)} "
-            f"{destination.stat().st_size} != {entry['bytes']}",
+            f"BYTE-LENGTH-MISMATCH: {name_of(entry)} {part.stat().st_size} != {entry['bytes']}",
             file=sys.stderr,
         )
         return 1
-    actual = sha256_of(destination)
+    actual = sha256_of(part)
     if actual != expected:
+        part.unlink(missing_ok=True)
         print(f"HASH-MISMATCH: {entry['name']} {actual} != {expected}", file=sys.stderr)
         return 1
+    part.replace(destination)
     print(f"VERIFIED after fetch: {entry['name']} [{actual[:12]}…]")
     return 0
 

@@ -1,0 +1,9 @@
+# Frozen proof surface — review required for every change (P-054 governance).
+/proof_artifacts/p054/            @OpenLithoHub/b04-verification
+/proof_artifacts/registry.json    @OpenLithoHub/b04-verification
+/proof_artifacts/verification-status.json @OpenLithoHub/b04-verification
+/src/openlithohub/verify/         @OpenLithoHub/b04-verification
+/tests/test_verify/test_p054_*    @OpenLithoHub/b04-verification
+/scripts/check_verification_status.py @OpenLithoHub/b04-verification
+/scripts/fetch_proof_artifacts.py @OpenLithoHub/b04-verification
+/.github/workflows/p054-proof-replay.yml @OpenLithoHub/b04-verification
