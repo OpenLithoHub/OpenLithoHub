@@ -1,0 +1,12 @@
+{
+  "schema": "P054.frozen-basis.v1",
+  "implementation_commit": "348fa5d86d5355465af98e2c4ce3deac60081a4c",
+  "content_hashes": {
+    "manifest.json": "bc7e802011631952266af67cbe6247aa1cf6c97a98ba9aa5594b49288b8184f6",
+    "fixture.json": "1aa9702feea076c6b6364525194761041cb442f548c1a35385db652dc2642c07",
+    "event_catalog.json": "241f4dcd6e8ed7cc537ec5ec7f580d56fdfe634a2f8a03bfbf4d569ba2498877",
+    "chamber_catalog.json": "d0372d3ac360c203e3f345a821d37b316228cfa71aa4604b3c115f3906558f7a"
+  },
+  "external_artifact_sha256": null,
+  "note": "Immutable release anchor for the P-054 frozen profile. Any edit to the hashed files requires a conscious regeneration of this file AND passes CI; external_artifact_sha256 is filled only from the frozen publication metadata."
+}
