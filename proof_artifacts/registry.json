@@ -14,7 +14,6 @@
       "bytes": null,
       "source": "zenodo",
       "destination": "proof_artifacts/p054/external/",
-      "status": "UNFETCHED",
       "required_for": ["p054-full-replay"],
       "provides": [
         "replay_manifest.json",

@@ -128,7 +128,13 @@ def verify_frozen_state(
     # replay receipt whose identity is bound end-to-end; unknown status
     # values are failures (PR-3E: verify_frozen_state always returns
     # list[str] — never an int)
-    replay_state = status.get("finite_declared_model", {}).get("full_artifact_replay", "")
+    model_state = status.get("finite_declared_model", {})
+    if "replay_state" in model_state:
+        failures.append(
+            "finite_declared_model.replay_state is a duplicate authority; "
+            "full_artifact_replay is the single replay-state key (PR-3F)"
+        )
+    replay_state = model_state.get("full_artifact_replay", "")
     if replay_state and replay_state not in STATUS_REQUIRED_STRENGTH:
         failures.append(
             f"unknown full_artifact_replay state {replay_state!r}; "
@@ -181,6 +187,31 @@ def _verify_replay_binding(
             f"{receipt_path} (S1: a populated registry hash alone is not evidence)"
         ]
     receipt = json.loads(receipt_path.read_text())
+    required_receipt_keys = {
+        "schema",
+        "profile",
+        "artifact_sha256",
+        "artifact_bytes",
+        "implementation_commit",
+        "manifest_sha256",
+        "replay_engine_sha256",
+        "replay_mode",
+        "result_digest",
+        "event_count",
+        "chamber_count",
+        "witness_count",
+    }
+    missing = required_receipt_keys - set(receipt)
+    if missing:
+        failures.append(
+            f"receipt missing required keys: {sorted(missing)} (PR-3F complete schema)"
+        )
+    if receipt.get("schema") != "P054.replay-receipt.v2":
+        failures.append(
+            f"receipt schema {receipt.get('schema')!r} != 'P054.replay-receipt.v2'"
+        )
+    if receipt.get("profile") != "p054-arf37":
+        failures.append(f"receipt profile {receipt.get('profile')!r} != 'p054-arf37'")
     entry = next(
         (
             a

@@ -7,7 +7,6 @@
   "finite_declared_model": {
     "phase_diagram": "FROZEN_CERTIFIED",
     "frozen_fixture_replay": "PASS_OFFLINE_STRUCTURE",
-    "replay_state": "STRUCTURE_ONLY",
     "full_artifact_replay": "BLOCKED_ARTIFACT_UNFETCHED"
   },
   "repository_engineering": {

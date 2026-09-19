@@ -142,7 +142,7 @@ def _receipt_state():
 
 def _receipt(**overrides):
     receipt = {
-        "schema": "P054.replay-receipt.v1",
+        "schema": "P054.replay-receipt.v2",
         "profile": "p054-arf37",
         "artifact_sha256": "a" * 64,
         "artifact_bytes": 1024,
@@ -150,6 +150,10 @@ def _receipt(**overrides):
         "manifest_sha256": "b" * 64,
         "replay_engine_sha256": "e" * 64,
         "replay_mode": "IMPORTED_CERTIFICATE_VERIFIED",
+        "result_digest": "d" * 64,
+        "event_count": 8,
+        "chamber_count": 4,
+        "witness_count": 1,
     }
     receipt.update(overrides)
     return receipt

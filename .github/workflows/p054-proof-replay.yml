@@ -68,19 +68,17 @@ jobs:
       - uses: actions/setup-python@0a5c61591373683505ea898d09fdccdc57c2ab49
         with:
           python-version: "3.12"
-      - name: Install
-        run: |
-          python -m pip install -U pip wheel
-          python -m pip install -e ".[workflow]" pytest
+      - name: Install (minimal hermetic replay environment)
+        run: python -m pip install pytest
       - name: Fetch frozen artifact (download + hash-verify)
         run: python scripts/fetch_proof_artifacts.py --profile p054-arf37
       - name: Re-verify artifact identity
         run: python scripts/fetch_proof_artifacts.py --profile p054-arf37 --verify-only
       - name: Imported-certificate verification shard
-        run: pytest -q tests/test_verify/test_p054_full_replay.py -m proof_artifact_required
+        run: PYTHONPATH=src pytest -q tests/test_verify/test_p054_full_replay.py -m proof_artifact_required
       - name: Produce the canonical replay receipt
         run: |
-          python scripts/replay_p054_artifact.py \
+          PYTHONPATH=src python scripts/replay_p054_artifact.py \
             --profile p054-arf37 \
             --artifact proof_artifacts/p054/external/p054-arf37-frozen-artifact.zip \
             --receipt-out p054-replay-receipt.json \
@@ -110,10 +108,8 @@ jobs:
       - uses: actions/setup-python@0a5c61591373683505ea898d09fdccdc57c2ab49
         with:
           python-version: "3.12"
-      - name: Install
-        run: |
-          python -m pip install -U pip wheel
-          python -m pip install -e ".[workflow]" pytest
+      - name: Install (minimal hermetic activation environment)
+        run: python -m pip install pytest
       - name: Fetch frozen artifact (download + hash-verify)
         id: fetch
         run: |
@@ -121,7 +117,7 @@ jobs:
           python scripts/fetch_proof_artifacts.py --profile p054-arf37 --verify-only
       - name: Replay and produce a FRESH receipt
         run: |
-          python scripts/replay_p054_artifact.py \
+          PYTHONPATH=src python scripts/replay_p054_artifact.py \
             --profile p054-arf37 \
             --artifact proof_artifacts/p054/external/p054-arf37-frozen-artifact.zip \
             --receipt-out /tmp/p054-replay-receipt.json \

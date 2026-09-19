@@ -63,13 +63,38 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+MAX_MEMBERS = 64
+MAX_MEMBER_BYTES = 1 << 30
+
+
+def _no_duplicate_keys(pairs):
+    seen = {}
+    for key, value in pairs:
+        if key in seen:
+            pytest.fail(f"duplicate JSON key in bundle: {key!r}")
+        seen[key] = value
+    return seen
+
+
 def _bundle() -> dict:
-    """Open the verified artifact and return (replay_manifest, members)."""
+    """Open the verified artifact and return (replay_manifest, members).
+
+    Parser hardening (re-audit R123): duplicate member names, member
+    count, per-member uncompressed size and duplicate JSON keys are all
+    rejected before anything is trusted.
+    """
     with zipfile.ZipFile(ARTIFACT) as zf:
-        names = set(zf.namelist())
+        names = zf.namelist()
+        if len(names) != len(set(names)):
+            pytest.fail("duplicate ZIP member names")
+        if len(names) > MAX_MEMBERS:
+            pytest.fail(f"too many members: {len(names)} > {MAX_MEMBERS}")
         if "replay_manifest.json" not in names:
             pytest.fail("frozen artifact lacks replay_manifest.json")
-        replay = json.loads(zf.read("replay_manifest.json"))
+        for info in zf.infolist():
+            if info.file_size > MAX_MEMBER_BYTES:
+                pytest.fail(f"member {info.filename} exceeds {MAX_MEMBER_BYTES} bytes")
+        replay = json.loads(zf.read("replay_manifest.json"), object_pairs_hook=_no_duplicate_keys)
         members = {name: zf.read(name) for name in names if name != "replay_manifest.json"}
     return replay, members
 

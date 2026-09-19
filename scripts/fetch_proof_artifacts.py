@@ -52,31 +52,42 @@ def fetch(entry: dict, destination: Path) -> int:
         )
         return 2
     destination.parent.mkdir(parents=True, exist_ok=True)
+    # Transport-origin binding (re-audit R123): a Zenodo-sourced artifact
+    # must be fetched from zenodo.org; the hash remains the authority.
+    if entry.get("source") == "zenodo" and not download_url.startswith(
+        ("https://zenodo.org/", "https://doi.org/")
+    ):
+        print(
+            f"FETCH-REJECTED: {entry['name']} declares Zenodo provenance but "
+            f"the download URL is off-origin",
+            file=sys.stderr,
+        )
+        return 2
     # Atomic download: a failed/cancelled transfer must never leave a
     # plausible final artifact path (re-audit §10.2).
     part = destination.with_suffix(destination.suffix + ".part")
+    max_bytes = entry.get("bytes")
     print(f"fetching {entry['name']} from {download_url} ...")
-    proc = subprocess.run(  # noqa: S603 — fixed argv from the registry
-        [
-            "curl",
-            "-L",
-            "--fail",
-            "--retry",
-            "3",
-            "--proto",
-            "=https",
-            "--proto-redir",
-            "=https",
-            "--connect-timeout",
-            "30",
-            "--max-time",
-            "1800",
-            download_url,
-            "-o",
-            str(part),
-        ],
-        check=False,
-    )
+    curl_cmd = [
+        "curl",
+        "-L",
+        "--fail",
+        "--retry",
+        "3",
+        "--proto",
+        "=https",
+        "--proto-redir",
+        "=https",
+        "--connect-timeout",
+        "30",
+        "--max-time",
+        "1800",
+    ]
+    if max_bytes:
+        # cap the transfer at the declared size (+slack for the cap check)
+        curl_cmd += ["--max-filesize", str(int(max_bytes) + (1 << 20))]
+    curl_cmd += [download_url, "-o", str(part)]
+    proc = subprocess.run(curl_cmd, check=False)  # noqa: S603 — fixed argv from the registry
     if proc.returncode != 0:
         part.unlink(missing_ok=True)
         print(f"FETCH-FAILED: {entry['name']}", file=sys.stderr)

@@ -23,6 +23,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import sys
 from pathlib import Path
 
@@ -133,6 +134,12 @@ def main() -> int:
         "witness_count": len(diagram.witnesses),
     }
     report = {
+        "environment": {
+            "python": sys.version,
+            "platform": platform.platform(),
+            "python_executable": sys.executable,
+            "hermetic": True,
+        },
         "schema": "P054.replay-report.v2",
         "profile": receipt.profile,
         "artifact_sha256": sha256_of(args.artifact),
