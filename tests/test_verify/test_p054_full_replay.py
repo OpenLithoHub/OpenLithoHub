@@ -20,9 +20,10 @@ from pathlib import Path
 import pytest
 
 from openlithohub.verify.phase_diagram import (
-    FrozenPhaseDiagram,
     PhaseArtifactNotAvailableError,
+    ReplayState,
     load_frozen_phase_diagram,
+    load_verified_frozen_phase_diagram,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -203,37 +204,23 @@ def test_proof_level_not_downgraded():
     )
 
 
-def test_numeric_query_only_after_artifact_verified():
+def test_numeric_query_only_after_imported_certificate_verified():
     _require_artifact()
-    replay, _members = _bundle()
     structure = load_frozen_phase_diagram("p054-arf37")
-    assert structure.replay_state == "STRUCTURE_ONLY"
+    assert structure.replay_state is ReplayState.STRUCTURE_ONLY
     with pytest.raises(PhaseArtifactNotAvailableError):
         structure.chamber_at_focus(40.0)
 
-    numeric_chambers = tuple(
-        type(structure.chambers[0])(
-            chamber_id=c["chamber_id"],
-            focus_interval_nm=(c["focus_interval_nm"][0], c["focus_interval_nm"][1]),
-            lower_owner=c["lower_owner"],
-            upper_owner=c["upper_owner"],
-            target_component_count=c["target_component_count"],
-            bounded_by_events=tuple(c["bounded_by_events"]),
-        )
-        for c in replay["chambers"]
-    )
-    numeric = FrozenPhaseDiagram(
-        fixture_id=structure.fixture_id,
-        model_schema=structure.model_schema,
-        implementation_commit=structure.implementation_commit,
-        events=structure.events,
-        chambers=numeric_chambers,
-        target_component_sequence=structure.target_component_sequence,
-        manifest=structure.manifest,
-        replay_state="ARTIFACT_VERIFIED_NUMERIC",
-    )
-    chamber = numeric.chamber_at_focus(sum(numeric.chambers[1].focus_interval_nm) / 2)
-    assert chamber.target_component_count == 3
+    # Contract B (re-audit PR-5B): verified imported-certificate replay,
+    # not source-native recomputation
+    numeric = load_verified_frozen_phase_diagram("p054-arf37", artifact_path=ARTIFACT, root=ROOT)
+    assert numeric.replay_state is ReplayState.IMPORTED_CERTIFICATE_VERIFIED
+    assert numeric.receipt is not None
+    assert numeric.receipt.artifact_sha256 == _registry_entry["sha256"]
+    assert numeric.receipt.artifact_bytes == ARTIFACT.stat().st_size
+    mid = sum(numeric.chambers[1].focus_interval_nm) / 2
+    assert numeric.chamber_at_focus(mid).target_component_count == 3
+    assert numeric.target_component_count(mid) == 3
 
 
 def test_hostile_mutated_artifact_byte_fails_hash():

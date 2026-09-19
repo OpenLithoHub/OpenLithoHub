@@ -17,7 +17,9 @@ re-certifying arbitrary inputs.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import zipfile
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -40,6 +42,52 @@ class EventKind(str, Enum):
     OWNERSHIP_INVISIBLE_PITCHFORK = "OWNERSHIP_INVISIBLE_PITCHFORK"
     TARGET_MAX_EVENT = "TARGET_MAX_EVENT"
     TARGET_SADDLE_EVENT = "TARGET_SADDLE_EVENT"
+
+
+class ReplayState(str, Enum):
+    """Evidence-owned replay state (P-054 re-audit PR-5B/PR-4C).
+
+    The states are produced by *evidence*, never by caller-supplied
+    strings:
+
+    - ``STRUCTURE_ONLY`` — catalogs structurally replayed; numeric
+      queries are refused;
+    - ``IMPORTED_CERTIFICATE_VERIFIED`` — the frozen external artifact
+      was fetched, hash/length verified, and its declarations replayed
+      against the catalogs (Contract B semantics);
+    - ``SOURCE_NATIVE_RECOMPUTED`` — the declarations were *recomputed*
+      from the source snapshot / coefficient tensor (Contract A; requires
+      a pinned recomputation engine and is not producible yet).
+    """
+
+    STRUCTURE_ONLY = "STRUCTURE_ONLY"
+    IMPORTED_CERTIFICATE_VERIFIED = "IMPORTED_CERTIFICATE_VERIFIED"
+    SOURCE_NATIVE_RECOMPUTED = "SOURCE_NATIVE_RECOMPUTED"
+
+
+_NUMERIC_REPLAY_STATES = (
+    ReplayState.IMPORTED_CERTIFICATE_VERIFIED,
+    ReplayState.SOURCE_NATIVE_RECOMPUTED,
+)
+
+
+@dataclass(frozen=True)
+class ArtifactVerificationReceipt:
+    """Evidence that a specific frozen artifact was verified and replayed.
+
+    A :class:`FrozenPhaseDiagram` may answer numeric queries only when it
+    carries a receipt whose identity binds the artifact bytes, the frozen
+    model commit and the replay mode.  A manually supplied string can
+    never substitute for the receipt.
+    """
+
+    profile: str
+    artifact_sha256: str
+    artifact_bytes: int
+    implementation_commit: str
+    manifest_sha256: str
+    mode: ReplayState
+    replay_engine_sha256: str | None = None
 
 
 _LAYER_FOR_KIND: dict[EventKind, PhaseLayer] = {
@@ -174,7 +222,12 @@ class FrozenPhaseDiagram:
     target_component_sequence: tuple[int, ...]
     witnesses: tuple[OwnershipInvisibilityWitness, ...] = ()
     manifest: dict[str, Any] = field(default_factory=dict)
-    replay_state: str = "STRUCTURE_ONLY"
+    receipt: ArtifactVerificationReceipt | None = None
+
+    @property
+    def replay_state(self) -> ReplayState:
+        """Derived from the verification receipt — never caller-owned."""
+        return self.receipt.mode if self.receipt is not None else ReplayState.STRUCTURE_ONLY
 
     def events_by_layer(
         self, layer: PhaseLayer
@@ -199,10 +252,10 @@ class FrozenPhaseDiagram:
         someone hand-injects intervals into a copy — use the
         ``ARTIFACT_VERIFIED_NUMERIC`` state produced by the replay shard.
         """
-        if self.replay_state != "ARTIFACT_VERIFIED_NUMERIC":
+        if self.receipt is None or self.receipt.mode not in _NUMERIC_REPLAY_STATES:
             raise PhaseArtifactNotAvailableError(
-                "numeric chamber queries require the verified frozen artifact "
-                "(replay_state=STRUCTURE_ONLY); run "
+                "numeric chamber queries require a verified frozen artifact "
+                "receipt (replay_state=STRUCTURE_ONLY); run "
                 "scripts/fetch_proof_artifacts.py --profile p054-arf37"
             )
         for chamber in self.chambers:
@@ -252,6 +305,50 @@ class FrozenPhaseDiagram:
             )
         self._verify_ownership_invisibility_witnesses()
 
+    def _verify_numeric_replay(self) -> None:
+        """Numeric-state obligations (PR-4C): the receipt must bind evidence."""
+        receipt = self.receipt
+        if receipt is None:  # pragma: no cover — gated by the caller
+            raise ValueError("numeric verification requires a receipt")
+        if receipt.profile != self.fixture_id:
+            raise ValueError(
+                f"receipt profile {receipt.profile!r} does not match the "
+                f"diagram {self.fixture_id!r}"
+            )
+        if receipt.implementation_commit != self.implementation_commit:
+            raise ValueError(
+                "receipt implementation_commit does not match the frozen diagram basis"
+            )
+        for event in self.events:
+            if event.focus_interval_nm is None:
+                raise ValueError(f"numeric replay requires a frozen interval for {event.event_id}")
+        for chamber in self.chambers:
+            if chamber.focus_interval_nm is None:
+                raise ValueError(
+                    f"numeric replay requires a frozen boundary for {chamber.chamber_id}"
+                )
+        for witness in self.witnesses:
+            if witness.critical_event_id and (
+                witness.owner_before is None or witness.owner_after is None
+            ):
+                raise ValueError(
+                    "numeric replay requires non-null owners on witness "
+                    f"{witness.critical_event_id}"
+                )
+            if witness.left_chamber_id is None or witness.right_chamber_id is None:
+                raise ValueError(
+                    "numeric replay requires adjacent chambers on witness "
+                    f"{witness.critical_event_id}"
+                )
+            if (
+                witness.artifact_sha256 is not None
+                and witness.artifact_sha256 != receipt.artifact_sha256
+            ):
+                raise ValueError(
+                    f"witness {witness.critical_event_id} artifact hash differs "
+                    "from the verification receipt"
+                )
+
     def _verify_ownership_invisibility_witnesses(self) -> None:
         """Cross-layer witness firewall (PR-4B).
 
@@ -266,6 +363,8 @@ class FrozenPhaseDiagram:
             event for event in self.events if event.kind is EventKind.OWNERSHIP_INVISIBLE_PITCHFORK
         ]
         invisible_ids = {event.event_id for event in invisible_events}
+        if self.receipt is not None and self.receipt.mode in _NUMERIC_REPLAY_STATES:
+            self._verify_numeric_replay()
         # every witness must point at an OWNERSHIP_INVISIBLE_PITCHFORK
         for witness in self.witnesses:
             if witness.critical_event_id not in invisible_ids:
@@ -346,6 +445,148 @@ def _event_from_catalog(entry: dict[str, Any], proof_level: ProofLevel) -> Any:
         component_count_after=entry.get("component_count_after"),
         **common,
     )
+
+
+def load_verified_frozen_phase_diagram(
+    profile: str = "p054-arf37",
+    *,
+    artifact_path: Path | None = None,
+    root: Path | None = None,
+) -> FrozenPhaseDiagram:
+    """Verify the frozen artifact and return a numeric-queryable diagram.
+
+    Contract B (re-audit PR-5B): this performs **imported frozen
+    certificate verification** — the artifact's identity and declarations
+    are verified against the repository catalogs.  It is *not*
+    source-native recomputation; producing
+    ``ReplayState.SOURCE_NATIVE_RECOMPUTED`` requires a pinned
+    recomputation engine and is intentionally unavailable.
+
+    Evidence chain: registry identity -> artifact sha256 + byte length ->
+    bundle manifest vs repo frozen manifest -> numeric fields -> receipt.
+    """
+    base = (root or Path(__file__).resolve().parents[3]) / "proof_artifacts"
+    registry = json.loads((base / "registry.json").read_text())
+    entry = next(
+        (a for a in registry.get("artifacts", []) if profile in a.get("profiles", ["p054-arf37"])),
+        None,
+    )
+    if entry is None:
+        raise PhaseArtifactNotAvailableError(f"no registry entry for {profile!r}")
+    expected_sha = entry.get("sha256")
+    expected_bytes = entry.get("bytes")
+    if not expected_sha or not expected_bytes:
+        raise PhaseArtifactNotAvailableError(
+            f"{profile} artifact is UNFETCHED: the frozen publication has not "
+            "provided its content identity (run "
+            "scripts/fetch_proof_artifacts.py once it has)"
+        )
+    artifact = artifact_path or (base / entry.get("destination", "p054/external") / entry["name"])
+    if not artifact.exists():
+        raise PhaseArtifactNotAvailableError(f"frozen artifact missing at {artifact}")
+    raw = artifact.read_bytes()
+    if len(raw) != expected_bytes:
+        raise ValueError(f"artifact byte length {len(raw)} != registry {expected_bytes}")
+    artifact_sha = hashlib.sha256(raw).hexdigest()
+    if artifact_sha != expected_sha:
+        raise ValueError(f"artifact sha256 {artifact_sha} != registry {expected_sha}")
+
+    structure = load_frozen_phase_diagram(profile, root=root)
+    with zipfile.ZipFile(artifact) as zf:
+        names = set(zf.namelist())
+        if "replay_manifest.json" not in names:
+            raise ValueError("frozen artifact lacks replay_manifest.json")
+        replay = json.loads(zf.read("replay_manifest.json"))
+    if replay.get("fixture_id") != profile:
+        raise ValueError("bundle fixture_id mismatch")
+    if replay.get("implementation_commit") != structure.implementation_commit:
+        raise ValueError("bundle implementation_commit mismatch")
+    if replay.get("proof_level") != ProofLevel.IMPORTED_QDM_CERTIFIED.value:
+        raise ValueError("bundle proof level is downgraded")
+
+    bundle_events = {e["event_id"]: e for e in replay.get("events", [])}
+    numeric_events = []
+    for event in structure.events:
+        declared = bundle_events.get(event.event_id)
+        if declared is None or declared.get("focus_interval_nm") is None:
+            raise ValueError(f"numeric replay requires a frozen interval for {event.event_id}")
+        lo, hi = declared["focus_interval_nm"]
+        numeric_events.append(
+            CriticalSetEventCertificate(
+                event_id=event.event_id,
+                kind=event.kind,
+                focus_interval_nm=(lo, hi),
+                multiplicity=event.multiplicity,
+                transversality_lower=event.transversality_lower
+                if isinstance(event, CriticalSetEventCertificate)
+                else None,
+                morse_signature=(
+                    event.morse_signature
+                    if isinstance(event, CriticalSetEventCertificate)
+                    else None
+                ),
+                proof_level=event.proof_level,
+                artifact_sha256=artifact_sha,
+            )
+            if event.layer is PhaseLayer.CRITICAL_SET
+            else event
+        )
+
+    bundle_chambers = {c["chamber_id"]: c for c in replay.get("chambers", [])}
+    numeric_chambers = []
+    for chamber in structure.chambers:
+        declared = bundle_chambers.get(chamber.chamber_id)
+        if declared is None or declared.get("focus_interval_nm") is None:
+            raise ValueError(f"numeric replay requires a frozen boundary for {chamber.chamber_id}")
+        lo, hi = declared["focus_interval_nm"]
+        numeric_chambers.append(
+            FocusChamber(
+                chamber_id=chamber.chamber_id,
+                focus_interval_nm=(lo, hi),
+                lower_owner=declared.get("lower_owner"),
+                upper_owner=declared.get("upper_owner"),
+                target_component_count=declared.get(
+                    "target_component_count", chamber.target_component_count
+                ),
+                bounded_by_events=chamber.bounded_by_events,
+            )
+        )
+
+    bundle_witnesses = {w["critical_event_id"]: w for w in replay.get("witnesses", [])}
+    numeric_witnesses = tuple(
+        OwnershipInvisibilityWitness(
+            critical_event_id=w.critical_event_id,
+            owner_before=bundle_witnesses.get(w.critical_event_id, {}).get("owner_before"),
+            owner_after=bundle_witnesses.get(w.critical_event_id, {}).get("owner_after"),
+            left_chamber_id=bundle_witnesses.get(w.critical_event_id, {}).get("left_chamber_id"),
+            right_chamber_id=bundle_witnesses.get(w.critical_event_id, {}).get("right_chamber_id"),
+            proof_level=w.proof_level,
+            artifact_sha256=artifact_sha,
+        )
+        for w in structure.witnesses
+    )
+
+    receipt = ArtifactVerificationReceipt(
+        profile=profile,
+        artifact_sha256=artifact_sha,
+        artifact_bytes=len(raw),
+        implementation_commit=structure.implementation_commit,
+        manifest_sha256=structure.manifest.get("manifest_sha256", ""),
+        mode=ReplayState.IMPORTED_CERTIFICATE_VERIFIED,
+    )
+    numeric = FrozenPhaseDiagram(
+        fixture_id=structure.fixture_id,
+        model_schema=structure.model_schema,
+        implementation_commit=structure.implementation_commit,
+        events=tuple(numeric_events),
+        chambers=tuple(numeric_chambers),
+        target_component_sequence=structure.target_component_sequence,
+        witnesses=numeric_witnesses,
+        manifest=structure.manifest,
+        receipt=receipt,
+    )
+    numeric.verify_manifest()
+    return numeric
 
 
 def load_frozen_phase_diagram(
