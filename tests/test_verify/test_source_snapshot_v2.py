@@ -232,3 +232,58 @@ def test_v2_json_round_trip():
     assert restored["samples"][1]["raw_weight"]["numerator"] == 3
     assert dyadic_from_float(0.5) == (1, 2)
     assert NormalizationRecord  # imported for API completeness
+
+
+# ---------------------------------------------------------------------------
+# PR-2D — imported frozen finite operator provenance firewall (L1–L5)
+# ---------------------------------------------------------------------------
+
+
+def _imported(**overrides):
+    base = _kwargs(
+        spectral_representation=SpectralRepresentation.IMPORTED_FROZEN_FINITE_OPERATOR,
+        imported_artifact_sha256="a" * 64,
+        imported_artifact_proof_level=ProofLevel.IMPORTED_QDM_CERTIFIED,
+    )
+    base.update(overrides)
+    return base
+
+
+def test_l1_imported_without_artifact_sha_rejected():
+    with pytest.raises(ValueError, match="must carry the sha256"):
+        freeze_source_snapshot_v2(**_imported(imported_artifact_sha256=None))
+
+
+def test_l2_malformed_sha_rejected():
+    with pytest.raises(ValueError, match="64 hex"):
+        freeze_source_snapshot_v2(**_imported(imported_artifact_sha256="zz" * 32))
+
+
+def test_l3_sha_without_certified_level_rejected():
+    # construction-time rejection is stronger than mere inadmissibility
+    with pytest.raises(ValueError, match="IMPORTED-QDM-CERTIFIED"):
+        freeze_source_snapshot_v2(**_imported(imported_artifact_proof_level=ProofLevel.HEURISTIC))
+
+
+def test_l4_fully_bound_imported_operator_admissible():
+    snap = freeze_source_snapshot_v2(**_imported())
+    assert snap.spectral_representation is SpectralRepresentation.IMPORTED_FROZEN_FINITE_OPERATOR
+    assert snap.source_native_certificate_admissible() is True
+
+
+def test_l5_enum_only_rewrite_from_legacy_is_not_an_upgrade():
+    v2 = migrate_v1_to_v2(_v1([0, 1]))
+    # LEGACY_UNKNOWN snapshot: no imported provenance fields exist.
+    # Flipping ONLY the enum on a legacy-normalized snapshot is rejected by
+    # the M6 firewall (LEGACY_NORMALIZED_FLOAT_ONLY + imported operator is
+    # not FULL_DISCRETE_SOURCE, but it must also not pass admissibility):
+    assert v2.imported_artifact_sha256 is None
+    assert v2.source_native_certificate_admissible() is False
+    # and a forged imported declaration without artifact identity is
+    # rejected outright
+    with pytest.raises(ValueError, match="must carry the sha256"):
+        freeze_source_snapshot_v2(
+            **_kwargs(
+                spectral_representation=SpectralRepresentation.IMPORTED_FROZEN_FINITE_OPERATOR,
+            )
+        )

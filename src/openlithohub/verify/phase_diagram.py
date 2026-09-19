@@ -502,21 +502,24 @@ def _numeric_event_from_bundle(
         artifact_sha256=artifact_sha256,
     )
     if structural_event.layer is PhaseLayer.CRITICAL_SET:
-        assert isinstance(structural_event, CriticalSetEventCertificate)
+        if not isinstance(structural_event, CriticalSetEventCertificate):
+            raise ValueError("critical-set layer with mismatched certificate type")
         return CriticalSetEventCertificate(
             transversality_lower=structural_event.transversality_lower,
             morse_signature=structural_event.morse_signature,
             **common,
         )
     if structural_event.layer is PhaseLayer.OWNERSHIP:
-        assert isinstance(structural_event, OwnershipEventCertificate)
+        if not isinstance(structural_event, OwnershipEventCertificate):
+            raise ValueError("ownership layer with mismatched certificate type")
         return OwnershipEventCertificate(
             owner_before=structural_event.owner_before,
             owner_after=structural_event.owner_after,
             invisible_to_lower_owner=structural_event.invisible_to_lower_owner,
             **common,
         )
-    assert isinstance(structural_event, TargetTopologyEventCertificate)
+    if not isinstance(structural_event, TargetTopologyEventCertificate):
+        raise ValueError("target-topology layer with mismatched certificate type")
     return TargetTopologyEventCertificate(
         component_count_before=structural_event.component_count_before,
         component_count_after=structural_event.component_count_after,

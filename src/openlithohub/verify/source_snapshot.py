@@ -21,6 +21,11 @@ from typing import Any
 
 from .types import ProofLevel
 
+
+def _is_hex(value: str) -> bool:
+    return all(c in "0123456789abcdefABCDEF" for c in value)
+
+
 FORWARD_MODEL_ID = "openlithohub.source_native_full.hopkins.discrete"
 
 FOCUS_DOSE_CONVENTION = (
@@ -238,6 +243,10 @@ class SourceSnapshotV2:
     truncation_rank: int | None = None
     truncation_error_upper: float | None = None
     truncation_error_proof_level: ProofLevel | None = None
+    # PR-2D: an IMPORTED_FROZEN_FINITE_OPERATOR must name the frozen
+    # artifact it was imported from, with a certified import proof level.
+    imported_artifact_sha256: str | None = None
+    imported_artifact_proof_level: ProofLevel | None = None
     schema: str = "B04.source_snapshot.v2"
 
     def __post_init__(self) -> None:
@@ -249,6 +258,8 @@ class SourceSnapshotV2:
             raise ValueError("pixel_size_nm must be positive")
         if self.spectral_representation is SpectralRepresentation.SOCS_TRUNCATED:
             self._validate_truncation()
+        if self.spectral_representation is SpectralRepresentation.IMPORTED_FROZEN_FINITE_OPERATOR:
+            self._validate_imported_provenance()
         if self.spectral_representation is SpectralRepresentation.FULL_DISCRETE_SOURCE and (
             self.normalization.policy == "LEGACY_NORMALIZED_FLOAT_ONLY"
         ):
@@ -270,6 +281,22 @@ class SourceSnapshotV2:
                 )
             ):
                 raise ValueError(f"source bin {index} disagrees with its sample coordinates")
+
+    def _validate_imported_provenance(self) -> None:
+        sha = self.imported_artifact_sha256
+        if sha is None:
+            raise ValueError(
+                "an imported frozen finite operator must carry the sha256 of "
+                "the artifact it was imported from (PR-2D: an enum rewrite is "
+                "not provenance)"
+            )
+        if len(sha) != 64 or not all(c in "0123456789abcdefABCDEF" for c in sha):
+            raise ValueError("imported artifact sha256 must be 64 hex characters")
+        if self.imported_artifact_proof_level is not ProofLevel.IMPORTED_QDM_CERTIFIED:
+            raise ValueError(
+                "an imported frozen finite operator requires an "
+                "IMPORTED-QDM-CERTIFIED import proof level"
+            )
 
     def _validate_truncation(self) -> None:
         if self.truncation_error_upper is None or self.truncation_rank is None:
@@ -314,16 +341,25 @@ class SourceSnapshotV2:
         return path
 
     def source_native_certificate_admissible(self) -> bool:
-        """Theorem-facing admissibility rule (audit P0.3 + re-audit PR-2C).
+        """Theorem-facing admissibility rule (audit P0.3 + re-audit PR-2C/2D).
 
-        A truncated representation needs a certified error bound; a
-        ``LEGACY_UNKNOWN`` representation (v1 migration) is never
-        admissible — unknown is not certified.
+        - ``LEGACY_UNKNOWN`` is never admissible: unknown is not certified;
+        - ``SOCS_TRUNCATED`` needs a certified error bound;
+        - ``IMPORTED_FROZEN_FINITE_OPERATOR`` needs a valid 64-hex artifact
+          identity plus a certified import proof level — an enum rewrite
+          alone is never an upgrade.
         """
         if self.spectral_representation is SpectralRepresentation.LEGACY_UNKNOWN:
             return False
         if self.spectral_representation is SpectralRepresentation.SOCS_TRUNCATED:
             return self.truncation_bound_is_certified()
+        if self.spectral_representation is SpectralRepresentation.IMPORTED_FROZEN_FINITE_OPERATOR:
+            return (
+                self.imported_artifact_sha256 is not None
+                and len(self.imported_artifact_sha256) == 64
+                and _is_hex(self.imported_artifact_sha256)
+                and self.imported_artifact_proof_level is ProofLevel.IMPORTED_QDM_CERTIFIED
+            )
         return True
 
 
@@ -344,6 +380,8 @@ def freeze_source_snapshot_v2(
     truncation_rank: int | None = None,
     truncation_error_upper: float | None = None,
     truncation_error_proof_level: ProofLevel | None = None,
+    imported_artifact_sha256: str | None = None,
+    imported_artifact_proof_level: ProofLevel | None = None,
     open_frame_factor: float | None = None,
     process_parameters: dict[str, float] | None = None,
 ) -> SourceSnapshotV2:
@@ -390,6 +428,8 @@ def freeze_source_snapshot_v2(
         truncation_rank=truncation_rank,
         truncation_error_upper=truncation_error_upper,
         truncation_error_proof_level=truncation_error_proof_level,
+        imported_artifact_sha256=imported_artifact_sha256,
+        imported_artifact_proof_level=imported_artifact_proof_level,
     )
 
 
