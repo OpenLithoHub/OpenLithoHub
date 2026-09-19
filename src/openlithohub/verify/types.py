@@ -11,6 +11,8 @@ from dataclasses import asdict, dataclass
 from enum import Enum
 from typing import Any
 
+from .model_identity import ModelIdentity
+
 
 class ProofLevel(str, Enum):
     HEURISTIC = "HEURISTIC"
@@ -30,6 +32,20 @@ class CertificationCapability(str, Enum):
     DIAGNOSTIC_ONLY = "DIAGNOSTIC_ONLY"
     RIGOROUS_INTERVAL = "RIGOROUS_INTERVAL"
     IMPORTED_FROZEN_CERTIFICATE = "IMPORTED_FROZEN_CERTIFICATE"
+
+
+class DependencyProvenance(str, Enum):
+    """Where a dependency's evidence comes from (P-054 re-audit PR-1B).
+
+    A certifying-level dependency may never be anonymous: it either comes
+    from a named backend (with declared capability), an imported frozen
+    artifact (with content hash), or the explicitly-gated legacy replay
+    path.
+    """
+
+    BACKEND = "BACKEND"
+    IMPORTED_FROZEN = "IMPORTED_FROZEN"
+    LEGACY_REPLAY = "LEGACY_REPLAY"
 
 
 class CertificateTarget(str, Enum):
@@ -92,6 +108,11 @@ class DependencyRecord:
     # package and fails closed in the assembler.
     backend_id: str | None = None
     certification_capability: CertificationCapability | None = None
+    # P-054 re-audit PR-1B: certifying-level dependencies may never be
+    # anonymous.  BACKEND requires backend_id + capability; IMPORTED_FROZEN
+    # requires artifact_sha256; LEGACY_REPLAY is admitted only through the
+    # explicit legacy replay API.
+    provenance: DependencyProvenance | None = None
 
 
 @dataclass(frozen=True)
@@ -137,8 +158,9 @@ class ContinuousFocusCertificate:
     proof_artifact_sha256: str | None = None
     nominal_reconstruction_upper_nm: float | None = None
     # P-054 repo integration: the frozen model this certificate names.  None
-    # only on the legacy replay path (which records that fact in `note`).
-    model_identity: Any = None
+    # only on the explicit legacy replay path (which records that fact in
+    # `note`).
+    model_identity: ModelIdentity | None = None
     note: str = ""
 
     def to_dict(self) -> dict[str, Any]:

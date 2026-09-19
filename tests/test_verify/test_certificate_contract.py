@@ -1,4 +1,4 @@
-from openlithohub.verify.certifier import assemble_continuous_focus_certificate
+from openlithohub.verify.certifier import replay_legacy_continuous_focus_certificate
 from openlithohub.verify.types import (
     CertificateStatus,
     CertificateTarget,
@@ -25,7 +25,9 @@ def _cert(**kw):
         dependencies=(_dep(),),
     )
     args.update(kw)
-    return assemble_continuous_focus_certificate(**args)
+    # status-firewall semantics are exercised on the explicit legacy
+    # replay path (anonymous dependencies are only admitted there)
+    return replay_legacy_continuous_focus_certificate(**args)
 
 
 def test_certified_upper_bound_can_pass():

@@ -23,6 +23,7 @@ from .types import (
     CertificationCapability,
     ContinuousFocusCertificate,
     CoverageStatus,
+    DependencyProvenance,
     DependencyRecord,
     ParameterInterval,
     ProofLevel,
@@ -83,32 +84,53 @@ def _level_rank(level: ProofLevel) -> int:
     return order.index(level)
 
 
-def assemble_continuous_focus_certificate(
+def _enforce_provenance(dependencies: tuple[DependencyRecord, ...], *, allow_legacy: bool) -> None:
+    """Certifying-level dependencies may never be anonymous (PR-1B)."""
+    for dep in dependencies:
+        if dep.level not in _CERTIFYING_LEVELS:
+            continue
+        if allow_legacy:
+            if dep.provenance not in (None, DependencyProvenance.LEGACY_REPLAY):
+                raise ValueError(
+                    f"dependency {dep.name!r}: only anonymous/LEGACY_REPLAY "
+                    "provenance is admitted on the legacy replay path"
+                )
+            continue
+        if dep.provenance is None:
+            raise ValueError(
+                f"dependency {dep.name!r} claims {dep.level.value} without "
+                "provenance; a new certificate may not inherit authority by "
+                "omission — declare BACKEND, IMPORTED_FROZEN provenance or "
+                "use the explicit legacy replay API"
+            )
+        if dep.provenance is DependencyProvenance.BACKEND:
+            if not dep.backend_id:
+                raise ValueError(f"dependency {dep.name!r}: BACKEND provenance requires backend_id")
+            if dep.certification_capability is None:
+                raise ValueError(
+                    f"dependency {dep.name!r}: BACKEND provenance requires certification_capability"
+                )
+        elif dep.provenance is DependencyProvenance.IMPORTED_FROZEN:
+            if not dep.artifact_sha256:
+                raise ValueError(
+                    f"dependency {dep.name!r}: IMPORTED_FROZEN provenance requires artifact_sha256"
+                )
+        elif dep.provenance is DependencyProvenance.LEGACY_REPLAY:
+            raise ValueError(
+                f"dependency {dep.name!r}: LEGACY_REPLAY provenance is only "
+                "admitted through replay_legacy_continuous_focus_certificate"
+            )
+
+
+def _finalize_status(
     *,
-    model_id: str,
-    target: CertificateTarget = CertificateTarget.EXTRACTED_CONTOUR_EPE,
-    input_sha256: str,
-    parameters: tuple[ParameterInterval, ...],
-    continuous_focus_contour_upper_nm: float,
-    continuous_focus_pairwise_diameter_upper_nm: float | None,
-    tolerance_nm: float,
+    target: CertificateTarget,
     coverage_status: CoverageStatus,
+    tolerance_nm: float,
+    continuous_focus_contour_upper_nm: float,
+    certified_violation_lower_nm: float | None,
     dependencies: tuple[DependencyRecord, ...],
-    certified_violation_lower_nm: float | None = None,
-    proof_artifact_sha256: str | None = None,
-    nominal_reconstruction_upper_nm: float | None = None,
-    model_identity: ModelIdentity | None = None,
-    note: str = "",
-) -> ContinuousFocusCertificate:
-    if continuous_focus_contour_upper_nm < 0.0:
-        raise ValueError("continuous_focus_contour_upper_nm must be nonnegative")
-    if tolerance_nm < 0.0:
-        raise ValueError("tolerance_nm must be nonnegative")
-    if certified_violation_lower_nm is not None and certified_violation_lower_nm < 0.0:
-        raise ValueError("certified_violation_lower_nm must be nonnegative")
-
-    _enforce_capability_ceiling(dependencies)
-
+) -> CertificateStatus:
     deps_ok = dependency_chain_is_certified(dependencies)
 
     # Contradictory certified claims indicate a corrupt proof package, not a
@@ -139,23 +161,55 @@ def assemble_continuous_focus_certificate(
         and continuous_focus_contour_upper_nm <= tolerance_nm
     ):
         status = CertificateStatus.PASS
+    return status
 
-    if model_identity is None:
-        # Legacy replay path: keep the historical pinned commit and say so.
-        upstream_commit = LEGACY_PINNED_UPSTREAM
-        legacy_note = "legacy replay without model identity"
-        stored_identity = None
-    else:
-        # A new certificate names its own frozen model — never the current
-        # HEAD, never the legacy pin.
-        upstream_commit = model_identity.implementation_commit
-        legacy_note = ""
-        stored_identity = model_identity
 
-    full_note = f"{note} {legacy_note}".strip()
+def assemble_continuous_focus_certificate(
+    *,
+    model_id: str,
+    target: CertificateTarget = CertificateTarget.EXTRACTED_CONTOUR_EPE,
+    input_sha256: str,
+    parameters: tuple[ParameterInterval, ...],
+    continuous_focus_contour_upper_nm: float,
+    continuous_focus_pairwise_diameter_upper_nm: float | None,
+    tolerance_nm: float,
+    coverage_status: CoverageStatus,
+    dependencies: tuple[DependencyRecord, ...],
+    certified_violation_lower_nm: float | None = None,
+    proof_artifact_sha256: str | None = None,
+    nominal_reconstruction_upper_nm: float | None = None,
+    model_identity: ModelIdentity,
+    note: str = "",
+) -> ContinuousFocusCertificate:
+    """Assemble a NEW theorem-facing certificate.
+
+    ``model_identity`` is mandatory: there is no API surface where omitting
+    the frozen model silently changes what the certificate claims (PR-1B).
+    """
+    if continuous_focus_contour_upper_nm < 0.0:
+        raise ValueError("continuous_focus_contour_upper_nm must be nonnegative")
+    if tolerance_nm < 0.0:
+        raise ValueError("tolerance_nm must be nonnegative")
+    if certified_violation_lower_nm is not None and certified_violation_lower_nm < 0.0:
+        raise ValueError("certified_violation_lower_nm must be nonnegative")
+
+    _enforce_capability_ceiling(dependencies)
+    _enforce_provenance(dependencies, allow_legacy=False)
+
+    status = _finalize_status(
+        target=target,
+        coverage_status=coverage_status,
+        tolerance_nm=tolerance_nm,
+        continuous_focus_contour_upper_nm=continuous_focus_contour_upper_nm,
+        certified_violation_lower_nm=certified_violation_lower_nm,
+        dependencies=dependencies,
+    )
+
     return ContinuousFocusCertificate(
         target=target,
-        upstream_commit=upstream_commit,
+        # A new certificate names its own frozen model — never the current
+        # HEAD, never the legacy pin.
+        upstream_commit=model_identity.implementation_commit,
         model_id=model_id,
         input_sha256=input_sha256,
         parameters=parameters,
@@ -168,6 +222,67 @@ def assemble_continuous_focus_certificate(
         certified_violation_lower_nm=certified_violation_lower_nm,
         proof_artifact_sha256=proof_artifact_sha256,
         nominal_reconstruction_upper_nm=nominal_reconstruction_upper_nm,
-        model_identity=stored_identity,
-        note=full_note,
+        model_identity=model_identity,
+        note=note,
+    )
+
+
+def replay_legacy_continuous_focus_certificate(
+    *,
+    model_id: str,
+    target: CertificateTarget = CertificateTarget.EXTRACTED_CONTOUR_EPE,
+    input_sha256: str,
+    parameters: tuple[ParameterInterval, ...],
+    continuous_focus_contour_upper_nm: float,
+    continuous_focus_pairwise_diameter_upper_nm: float | None,
+    tolerance_nm: float,
+    coverage_status: CoverageStatus,
+    dependencies: tuple[DependencyRecord, ...],
+    certified_violation_lower_nm: float | None = None,
+    proof_artifact_sha256: str | None = None,
+    nominal_reconstruction_upper_nm: float | None = None,
+    note: str = "",
+) -> ContinuousFocusCertificate:
+    """Explicit historical replay path (Increments 11–15 artifacts).
+
+    The ONLY place where a certificate may carry the legacy pinned commit
+    without a ``ModelIdentity``.  The result is marked as a legacy replay
+    in its note.
+    """
+    if continuous_focus_contour_upper_nm < 0.0:
+        raise ValueError("continuous_focus_contour_upper_nm must be nonnegative")
+    if tolerance_nm < 0.0:
+        raise ValueError("tolerance_nm must be nonnegative")
+    if certified_violation_lower_nm is not None and certified_violation_lower_nm < 0.0:
+        raise ValueError("certified_violation_lower_nm must be nonnegative")
+
+    _enforce_capability_ceiling(dependencies)
+    _enforce_provenance(dependencies, allow_legacy=True)
+
+    status = _finalize_status(
+        target=target,
+        coverage_status=coverage_status,
+        tolerance_nm=tolerance_nm,
+        continuous_focus_contour_upper_nm=continuous_focus_contour_upper_nm,
+        certified_violation_lower_nm=certified_violation_lower_nm,
+        dependencies=dependencies,
+    )
+
+    return ContinuousFocusCertificate(
+        target=target,
+        upstream_commit=LEGACY_PINNED_UPSTREAM,
+        model_id=model_id,
+        input_sha256=input_sha256,
+        parameters=parameters,
+        continuous_focus_contour_upper_nm=continuous_focus_contour_upper_nm,
+        continuous_focus_pairwise_diameter_upper_nm=(continuous_focus_pairwise_diameter_upper_nm),
+        tolerance_nm=tolerance_nm,
+        coverage_status=coverage_status,
+        dependencies=dependencies,
+        status=status,
+        certified_violation_lower_nm=certified_violation_lower_nm,
+        proof_artifact_sha256=proof_artifact_sha256,
+        nominal_reconstruction_upper_nm=nominal_reconstruction_upper_nm,
+        model_identity=None,
+        note=f"{note} legacy replay without model identity".strip(),
     )

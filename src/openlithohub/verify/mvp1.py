@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .certifier import assemble_continuous_focus_certificate
+from .certifier import replay_legacy_continuous_focus_certificate
 from .coverage import verify_boundary_artifact
 from .reconstruction import verify_reconstruction_artifact
 from .replay import replay_expanded_band, sha256_file
@@ -119,7 +119,7 @@ def certify_mvp1_manifest(
         else reconstruction.continuous_focus_to_reconstruction_upper_nm
     )
     recon_upper = None if reconstruction is None else reconstruction.nominal_reconstruction_upper_nm
-    return assemble_continuous_focus_certificate(
+    return replay_legacy_continuous_focus_certificate(
         target=target,
         model_id=str(raw["model_id"]),
         input_sha256=str(raw["input_mask_sha256"]),

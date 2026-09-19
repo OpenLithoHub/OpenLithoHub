@@ -14,6 +14,7 @@ from .cellwise_fourier import (
 from .certifier import (
     LEGACY_PINNED_UPSTREAM,
     assemble_continuous_focus_certificate,
+    replay_legacy_continuous_focus_certificate,
 )
 from .coverage import replay_boundary_coverage, verify_boundary_artifact
 from .derivative_runs import (
@@ -129,6 +130,7 @@ __all__ = [
     "CyclicRowPrefix",
     "ContinuousFocusCertificate",
     "CoverageStatus",
+    "DependencyProvenance",
     "DependencyRecord",
     "DerivativeRunPrefixArtifact",
     "ExpandedBandReplay",
@@ -168,6 +170,7 @@ __all__ = [
     "migrate_v1_to_v2",
     "aggregate_full_chip_status",
     "assemble_continuous_focus_certificate",
+    "replay_legacy_continuous_focus_certificate",
     "CriticalSetEventCertificate",
     "EventKind",
     "FocusChamber",
