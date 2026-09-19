@@ -30,6 +30,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STATUS_PATH = ROOT / "proof_artifacts" / "verification-status.json"
+RECEIPT_PATH = ROOT / "proof_artifacts" / "p054" / "replay-receipt.json"
+REPLAY_ENGINE = ROOT / "src" / "openlithohub" / "verify" / "phase_diagram.py"
 REGISTRY_PATH = ROOT / "proof_artifacts" / "registry.json"
 P054 = ROOT / "proof_artifacts" / "p054"
 P054_README = P054 / "README.md"
@@ -103,17 +105,24 @@ def verify_frozen_state(
                 f"!= {expected[:12]}…); regenerate frozen-basis.json in review"
             )
 
-    # activation gate: no passing replay state while the artifact is UNFETCHED
+    # activation gate (PR-3C): a passing full_artifact_replay requires a
+    # replay receipt whose identity is bound end-to-end
     replay_state = status.get("finite_declared_model", {}).get("full_artifact_replay", "")
-    unfetched = any(
-        a.get("sha256") is None
-        for a in registry.get("artifacts", [])
-        if "p054-full-replay" in a.get("required_for", [])
-    )
-    if unfetched and replay_state in _PASSING_REPLAY_STATES:
+    if replay_state in _PASSING_REPLAY_STATES:
+        failures.extend(
+            _verify_replay_binding(
+                replay_state=replay_state,
+                receipt_path=RECEIPT_PATH,
+                registry=registry,
+                frozen_basis=frozen_basis,
+                manifest=manifest,
+                engine_engine_hash=sha256_of(REPLAY_ENGINE) if REPLAY_ENGINE.exists() else None,
+            )
+        )
+    elif replay_state and receipt_path_exists():
         failures.append(
-            f"full_artifact_replay={replay_state!r} while the registry artifact "
-            "is UNFETCHED — hand promotion is not allowed"
+            "a replay receipt exists but the status is not a passing state; "
+            "promote the status in a reviewed release change instead"
         )
 
     if basis not in P054_README.read_text():
@@ -121,6 +130,68 @@ def verify_frozen_state(
     canonical = status.get("canonical_entry", "")
     if canonical and canonical not in readiness_text and "p054" not in readiness_text:
         failures.append("docs/qdm-readiness.md does not reference the canonical entry")
+    return failures
+
+
+def receipt_path_exists() -> bool:
+    return RECEIPT_PATH.exists()
+
+
+def _verify_replay_binding(
+    *,
+    replay_state: str,
+    receipt_path: Path,
+    registry: dict,
+    frozen_basis: dict,
+    manifest: dict,
+    engine_engine_hash: str | None,
+) -> list[str]:
+    """S1-S6: the receipt, registry, frozen basis and engine must agree."""
+    failures: list[str] = []
+    if not receipt_path.exists():
+        return [
+            f"full_artifact_replay={replay_state!r} but no replay receipt at "
+            f"{receipt_path} (S1: a populated registry hash alone is not evidence)"
+        ]
+    receipt = json.loads(receipt_path.read_text())
+    entry = next(
+        (
+            a
+            for a in registry.get("artifacts", [])
+            if "p054-full-replay" in a.get("required_for", [])
+        ),
+        {},
+    )
+    registry_sha = entry.get("sha256")
+    registry_bytes = entry.get("bytes")
+    basis_external = frozen_basis.get("external_artifact_sha256")
+    receipt_sha = receipt.get("artifact_sha256")
+    receipt_bytes = receipt.get("artifact_bytes")
+    # S1/S2/S3: end-to-end hash binding
+    if not registry_sha:
+        failures.append("registry sha256 is null; a passing state is not possible (S1)")
+    if receipt_sha != registry_sha:
+        failures.append("receipt artifact hash != registry hash (S2)")
+    if basis_external is None or receipt_sha != basis_external:
+        failures.append("receipt artifact hash != frozen-basis external hash (S3)")
+    # S4: replay engine drift
+    if engine_engine_hash and receipt.get("replay_engine_sha256") != engine_engine_hash:
+        failures.append("receipt replay engine hash drifted from the live engine (S4)")
+    # S5: mode must be strong enough for the claimed status
+    claimed = "FULL_REPLAY_PASSED" if replay_state == "FULL_REPLAY_PASSED" else replay_state
+    mode = receipt.get("replay_mode")
+    strong_modes = {"IMPORTED_CERTIFICATE_VERIFIED", "SOURCE_NATIVE_RECOMPUTED"}
+    if replay_state == "SOURCE_NATIVE_RECOMPUTED" and mode != "SOURCE_NATIVE_RECOMPUTED":
+        failures.append("status claims source-native replay but the receipt mode is weaker (S5)")
+    if mode not in strong_modes:
+        failures.append(f"receipt replay mode {mode!r} is too weak for a passing status (S5)")
+    # S6: byte binding
+    if registry_bytes is not None and receipt_bytes != registry_bytes:
+        failures.append("receipt artifact bytes != registry bytes (S6)")
+    # commit binding
+    if receipt.get("implementation_commit") != manifest.get("implementation_commit"):
+        failures.append("receipt implementation_commit != manifest basis")
+    del claimed
     return failures
 
 

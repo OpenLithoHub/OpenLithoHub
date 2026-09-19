@@ -5,7 +5,13 @@ Plus: cross-file basis disagreement, profile content-hash drift, and the
 activation gate (no passing replay state while the artifact is UNFETCHED).
 """
 
-from scripts.check_verification_status import verify_frozen_state
+import json
+from pathlib import Path
+
+from scripts.check_verification_status import (
+    _verify_replay_binding,
+    verify_frozen_state,
+)
 
 BASIS = "348fa5d86d5355465af98e2c4ce3deac60081a4c"
 HEAD = "f" * 40
@@ -102,7 +108,7 @@ def test_hand_promoted_replay_state_fails_activation_gate():
         file_hashes=file_hashes,
         readiness_text="",
     )
-    assert any("hand promotion is not allowed" in f for f in failures)
+    assert any("no replay receipt" in f for f in failures)
 
 
 def test_fetched_artifact_allows_passing_replay_state():
@@ -118,3 +124,84 @@ def test_fetched_artifact_allows_passing_replay_state():
         readiness_text="",
     )
     assert not any("hand promotion" in f for f in failures)
+
+
+# ---------------------------------------------------------------------------
+# PR-3C — replay-receipt binding (S1–S6)
+# ---------------------------------------------------------------------------
+
+
+def _receipt_state():
+    status, manifest, frozen_basis, registry, file_hashes = _state()
+    status["finite_declared_model"]["full_artifact_replay"] = "IMPORTED_CERTIFICATE_VERIFIED"
+    registry["artifacts"][0]["sha256"] = "a" * 64
+    registry["artifacts"][0]["bytes"] = 1024
+    frozen_basis["external_artifact_sha256"] = "a" * 64
+    return status, manifest, frozen_basis, registry, file_hashes
+
+
+def _receipt(**overrides):
+    receipt = {
+        "schema": "P054.replay-receipt.v1",
+        "profile": "p054-arf37",
+        "artifact_sha256": "a" * 64,
+        "artifact_bytes": 1024,
+        "implementation_commit": BASIS,
+        "manifest_sha256": "b" * 64,
+        "replay_engine_sha256": "e" * 64,
+        "replay_mode": "IMPORTED_CERTIFICATE_VERIFIED",
+    }
+    receipt.update(overrides)
+    return receipt
+
+
+def _check_receipt(receipt, tmp_path: Path, *, engine_hash="e" * 64, with_receipt=True, state=None):
+    path = tmp_path / "replay-receipt.json"
+    if with_receipt:
+        path.write_text(json.dumps(receipt))
+    state = state or _receipt_state()
+    return _verify_replay_binding(
+        replay_state=state[0]["finite_declared_model"]["full_artifact_replay"],
+        receipt_path=path if with_receipt else tmp_path / "absent.json",
+        registry=state[3],
+        frozen_basis=state[2],
+        manifest=state[1],
+        engine_engine_hash=engine_hash,
+    )
+
+
+def test_s1_populated_registry_without_receipt_rejected(tmp_path):
+    failures = _check_receipt(_receipt(), tmp_path, with_receipt=False)
+    assert any("no replay receipt" in f for f in failures)
+
+
+def test_s2_receipt_hash_differs_from_registry_rejected(tmp_path):
+    failures = _check_receipt(_receipt(artifact_sha256="d" * 64), tmp_path)
+    assert any("!= registry hash" in f for f in failures)
+
+
+def test_s3_receipt_hash_differs_from_frozen_basis_rejected(tmp_path):
+    state = _receipt_state()
+    state[2]["external_artifact_sha256"] = "c" * 64
+    failures = _check_receipt(_receipt(), tmp_path, state=state)
+    assert any("frozen-basis external hash" in f for f in failures)
+
+
+def test_s4_engine_hash_drift_rejected(tmp_path):
+    failures = _check_receipt(_receipt(replay_engine_sha256="0" * 64), tmp_path)
+    assert any("engine hash drifted" in f for f in failures)
+
+
+def test_s5_weak_mode_rejected(tmp_path):
+    failures = _check_receipt(_receipt(replay_mode="STRUCTURE_ONLY"), tmp_path)
+    assert any("too weak" in f for f in failures)
+
+
+def test_s6_bytes_mismatch_rejected(tmp_path):
+    failures = _check_receipt(_receipt(artifact_bytes=1), tmp_path)
+    assert any("bytes != registry bytes" in f for f in failures)
+
+
+def test_healthy_receipt_passes_binding(tmp_path):
+    failures = _check_receipt(_receipt(), tmp_path)
+    assert failures == []
