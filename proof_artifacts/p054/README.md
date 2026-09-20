@@ -56,6 +56,13 @@ fresh fetch of the exact published Zenodo bytes and validated by the
 strict Contract-B shard and the whole-receipt equality gate.  See
 `replay-receipt.json` and `scripts/check_verification_status.py`.
 
+## Governance note
+
+This directory is a governed path: changes to the frozen catalogs,
+registry identity, or activation evidence require the P-054
+release-activation gate (fresh Zenodo fetch + exact whole-receipt
+equality) before merge.
+
 ## Replay
 
 - **Offline (PR fast gate):** manifest/fixture/catalog schema and
