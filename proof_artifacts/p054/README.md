@@ -48,6 +48,14 @@ the declared frozen fixture.
 | `*.fetch-report.json` | canonical fetch evidence: effective URL + artifact SHA/bytes, written after validation (PR-5E5) |
 | `../verification-status.json` | machine-readable status consumed by CI (`scripts/check_verification_status.py`) |
 
+## Activation evidence
+
+The repository replay state is `IMPORTED_CERTIFICATE_VERIFIED`: the
+committed canonical receipt (P054.replay-receipt.v2) was produced from a
+fresh fetch of the exact published Zenodo bytes and validated by the
+strict Contract-B shard and the whole-receipt equality gate.  See
+`replay-receipt.json` and `scripts/check_verification_status.py`.
+
 ## Replay
 
 - **Offline (PR fast gate):** manifest/fixture/catalog schema and
