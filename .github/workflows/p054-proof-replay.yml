@@ -33,8 +33,8 @@ jobs:
     # claim firewall, status manifest.  No external artifacts needed.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322ed31bde414eec1
-      - uses: actions/setup-python@0a5c61591373683505ea898d09fdccdc57c2ab49
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: "3.12"
       - name: Install
@@ -66,8 +66,8 @@ jobs:
     env:
       B04_PROOF_REPLAY_STRICT: "1"
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322ed31bde414eec1
-      - uses: actions/setup-python@0a5c61591373683505ea898d09fdccdc57c2ab49
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: "3.12"
       - name: Install (minimal hermetic replay environment)
@@ -86,11 +86,32 @@ jobs:
             --receipt-out p054-replay-receipt.json \
             --report-out p054-replay-report.json \
             --fetch-report proof_artifacts/p054/external/p054-arf37-frozen-artifact.fetch-report.json
+      - name: Compare scheduled fresh receipt with committed receipt
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          fresh = json.loads(Path("p054-replay-receipt.json").read_text())
+          committed = json.loads(
+              Path("proof_artifacts/p054/replay-receipt.json").read_text()
+          )
+          if fresh != committed:
+              diff = {
+                  k: (committed.get(k), fresh.get(k))
+                  for k in set(committed) | set(fresh)
+                  if committed.get(k) != fresh.get(k)
+              }
+              raise SystemExit(
+                  f"FAIL: scheduled fresh receipt != committed receipt: {diff}"
+              )
+          print("scheduled fresh receipt is exactly equal to the committed receipt")
+          PY
       - name: Status manifest after replay
         run: python scripts/check_verification_status.py
       - name: Preserve replay evidence (never the frozen artifact itself)
         if: always()
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb0b8836a71a4b6cec80
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: p054-replay-logs
           path: |
@@ -108,8 +129,8 @@ jobs:
     if: github.event_name == 'pull_request'
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322ed31bde414eec1
-      - uses: actions/setup-python@0a5c61591373683505ea898d09fdccdc57c2ab49
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: "3.12"
       # ENV2: the activation checker/replay/producer are stdlib-only — no
@@ -208,7 +229,7 @@ jobs:
         run: python scripts/check_verification_status.py
       - name: Preserve replay evidence (never the frozen artifact itself)
         if: always()
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb0b8836a71a4b6cec80
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: p054-activation-evidence
           path: |

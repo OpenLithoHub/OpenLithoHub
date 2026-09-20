@@ -13,6 +13,7 @@ from typing import Any
 
 import numpy as np
 import typer
+from typing import NoReturn
 
 from openlithohub.data.base import DatasetAdapter
 
@@ -22,6 +23,17 @@ data_app = typer.Typer(
 )
 
 _KNOWN_DATASETS = ("asap7", "freepdk45-sram")
+
+
+def _usage_error(message: str) -> NoReturn:
+    """User-facing validation failure independent of Typer's error renderer.
+
+    Typer 0.26+ vendors Click and renders ``typer.BadParameter`` through
+    its own Rich usage screen; command-body checks that tests (and users)
+    match on stable substrings go through this helper instead.
+    """
+    typer.echo(f"Error: {message}", err=True)
+    raise typer.Exit(code=2)
 
 
 def _validate_dataset(dataset: str) -> str:
@@ -78,11 +90,11 @@ def _build_adapter(
         )
 
         if data_root is None:
-            raise typer.BadParameter("--data-root is required for --dataset asap7")
+            _usage_error("--data-root is required for --dataset asap7")
         if not accept_license:
-            raise typer.BadParameter(
-                f"--dataset asap7 requires --accept-license: ASAP7 ships under "
-                f"{ASAP7_LICENSE}; see {ASAP7_LICENSE_URL}."
+            _usage_error(
+                "--dataset asap7 requires --accept-license: "
+                f"ASAP7 ships under {ASAP7_LICENSE}; see {ASAP7_LICENSE_URL}."
             )
         return Asap7Dataset(
             root=data_root,
@@ -252,11 +264,9 @@ def show_cmd(
     before a benchmark run.
     """
     if all_cells and cell is not None:
-        raise typer.BadParameter("--cell and --all are mutually exclusive")
+        _usage_error("--cell and --all are mutually exclusive")
     if not all_cells and cell is None:
-        raise typer.BadParameter(
-            "--cell is required (or pass --all to render every canonical cell)"
-        )
+        _usage_error("--cell is required (or pass --all to render every canonical cell)")
 
     layer_spec = _parse_design_layer(design_layer) if design_layer else None
 

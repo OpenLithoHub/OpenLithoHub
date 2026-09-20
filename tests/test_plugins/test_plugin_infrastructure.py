@@ -108,9 +108,24 @@ class TestRegistryPluginDiscovery:
             get_simulator("diffnano_rcwa")
 
     def test_get_simulator_diffcfd_loads_when_installed(self):
-        # DiffCFD is installed in this environment — should load successfully
+        # Optional physics extra: skip in base environments (PR-5F5-D).
+        pytest.importorskip("diffcfd")
         sim = get_simulator("diffcfd_litho")
         assert sim.name == "diffcfd_litho"
+
+    def test_get_simulator_diffcfd_requires_extra_when_unavailable(
+        self, monkeypatch
+    ):
+        # Deterministic base-environment error path (PR-5F5-D): the registry
+        # must fail closed with the install hint even without the extra.
+        import openlithohub.simulators.registry as registry
+
+        # a previous test may have lazily loaded the backend into _REGISTRY;
+        # the base-environment error path requires the lazy-load to fail.
+        monkeypatch.delitem(registry._REGISTRY, "diffcfd_litho", raising=False)
+        monkeypatch.setattr(registry, "_try_load_plugin_backend", lambda name: False)
+        with pytest.raises(KeyError, match=r"pip install openlithohub\[diffcfd\]"):
+            registry.get_simulator("diffcfd_litho")
 
     def test_unknown_backend_error(self):
         with pytest.raises(KeyError, match="Unknown simulator"):

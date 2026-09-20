@@ -417,3 +417,71 @@ def test_fetch_curl_command_includes_download_url():
     assert entry["download_url"] in cmd, "download URL missing from curl command"
     # curl writes to destination + ".part" (atomic download, PR-5E2)
     assert str(destination) + ".part" in cmd
+
+
+# ---------------------------------------------------------------------------
+# PR-5F5 — action pin map + scheduled receipt equality (audit items 1–4)
+# ---------------------------------------------------------------------------
+
+EXPECTED_ACTION_PINS = {
+    "actions/checkout": "d23441a48e516b6c34aea4fa41551a30e30af803",
+    "actions/setup-python": "ece7cb06caefa5fff74198d8649806c4678c61a1",
+    "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+}
+RETIRED_PINS = {
+    "08c6903cd8c0fde910a37f88322ed31bde414eec1",
+    "0a5c61591373683505ea898d09fdccdc57c2ab49",
+    "6f51ac03b9356f520e9adb0b8836a71a4b6cec80",
+}
+
+
+def _uses_entries() -> list[str]:
+    doc = _doc()
+    uses = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k == "uses" and isinstance(v, str):
+                    uses.append(v)
+                else:
+                    walk(v)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(doc)
+    return uses
+
+
+def test_all_uses_entries_use_expected_pins():
+    for uses in _uses_entries():
+        action = uses.split("@")[0]
+        pin = uses.split("@")[1] if "@" in uses else None
+        assert action in EXPECTED_ACTION_PINS, f"unexpected action {uses!r}"
+        assert pin == EXPECTED_ACTION_PINS[action], f"{uses!r} does not match the expected pin"
+
+
+def test_retired_pins_absent():
+    raw = WORKFLOW.read_text()
+    for retired in RETIRED_PINS:
+        assert retired not in raw, f"retired pin {retired} still present"
+
+
+def test_scheduled_replay_compares_receipt_equality():
+    job = _jobs()["p054-full-replay"]
+    names = [s.get("name", "") for s in job.get("steps", [])]
+    assert any("Compare scheduled fresh receipt with committed receipt" in n for n in names), (
+        "receipt equality step missing from the scheduled replay"
+    )
+
+
+def test_scheduled_equality_script_uses_exact_whole_document_comparison():
+    job = _jobs()["p054-full-replay"]
+    for step in job.get("steps", []):
+        if "Compare scheduled fresh receipt" in step.get("name", ""):
+            run = step.get("run", "")
+            assert "if fresh != committed:" in run
+            assert "raise SystemExit" in run
+            return
+    raise AssertionError("scheduled equality step missing")
