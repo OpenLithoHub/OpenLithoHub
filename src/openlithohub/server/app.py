@@ -37,7 +37,7 @@ from typing import Any
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
-from starlette.background import BackgroundTask
+from starlette.background import BackgroundTask  # type: ignore[import-not-found]
 
 logger = logging.getLogger(__name__)
 

@@ -187,7 +187,7 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "onnxscript.*", "fastapi", "fastapi.*", "uvicorn", "gdown", "multivolumefile", "py7zr", "pyarrow", "pyarrow.*", "PIL", "PIL.*", "yaml", "diff_surrogate", "diff_surrogate.*", "flint", "flint.*"]
+module = ["klayout.*", "datasets.*", "torch.*", "scipy.*", "huggingface_hub.*", "matplotlib.*", "IPython.*", "onnxscript.*", "fastapi", "fastapi.*", "uvicorn", "gdown", "multivolumefile", "py7zr", "pyarrow", "pyarrow.*", "PIL", "PIL.*", "yaml", "diff_surrogate", "diff_surrogate.*", "flint", "flint.*", "starlette", "starlette.*"]
 ignore_missing_imports = true
 
 # server/app.py uses fastapi decorators which mypy flags as untyped when
@@ -196,6 +196,9 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["openlithohub.server.app"]
 disallow_untyped_decorators = false
+# starlette ships typing but is a transitive dep: resolved locally, often
+# unresolved in slimmer CI typecheck envs — accept either reality.
+warn_unused_ignores = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
