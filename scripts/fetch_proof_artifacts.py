@@ -86,45 +86,36 @@ def fetch(entry: dict, destination: Path) -> int:
     if max_bytes:
         # cap the transfer at the declared size (+slack for the cap check)
         curl_cmd += ["--max-filesize", str(int(max_bytes) + (1 << 20))]
-    curl_cmd += [download_url, "-o", str(part)]
-    proc = subprocess.run(curl_cmd, check=False)  # noqa: S603 — fixed argv from the registry
+    # PR-5E3: ONE curl invocation writes the artifact to .part and emits
+    # the final effective URL (after redirects) — the validated origin is
+    # the request that actually produced the accepted bytes, and the
+    # payload is never transferred twice.
+    effective_url_file = part.with_suffix(".effective-url")
+    curl_cmd += ["-w", "%{url_effective}\\n", "-o", str(part)]
+    proc = subprocess.run(  # noqa: S603 — fixed argv from the registry
+        curl_cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     if proc.returncode != 0:
         part.unlink(missing_ok=True)
         print(f"FETCH-FAILED: {entry['name']}", file=sys.stderr)
         return 2
-    # PR-5E2: validate the FINAL effective host — curl may have followed
-    # redirects away from the declared origin.
     if entry.get("source") == "zenodo":
-        effective = part.with_suffix(".url")
-        effective.write_text(
-            subprocess.run(  # noqa: S603 — fixed argv
-                [
-                    "curl",
-                    "-Ls",
-                    "--proto",
-                    "=https",
-                    "-o",
-                    "/dev/null",
-                    "-w",
-                    "%{url_effective}",
-                    download_url,
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            ).stdout
-        )
-        host = effective.read_text().strip()
         from urllib.parse import urlparse
 
-        if urlparse(host).hostname not in ("zenodo.org", "www.zenodo.org"):
+        lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip()]
+        effective_url = lines[-1] if lines else ""
+        host = urlparse(effective_url).hostname or ""
+        if host not in ("zenodo.org", "www.zenodo.org"):
             part.unlink(missing_ok=True)
-            effective.unlink(missing_ok=True)
             print(
                 f"REDIRECT-REJECTED: {entry['name']} landed off-origin at {host!r}",
                 file=sys.stderr,
             )
             return 2
+        effective_url_file.write_text(effective_url + "\n", encoding="utf-8")
     # PR-5E2: capture the size BEFORE unlinking so the mismatch path cannot
     # crash with FileNotFoundError instead of the intended diagnosis.
     actual_bytes = part.stat().st_size

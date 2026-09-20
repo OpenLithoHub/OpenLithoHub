@@ -66,6 +66,7 @@ dev = [
     "pre-commit>=3.4",
     "Pillow>=10.0",
     "types-PyYAML",
+    "pyyaml>=6.0",
 ]
 docs = [
     "mkdocs-material>=9.4,<10",

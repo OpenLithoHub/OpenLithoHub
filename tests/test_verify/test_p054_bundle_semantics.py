@@ -245,3 +245,60 @@ def test_zip_duplicate_member_names_rejected_by_loader(tmp_path):
         zf.writestr("source_snapshot.npz", b"y")
     with pytest.raises(ValueError, match="duplicate ZIP member names"):
         load_replay_bundle(artifact)
+
+
+# ---------------------------------------------------------------------------
+# PR-5D3 — concrete ZIP-envelope hostiles (P1/P2) + chamber permutation (P3)
+# ---------------------------------------------------------------------------
+
+
+def _write_zip(path, member_payloads: dict[str, bytes]) -> None:
+    import zipfile
+
+    with zipfile.ZipFile(path, "w") as zf:
+        for name, payload in member_payloads.items():
+            zf.writestr(name, payload)
+
+
+def test_p1_member_count_over_limit_rejected(tmp_path):
+
+    from openlithohub.verify import phase_diagram
+
+    artifact = tmp_path / "many.zip"
+    payloads = {f"m{i}.bin": b"x" for i in range(phase_diagram.MAX_BUNDLE_MEMBERS + 1)}
+    _write_zip(artifact, payloads)
+    with pytest.raises(ValueError, match="member limit"):
+        phase_diagram.load_replay_bundle(artifact)
+
+
+def test_p2_oversized_member_rejected(tmp_path, monkeypatch):
+    from openlithohub.verify import phase_diagram
+
+    monkeypatch.setattr(phase_diagram, "MAX_BUNDLE_MEMBER_BYTES", 16)
+    artifact = tmp_path / "big.zip"
+    _write_zip(artifact, {"replay_manifest.json": b"{}", "huge.bin": b"x" * 32})
+    with pytest.raises(ValueError, match="per-member size limit"):
+        phase_diagram.load_replay_bundle(artifact)
+
+
+def test_p2b_total_uncompressed_cap_rejected(tmp_path, monkeypatch):
+    from openlithohub.verify import phase_diagram
+
+    monkeypatch.setattr(phase_diagram, "MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES", 16)
+    artifact = tmp_path / "total.zip"
+    _write_zip(
+        artifact,
+        {"a.bin": b"x" * 8, "b.bin": b"y" * 8, "c.bin": b"z" * 8},
+    )
+    with pytest.raises(ValueError, match="total uncompressed limit"):
+        phase_diagram.load_replay_bundle(artifact)
+
+
+def test_p3_chamber_order_permutation_rejected():
+    replay, members, fixture = _healthy()
+    replay["chambers"][0], replay["chambers"][1] = (
+        replay["chambers"][1],
+        replay["chambers"][0],
+    )
+    with pytest.raises(ValueError, match="chamber sequence differs"):
+        _verify_bundle_semantics(replay, members, PD, fixture, SHA)
