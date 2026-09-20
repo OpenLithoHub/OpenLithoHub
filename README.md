@@ -50,6 +50,8 @@ Dose-response is **monotonically decreasing** (19.4× from 10→100 ph/nm²), ma
 - **Proof-carrying verification** — theorem-facing `PASS`/`FAIL`/`INCONCLUSIVE` certificates with certified-halo brackets, coverage contract, and the source-native verification contract and replay infrastructure; rigorous certification capability is profile/backend-specific (RFC 0007 / B04 / P-054)
 - **Optional physics plugins** — DiffNano (EM solvers) and DiffCFD (litho + spin-coat) as opt-in extras
 
+<!-- governance smoke: ruleset-activated normal-CI validation marker -->
+
 **Honesty boundaries:** Leaderboard/reference model-quality numbers remain benchmark-relative and are not foundry validation. The repository also contains public-layout engineering benchmarks (sky130 / Ibex routed GDS) for scaling, semantics, and work-avoidance studies. No result should be interpreted as wafer-process qualification without external calibration/SEM validation. CPU-only timing. See [BENCHMARKS.md](BENCHMARKS.md) for full methodology and [proof_artifacts/p054/README.md](proof_artifacts/p054/README.md) for the canonical frozen proof entry point.
 
 ```text
