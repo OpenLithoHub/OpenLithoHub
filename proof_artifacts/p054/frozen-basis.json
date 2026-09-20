@@ -8,5 +8,5 @@
     "chamber_catalog.json": "adf072da3d0f081b10ae76943aed005f1750ff59329287ca198666d3fea8acd6"
   },
   "external_artifact_sha256": "5a6abec06dc4f58df8d3435f77877e5525c505d0992f193f15e227dd3d55bc3e",
-  "note": "Immutable release anchor regenerated after PR-5F3 catalog alignment. external_artifact_sha256 records the PR-5F3-aligned rebuilt candidate; at Zenodo publication it must equal the published file's sha256."
+  "note": "Immutable release anchor regenerated after PR-5F3/5F4 (repo-committed deterministic builder, catalog-aligned declarations, R107 owner-witness materialization). external_artifact_sha256 is filled from the exact rebuilt bytes; at Zenodo publication it must equal the published file's sha256."
 }

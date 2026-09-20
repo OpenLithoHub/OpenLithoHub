@@ -195,7 +195,7 @@ def test_chamber_boundaries_replay():
         lo, hi = chamber["focus_interval_nm"]
         assert lo < hi
     # adjacency: consecutive chambers share their bounding event
-    for left, right in zip(chambers, chambers[1:]):
+    for left, right in zip(chambers, chambers[1:], strict=False):
         assert left["bounded_by_events"][-1] == right["bounded_by_events"][0]
 
 

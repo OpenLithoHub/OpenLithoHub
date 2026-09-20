@@ -6,7 +6,10 @@ activation job must carry the preflight that spares ordinary PRs from a
 guaranteed external-fetch failure while the artifact is unpublished.
 """
 
+import hashlib
 import json
+import subprocess
+from pathlib import Path
 
 import yaml
 
@@ -238,3 +241,139 @@ def test_both_evidence_uploads_include_fetch_report():
     )
     for name, path in uploads.items():
         assert "fetch-report" in path, f"{name} upload lost the canonical fetch report"
+
+
+# ---------------------------------------------------------------------------
+# PR-5F4 — external artifact hygiene (audit items 1–4)
+# ---------------------------------------------------------------------------
+
+
+def test_artifact_not_tracked():
+    import subprocess
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    proc = subprocess.run(  # noqa: S603 — fixed argv
+        [
+            "git",
+            "ls-files",
+            "--error-unmatch",
+            "proof_artifacts/p054/external/p054-arf37-frozen-artifact.zip",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=repo,
+        check=False,
+    )
+    assert proc.returncode != 0, "external artifact must not be tracked in git"
+
+
+def test_gitignore_covers_external_dir():
+    repo = Path(__file__).resolve().parents[2]
+    gitignore = (repo / ".gitignore").read_text()
+    assert "proof_artifacts/p054/external/" in gitignore
+
+
+def test_fetch_report_request_forces_transport(tmp_path, monkeypatch):
+    # PR-5F4 C: a pre-existing SHA/byte-correct destination must NOT
+    # short-circuit when --fetch-report-out is supplied — the transport
+    # must run and produce the report.
+    import scripts.fetch_proof_artifacts as fetcher
+
+    registry = {
+        "artifacts": [
+            {
+                "name": "p054-arf37-frozen-artifact.zip",
+                "profiles": ["p054-arf37"],
+                "sha256": hashlib.sha256(b"BYTES!").hexdigest(),
+                "bytes": 6,
+                "download_url": "https://zenodo.org/records/1/files/x.zip",
+                "destination": "proof_artifacts/p054/external",
+                "source": "zenodo",
+                "required_for": ["p054-full-replay"],
+            }
+        ]
+    }
+    real_registry = fetcher.REGISTRY
+    real_root = fetcher.ROOT
+    try:
+        fetcher.REGISTRY = tmp_path / "registry.json"
+        fetcher.REGISTRY.write_text(json.dumps(registry))
+        fetcher.ROOT = tmp_path
+        monkeypatch.setattr(fetcher, "ROOT", tmp_path)
+
+        transport_calls = []
+
+        def fake_curl(cmd, **kwargs):
+            transport_calls.append(cmd)
+            out = cmd[cmd.index("-o") + 1]
+            Path(out).write_bytes(b"BYTES!")
+            # curl -w emits the final effective URL on stdout
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout="https://zenodo.org/records/1/files/x.zip\n", stderr=""
+            )
+
+        monkeypatch.setattr(fetcher.subprocess, "run", fake_curl)
+        rc = fetcher.main(
+            [
+                "--profile",
+                "p054-arf37",
+                "--fetch-report-out",
+                str(tmp_path / "report.json"),
+            ]
+        )
+        assert rc == 0
+        assert transport_calls, "explicit fetch report request must transport"
+        report = json.loads((tmp_path / "report.json").read_text())
+        assert report["effective_url"] == "https://zenodo.org/records/1/files/x.zip"
+        assert (
+            report["artifact_sha256"]
+            == "ca275fd3a431af5615d3119b95585d6f030a8678894bac9c06faeb162570914f"
+        )
+    finally:
+        fetcher.REGISTRY = real_registry
+        fetcher.ROOT = real_root
+
+
+def test_existing_verified_destination_short_circuits_without_fetch(tmp_path, monkeypatch):
+    # without an explicit fetch report request, a verified destination is
+    # reused (no transport); the report is never synthesized.
+    import scripts.fetch_proof_artifacts as fetcher
+
+    registry = {
+        "artifacts": [
+            {
+                "name": "p054-arf37-frozen-artifact.zip",
+                "profiles": ["p054-arf37"],
+                "sha256": hashlib.sha256(b"BYTES!").hexdigest(),
+                "bytes": 6,
+                "download_url": "https://zenodo.org/records/1/files/x.zip",
+                "destination": "proof_artifacts/p054/external",
+                "source": "zenodo",
+                "required_for": ["p054-full-replay"],
+            }
+        ]
+    }
+    real_registry = fetcher.REGISTRY
+    real_root = fetcher.ROOT
+    try:
+        fetcher.REGISTRY = tmp_path / "registry.json"
+        fetcher.REGISTRY.write_text(json.dumps(registry))
+        fetcher.ROOT = tmp_path
+        ext = tmp_path / "proof_artifacts" / "p054" / "external"
+        ext.mkdir(parents=True)
+        (ext / "p054-arf37-frozen-artifact.zip").write_bytes(b"BYTES!")
+
+        transport_calls = []
+
+        def fake_curl(cmd, **kwargs):
+            transport_calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(fetcher.subprocess, "run", fake_curl)
+        rc = fetcher.main(["--profile", "p054-arf37", "--verify-only"])
+        assert rc == 0
+        assert transport_calls == []
+    finally:
+        fetcher.REGISTRY = real_registry
+        fetcher.ROOT = real_root

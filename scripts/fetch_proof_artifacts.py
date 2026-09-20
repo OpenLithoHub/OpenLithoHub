@@ -247,8 +247,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def main() -> int:
-    args = build_arg_parser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = build_arg_parser().parse_args(argv)
 
     registry = json.loads(REGISTRY.read_text())
     failures = 0
@@ -265,9 +265,12 @@ def main() -> int:
             )
             if destination.exists():
                 rc, state = verify_entry(entry)
-                if rc == 0:
+                # PR-5F4: an explicit --fetch-report-out request always
+                # performs a fresh transport fetch — a canonical fetch
+                # report may only represent an actual transfer, never
+                # local bytes.
+                if rc == 0 and args.fetch_report_out is None:
                     continue
-                # present but wrong: re-fetch only with a declared identity
                 if entry.get("sha256") is None:
                     failures += 1
                     continue
