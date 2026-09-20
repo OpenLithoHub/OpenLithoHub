@@ -546,6 +546,10 @@ def _numeric_event_from_bundle(
 
 MAX_BUNDLE_MEMBERS = 64
 MAX_BUNDLE_MEMBER_BYTES = 1 << 30
+# Chosen from the frozen artifact envelope: the P-054 bundle is a ~100 MB
+# ZIP whose uncompressed members stay well under 2 GiB.  Rejected before
+# any member body is read.
+MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES = 2 << 30
 
 
 def _reject_duplicate_json_keys(
@@ -574,6 +578,12 @@ def load_replay_bundle(artifact: Path) -> tuple[dict[str, Any], dict[str, bytes]
         if len(names) > MAX_BUNDLE_MEMBERS:
             raise ValueError(
                 f"frozen bundle exceeds the member limit: {len(names)} > {MAX_BUNDLE_MEMBERS}"
+            )
+        total_uncompressed = sum(info.file_size for info in zf.infolist())
+        if total_uncompressed > MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES:
+            raise ValueError(
+                "frozen bundle exceeds the total uncompressed limit: "
+                f"{total_uncompressed} > {MAX_BUNDLE_TOTAL_UNCOMPRESSED_BYTES}"
             )
         for info in zf.infolist():
             if info.file_size > MAX_BUNDLE_MEMBER_BYTES:

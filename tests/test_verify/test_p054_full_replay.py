@@ -22,6 +22,7 @@ from openlithohub.verify.phase_diagram import (
     PhaseArtifactNotAvailableError,
     ReplayState,
     load_frozen_phase_diagram,
+    load_replay_bundle,
     load_verified_frozen_phase_diagram,
 )
 
