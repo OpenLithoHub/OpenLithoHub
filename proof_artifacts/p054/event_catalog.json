@@ -1,7 +1,7 @@
 {
   "schema": "P054.phase-events.v1",
   "fixture_id": "p054-arf37",
-  "note": "Event classifications and ownership data are frozen by P-054. Exact focus intervals are carried by the external Zenodo artifact (see external_artifacts.json); entries here record the stratification structure that offline replay tests enforce. The three layers are distinct: a critical-set event is not an ownership event, and neither is a fixed-target topology event.",
+  "note": "Event stratification frozen by P-054. multiplicities are the R108 spatial event-orbit cardinalities (zV: symmetry pair 2, zH: symmetry pair 2, zP: symmetry-fixed saddle 1). Exact focus intervals are carried by the external Zenodo artifact (see external_artifacts.json); entries here record the stratification structure that offline replay tests enforce. The three layers are distinct: a critical-set event is not an ownership event, and neither is a fixed-target topology event.",
   "events": [
     {
       "event_id": "z1",
@@ -71,25 +71,29 @@
       "event_id": "zV",
       "layer": "TARGET_TOPOLOGY",
       "kind": "TARGET_MAX_EVENT",
-      "multiplicity": 1,
+      "multiplicity": 2,
       "transversality_lower": null,
       "morse_signature": null,
       "owner_before": null,
       "owner_after": null,
       "focus_interval_nm": null,
-      "value_source": "external_artifact"
+      "value_source": "external_artifact",
+      "component_count_before": 1,
+      "component_count_after": 3
     },
     {
       "event_id": "zH",
       "layer": "TARGET_TOPOLOGY",
       "kind": "TARGET_MAX_EVENT",
-      "multiplicity": 1,
+      "multiplicity": 2,
       "transversality_lower": null,
       "morse_signature": null,
       "owner_before": null,
       "owner_after": null,
       "focus_interval_nm": null,
-      "value_source": "external_artifact"
+      "value_source": "external_artifact",
+      "component_count_before": 3,
+      "component_count_after": 5
     },
     {
       "event_id": "zP",

@@ -4,9 +4,9 @@
   "content_hashes": {
     "manifest.json": "bc7e802011631952266af67cbe6247aa1cf6c97a98ba9aa5594b49288b8184f6",
     "fixture.json": "1aa9702feea076c6b6364525194761041cb442f548c1a35385db652dc2642c07",
-    "event_catalog.json": "241f4dcd6e8ed7cc537ec5ec7f580d56fdfe634a2f8a03bfbf4d569ba2498877",
-    "chamber_catalog.json": "d0372d3ac360c203e3f345a821d37b316228cfa71aa4604b3c115f3906558f7a"
+    "event_catalog.json": "5809b37498714cf8aacd76adac7505b2d269857f048a120742db1c5b61e83046",
+    "chamber_catalog.json": "adf072da3d0f081b10ae76943aed005f1750ff59329287ca198666d3fea8acd6"
   },
-  "external_artifact_sha256": "7212a7d8442159f1bb74c13949cf0f49b02142145b06efc6577728590b9a3d07",
-  "note": "Immutable release anchor. external_artifact_sha256 currently records the staged local candidate identity; it must equal the final Zenodo file hash at publication (activation plan Step 8)."
+  "external_artifact_sha256": "5a6abec06dc4f58df8d3435f77877e5525c505d0992f193f15e227dd3d55bc3e",
+  "note": "Immutable release anchor regenerated after PR-5F3 catalog alignment. external_artifact_sha256 records the PR-5F3-aligned rebuilt candidate; at Zenodo publication it must equal the published file's sha256."
 }

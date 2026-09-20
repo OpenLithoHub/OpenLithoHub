@@ -12,8 +12,8 @@
       "record_id": null,
       "file_name": "p054-arf37-frozen-artifact.zip",
       "download_url": null,
-      "sha256": "7212a7d8442159f1bb74c13949cf0f49b02142145b06efc6577728590b9a3d07",
-      "bytes": 92082,
+      "sha256": "5a6abec06dc4f58df8d3435f77877e5525c505d0992f193f15e227dd3d55bc3e",
+      "bytes": 90673,
       "source": "zenodo",
       "destination": "proof_artifacts/p054/external/",
       "required_for": [
@@ -25,8 +25,8 @@
         "source_snapshot_sha256",
         "coefficient_tensor_sha256",
         "event focus intervals (z1,z2,z3,z4,z5,zV,zH,zP)",
-        "chamber focus boundaries and owners",
-        "z5 ownership-invisibility witness (non-null owners)"
+        "target-topology chamber focus boundaries and component counts",
+        "z5 ownership-invisibility witness (equal non-null owners + certified owner interval)"
       ],
       "status": "LOCAL_CANDIDATE_STAGED"
     }
