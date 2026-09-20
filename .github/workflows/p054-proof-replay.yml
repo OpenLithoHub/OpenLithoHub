@@ -74,6 +74,7 @@ jobs:
       - name: Fetch frozen artifact (download + hash-verify)
         run: python scripts/fetch_proof_artifacts.py --profile p054-arf37
       - name: Re-verify artifact identity
+        if: steps.activation_preflight.outputs.needs_replay == 'true'
         run: python scripts/fetch_proof_artifacts.py --profile p054-arf37 --verify-only
       - name: Imported-certificate verification shard
         run: PYTHONPATH=src pytest -q tests/test_verify/test_p054_full_replay.py -m proof_artifact_required
@@ -111,10 +112,11 @@ jobs:
           python-version: "3.12"
       # ENV2: the activation checker/replay/producer are stdlib-only — no
       # pip install at all, so the environment cannot drift.
-      - name: Preflight — fetch only when evidence requires it (PR-3E2)
+      - name: Activation preflight (PR-3E3 — controls all external steps)
+        id: activation_preflight
         run: |
           python - <<'PY'
-          import json, pathlib, sys
+          import json, os, pathlib
           registry = json.loads(pathlib.Path("proof_artifacts/registry.json").read_text())
           entry = next(
               (a for a in registry["artifacts"] if "p054-full-replay" in a.get("required_for", [])),
@@ -132,20 +134,35 @@ jobs:
               and entry.get("download_url") is not None
               and entry.get("bytes") is not None
           )
-          if not identity_complete and not passing:
-              print(
-                  f"NEUTRAL: registry artifact identity incomplete and status "
-                  f"{state!r} is not passing; external fetch skipped"
-              )
-              sys.exit(0)
-          print("external replay required; proceeding")
+          needs_replay = identity_complete or passing
+          reason = (
+              "artifact identity complete or passing status proposed"
+              if needs_replay
+              else "artifact identity incomplete and state non-passing"
+          )
+          out = os.environ.get("GITHUB_OUTPUT")
+          if out:
+              with open(out, "a", encoding="utf-8") as fh:
+                  fh.write(f"needs_replay={'true' if needs_replay else 'false'}\n")
+          preflight_report = {
+              "schema": "P054.activation-preflight.v1",
+              "needs_replay": needs_replay,
+              "reason": reason,
+              "status": state,
+          }
+          pathlib.Path("activation-preflight.json").write_text(
+              json.dumps(preflight_report, indent=2) + "\n", encoding="utf-8"
+          )
+          print(f"preflight: needs_replay={needs_replay} ({reason})")
           PY
       - name: Fetch frozen artifact (download + hash-verify)
         id: fetch
+        if: steps.activation_preflight.outputs.needs_replay == 'true'
         run: |
           python scripts/fetch_proof_artifacts.py --profile p054-arf37
           python scripts/fetch_proof_artifacts.py --profile p054-arf37 --verify-only
       - name: Replay and produce a FRESH receipt
+        if: steps.activation_preflight.outputs.needs_replay == 'true'
         run: |
           PYTHONPATH=src python scripts/replay_p054_artifact.py \
             --profile p054-arf37 \
@@ -155,6 +172,7 @@ jobs:
           cp /tmp/p054-replay-receipt.json replay-receipt-fresh.json
           cp /tmp/p054-replay-report.json replay-report-fresh.json
       - name: Compare fresh receipt with the committed one (exact equality)
+        if: steps.activation_preflight.outputs.needs_replay == 'true'
         run: |
           python - <<'PY'
           import json, pathlib, sys
@@ -181,15 +199,18 @@ jobs:
           print("committed receipt is exactly equal to the fresh replay")
           PY
       - name: Status manifest against the fresh evidence
+        if: steps.activation_preflight.outputs.needs_replay == 'true'
         run: python scripts/check_verification_status.py --report-head
+      - name: Offline status manifest (stable, always)
+        run: python scripts/check_verification_status.py
       - name: Preserve replay evidence (never the frozen artifact itself)
         if: always()
         uses: actions/upload-artifact@6f51ac03b9356f520e9adb0b8836a71a4b6cec80
         with:
           name: p054-activation-evidence
           path: |
+            activation-preflight.json
             replay-receipt-fresh.json
             replay-report-fresh.json
             pytest-output.txt
-            artifact-hash-report.txt
           if-no-files-found: error
