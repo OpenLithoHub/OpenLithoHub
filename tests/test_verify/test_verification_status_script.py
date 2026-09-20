@@ -141,13 +141,19 @@ def _receipt_state():
 
 
 def _receipt(**overrides):
+    import hashlib
+    from pathlib import Path
+
+    real_manifest = (
+        Path(__file__).resolve().parents[2] / "proof_artifacts" / "p054" / "manifest.json"
+    )
     receipt = {
         "schema": "P054.replay-receipt.v2",
         "profile": "p054-arf37",
         "artifact_sha256": "a" * 64,
         "artifact_bytes": 1024,
         "implementation_commit": BASIS,
-        "manifest_sha256": "b" * 64,
+        "manifest_sha256": hashlib.sha256(real_manifest.read_bytes()).hexdigest(),
         "replay_engine_sha256": "e" * 64,
         "replay_mode": "IMPORTED_CERTIFICATE_VERIFIED",
         "result_digest": "d" * 64,
@@ -289,3 +295,26 @@ def _passing_set():
 def test_unknown_receipt_mode_rejected(tmp_path):
     failures = _check_receipt(_receipt(replay_mode="WARP_DRIVE"), tmp_path)
     assert any("unknown receipt replay mode" in f for f in failures)
+
+
+# ---------------------------------------------------------------------------
+# PR-3F2 — receipt local semantic checks (S9 + digest + counts)
+# ---------------------------------------------------------------------------
+
+
+def test_s9_wrong_manifest_hash_rejected(tmp_path):
+    receipt = _receipt(manifest_sha256="0" * 64)
+    failures = _check_receipt(receipt, tmp_path)
+    assert any("!= sha256(actual manifest.json)" in f for f in failures)
+
+
+def test_receipt_result_digest_must_be_64_hex(tmp_path):
+    failures = _check_receipt(_receipt(result_digest="short"), tmp_path)
+    assert any("64-hex" in f for f in failures)
+
+
+def test_receipt_counts_must_match_frozen_catalog(tmp_path):
+    failures = _check_receipt(_receipt(event_count=99), tmp_path)
+    assert any("event_count" in f and "frozen catalog" in f for f in failures)
+    healthy = _check_receipt(_receipt(), tmp_path)
+    assert not any("frozen catalog" in f for f in healthy)

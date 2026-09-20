@@ -203,13 +203,9 @@ def _verify_replay_binding(
     }
     missing = required_receipt_keys - set(receipt)
     if missing:
-        failures.append(
-            f"receipt missing required keys: {sorted(missing)} (PR-3F complete schema)"
-        )
+        failures.append(f"receipt missing required keys: {sorted(missing)} (PR-3F complete schema)")
     if receipt.get("schema") != "P054.replay-receipt.v2":
-        failures.append(
-            f"receipt schema {receipt.get('schema')!r} != 'P054.replay-receipt.v2'"
-        )
+        failures.append(f"receipt schema {receipt.get('schema')!r} != 'P054.replay-receipt.v2'")
     if receipt.get("profile") != "p054-arf37":
         failures.append(f"receipt profile {receipt.get('profile')!r} != 'p054-arf37'")
     entry = next(
@@ -252,6 +248,35 @@ def _verify_replay_binding(
     # commit binding
     if receipt.get("implementation_commit") != manifest.get("implementation_commit"):
         failures.append("receipt implementation_commit != manifest basis")
+
+    # PR-3F2: locally validate the semantically load-bearing fields against
+    # the repository's own manifest and frozen catalogs.
+    p054_dir = ROOT / "proof_artifacts" / "p054"
+    actual_manifest_sha = sha256_of(p054_dir / "manifest.json")
+    if receipt.get("manifest_sha256") != actual_manifest_sha:
+        failures.append("receipt manifest_sha256 != sha256(actual manifest.json) (S9)")
+    digest = receipt.get("result_digest")
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(c not in "0123456789abcdef" for c in digest.lower())
+    ):
+        failures.append("receipt result_digest is not a 64-hex digest")
+    try:
+        event_catalog = json.loads((p054_dir / "event_catalog.json").read_text())
+        chamber_catalog = json.loads((p054_dir / "chamber_catalog.json").read_text())
+        expected_counts = {
+            "event_count": len(event_catalog.get("events", [])),
+            "chamber_count": len(chamber_catalog.get("chambers", [])),
+            "witness_count": len(chamber_catalog.get("witnesses", [])),
+        }
+        for key, expected in expected_counts.items():
+            if receipt.get(key) != expected:
+                failures.append(
+                    f"receipt {key} {receipt.get(key)!r} != frozen catalog count {expected} "
+                )
+    except OSError as exc:
+        failures.append(f"frozen catalogs unreadable for receipt counts: {exc}")
     return failures
 
 
