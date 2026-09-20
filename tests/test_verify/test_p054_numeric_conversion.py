@@ -80,8 +80,11 @@ def test_f3_all_eight_events_survive_numeric_verify():
             critical_event_id=w.critical_event_id,
             owner_before="C",
             owner_after="C",
-            left_chamber_id=PD.chambers[0].chamber_id,
-            right_chamber_id=PD.chambers[1].chamber_id,
+            owner_interval_nm=(90.0, 300.0)
+            if w.critical_event_id == "z5"
+            else None,
+            left_chamber_id=None,
+            right_chamber_id=None,
             proof_level=w.proof_level,
             artifact_sha256=SHA,
         )

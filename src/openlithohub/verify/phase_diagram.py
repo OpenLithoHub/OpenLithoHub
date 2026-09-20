@@ -175,14 +175,20 @@ class OwnershipInvisibilityWitness:
 
     The correct ontology is ``critical-set event + witness => ownership
     invisibility`` — the critical-set event never becomes an ownership
-    statement by itself.  ``owner_before == owner_after`` is the theorem;
-    chamber adjacency across the event is the structural witness.  Fields
-    frozen by the external artifact stay ``None`` until numeric replay.
+    statement by itself.  The load-bearing witness is
+    ``owner_before == owner_after`` on a certified focus interval
+    (``owner_interval_nm``) containing the critical event (PR-5F1): the
+    target-topology chamber catalog is *not* an ownership-chamber catalog
+    and must not be reused as one.  ``left_chamber_id`` /
+    ``right_chamber_id`` remain only for backwards API compatibility.
+    Fields frozen by the external artifact stay ``None`` until numeric
+    replay.
     """
 
     critical_event_id: str
     owner_before: str | None = None
     owner_after: str | None = None
+    owner_interval_nm: tuple[float, float] | None = None
     left_chamber_id: str | None = None
     right_chamber_id: str | None = None
     proof_level: ProofLevel = ProofLevel.IMPORTED_QDM_CERTIFIED
@@ -329,10 +335,18 @@ class FrozenPhaseDiagram:
                     "numeric replay requires non-null owners on witness "
                     f"{witness.critical_event_id}"
                 )
-            if witness.left_chamber_id is None or witness.right_chamber_id is None:
+            # PR-5F1: the load-bearing ownership witness is the certified
+            # focus interval — NOT the target-topology chamber catalog.
+            interval = witness.owner_interval_nm
+            if (
+                interval is None
+                or len(interval) != 2
+                or not all(math.isfinite(v) for v in interval)
+                or interval[0] >= interval[1]
+            ):
                 raise ValueError(
-                    "numeric replay requires adjacent chambers on witness "
-                    f"{witness.critical_event_id}"
+                    "numeric replay requires a finite ordered ownership "
+                    f"interval on witness {witness.critical_event_id}"
                 )
             if (
                 witness.artifact_sha256 is not None
@@ -369,7 +383,6 @@ class FrozenPhaseDiagram:
         by_event: dict[str, list[OwnershipInvisibilityWitness]] = {}
         for witness in self.witnesses:
             by_event.setdefault(witness.critical_event_id, []).append(witness)
-        chamber_ids = {chamber.chamber_id for chamber in self.chambers}
         for event in invisible_events:
             witnesses = by_event.get(event.event_id, [])
             if len(witnesses) != 1:
@@ -387,19 +400,19 @@ class FrozenPhaseDiagram:
                     f"witness {witness.critical_event_id}: ownership-invisibility "
                     f"broken ({witness.owner_before} -> {witness.owner_after})"
                 )
-            if witness.left_chamber_id is not None and witness.right_chamber_id is not None:
-                for chamber_id in (witness.left_chamber_id, witness.right_chamber_id):
-                    if chamber_id not in chamber_ids:
-                        raise ValueError(
-                            f"witness {witness.critical_event_id} references "
-                            f"unknown chamber {chamber_id!r}"
-                        )
-                    chamber = next(c for c in self.chambers if c.chamber_id == chamber_id)
-                    if event.event_id not in chamber.bounded_by_events:
-                        raise ValueError(
-                            f"witness {witness.critical_event_id}: chamber "
-                            f"{chamber_id!r} is not adjacent across the event"
-                        )
+            # PR-5F1: when both the witness ownership interval and the
+            # critical event's frozen interval are known, the event must lie
+            # INSIDE the ownership-certified interval.  Chamber membership is
+            # no longer an ownership criterion (the chamber catalog is
+            # target-topology, not ownership).
+            if witness.owner_interval_nm is not None and event.focus_interval_nm is not None:
+                wlo, whi = witness.owner_interval_nm
+                elo, ehi = event.focus_interval_nm
+                if not (wlo <= elo and ehi <= whi):
+                    raise ValueError(
+                        f"witness {witness.critical_event_id}: event interval is "
+                        "not contained in the ownership-certified interval"
+                    )
 
 
 def _event_from_catalog(entry: dict[str, Any], proof_level: ProofLevel) -> Any:
@@ -439,6 +452,12 @@ def _event_from_catalog(entry: dict[str, Any], proof_level: ProofLevel) -> Any:
         component_count_after=entry.get("component_count_after"),
         **common,
     )
+
+
+def _tuple_or_none(values: Any) -> tuple[float, float] | None:
+    if isinstance(values, (list, tuple)) and len(values) == 2:
+        return (float(values[0]), float(values[1]))
+    return None
 
 
 class VerifiedFrozenPhaseDiagram(FrozenPhaseDiagram):
@@ -819,6 +838,9 @@ def load_verified_frozen_phase_diagram(
             critical_event_id=w.critical_event_id,
             owner_before=bundle_witnesses.get(w.critical_event_id, {}).get("owner_before"),
             owner_after=bundle_witnesses.get(w.critical_event_id, {}).get("owner_after"),
+            owner_interval_nm=_tuple_or_none(
+                bundle_witnesses.get(w.critical_event_id, {}).get("owner_interval_nm")
+            ),
             left_chamber_id=bundle_witnesses.get(w.critical_event_id, {}).get("left_chamber_id"),
             right_chamber_id=bundle_witnesses.get(w.critical_event_id, {}).get("right_chamber_id"),
             proof_level=w.proof_level,
@@ -912,6 +934,7 @@ def load_frozen_phase_diagram(
             critical_event_id=w["critical_event_id"],
             owner_before=w.get("owner_before"),
             owner_after=w.get("owner_after"),
+            owner_interval_nm=_tuple_or_none(w.get("owner_interval_nm")),
             left_chamber_id=w.get("left_chamber_id"),
             right_chamber_id=w.get("right_chamber_id"),
             artifact_sha256=w.get("artifact_sha256"),

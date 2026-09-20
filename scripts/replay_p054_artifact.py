@@ -88,6 +88,7 @@ def result_digest(diagram: Any) -> str:
                 w.critical_event_id,
                 w.owner_before,
                 w.owner_after,
+                w.owner_interval_nm,
                 w.left_chamber_id,
                 w.right_chamber_id,
             ]
