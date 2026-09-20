@@ -69,32 +69,23 @@ Dose 响应**单调递减**（10→100 ph/nm² 下降 19.4×），符合已发�
 
 ## 工业基准测试结果（实测）
 
-参考硬件（CPU）：Apple M5 Pro、48 GB 内存、torch 2.14 —— 多次重复取 median，
-数据为真实布线硅版图：OpenROAD 布线的 **Ibex RISC-V 核**（sky130hd，15,515 个单元）。
-数据集：PDB Physical Design Database @ `9e1e3399`。
+**工业基准 v1.1 重测进行中。** 正在加固 Industrial Benchmark v1 契约
+（严格 JSON artifact、测量源 provenance 闭合、fixture SHA-256、CI authority 门）；
+干净树重测完成后，头条指标将以 checked-in artifact 自动生成的形式回到此处。
+在此之前，不主张任何工业数字。
 
-| 实测结果（claim ID） | 数值 | 条件 |
-|---|---|---|
-| 流式 vs dense 峰值内存降低 — `IB-MEM-32768` | **98.0%** | 32768² px 裁剪 @ 1 nm/px：dense median RSS 19.67 GB → 流式 **0.40 GB** |
-| 流式 vs dense 峰值内存降低 — `IB-MEM-16384` | **96.7%** | 16384² px：12.28 GB → 0.40 GB |
-| 端到端流式处理的最大版图 — `IB-SCALE-65536` | **65536x65536 px** | 4.29 GPx 以 **0.38 GB** 峰值 RSS 完成；dense 仅输入就需 16 GB，在 30 GB 策略下不可行 |
-| 全 die dense 栅格化 — `IB-DIE-1` | **1.23 TB** | 在 48 GB 内存上结构性不可行；逐 tile 流式仅需 O(tile) 内存 |
-| ILT vs 无 OPC 的 MRC 违规率降低 — `IB-Q-ILT-MRC` | **29.1%** | 相同 Hopkins 光学、真实布线 sky130hd tile；`levelset-ilt` vs design-as-mask |
+方法论、协议与 claim 规则：[`docs/industrial-benchmarks.md`](docs/industrial-benchmarks.md)。
+复现（干净 checkout 上一条命令）：
 
-流式峰值内存在 4096² 到 65536² 保持**平稳（0.35 → 0.40 GB）**，而版图增长 256×——
-内存随 tile 增长，而非随版图增长。
+```bash
+python benchmarks/industrial/run_industrial_benchmark.py \
+  --gds /path/to/ibex.gds --out benchmarks/results/industrial
+```
 
-我们对自己不利的事实也如实报告：在 CPU + 轻量基准前向模型下，dense 在所有可行尺寸上仍*更快*
-（流式/dense 中位墙钟比 0.22–0.44x，覆盖整个尺寸阶梯——见 claims 文档）；
-`levelset-ilt` 默认超参数在 print-critical 的 ICCAD16 EUV 裁剪上退化为空白掩膜
-（见退化输出行）；相同迭代预算下 surrogate-ILT 在 CPU 上端到端并不更快（见 surrogate 运行时行）。
-
-上方每个头条数字均由 `scripts/generate_industrial_claims.py` 从入库的 benchmark artifact（`benchmarks/results/industrial/`）自动生成；claim ID 对应的完整溯源（数据集、硬件、适用范围、artifact 哈希）见
-[`docs/generated/industrial-claims.md`](docs/generated/industrial-claims.md)，方法论见 [`docs/industrial-benchmarks.md`](docs/industrial-benchmarks.md)。
-若 README 引用的数字与 artifact 漂移，CI 会直接失败。
-
-**我们刻意不做的主张：** 不宣称 foundry 认证（无 wafer/SEM 校准）；不与商业工具对比（Calibre/Tachyon/cuLitho 仅为适配器）；不提供 GPU 性能数字（参考硬件为 CPU，见
-[`docs/self_hosted_deployment.md`](docs/self_hosted_deployment.md) 的溯源声明）；不从退化模型输出中提取质量主张。运行时间加速始终与质量并列呈现，trade-off 不被隐藏。
+**我们刻意不做的主张：** 不宣称 foundry 认证（无 wafer/SEM 校准）；不与商业工具对比
+（Calibre/Tachyon/cuLitho 仅为适配器）；不提供 GPU 性能数字（参考硬件为 CPU，见
+[`docs/self_hosted_deployment.md`](docs/self_hosted_deployment.md) 的溯源声明）；
+不从退化模型输出中提取质量主张；估算或策略决定永不冒充实测主张。
 
 ---
 
@@ -434,7 +425,7 @@ pip install --pre 'openlithohub[plugins]'   # 安装两者
 - **工业基准 v1**（`benchmarks/industrial/`）— 真实布线 GDS（OpenROAD 布线的 Ibex/sky130hd），dense vs streaming 的运行时间与峰值内存（多次重复的 median/p10/p90）、同光学模型质量对比、artifact 支撑的 claim。见[工业基准测试结果](#工业基准测试结果实测)与 [`docs/industrial-benchmarks.md`](docs/industrial-benchmarks.md)。
 - **模型质量基准**（下文）— 内置脚本在 synthetic-8 与 ICCAD16 版图上的结果，保持方法对比的连续性。
 
-> 所有数据均由内置基准测试脚本在真实硬件上运行获得。没有任何数据是通过估算、外推或"合理假设"得出的。
+> 头条指标均为实测，而非估算或外推；标注为 STRUCTURAL 或 ESTIMATE 的数值永不作为实测主张。
 > 方法学、前向模型配置和逐模式细分见 [`docs/benchmarks.md`](docs/benchmarks.md)。
 
 ### 模型质量 — synthetic-8（表 1）

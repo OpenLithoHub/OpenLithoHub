@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import tempfile
 import threading
 from collections import OrderedDict
@@ -35,7 +36,8 @@ from typing import Any
 
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
+from starlette.background import BackgroundTask
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +75,11 @@ _MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
 
 def _teardown_model(key: tuple[str, frozenset[tuple[str, Any]]], model: Any) -> None:
-    """Tear down an evicted model and release its CUDA memory."""
+    """Tear down an evicted model and release its CUDA memory.
+
+    Must be called OUTSIDE ``_CACHE_LOCK`` — teardown can be slow (CUDA
+    cache flushes) and must not block unrelated cache operations.
+    """
     try:
         model.teardown()
     except Exception:  # noqa: BLE001 — teardown failure shouldn't block eviction
@@ -88,9 +94,14 @@ def _teardown_model(key: tuple[str, frozenset[tuple[str, Any]]], model: Any) -> 
         logger.info("evicted model %r from cache (capacity=%d)", key, _MODEL_CACHE_CAP)
 
 
-def _acquire(
+def _acquire_locked(
     key: tuple[str, frozenset[tuple[str, Any]]], model: Any, lock: threading.Lock
 ) -> tuple[Any, threading.Lock, tuple[str, frozenset[tuple[str, Any]]]]:
+    """Refcount an acquisition. MUST be called while holding _CACHE_LOCK:
+    bumping the refcount after releasing the lock opens a window in which
+    a concurrent eviction sees refcount == 0 and tears down a model this
+    caller is about to use.
+    """
     _MODEL_REFCOUNTS[key] = _MODEL_REFCOUNTS.get(key, 0) + 1
     return model, lock, key
 
@@ -107,7 +118,8 @@ def _get_or_load_model(
     the lookup *and* the insertion of a placeholder lock; the heavy
     ``model.setup()`` happens outside the cache lock under that per-key
     lock so unrelated requests stay unblocked. Acquired models are
-    refcounted; callers MUST call ``_release_model(key)`` when finished.
+    refcounted *under the cache lock* (see :func:`_acquire_locked`);
+    callers MUST call ``_release_model(key)`` when finished.
     """
     from openlithohub.models.registry import register_builtin_models, registry
 
@@ -117,7 +129,7 @@ def _get_or_load_model(
     with _CACHE_LOCK:
         if key in _MODEL_CACHE:
             _MODEL_CACHE.move_to_end(key)
-            return _acquire(key, _MODEL_CACHE[key], _MODEL_LOCKS[key])
+            return _acquire_locked(key, _MODEL_CACHE[key], _MODEL_LOCKS[key])
         # Reserve a per-key lock so a second concurrent caller for the same
         # key blocks on it instead of double-loading.
         per_key_lock = _MODEL_LOCKS.setdefault(key, threading.Lock())
@@ -128,18 +140,19 @@ def _get_or_load_model(
         with _CACHE_LOCK:
             if key in _MODEL_CACHE:
                 _MODEL_CACHE.move_to_end(key)
-                return _acquire(key, _MODEL_CACHE[key], per_key_lock)
+                return _acquire_locked(key, _MODEL_CACHE[key], per_key_lock)
             # A previous holder may have gotten this key evicted while it
             # was still in use; reuse the parked model instead of
             # reloading weights from disk.
             parked = _PENDING_TEARDOWN.pop(key, None)
             if parked is not None:
                 _MODEL_CACHE[key] = parked
-                return _acquire(key, parked, per_key_lock)
+                return _acquire_locked(key, parked, per_key_lock)
 
         model = registry.get(name, **kwargs)
         model.setup()
 
+        to_teardown: list[tuple[tuple[str, frozenset[tuple[str, Any]]], Any]] = []
         with _CACHE_LOCK:
             _MODEL_CACHE[key] = model
             while len(_MODEL_CACHE) > _MODEL_CACHE_CAP:
@@ -153,9 +166,23 @@ def _get_or_load_model(
                         _MODEL_CACHE_CAP,
                     )
                     continue
-                _teardown_model(evicted_key, evicted)
+                to_teardown.append((evicted_key, evicted))
+            # Refcount OUR acquisition in the same critical section as the
+            # insertion: only after this increment can a concurrent insert
+            # legitimately evict (and then park, not teardown) this model.
+            acquired = _acquire_locked(key, model, per_key_lock)
+            # Restore the sidecar lock (an earlier eviction of the same key
+            # may have popped it while a waiter was blocked on the old lock).
+            _MODEL_LOCKS.setdefault(key, per_key_lock)
+        # Slow teardown happens outside the cache lock (P1.2). The sidecar
+        # entries are safe to drop: the evicted model has no in-flight
+        # holders and is not cached or parked.
+        for evicted_key, evicted in to_teardown:
+            _MODEL_LOCKS.pop(evicted_key, None)
+            _MODEL_REFCOUNTS.pop(evicted_key, None)
+            _teardown_model(evicted_key, evicted)
         logger.info("loaded model %r (kwargs=%s) into resident cache", name, kwargs)
-        return _acquire(key, model, per_key_lock)
+        return acquired
 
 
 def _release_model(key: tuple[str, frozenset[tuple[str, Any]]]) -> None:
@@ -171,6 +198,12 @@ def _release_model(key: tuple[str, frozenset[tuple[str, Any]]]) -> None:
             return
         _MODEL_REFCOUNTS.pop(key, None)
         model = _PENDING_TEARDOWN.pop(key, None)
+        if model is not None:
+            # Final teardown of a parked model: the key is neither cached
+            # nor parked anymore, so its sidecar entries must go too —
+            # otherwise a long-running worker leaks locks/refcounts for
+            # every distinct key ever evicted mid-flight (P1.3).
+            _MODEL_LOCKS.pop(key, None)
     if model is not None:
         _teardown_model(key, model)
 
@@ -289,11 +322,12 @@ def create_app() -> FastAPI:
         from openlithohub._version import __version__
         from openlithohub.benchmark.industrial import git_commit
 
+        commit = git_commit()
         return {
             "api": "v1",
             "package": "openlithohub",
             "version": __version__,
-            "git_commit": git_commit(),
+            "git_commit": commit if commit else "unknown",
             "torch": torch.__version__,
         }
 
@@ -353,8 +387,12 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="layout upload missing filename")
 
         suffix = Path(layout.filename).suffix or ".bin"
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_path = Path(tmpdir)
+        # Per-request scratch dir WITHOUT a context manager: the optimized
+        # output must outlive this handler so the response can stream it
+        # from disk; a BackgroundTask removes the dir after the response
+        # completes. On any failure path we clean up before re-raising.
+        tmp_path = Path(tempfile.mkdtemp(prefix="olh_req_"))
+        try:
             input_path = tmp_path / f"input{suffix}"
             output_path = tmp_path / "optimized.oas"
 
@@ -418,18 +456,22 @@ def create_app() -> FastAPI:
             if not served_path.exists():
                 raise HTTPException(status_code=500, detail="optimization produced no output file")
 
-            payload = served_path.read_bytes()
-
-        return Response(
-            content=payload,
-            media_type="application/octet-stream",
-            headers={
-                "Content-Disposition": f'attachment; filename="{served_path.name}"',
-                "X-OLH-Tiles": str(summary["tiles"]),
-                "X-OLH-Halo-Px": str(summary["halo_px"]),
-                "X-OLH-Export-Format": summary["export_format"],
-                "X-OLH-Shape": "x".join(str(d) for d in summary["shape"]),
-            },
-        )
+            # Stream the file from disk instead of read_bytes(): a multi-GB
+            # output no longer transits through RAM a second time.
+            return FileResponse(
+                served_path,
+                media_type="application/octet-stream",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{served_path.name}"',
+                    "X-OLH-Tiles": str(summary["tiles"]),
+                    "X-OLH-Halo-Px": str(summary["halo_px"]),
+                    "X-OLH-Export-Format": summary["export_format"],
+                    "X-OLH-Shape": "x".join(str(d) for d in summary["shape"]),
+                },
+                background=BackgroundTask(shutil.rmtree, tmp_path, True),
+            )
+        except BaseException:
+            shutil.rmtree(tmp_path, ignore_errors=True)
+            raise
 
     return app

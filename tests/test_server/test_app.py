@@ -181,3 +181,147 @@ def test_capabilities(client: TestClient) -> None:
     assert "hopkins" in body["simulator_backends"]
     assert isinstance(body["gpu"]["available"], bool)
     assert body["streaming_pipeline"] is True
+
+
+def test_eviction_parks_inflight_model_instead_of_teardown(monkeypatch) -> None:
+    """P1.1 hostile: a model acquired (refcounted) before a concurrent
+    insert evicts it must be PARKED, never torn down while in flight."""
+
+    from openlithohub.server import app as app_mod
+
+    class _Fake:
+        def __init__(self, tag: str) -> None:
+            self.tag = tag
+            self.torn_down = False
+
+        def setup(self) -> None:
+            pass
+
+        def teardown(self) -> None:
+            self.torn_down = True
+
+    saved = (
+        dict(app_mod._MODEL_CACHE),
+        dict(app_mod._MODEL_LOCKS),
+        dict(app_mod._MODEL_REFCOUNTS),
+        dict(app_mod._PENDING_TEARDOWN),
+        app_mod._MODEL_CACHE_CAP,
+    )
+    app_mod._MODEL_CACHE.clear()
+    app_mod._MODEL_LOCKS.clear()
+    app_mod._MODEL_REFCOUNTS.clear()
+    app_mod._PENDING_TEARDOWN.clear()
+    monkeypatch.setattr(app_mod, "_MODEL_CACHE_CAP", 1)
+    made: list[_Fake] = []
+
+    def fake_get(name: str, **kwargs: object) -> _Fake:
+        m = _Fake(f"{name}-{kwargs.get('slot', 0)}")
+        made.append(m)
+        return m
+
+    monkeypatch.setattr(app_mod, "_MODEL_CACHE_CAP", 1)
+    import openlithohub.models.registry as registry_mod
+
+    monkeypatch.setattr(registry_mod, "register_builtin_models", lambda: None)
+
+    class _Reg:
+        @staticmethod
+        def get(name: str, **kwargs: object) -> _Fake:
+            return fake_get(name, **kwargs)
+
+    monkeypatch.setattr(app_mod, "registry", _Reg, raising=False)
+    # _get_or_load_model imports registry locally; patch the registry module attr
+    import sys
+
+    real_registry = registry_mod.registry
+    monkeypatch.setattr(registry_mod, "registry", _Reg)
+    try:
+        # Acquire A and hold the reference (in flight).
+        model_a, lock_a, key_a = app_mod._get_or_load_model("dummy-identity", {"slot": "a"})
+        # Another load forces eviction of A while A is still in flight.
+        model_b, lock_b, key_b = app_mod._get_or_load_model("dummy-identity", {"slot": "b"})
+        assert model_a.torn_down is False, "in-flight model was torn down (P1.1 race)"
+        assert key_a in app_mod._PENDING_TEARDOWN, "in-flight model must be parked"
+        # Release A: only now may the deferred teardown run.
+        app_mod._release_model(key_a)
+        assert model_a.torn_down is True
+        assert key_a not in app_mod._PENDING_TEARDOWN
+        # B was never evicted: releasing it leaves it resident in cache.
+        app_mod._release_model(key_b)
+        assert model_b.torn_down is False
+        assert key_b in app_mod._MODEL_CACHE
+    finally:
+        (
+            app_mod._MODEL_CACHE.clear(),
+            app_mod._MODEL_LOCKS.clear(),
+            app_mod._MODEL_REFCOUNTS.clear(),
+            app_mod._PENDING_TEARDOWN.clear(),
+        )
+        (
+            app_mod._MODEL_CACHE.update(saved[0]),
+            app_mod._MODEL_LOCKS.update(saved[1]),
+            app_mod._MODEL_REFCOUNTS.update(saved[2]),
+            app_mod._PENDING_TEARDOWN.update(saved[3]),
+        )
+        app_mod._MODEL_CACHE_CAP = saved[4]
+        monkeypatch.setattr(registry_mod, "registry", real_registry)
+        assert sys.modules  # no-op keeps imports referenced
+
+
+def test_sidecar_state_bounded_under_churn(monkeypatch) -> None:
+    """P1.3: distinct-key churn must not leak lock/refcount sidecar state."""
+    from openlithohub.server import app as app_mod
+
+    class _Fake:
+        def setup(self) -> None:
+            pass
+
+        def teardown(self) -> None:
+            pass
+
+    saved = (
+        dict(app_mod._MODEL_CACHE),
+        dict(app_mod._MODEL_LOCKS),
+        dict(app_mod._MODEL_REFCOUNTS),
+        dict(app_mod._PENDING_TEARDOWN),
+        app_mod._MODEL_CACHE_CAP,
+    )
+    app_mod._MODEL_CACHE.clear()
+    app_mod._MODEL_LOCKS.clear()
+    app_mod._MODEL_REFCOUNTS.clear()
+    app_mod._PENDING_TEARDOWN.clear()
+    monkeypatch.setattr(app_mod, "_MODEL_CACHE_CAP", 2)
+    import openlithohub.models.registry as registry_mod
+
+    monkeypatch.setattr(registry_mod, "register_builtin_models", lambda: None)
+
+    class _Reg:
+        @staticmethod
+        def get(name: str, **kwargs: object) -> _Fake:
+            return _Fake()
+
+    real_registry = registry_mod.registry
+    monkeypatch.setattr(registry_mod, "registry", _Reg)
+    try:
+        for i in range(200):
+            _, _, key = app_mod._get_or_load_model("dummy-identity", {"slot": i})
+            app_mod._release_model(key)
+        assert len(app_mod._MODEL_CACHE) <= 2
+        assert len(app_mod._MODEL_LOCKS) <= 2
+        assert len(app_mod._MODEL_REFCOUNTS) == 0
+        assert len(app_mod._PENDING_TEARDOWN) == 0
+    finally:
+        (
+            app_mod._MODEL_CACHE.clear(),
+            app_mod._MODEL_LOCKS.clear(),
+            app_mod._MODEL_REFCOUNTS.clear(),
+            app_mod._PENDING_TEARDOWN.clear(),
+        )
+        (
+            app_mod._MODEL_CACHE.update(saved[0]),
+            app_mod._MODEL_LOCKS.update(saved[1]),
+            app_mod._MODEL_REFCOUNTS.update(saved[2]),
+            app_mod._PENDING_TEARDOWN.update(saved[3]),
+        )
+        app_mod._MODEL_CACHE_CAP = saved[4]
+        monkeypatch.setattr(registry_mod, "registry", real_registry)

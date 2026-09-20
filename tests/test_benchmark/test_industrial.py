@@ -118,17 +118,29 @@ class TestClaimBuilder:
             )
 
 
+COMMIT = "a" * 40
+SHA = "b" * 64
+
+
 def _valid_artifact() -> dict:
     return {
         "schema": SCHEMA_NAME,
         "kind": "runtime",
         "status": STATUS_SUCCESS,
-        "git_commit": "abcdef123456",
+        "git_commit": COMMIT,
         "timestamp_utc": "2026-09-20T00:00:00Z",
         "hardware": {"cpu_model": "test"},
         "software": {"python": "3.12"},
         "claim_scope": {"physics_claim": "NOT_FOUNDRY_CALIBRATED"},
         "reproducibility": {"command": "run.sh"},
+        "measurement_source": {
+            "commit": COMMIT,
+            "commit_valid": True,
+            "working_tree_dirty": False,
+            "harness_sha256": SHA,
+            "industrial_core_sha256": SHA,
+        },
+        "fixture": {"sha256": SHA, "bytes": 1234, "top_cell": "ibex_core"},
     }
 
 
@@ -156,6 +168,31 @@ class TestValidateArtifact:
         artifact = _valid_artifact()
         artifact["git_commit"] = "x"
         assert any("git_commit" in p for p in validate_artifact(artifact))
+
+    def test_placeholder_commit_rejected(self) -> None:
+        artifact = _valid_artifact()
+        artifact["git_commit"] = "UNKNOWN"
+        assert any("git_commit" in p for p in validate_artifact(artifact))
+
+    def test_dirty_measurement_source_rejected(self) -> None:
+        artifact = _valid_artifact()
+        artifact["measurement_source"]["working_tree_dirty"] = True
+        assert any("working_tree_dirty" in p for p in validate_artifact(artifact))
+
+    def test_non_finite_rejected(self) -> None:
+        artifact = _valid_artifact()
+        artifact["rows"] = [{"score": float("inf")}]
+        assert any("non-finite" in p for p in validate_artifact(artifact))
+
+    def test_missing_fixture_rejected(self) -> None:
+        artifact = _valid_artifact()
+        del artifact["fixture"]
+        assert any("fixture" in p for p in validate_artifact(artifact))
+
+    def test_bad_fixture_hash_rejected(self) -> None:
+        artifact = _valid_artifact()
+        artifact["fixture"]["sha256"] = "nope"
+        assert any("fixture.sha256" in p for p in validate_artifact(artifact))
 
     def test_claim_scope_must_be_object(self) -> None:
         artifact = _valid_artifact()
@@ -197,4 +234,6 @@ class TestEnvironment:
         assert "torch" in snap["software"]
 
     def test_git_commit_nonempty(self) -> None:
-        assert isinstance(git_commit(), str) and len(git_commit()) >= 7
+        from openlithohub.benchmark.industrial import is_full_commit
+
+        assert is_full_commit(git_commit())

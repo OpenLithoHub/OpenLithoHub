@@ -11,10 +11,20 @@ Everything here is designed around one rule:
 
 - Harness: [`benchmarks/industrial/run_industrial_benchmark.py`](https://github.com/OpenLithoHub/OpenLithoHub/blob/main/benchmarks/industrial/run_industrial_benchmark.py)
 - Artifacts: `benchmarks/results/industrial/*.json` (schema
-  `OpenLithoHub.industrial-benchmark.v1`)
+  `OpenLithoHub.industrial-benchmark.v1`, STRICT JSON — `NaN`/`Infinity`
+  tokens are rejected at parse time and undefined metrics are serialized
+  as `null` with an explicit reason)
+- Artifact contract v1.1: every artifact records a `measurement_source`
+  block (exact 40-hex commit of a clean checkout, SHA-256 of the harness,
+  core module and claim generator) and a `fixture` block (SHA-256, byte
+  size, top cell, layer, die bbox of the measured GDS)
 - Generated claims: [`docs/generated/industrial-claims.md`](generated/industrial-claims.md)
 - Claim generator: `scripts/generate_industrial_claims.py` (use `--check`
   to fail CI when the README quotes drift from artifacts)
+- CI authority gates: `scripts/verify_industrial_artifacts.py`
+  (strict JSON + schema + checksum + provenance closure) and
+  `generate_industrial_claims.py --check` run in the `lint` job on every
+  pull request; measurements themselves are never run in CI
 
 ## What it measures
 
@@ -28,9 +38,13 @@ Four questions, in priority order:
    spread. Best-of-N is never reported.
 2. **Peak memory** — fresh worker process per timed run, `ru_maxrss`
    medians. Dense input is `O(W·H)`; streaming memory is
-   `O(tile_area + active_batch)`. Where dense is infeasible under the
-   harness memory policy, that is recorded as `INFEASIBLE_STRUCTURAL`
-   rather than skipped silently.
+   `O(tile_area + active_batch)`. Memory figures are reported in GiB
+   (2^30 bytes). Where dense is not executed because the harness memory
+   *policy* forbids it, the row records `NOT_RUN_MEMORY_POLICY` — a
+   protocol decision, never labeled "structurally impossible". Only the
+   full-die raster (1.23 TB vs 48 GiB RAM) is marked
+   `INFEASIBLE_ON_REFERENCE_MACHINE`, with the machine-relative arithmetic
+   shown in the artifact.
 3. **Quality** — registered models on real-layout tiles with the *same*
    Hopkins SOCS optical model, same resist threshold, same pixel size,
    same input, same metric implementations (EPE, wafer EPE, L2, PV Band,
@@ -70,6 +84,12 @@ recorded as such.
 - Claim-bearing rows use ≥ 5 repeats (median / p10 / p90). The largest
   scaling-only rows record fewer repeats and carry their own `repeats`
   field; headline claims are derived only from full-repeat rows.
+- Quality comparisons are published as scoped **facts** (absolute +
+  relative deltas, per-metric status) — never as headline claims — until
+  the evaluation set is spatially expanded with a paired-confidence-interval
+  gate. A candidate that produces a degenerate (near-blank) mask on any
+  tile is flagged `DEGENERATE_OUTPUT`; its reduction percentages are
+  withheld and can never headline.
 - Correctness witnesses gate the whole benchmark: a 512² synthetic
   witness and a 1024² real-layout witness verify that selective
   streaming output matches the dense reference (`max_abs_error ≤ 2e-6`).
@@ -141,13 +161,18 @@ timed run.
 
 ## Known limitations (measured)
 
+- **CPU wall time:** with the lightweight benchmark forward model, dense
+  execution is 2.3–4.5× FASTER than the current streaming implementation
+  at every size where both fit (the exact-vector path trades wall time
+  for bounded memory on CPU). The streaming value proposition is memory
+  scalability and dense-infeasible sizes — reported, not hidden.
 - **Exact-vector window/screen queries** build a per-row polygon index on
   first touch; cost grows with tile rows × layout polygons. On the
   reference machine a 32768² die-center tile costs ~56 s of screening
   before any forward work, and a full-die screening survey is estimated
   (mean per-tile × 289 grid tiles, labeled `ESTIMATE_NOT_MEASUREMENT` in
-  the artifact) at roughly an hour of CPU. A spatial index over runs is
-  the highest-leverage next step for die-scale exhaustive surveys.
+  the artifact) at roughly 40 minutes of CPU. A spatial index over runs
+  is the highest-leverage next step for die-scale exhaustive surveys.
 - **GPU tiers are NOT yet measured.** The reference hardware for v1 is a
   CPU machine; any GPU number in older docs is historical and not
   artifact-backed (see `docs/self_hosted_deployment.md`).
@@ -155,3 +180,6 @@ timed run.
   (16 samples × 3 epochs) relative to library defaults, which are
   intractable at 1024 px on CPU; surrogate comparisons are therefore
   scoped to the recorded budget, never generalized.
+- Quality evaluation currently covers 4 high-occupancy real tiles + 1
+  ICCAD16 crop — enough to compare methods, not enough to generalize
+  quality headlines (see the facts-only rule above).

@@ -38,6 +38,7 @@ import argparse
 import contextlib
 import hashlib
 import json
+import math
 import os
 import resource
 import subprocess
@@ -50,10 +51,12 @@ import torch
 
 from openlithohub.benchmark.industrial import (
     SCHEMA_NAME,
-    STATUS_INFEASIBLE_STRUCTURAL,
+    STATUS_INFEASIBLE_ON_REFERENCE_MACHINE,
+    STATUS_NOT_RUN_MEMORY_POLICY,
     STATUS_SUCCESS,
+    _sanitize,
     environment_snapshot,
-    git_commit,
+    measurement_source,
     memory_reduction_pct,
     relative_reduction_pct,
     sha256_file,
@@ -86,6 +89,30 @@ DATASET = {
     "license_note": "public dataset; shipped as adapter-only, not redistributed",
 }
 
+
+def fixture_identity(gds: Path) -> dict[str, Any]:
+    """Content identity of the measured fixture (P0.3: provenance closure)."""
+    import klayout.db as kdb
+
+    layout = kdb.Layout()
+    layout.read(str(gds))
+    top = layout.top_cells()[0]
+    bb = top.bbox()
+    return {
+        "filename": gds.name,
+        "sha256": sha256_file(gds),
+        "bytes": gds.stat().st_size,
+        "source_repo": DATASET["source"],
+        "source_commit": DATASET["source_commit"],
+        "top_cell": top.name,
+        "layer": LAYER,
+        "pixel_size_nm": DATASET["pixel_size_nm"],
+        "die_bbox_dbu": [bb.left, bb.bottom, bb.right, bb.top],
+        "dbu_nm": 1.0,
+        "cell_count": layout.cells(),
+    }
+
+
 PHYSICS_SCOPE = {
     "ladder_forward_model": (
         "deterministic 9x9 separable finite-support zero-preserving blur (identical to B04 INC28)"
@@ -110,8 +137,23 @@ def peak_rss_bytes() -> int:
     return value * 1024
 
 
+_RUN_LOG: Path | None = None
+
+
+def init_run_log(out: Path) -> None:
+    global _RUN_LOG
+    out.mkdir(parents=True, exist_ok=True)
+    _RUN_LOG = out / "RUN.log"
+    with open(_RUN_LOG, "a", encoding="utf-8") as handle:
+        handle.write(f"\n=== run start {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} ===\n")
+
+
 def log(msg: str) -> None:
-    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+    line = f"[{time.strftime('%H:%M:%S')}] {msg}"
+    print(line, flush=True)
+    if _RUN_LOG is not None:
+        with open(_RUN_LOG, "a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
 
 
 def make_forward():
@@ -372,7 +414,7 @@ def _evaluate_mask(
     l2 = compute_l2_error(binary, design)
     shots = estimate_shot_count(binary, writer_type="mbmw", pixel_size_nm=pixel_size_nm)
     total_px = int(binary.numel())
-    return {
+    metrics = {
         "epe_mean_nm": float(epe["epe_mean_nm"]),
         "epe_max_nm": float(epe["epe_max_nm"]),
         "wafer_epe_mean_nm": float(wafer["epe_mean_nm"]),
@@ -385,6 +427,17 @@ def _evaluate_mask(
         "shot_count": int(shots["shot_count"]),
         "valid": bool(epe.get("valid", True)) and bool(wafer.get("valid", True)),
     }
+    # Strict-JSON contract: a metric that cannot be computed (e.g. wafer EPE
+    # of an empty mask) becomes null + an explicit reason, never Infinity.
+    import math as _math
+
+    non_finite = [k for k, v in metrics.items() if isinstance(v, float) and not _math.isfinite(v)]
+    for k in non_finite:
+        metrics[k] = None
+    metrics["non_finite_metrics"] = non_finite
+    if non_finite:
+        metrics["non_finite_reason"] = "degenerate output (empty/degenerate mask): metric undefined"
+    return metrics
 
 
 def job_quality_tile(args: argparse.Namespace) -> dict[str, Any]:
@@ -695,7 +748,7 @@ def job_fulldie_tile(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def run_worker(script: Path, job_args: list[str]) -> dict[str, Any]:
-    cmd = [sys.executable, str(script), "--worker", *job_args]
+    cmd = [sys.executable, str(script), "--worker", "--parent-pid", str(os.getpid()), *job_args]
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)  # noqa: S603
     if proc.returncode != 0:
         raise RuntimeError(f"worker failed {job_args}: {proc.stderr[-3000:]}")
@@ -705,6 +758,76 @@ def run_worker(script: Path, job_args: list[str]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # checkpoints
 # ---------------------------------------------------------------------------
+
+
+_PROGRESS_INSTANCES: dict[str, Progress] = {}
+
+
+def get_progress(path: Path) -> Progress:
+    """One Progress instance per path, so stages accumulate in one file."""
+    key = str(path.resolve())
+    if key not in _PROGRESS_INSTANCES:
+        _PROGRESS_INSTANCES[key] = Progress(path)
+    return _PROGRESS_INSTANCES[key]
+
+
+class Progress:
+    """Durable progress file: stage, done/total, in-flight row, ETA.
+
+    Written atomically after every checkpoint append so "where is the run,
+    how much longer" is answerable from a single JSON at any moment —
+    including after an interrupt.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.stages: dict[str, dict[str, Any]] = {}
+
+    def stage(self, name: str, total: int) -> None:
+        self.stages[name] = {
+            "total": total,
+            "done": 0,
+            "skipped_on_resume": 0,
+            "current": None,
+            "last_row_wall_s": None,
+            "eta_s": None,
+            "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        self.flush(name, None)
+
+    def begin_row(self, stage: str, key: str) -> None:
+        self.stages[stage]["current"] = key
+        self.flush(stage, None)
+
+    def end_row(self, stage: str, key: str, wall_s: float, skipped: bool = False) -> None:
+        s = self.stages[stage]
+        s["current"] = None
+        s["last_row_wall_s"] = round(wall_s, 3)
+        if skipped:
+            s["skipped_on_resume"] += 1
+        else:
+            s["done"] += 1
+        remaining = s["total"] - s["done"] - s["skipped_on_resume"]
+        s["eta_s"] = round(max(0, remaining) * (s["last_row_wall_s"] or 0.0), 1)
+        self.flush(stage, wall_s)
+
+    def flush(self, stage: str, wall_s: float | None) -> None:
+        s = self.stages[stage]
+        remaining = s["total"] - s["done"] - s["skipped_on_resume"]
+        if s["eta_s"] is None and s["last_row_wall_s"]:
+            s["eta_s"] = round(max(0, remaining) * s["last_row_wall_s"], 1)
+        payload = {
+            "updated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "stages": self.stages,
+        }
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        tmp.replace(self.path)
+        if wall_s is not None:
+            log(
+                f"progress [{stage}] done={s['done']}/{s['total']} "
+                f"(resumed {s['skipped_on_resume']}) eta~{s['eta_s']}s"
+            )
 
 
 class Checkpoint:
@@ -740,6 +863,27 @@ class Checkpoint:
 # ---------------------------------------------------------------------------
 
 
+def tracked_row(
+    ckpt: Checkpoint,
+    progress: Progress,
+    stage: str,
+    key: str,
+    produce: callable[[], dict[str, Any]],
+) -> dict[str, Any]:
+    """Resume-aware checkpointed row with progress bookkeeping."""
+    progress.begin_row(stage, key)
+    t0 = time.perf_counter()
+    rec = ckpt.get(key)
+    if rec is not None:
+        progress.end_row(stage, key, 0.0, skipped=True)
+        return rec
+    rec = produce()
+    wall = time.perf_counter() - t0
+    ckpt.append(key, rec)
+    progress.end_row(stage, key, wall, skipped=False)
+    return rec
+
+
 def fingerprint(args: argparse.Namespace) -> str:
     payload = json.dumps(
         {
@@ -761,13 +905,23 @@ def fingerprint(args: argparse.Namespace) -> str:
 
 def stage_prepare(args: argparse.Namespace, out: Path, script: Path) -> dict[str, Any]:
     ckpt = Checkpoint(out / "checkpoints" / f"prepare_{fingerprint(args)}.jsonl")
+    progress = get_progress(out / "progress.json")
     fixture_dir = out / "fixtures"
     fixture_dir.mkdir(parents=True, exist_ok=True)
 
-    # synthetic correctness witness (B04 INC28-identical)
-    key = "witness_synthetic"
-    if not ckpt.has(key):
-        from openlithohub.streaming.vector_runs import ExactVectorRunSource, VectorCell
+    crop_sizes = sorted(
+        {int(s) for s in args.sizes.split(",")}
+        | ({args.max_selective_size} if args.max_selective_size > 0 else set())
+    )
+    progress.stage("prepare", 2 + len(crop_sizes) + 1)  # witnesses + crops + die grid
+    log(f"prepare: {2 + len(crop_sizes) + 1} checkpointed steps")
+
+    def witness_synthetic() -> dict[str, Any]:
+        from openlithohub.streaming.vector_runs import (
+            ExactVectorRunSource,
+            PolygonWithHoles,
+            VectorCell,
+        )
 
         size = 512
         side = 48
@@ -786,8 +940,6 @@ def stage_prepare(args: argparse.Namespace, out: Path, script: Path) -> dict[str
                     ),
                 }
             )
-        from openlithohub.streaming.vector_runs import PolygonWithHoles
-
         cell = VectorCell(
             name="TOP",
             polygons=tuple(
@@ -810,11 +962,18 @@ def stage_prepare(args: argparse.Namespace, out: Path, script: Path) -> dict[str
             halo_policy=LegacyFixedHaloPolicy(FORWARD_RADIUS),
             screening_policy=selective_policy(),
         )
-        row = {
+        return {
             "size": size,
             "max_abs_error": float((sink.finalize() - reference).abs().max().item()),
         }
+
+    key = "witness_synthetic"
+    if not ckpt.has(key):
+        progress.begin_row("prepare", key)
+        t0 = time.perf_counter()
+        row = witness_synthetic()
         ckpt.append(key, row)
+        progress.end_row("prepare", key, time.perf_counter() - t0)
     witness_synth = ckpt.get(key)
     if witness_synth is None:
         raise RuntimeError("prepare checkpoint lost synthetic witness row")
@@ -824,6 +983,8 @@ def stage_prepare(args: argparse.Namespace, out: Path, script: Path) -> dict[str
     # real-layout equivalence witness on an occupied window of the 4096 crop
     key = "witness_real"
     if not ckpt.has(key):
+        progress.begin_row("prepare", key)
+        t0 = time.perf_counter()
         crop4096 = out / "fixtures" / "ibex_crop_4096.gds"
         if not crop4096.exists():
             info = clip_gds(Path(args.gds), crop4096, top_name="IBEX_CROP_4096", size_dbu=4096)
@@ -842,6 +1003,7 @@ def stage_prepare(args: argparse.Namespace, out: Path, script: Path) -> dict[str
             ],
         )
         ckpt.append(key, row)
+        progress.end_row("prepare", key, time.perf_counter() - t0)
     witness_real = ckpt.get(key)
     if witness_real is None:
         raise RuntimeError("prepare checkpoint lost real-layout witness row")
@@ -849,16 +1011,16 @@ def stage_prepare(args: argparse.Namespace, out: Path, script: Path) -> dict[str
         raise RuntimeError(f"real-layout witness failed: {witness_real}")
 
     # fixtures: center crops (ladder sizes + the selective-only maximum)
-    crop_sizes = [int(s) for s in args.sizes.split(",")]
-    if args.max_selective_size > 0:
-        crop_sizes.append(args.max_selective_size)
     crops: dict[str, Any] = {}
-    for size in sorted(set(crop_sizes)):
+    for size in crop_sizes:
         key = f"crop_{size}"
         path = fixture_dir / f"ibex_crop_{size}.gds"
         if not ckpt.has(key):
+            progress.begin_row("prepare", key)
+            t0 = time.perf_counter()
             info = clip_gds(Path(args.gds), path, top_name=f"IBEX_CROP_{size}", size_dbu=size)
             ckpt.append(key, info)
+            progress.end_row("prepare", key, time.perf_counter() - t0)
         rec = ckpt.get(key)
         if rec is None:
             raise RuntimeError(f"prepare checkpoint lost crop fixture row for {size}")
@@ -867,6 +1029,8 @@ def stage_prepare(args: argparse.Namespace, out: Path, script: Path) -> dict[str
     # die sample tiles (center + 4 corners of the grid)
     key = "die_grid"
     if not ckpt.has(key):
+        progress.begin_row("prepare", key)
+        t0 = time.perf_counter()
         die_dir = fixture_dir / "die_tiles"
         die_dir.mkdir(exist_ok=True)
         info = make_die_sample_tiles(
@@ -876,6 +1040,7 @@ def stage_prepare(args: argparse.Namespace, out: Path, script: Path) -> dict[str
             tiles_per_side=args.die_tiles_per_side,
         )
         ckpt.append(key, info)
+        progress.end_row("prepare", key, time.perf_counter() - t0)
     die_grid_rec = ckpt.get(key)
     if die_grid_rec is None:
         raise RuntimeError("prepare checkpoint lost die-grid row")
@@ -892,10 +1057,29 @@ def stage_runtime(
     args: argparse.Namespace, out: Path, script: Path, prepared: dict[str, Any]
 ) -> dict[str, Any]:
     ckpt = Checkpoint(out / "checkpoints" / f"runtime_{fingerprint(args)}.jsonl")
+    progress = get_progress(out / "progress.json")
     sizes = [int(s) for s in args.sizes.split(",")]
     if args.max_selective_size > 0:
         sizes.append(args.max_selective_size)
     sizes = sorted(set(sizes))
+
+    # planned worker rows (policy-blocked dense rows cost nothing and are
+    # not tracked as progress rows)
+    total_rows = 0
+    for size in sizes:
+        if prepared["crops"].get(str(size)) is None:
+            continue
+        n_modes = 0
+        if dense_allowed(size, budget_bytes=args.dense_max_bytes):
+            n_modes += 2
+        if size <= args.max_vector_size:
+            n_modes += 1
+        n_modes += 1  # selective
+        reps_n = args.repeats if size <= 16384 else min(args.repeats, args.large_repeats)
+        total_rows += n_modes * reps_n
+    progress.stage("runtime", total_rows)
+    log(f"runtime: {total_rows} checkpointed worker rows")
+
     rows: list[dict[str, Any]] = []
     for size in sizes:
         crop = prepared["crops"].get(str(size))
@@ -911,9 +1095,12 @@ def stage_runtime(
                 {
                     "mode": "dense_full",
                     "size_px": [size, size],
-                    "status": STATUS_INFEASIBLE_STRUCTURAL,
+                    "status": STATUS_NOT_RUN_MEMORY_POLICY,
                     "dense_input_bytes_structural": size * size * 4,
-                    "note": "dense input exceeds --dense-max-bytes policy budget",
+                    "note": (
+                        "dense input exceeds --dense-max-bytes policy budget; a "
+                        "policy decision, not a structural impossibility"
+                    ),
                 }
             )
         modes += ["b04_vector"] if size <= args.max_vector_size else []
@@ -928,24 +1115,30 @@ def stage_runtime(
             for rep in range(repeats):
                 key = f"{mode}_{size}_{rep}"
                 rec = ckpt.get(key)
-                if rec is None:
-                    log(f"runtime {mode} {size}px rep {rep + 1}/{repeats}")
-                    rec = run_worker(
-                        script,
-                        [
-                            "--job",
-                            "runtime_row",
-                            "--mode",
-                            mode,
-                            "--gds",
-                            str(gds),
-                            "--top-cell",
-                            str(top),
-                            "--core",
-                            str(args.core),
-                        ],
-                    )
-                    ckpt.append(key, rec)
+                if rec is not None:
+                    progress.end_row("runtime", key, 0.0, skipped=True)
+                    reps.append(rec)
+                    continue
+                progress.begin_row("runtime", key)
+                t0 = time.perf_counter()
+                log(f"runtime {mode} {size}px rep {rep + 1}/{repeats}")
+                rec = run_worker(
+                    script,
+                    [
+                        "--job",
+                        "runtime_row",
+                        "--mode",
+                        mode,
+                        "--gds",
+                        str(gds),
+                        "--top-cell",
+                        str(top),
+                        "--core",
+                        str(args.core),
+                    ],
+                )
+                ckpt.append(key, rec)
+                progress.end_row("runtime", key, time.perf_counter() - t0)
                 reps.append(rec)
             merged = dict(reps[0])
             for fieldname in ("parse_wall_s", "execution_wall_s", "end_to_end_wall_s"):
@@ -957,7 +1150,7 @@ def stage_runtime(
     comparisons: dict[str, Any] = {}
     by_size: dict[int, dict[str, dict[str, Any]]] = {}
     for row in rows:
-        if row.get("status") == STATUS_INFEASIBLE_STRUCTURAL:
+        if row.get("status") not in (None, STATUS_SUCCESS):
             continue
         by_size.setdefault(int(row["size_px"][0]), {})[str(row["mode"])] = row
     for size, per_mode in sorted(by_size.items()):
@@ -994,11 +1187,15 @@ def stage_runtime(
     streamed_ok = [
         int(row["size_px"][0])
         for row in rows
-        if row["mode"] == "b04_selective" and row.get("status") != STATUS_INFEASIBLE_STRUCTURAL
+        if row["mode"] == "b04_selective" and row.get("status") != STATUS_NOT_RUN_MEMORY_POLICY
     ]
-    dense_infeasible = [row for row in rows if row.get("status") == STATUS_INFEASIBLE_STRUCTURAL]
+    dense_policy_blocked = [
+        row for row in rows if row.get("status") == STATUS_NOT_RUN_MEMORY_POLICY
+    ]
     memory["max_streamed_size_px"] = max(streamed_ok) if streamed_ok else None
-    memory["dense_structural_infeasible_sizes_px"] = [row["size_px"][0] for row in dense_infeasible]
+    memory["dense_not_run_under_memory_policy_px"] = [
+        row["size_px"][0] for row in dense_policy_blocked
+    ]
 
     return {
         "rows": rows,
@@ -1027,6 +1224,14 @@ def _runtime_compare(baseline_row: dict[str, Any], candidate_row: dict[str, Any]
     }
 
 
+def _safe_summarize(values: list[float]) -> dict[str, Any]:
+    """summarize() that tolerates "no finite data" (strict-JSON contract)."""
+    finite = [v for v in values if v is not None and math.isfinite(v)]
+    if not finite:
+        return {"n": 0, "median": None, "p10": None, "p90": None, "min": None, "max": None}
+    return summarize(finite)
+
+
 def _aggregate_quality(block_rows: list[dict[str, Any]], models: list[str]) -> dict[str, Any]:
     """Aggregate per-tile quality rows into per-model summaries + comparisons."""
     metric_keys = [
@@ -1043,7 +1248,10 @@ def _aggregate_quality(block_rows: list[dict[str, Any]], models: list[str]) -> d
         per_tile = [
             row["metrics"] for rec in block_rows for row in rec["rows"] if row["model"] == model
         ]
-        agg: dict[str, Any] = {k: summarize([float(m[k]) for m in per_tile]) for k in metric_keys}
+        agg: dict[str, Any] = {
+            k: _safe_summarize([m.get(k) for m in per_tile if m.get(k) is not None])
+            for k in metric_keys
+        }
         # Degenerate-output firewall: a model that produced a (near-)blank
         # mask on any tile must never headline a quality comparison — a
         # blank mask trivially "passes" MRC and prints nothing.
@@ -1064,16 +1272,21 @@ def _aggregate_quality(block_rows: list[dict[str, Any]], models: list[str]) -> d
         aggregate[model] = agg
 
     def agg_reduction(metric: str, baseline_model: str, candidate_model: str) -> dict[str, Any]:
-        base = float(aggregate[baseline_model][metric]["median"])
-        cand = float(aggregate[candidate_model][metric]["median"])
-        return {
+        base = aggregate[baseline_model][metric]["median"]
+        cand = aggregate[candidate_model][metric]["median"]
+        entry: dict[str, Any] = {
             "metric": metric,
             "baseline": baseline_model,
             "candidate": candidate_model,
             "baseline_median": base,
             "candidate_median": cand,
-            "reduction_pct": relative_reduction_pct(base, cand),
+            "reduction_pct": None,
         }
+        if base is None or cand is None:
+            entry["status"] = "NOT_MEASURABLE"
+            return entry
+        entry["reduction_pct"] = relative_reduction_pct(float(base), float(cand))
+        return entry
 
     surrogate_speed: dict[str, Any] | None = None
     if "levelset-ilt" in aggregate and "surrogate-ilt" in aggregate:
@@ -1104,6 +1317,7 @@ def stage_quality(
     args: argparse.Namespace, out: Path, script: Path, prepared: dict[str, Any]
 ) -> dict[str, Any]:
     ckpt = Checkpoint(out / "checkpoints" / f"quality_{fingerprint(args)}.jsonl")
+    progress = get_progress(out / "progress.json")
     crop = prepared["crops"]["4096"]
     models = ["dummy-identity", "rule-based-opc", "levelset-ilt", "surrogate-ilt"]
 
@@ -1127,40 +1341,49 @@ def stage_quality(
     if sel is None:
         raise RuntimeError("quality checkpoint lost tile-selection row")
 
+    quality_total = 1 + len(sel["tiles"]) + (1 if args.iccad16_dir else 0)
+    progress.stage("quality", quality_total)
+    log(f"quality: {quality_total} checkpointed rows")
     tile_rows = []
     for tile in sel["tiles"]:
         key = f"tile_{tile['x']}_{tile['y']}"
         rec = ckpt.get(key)
-        if rec is None:
-            log(f"quality tile ({tile['x']},{tile['y']}) occ={tile['occupancy']:.3f}")
-            rec = run_worker(
-                script,
-                [
-                    "--job",
-                    "quality_tile",
-                    "--gds",
-                    str(crop["gds"]),
-                    "--top-cell",
-                    str(crop["top_cell"]),
-                    "--tile-x",
-                    str(tile["x"]),
-                    "--tile-y",
-                    str(tile["y"]),
-                    "--tile-size",
-                    str(args.tile_size),
-                    "--iters",
-                    str(args.ilt_iterations),
-                    "--reps",
-                    str(args.quality_reps),
-                    "--surrogate-train-samples",
-                    str(args.surrogate_train_samples),
-                    "--surrogate-epochs",
-                    str(args.surrogate_epochs),
-                    "--models",
-                    ",".join(models),
-                ],
-            )
-            ckpt.append(key, rec)
+        if rec is not None:
+            progress.end_row("quality", key, 0.0, skipped=True)
+            tile_rows.append(rec)
+            continue
+        progress.begin_row("quality", key)
+        t0 = time.perf_counter()
+        log(f"quality tile ({tile['x']},{tile['y']}) occ={tile['occupancy']:.3f}")
+        rec = run_worker(
+            script,
+            [
+                "--job",
+                "quality_tile",
+                "--gds",
+                str(crop["gds"]),
+                "--top-cell",
+                str(crop["top_cell"]),
+                "--tile-x",
+                str(tile["x"]),
+                "--tile-y",
+                str(tile["y"]),
+                "--tile-size",
+                str(args.tile_size),
+                "--iters",
+                str(args.ilt_iterations),
+                "--reps",
+                str(args.quality_reps),
+                "--surrogate-train-samples",
+                str(args.surrogate_train_samples),
+                "--surrogate-epochs",
+                str(args.surrogate_epochs),
+                "--models",
+                ",".join(models),
+            ],
+        )
+        ckpt.append(key, rec)
+        progress.end_row("quality", key, time.perf_counter() - t0)
         tile_rows.append(rec)
 
     datasets: dict[str, Any] = {
@@ -1185,7 +1408,11 @@ def stage_quality(
     if args.iccad16_dir:
         key = "iccad16_testcase1"
         rec = ckpt.get(key)
-        if rec is None:
+        if rec is not None:
+            progress.end_row("quality", key, 0.0, skipped=True)
+        else:
+            progress.begin_row("quality", key)
+            t0 = time.perf_counter()
             log("quality iccad16 testcase1 (4nm/px, 13.5nm EUV-class optics)")
             rec = run_worker(
                 script,
@@ -1209,6 +1436,7 @@ def stage_quality(
                 ],
             )
             ckpt.append(key, rec)
+            progress.end_row("quality", key, time.perf_counter() - t0)
         datasets["iccad16-testcase1"] = {
             "description": (
                 "ICCAD16 Problem C testcase1 (N7 EUV, 4nm/px, 13.5nm NA0.33 optics); "
@@ -1217,7 +1445,7 @@ def stage_quality(
             "policy": {
                 "tile_size_px": [rec["tile_px"][0], rec["tile_px"][1]],
                 "n_tiles": 1,
-                "ilt_iterations": args.ilt_iterations,
+                "ilt_iterations": args.ilt_iterations_iccad16,
                 "quality_reps": args.quality_reps,
                 "surrogate_train_samples": args.surrogate_train_samples,
                 "surrogate_epochs": args.surrogate_epochs,
@@ -1250,32 +1478,41 @@ def stage_fulldie(
     (mean per-tile cost x grid tile count), never presented as measured.
     """
     ckpt = Checkpoint(out / "checkpoints" / f"fulldie_{fingerprint(args)}.jsonl")
+    progress = get_progress(out / "progress.json")
     grid = prepared["die_grid"]
+    progress.stage("fulldie", len(grid["tiles"]))
+    log(f"fulldie: {len(grid['tiles'])} checkpointed screen-only tiles")
     rows = []
     for entry in grid["tiles"]:
         ix, iy = entry["tile"]
         key = f"tile_{ix}_{iy}"
         rec = ckpt.get(key)
-        if rec is None:
-            log(f"fulldie screen-only tile ({ix},{iy})")
-            rec = run_worker(
-                script,
-                [
-                    "--job",
-                    "fulldie_tile",
-                    "--gds",
-                    entry["gds"],
-                    "--top-cell",
-                    entry["top_cell"],
-                    "--core",
-                    str(args.die_core_px),
-                    "--tile-ix",
-                    str(ix),
-                    "--tile-iy",
-                    str(iy),
-                ],
-            )
-            ckpt.append(key, rec)
+        if rec is not None:
+            progress.end_row("fulldie", key, 0.0, skipped=True)
+            rows.append(rec)
+            continue
+        progress.begin_row("fulldie", key)
+        t0 = time.perf_counter()
+        log(f"fulldie screen-only tile ({ix},{iy})")
+        rec = run_worker(
+            script,
+            [
+                "--job",
+                "fulldie_tile",
+                "--gds",
+                entry["gds"],
+                "--top-cell",
+                entry["top_cell"],
+                "--core",
+                str(args.die_core_px),
+                "--tile-ix",
+                str(ix),
+                "--tile-iy",
+                str(iy),
+            ],
+        )
+        ckpt.append(key, rec)
+        progress.end_row("fulldie", key, time.perf_counter() - t0)
         rows.append(rec)
 
     die_px = grid["die_size_px"]
@@ -1302,7 +1539,9 @@ def stage_fulldie(
         },
         "dense_die_raster_bytes_structural": dense_die_bytes,
         "dense_die_status": (
-            STATUS_INFEASIBLE_STRUCTURAL if dense_die_bytes > ram else "FEASIBLE_BUT_NOT_RUN"
+            STATUS_INFEASIBLE_ON_REFERENCE_MACHINE
+            if dense_die_bytes > ram
+            else "FEASIBLE_BUT_NOT_RUN"
         ),
         "physical_ram_bytes": ram,
         "known_scaling_limit": (
@@ -1314,18 +1553,28 @@ def stage_fulldie(
 
 
 def build_artifact(
-    kind: str, status: str, payload: dict[str, Any], args: argparse.Namespace
+    kind: str,
+    status: str,
+    payload: dict[str, Any],
+    args: argparse.Namespace,
+    *,
+    fixture: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     env = environment_snapshot()
+    source = measurement_source()
+    if source["commit"] is None:
+        raise RuntimeError("measurement source commit undeterminable; refusing to measure")
     artifact = {
         "schema": SCHEMA_NAME,
         "kind": kind,
         "status": status,
-        "git_commit": git_commit(),
+        "git_commit": source["commit"],
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "hardware": env["hardware"],
         "software": env["software"],
         "dataset": DATASET,
+        "fixture": fixture or args.fixture_identity,
+        "measurement_source": source,
         "claim_scope": dict(PHYSICS_SCOPE),
         "reproducibility": {
             "command": "python benchmarks/industrial/run_industrial_benchmark.py "
@@ -1338,11 +1587,25 @@ def build_artifact(
 
 
 def write_artifact(out: Path, name: str, artifact: dict[str, Any]) -> Path:
+    # Strict-JSON contract (P0.2): non-finite values are sanitized to None
+    # before writing, and allow_nan=False makes any leak a hard error.
+    artifact = _sanitize(artifact)
     problems = validate_artifact(artifact)
-    if problems:
+    # Local-iteration escape hatch: a dirty tree can produce *provisional*
+    # artifacts, but they still record working_tree_dirty=true and the CI
+    # verifier rejects any dirty artifact from the repository.
+    if os.environ.get("OPENLITHOHUB_ALLOW_DIRTY_MEASUREMENT") == "1":
+        problems = [p for p in problems if "working_tree_dirty" not in p]
+        if problems:
+            raise RuntimeError(f"artifact {name} failed validation: {problems}")
+        log("WARNING: provisional artifact from a DIRTY tree (not CI-admissible)")
+    elif problems:
         raise RuntimeError(f"artifact {name} failed validation: {problems}")
     path = out / name
-    path.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(artifact, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
     log(f"wrote {path}")
     return path
 
@@ -1393,6 +1656,7 @@ def main() -> int:
     ap.add_argument("--large-repeats", type=int, default=3, help="repeats for sizes > 16384px")
 
     ap.add_argument("--worker", action="store_true")
+    ap.add_argument("--parent-pid", type=int, default=0)
     ap.add_argument("--job")
     ap.add_argument("--mode")
     ap.add_argument("--top-cell")
@@ -1409,6 +1673,32 @@ def main() -> int:
     script = Path(__file__).resolve()
     out = args.out
     out.mkdir(parents=True, exist_ok=True)
+    if not args.worker:
+        init_run_log(out)
+
+    if args.worker:
+        if args.parent_pid and args.parent_pid > 0:
+            import threading
+
+            def _orphan_watchdog() -> None:
+                # If the driver dies (Ctrl-C/kill), exit instead of burning
+                # CPU as an orphan for the remainder of a long row.
+                while True:
+                    if os.getppid() != args.parent_pid:
+                        os._exit(97)
+                    time.sleep(5)
+
+            threading.Thread(target=_orphan_watchdog, daemon=True).start()
+    elif args.gds is None or not Path(args.gds).exists():
+        raise SystemExit("--gds is required and must exist")
+    else:
+        # One content-identity record for the parent fixture, shared by all
+        # artifacts of this run (P0.3: fixture provenance closure).
+        args.fixture_identity = fixture_identity(Path(args.gds))
+        log(
+            "fixture sha256="
+            f"{args.fixture_identity['sha256'][:16]} bytes={args.fixture_identity['bytes']}"
+        )
 
     if args.worker:
         jobs = {
@@ -1422,9 +1712,6 @@ def main() -> int:
             raise SystemExit(f"unknown job {args.job!r}")
         print(json.dumps(jobs[args.job](args), sort_keys=True))
         return 0
-
-    if args.gds is None or not Path(args.gds).exists():
-        raise SystemExit("--gds is required and must exist")
 
     stages = (
         ["prepare", "runtime", "quality", "fulldie", "manifest"]

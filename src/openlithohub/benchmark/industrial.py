@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import platform
+import re
 import subprocess  # noqa: S404 - only fixed-argv probes of the local host
 import sys
 from collections.abc import Sequence
@@ -39,6 +41,15 @@ STATUS_FAILED = "FAILED"
 STATUS_SKIPPED = "SKIPPED"
 STATUS_UNSUPPORTED = "UNSUPPORTED"
 STATUS_INCONCLUSIVE = "INCONCLUSIVE"
+# A dense row the harness declined to run because the memory *policy*
+# forbids it — a protocol decision, not an impossibility proof.
+STATUS_NOT_RUN_MEMORY_POLICY = "NOT_RUN_MEMORY_POLICY"
+# Dense raster cannot fit the *reference machine's* physical RAM
+# (machine-relative arithmetic, e.g. the 1.23 TB full-die raster vs 48 GiB).
+STATUS_INFEASIBLE_ON_REFERENCE_MACHINE = "INFEASIBLE_ON_REFERENCE_MACHINE"
+# Reserved for genuinely size-independent impossibilities (none currently
+# emitted); kept distinct so policy and machine limits are never laundered
+# into "structurally impossible".
 STATUS_INFEASIBLE_STRUCTURAL = "INFEASIBLE_STRUCTURAL"
 KNOWN_STATUSES = (
     STATUS_SUCCESS,
@@ -46,6 +57,8 @@ KNOWN_STATUSES = (
     STATUS_SKIPPED,
     STATUS_UNSUPPORTED,
     STATUS_INCONCLUSIVE,
+    STATUS_NOT_RUN_MEMORY_POLICY,
+    STATUS_INFEASIBLE_ON_REFERENCE_MACHINE,
     STATUS_INFEASIBLE_STRUCTURAL,
 )
 
@@ -67,6 +80,8 @@ _REQUIRED_SECTIONS = (
     "software",
     "claim_scope",
     "reproducibility",
+    "measurement_source",
+    "fixture",
 )
 
 
@@ -77,6 +92,31 @@ def sha256_file(path: str | os.PathLike[str]) -> str:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _sanitize(obj: Any) -> Any:
+    """Recursively map non-finite floats to None (strict-JSON contract)."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize(v) for v in obj]
+    return obj
+
+
+def _find_non_finite(obj: Any, path: str = "") -> list[str]:
+    """Paths of any non-finite float in a parsed artifact (fail-closed)."""
+    bad: list[str] = []
+    if isinstance(obj, float) and not math.isfinite(obj):
+        bad.append(path or "<root>")
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            bad.extend(_find_non_finite(v, f"{path}.{k}" if path else str(k)))
+    elif isinstance(obj, (list, tuple)):
+        for i, v in enumerate(obj):
+            bad.extend(_find_non_finite(v, f"{path}[{i}]"))
+    return bad
 
 
 def percentile(values: Sequence[float], q: float) -> float:
@@ -126,8 +166,12 @@ def relative_reduction_pct(baseline: float, candidate: float) -> float:
     return (baseline - candidate) / baseline * 100.0
 
 
-def git_commit(repo_root: Path | None = None) -> str:
-    """Best-effort HEAD commit of the measuring checkout."""
+def git_commit(repo_root: Path | None = None) -> str | None:
+    """HEAD commit of the measuring checkout; None when undeterminable.
+
+    Returns None (never a placeholder string) so downstream validation
+    cannot mistake an unknown checkout for a 40-hex commit.
+    """
     root = repo_root or Path(__file__).resolve().parents[3]
     try:
         out = subprocess.run(
@@ -139,8 +183,67 @@ def git_commit(repo_root: Path | None = None) -> str:
             timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
-        return "UNKNOWN"
-    return out.stdout.strip() or "UNKNOWN"
+        return None
+    value = out.stdout.strip()
+    return value or None
+
+
+_FULL_HEX_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def is_full_commit(value: str | None) -> bool:
+    """True when value is a full 40-character lowercase hex commit."""
+    return value is not None and _FULL_HEX_RE.match(value) is not None
+
+
+def working_tree_clean(repo_root: Path | None = None) -> bool:
+    """True when no *tracked* file is modified (untracked scratch ignored)."""
+    root = repo_root or Path(__file__).resolve().parents[3]
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.stdout.strip() == ""
+
+
+def file_sha256_relative(repo_root: Path, relative: str) -> str | None:
+    """SHA-256 of a repo file at measurement time; None when absent."""
+    path = repo_root / relative
+    if not path.exists():
+        return None
+    return sha256_file(path)
+
+
+def measurement_source(repo_root: Path | None = None) -> dict[str, Any]:
+    """Exact provenance of the source that produced a measurement.
+
+    Binds an artifact to the committed source tree that produced it so
+    the measurement can be reproduced bit-for-bit from a clean checkout.
+    """
+    root = repo_root or Path(__file__).resolve().parents[3]
+    commit = git_commit(root)
+    return {
+        "commit": commit,
+        "commit_valid": is_full_commit(commit),
+        "working_tree_dirty": not working_tree_clean(root),
+        "harness_path": "benchmarks/industrial/run_industrial_benchmark.py",
+        "harness_sha256": file_sha256_relative(
+            root, "benchmarks/industrial/run_industrial_benchmark.py"
+        ),
+        "industrial_core_sha256": file_sha256_relative(
+            root, "src/openlithohub/benchmark/industrial.py"
+        ),
+        "claim_generator_sha256": file_sha256_relative(
+            root, "scripts/generate_industrial_claims.py"
+        ),
+    }
 
 
 def _cpu_model() -> str:
@@ -321,8 +424,31 @@ def validate_artifact(artifact: dict[str, Any]) -> list[str]:
     if status is not None and status not in KNOWN_STATUSES:
         problems.append(f"unknown status {status!r} (must be one of {KNOWN_STATUSES})")
     commit = artifact.get("git_commit")
-    if commit is not None and (not isinstance(commit, str) or len(commit) < 7):
-        problems.append("git_commit must be a non-trivial string")
+    if commit is not None and not is_full_commit(commit):
+        problems.append(
+            "git_commit must be a full 40-character lowercase hex commit "
+            "(placeholders like UNKNOWN are not auditable)"
+        )
+    source = artifact.get("measurement_source")
+    if isinstance(source, dict):
+        if not is_full_commit(source.get("commit")):
+            problems.append("measurement_source.commit must be a full 40-hex commit")
+        if source.get("working_tree_dirty") is True:
+            problems.append(
+                "measurement_source.working_tree_dirty must be false: artifacts "
+                "must be produced from a clean committed checkout"
+            )
+        for key in ("harness_sha256", "industrial_core_sha256"):
+            value = source.get(key)
+            if value is not None and not re.fullmatch(r"[0-9a-f]{64}", str(value)):
+                problems.append(f"measurement_source.{key} must be a 64-hex sha256")
+    fixture = artifact.get("fixture")
+    fixture_hash = str(fixture.get("sha256", "")) if isinstance(fixture, dict) else ""
+    if isinstance(fixture, dict) and not re.fullmatch(r"[0-9a-f]{64}", fixture_hash):
+        problems.append("fixture.sha256 must be a 64-hex sha256")
+    non_finite = _find_non_finite(artifact)
+    if non_finite:
+        problems.append(f"non-finite floats are not strict JSON: {non_finite[:5]}")
     claim_scope = artifact.get("claim_scope")
     if (
         isinstance(artifact, dict)
@@ -333,10 +459,17 @@ def validate_artifact(artifact: dict[str, Any]) -> list[str]:
     return problems
 
 
+def _reject_constant(token: str) -> float:
+    raise ValueError(f"non-finite JSON constant {token!r} is not allowed in artifacts")
+
+
 def load_artifact(path: str | os.PathLike[str]) -> dict[str, Any]:
-    """Load and validate one artifact JSON; raises on structural failure."""
+    """Load and validate one artifact JSON; raises on structural failure.
+
+    Parsing itself rejects NaN/Infinity tokens — artifacts are strict JSON.
+    """
     with open(path, encoding="utf-8") as handle:
-        artifact: dict[str, Any] = json.load(handle)
+        artifact: dict[str, Any] = json.load(handle, parse_constant=_reject_constant)
     problems = validate_artifact(artifact)
     if problems:
         raise ValueError(f"{path}: invalid industrial benchmark artifact: {problems}")

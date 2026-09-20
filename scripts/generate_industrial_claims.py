@@ -36,6 +36,7 @@ from typing import Any
 from openlithohub.benchmark.industrial import (
     REPRODUCED_INTERNAL,
     SCHEMA_NAME,
+    _sanitize,
     load_artifact,
     relative_reduction_pct,
 )
@@ -46,6 +47,10 @@ SPEEDUP_HEADLINE_MIN = 1.1
 MEMORY_HEADLINE_MIN_PCT = 20.0
 QUALITY_HEADLINE_MIN_PCT = 5.0
 SURROGATE_QUALITY_TOLERANCE_PCT = 10.0
+# P0.8 (audit 2026-09-21): with 4 tiles + 1 crop, quality comparisons are
+# published as scoped facts only — never as industrial headline claims —
+# until the sample is spatially expanded with a paired-CI gate.
+QUALITY_HEADLINE_ENABLED = False
 
 FIREWALL = [
     "No foundry qualification without wafer/SEM calibration.",
@@ -66,8 +71,12 @@ def fmt_pct(x: float) -> str:
     return f"{x:.1f}%"
 
 
+def fmt_gib(bytes_val: float) -> str:
+    return f"{bytes_val / (1 << 30):.2f} GiB"
+
+
 def fmt_gb(bytes_val: float) -> str:
-    return f"{bytes_val / (1 << 30):.2f} GB"
+    return f"{bytes_val / 1e9:.2f} GB"
 
 
 def hardware_label(artifact: dict[str, Any]) -> str:
@@ -112,6 +121,10 @@ def _claim(
     }
 
 
+def degenerate_model_static(q_aggregate: dict[str, Any], model: str) -> bool:
+    return bool(q_aggregate.get(model, {}).get("degenerate_blank_any_rep", False))
+
+
 def derive_claims(
     artifacts: dict[str, dict[str, Any]], hashes: dict[str, str]
 ) -> list[dict[str, Any]]:
@@ -136,7 +149,7 @@ def derive_claims(
                     metric="peak_rss_memory_reduction",
                     value=fmt_pct(red),
                     unit="%",
-                    baseline=f"dense full-raster ({fmt_gb(dense)} peak RSS)",
+                    baseline=f"dense full-raster ({fmt_gib(dense)} peak RSS)",
                     dataset=dataset,
                     hardware=hw,
                     scope=(
@@ -196,18 +209,19 @@ def derive_claims(
                     claim_id=f"IB-SCALE-{max_streamed}",
                     metric="max_layout_streamed_end_to_end",
                     value=f"{max_streamed}x{max_streamed} px",
-                    baseline="dense full-raster infeasible at this size under memory policy",
+                    baseline="dense not run at this size under the harness memory policy",
                     dataset=dataset,
                     hardware=hw,
                     scope=(
                         "exact-vector selective streaming completed end-to-end "
                         f"({max_streamed**2 / 1e9:.2f} GPx) with median peak RSS "
-                        + (fmt_gb(rss) if rss else "n/a")
+                        + (fmt_gib(rss) if rss else "n/a")
                         + "; dense input alone would be "
-                        + fmt_gb(max_streamed**2 * 4)
-                        + "; structural infeasibility for dense at sizes "
+                        + fmt_gib(max_streamed**2 * 4)
+                        + "; dense not run at sizes "
                         + ", ".join(f"{s}px" for s in infeasible)
-                        + " under the harness memory policy"
+                        + " under the harness memory policy (policy decision, "
+                        "not a structural impossibility)"
                     ),
                     artifact="industrial-runtime.json",
                     artifact_sha256=hashes.get("industrial-runtime.json", ""),
@@ -215,7 +229,7 @@ def derive_claims(
                     context={
                         "size_px": max_streamed,
                         "streaming_peak_rss_bytes": rss,
-                        "dense_structural_infeasible_sizes_px": infeasible,
+                        "dense_not_run_under_memory_policy_px": infeasible,
                     },
                 )
             )
@@ -240,20 +254,27 @@ def derive_claims(
             degenerate = candidate_degenerate(ds, candidate_model)
             for key, suffix, metric_label in (
                 ("pvband_mean_nm", "PVB", "PV Band mean reduction (no-OPC -> ILT)"),
-                ("mrc_violation_rate", "MRC", "MRC violation-rate reduction (no-OPC -> ILT)"),
+                (
+                    "mrc_violation_rate",
+                    "MRC",
+                    "benchmark MRC violating-pixel fraction reduction (no-OPC -> ILT)",
+                ),
                 ("wafer_epe_mean_nm", "WEPE", "wafer EPE mean reduction (no-OPC -> ILT)"),
             ):
                 base_med = float(base_agg.get(key, {}).get("median", 0.0) or 0.0)
                 cand_med = float(cand_agg.get(key, {}).get("median", 0.0) or 0.0)
                 red = relative_reduction_pct(base_med, cand_med)
-                if degenerate or not math.isfinite(red):
+                abs_delta = cand_med - base_med
+                if degenerate or not math.isfinite(red) or not math.isfinite(abs_delta):
                     # A blank mask "wins" MRC/PVB trivially and makes wafer
                     # EPE infinite — record the fact, never the percentage.
                     value = "DEGENERATE (blank mask)" if degenerate else "NOT MEASURABLE"
                     headline = False
                 else:
-                    value = fmt_pct(red)
-                    headline = red >= QUALITY_HEADLINE_MIN_PCT
+                    value = (
+                        f"{fmt_pct(red)} ({base_med:.5f} -> {cand_med:.5f}, delta {abs_delta:+.5f})"
+                    )
+                    headline = QUALITY_HEADLINE_ENABLED and red >= QUALITY_HEADLINE_MIN_PCT
                 trade_off = ""
                 if key == "wafer_epe_mean_nm" and headline:
                     base_mrc = float(
@@ -344,12 +365,26 @@ def derive_claims(
                     or 0.0
                 )
 
+                lv_degenerate = degenerate_model_static(q_aggregate, "levelset-ilt")
+                sg_degenerate = degenerate_model_static(q_aggregate, "surrogate-ilt")
+
                 def degraded(base: float, cand: float) -> bool:
-                    if base <= 0:
-                        return False
+                    if base <= 0 or not math.isfinite(base) or not math.isfinite(cand):
+                        return True
                     return (cand - base) / base * 100.0 > SURROGATE_QUALITY_TOLERANCE_PCT
 
-                quality_ok = not (degraded(lv_pvb, sg_pvb) or degraded(lv_wepe, sg_wepe))
+                invalid = (
+                    lv_degenerate
+                    or sg_degenerate
+                    or not math.isfinite(lv_pvb)
+                    or not math.isfinite(sg_pvb)
+                    or not math.isfinite(lv_wepe)
+                    or not math.isfinite(sg_wepe)
+                )
+                if invalid:
+                    quality_ok = False
+                else:
+                    quality_ok = not (degraded(lv_pvb, sg_pvb) or degraded(lv_wepe, sg_wepe))
                 claims.append(
                     _claim(
                         claim_id=f"{prefix}-SURR",
@@ -365,14 +400,23 @@ def derive_claims(
                             + (
                                 "quality within tolerance at this budget"
                                 if quality_ok
-                                else "NOT quality-normalized at this budget: surrogate quality "
-                                "degrades beyond tolerance, so this is NOT a matched-quality "
-                                "speedup"
+                                else (
+                                    "QUALITY_COMPARISON_INVALID: degenerate or non-finite "
+                                    "metrics on at least one side"
+                                    if invalid
+                                    else "NOT quality-normalized at this budget: surrogate "
+                                    "quality degrades beyond tolerance, so this is NOT a "
+                                    "matched-quality speedup"
+                                )
                             )
                         ),
                         artifact="industrial-quality.json",
                         artifact_sha256=hashes.get("industrial-quality.json", ""),
-                        headline=speed >= SPEEDUP_HEADLINE_MIN and quality_ok,
+                        headline=(
+                            QUALITY_HEADLINE_ENABLED
+                            and speed >= SPEEDUP_HEADLINE_MIN
+                            and quality_ok
+                        ),
                         context={
                             **surr,
                             "levelset_pvband_mean_nm": lv_pvb,
@@ -386,19 +430,20 @@ def derive_claims(
     if fulldie is not None:
         die_bytes = fulldie.get("dense_die_raster_bytes_structural", 0)
         status = fulldie.get("dense_die_status")
-        if die_bytes and status == "INFEASIBLE_STRUCTURAL":
+        if die_bytes and status == "INFEASIBLE_ON_REFERENCE_MACHINE":
             claims.append(
                 _claim(
                     claim_id="IB-DIE-1",
                     metric="full-die dense raster infeasibility",
-                    value=f"{die_bytes / 1e12:.2f} TB",
+                    value=f"{die_bytes / 1e12:.2f} TB ({die_bytes / (1 << 40):.2f} TiB)",
                     baseline="physical RAM of the benchmark machine",
                     dataset=dataset,
                     hardware=hw,
                     scope=(
-                        "structural arithmetic (die pixels x 4 bytes vs physical RAM); the "
-                        "routed ibex die cannot be dense-rasterized at 1nm/px on this machine, "
-                        "while per-tile streaming fixtures complete with O(tile) memory"
+                        "machine-relative arithmetic (die pixels x 4 bytes vs physical RAM): "
+                        "the routed ibex die cannot be dense-rasterized at 1nm/px on the "
+                        "48 GiB reference machine, while per-tile streaming fixtures "
+                        "complete with O(tile) memory"
                     ),
                     artifact="industrial-fulldie.json",
                     artifact_sha256=hashes.get("industrial-fulldie.json", ""),
@@ -533,6 +578,13 @@ def main() -> int:
 
     manifest_path = args.artifacts / "manifest.json"
     if not manifest_path.exists():
+        if args.check:
+            # No artifacts yet → no headline claims exist → nothing to drift.
+            print(
+                f"no industrial artifacts at {args.artifacts} — "
+                "claims check skipped (benchmark not yet measured)"
+            )
+            return 0
         raise SystemExit(f"missing {manifest_path} — run the industrial benchmark first")
     manifest = load_artifact(manifest_path)
 
@@ -588,7 +640,10 @@ def main() -> int:
 
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_md.parent.mkdir(parents=True, exist_ok=True)
-    args.out_json.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    doc = _sanitize(doc)
+    args.out_json.write_text(
+        json.dumps(doc, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8"
+    )
     args.out_md.write_text(render_markdown(claims, hashes, hw), encoding="utf-8")
     print(f"wrote {args.out_json} and {args.out_md} ({len(claims)} claims)")
     return 0

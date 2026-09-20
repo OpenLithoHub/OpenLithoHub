@@ -171,7 +171,7 @@ def fulldie_artifact() -> dict[str, Any]:
                 "status": "ESTIMATE_NOT_MEASUREMENT",
             },
             "dense_die_raster_bytes_structural": 1233676704100,
-            "dense_die_status": "INFEASIBLE_STRUCTURAL",
+            "dense_die_status": "INFEASIBLE_ON_REFERENCE_MACHINE",
             "physical_ram_bytes": 48 * (1 << 30),
             "known_scaling_limit": "row index cost",
         },
@@ -223,9 +223,13 @@ class TestDeriveClaims:
             {},
         )
         by_id = {c["claim_id"]: c for c in claims}
-        assert by_id["IB-Q-ILT-PVB"]["headline"] is True
-        assert by_id["IB-Q-ILT-MRC"]["headline"] is True
-        assert by_id["IB-Q-ILT-WEPE"]["headline"] is True
+        # P0.8: quality comparisons are facts only — never headline in v1
+        assert by_id["IB-Q-ILT-PVB"]["headline"] is False
+        assert by_id["IB-Q-ILT-MRC"]["headline"] is False
+        assert by_id["IB-Q-ILT-WEPE"]["headline"] is False
+        # values carry absolute + relative change
+        assert "10.00000 -> 7.00000" in by_id["IB-Q-ILT-PVB"]["value"]
+        assert "30.0%" in by_id["IB-Q-ILT-PVB"]["value"]
         # rule-based-opc is absent from this fixture's aggregate: no RB claims
         assert not any(c["claim_id"].startswith("IB-Q-RB") for c in claims)
 
@@ -256,7 +260,10 @@ class TestDeriveClaims:
             {},
         )
         surr = next(c for c in claims if c["claim_id"] == "IB-Q-SURR")
-        assert surr["headline"] is True
+        # quality holds at this budget, but the v1 quality-headline flag is
+        # off: surrogate runtime stays a scoped fact, never a headline.
+        assert surr["headline"] is False
+        assert "quality within tolerance" in surr["scope"]
 
     def test_die_structural_claim(
         self, runtime_artifact, quality_artifact, fulldie_artifact
