@@ -653,9 +653,15 @@ def _verify_bundle_semantics(
     # PR-5D2: exact canonical member identity — the bundle manifest names
     # the one member carrying each payload, and exactly that member is
     # hashed (no substring guessing).
+    if replay.get("model_schema") != structure.model_schema:
+        raise ValueError(
+            f"bundle model_schema {replay.get('model_schema')!r} "
+            f"!= frozen model schema {structure.model_schema!r}"
+        )
     for hash_key, file_key in (
         ("source_snapshot_sha256", "source_snapshot_file"),
         ("coefficient_tensor_sha256", "coefficient_file"),
+        ("mask_sha256", "mask_file"),
     ):
         declared = replay.get(hash_key)
         member_name = replay.get(file_key)
@@ -793,6 +799,11 @@ def load_verified_frozen_phase_diagram(
     replay, members = load_replay_bundle(artifact)
     if replay.get("fixture_id") != profile:
         raise ValueError("bundle fixture_id mismatch")
+    if replay.get("model_schema") != structure.model_schema:
+        raise ValueError(
+            f"bundle model_schema {replay.get('model_schema')!r} "
+            f"!= frozen model schema {structure.model_schema!r}"
+        )
     if replay.get("implementation_commit") != structure.implementation_commit:
         raise ValueError("bundle implementation_commit mismatch")
     if replay.get("proof_level") != ProofLevel.IMPORTED_QDM_CERTIFIED.value:

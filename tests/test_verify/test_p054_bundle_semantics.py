@@ -117,6 +117,9 @@ def _members() -> dict:
 def _healthy() -> tuple[dict, dict, dict]:
     replay = _healthy_replay()
     members = _members()
+    members.setdefault("mask.bin", b"mask-bytes")
+    replay["mask_sha256"] = hashlib.sha256(members["mask.bin"]).hexdigest()
+    replay["mask_file"] = "mask.bin"
     # make the declared hashes real
     replay["source_snapshot_sha256"] = hashlib.sha256(members["source_snapshot.npz"]).hexdigest()
     replay["coefficient_tensor_sha256"] = hashlib.sha256(members["coefficients.npz"]).hexdigest()
@@ -301,4 +304,58 @@ def test_p3_chamber_order_permutation_rejected():
         replay["chambers"][0],
     )
     with pytest.raises(ValueError, match="chamber sequence differs"):
+        _verify_bundle_semantics(replay, members, PD, fixture, SHA)
+
+
+# ---------------------------------------------------------------------------
+# PR-5F2 — canonical mask member binding (audit third gap)
+# ---------------------------------------------------------------------------
+
+
+def _healthy_with_mask():
+    replay, members, fixture = _healthy()
+    mask_sha = hashlib.sha256(members.setdefault("mask.bin", b"mask-bytes")).hexdigest()
+    replay["mask_sha256"] = mask_sha
+    replay["mask_file"] = "mask.bin"
+    return replay, members, fixture, mask_sha
+
+
+def test_mask_member_binding_healthy_passes():
+    replay, members, fixture, mask_sha = _healthy_with_mask()
+    _verify_bundle_semantics(replay, members, PD, fixture, SHA)  # no raise
+    assert mask_sha == hashlib.sha256(b"mask-bytes").hexdigest()
+
+
+def test_mask_member_missing_rejected():
+    replay, members, fixture, _ = _healthy_with_mask()
+    del members["mask.bin"]
+    with pytest.raises(ValueError, match="is missing"):
+        _verify_bundle_semantics(replay, members, PD, fixture, SHA)
+
+
+def test_mask_bytes_altered_rejected():
+    replay, members, fixture, _ = _healthy_with_mask()
+    members["mask.bin"] = b"tampered-mask"
+    with pytest.raises(ValueError, match="does not match mask_sha256"):
+        _verify_bundle_semantics(replay, members, PD, fixture, SHA)
+
+
+def test_mask_wrong_declared_sha_rejected():
+    replay, members, fixture, _ = _healthy_with_mask()
+    replay["mask_sha256"] = "e" * 64
+    with pytest.raises(ValueError, match="does not match mask_sha256"):
+        _verify_bundle_semantics(replay, members, PD, fixture, SHA)
+
+
+def test_mask_wrong_file_name_rejected():
+    replay, members, fixture, _ = _healthy_with_mask()
+    replay["mask_file"] = "not-the-mask.bin"
+    with pytest.raises(ValueError, match="is missing"):
+        _verify_bundle_semantics(replay, members, PD, fixture, SHA)
+
+
+def test_model_schema_mismatch_rejected():
+    replay, members, fixture = _healthy()
+    replay["model_schema"] = "P054.frozen-arf37.v0"
+    with pytest.raises(ValueError, match="model_schema"):
         _verify_bundle_semantics(replay, members, PD, fixture, SHA)
