@@ -48,6 +48,7 @@ def test_healthy_state_passes():
         registry=_state()[3],
         file_hashes=_state()[4],
         readiness_text="canonical entry: proof_artifacts/p054/README.md",
+        receipt_exists=False,
     )
     assert failures == []
 
@@ -107,8 +108,9 @@ def test_hand_promoted_replay_state_fails_activation_gate():
         registry=registry,
         file_hashes=file_hashes,
         readiness_text="",
+        receipt_exists=False,
     )
-    assert any("no replay receipt" in f for f in failures)
+    assert any("registry sha256 is null" in f or "no replay receipt" in f for f in failures)
 
 
 def test_fetched_artifact_allows_passing_replay_state():
@@ -181,6 +183,8 @@ def _check_receipt(receipt, tmp_path: Path, *, engine_hash="e" * 64, with_receip
 
 
 def test_s1_populated_registry_without_receipt_rejected(tmp_path):
+    # _verify_replay_binding with an absent receipt file reports the
+    # missing canonical evidence for a passing state.
     failures = _check_receipt(_receipt(), tmp_path, with_receipt=False)
     assert any("no replay receipt" in f for f in failures)
 

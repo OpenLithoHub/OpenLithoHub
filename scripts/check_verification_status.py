@@ -90,8 +90,13 @@ def verify_frozen_state(
     registry: dict,
     file_hashes: dict[str, str],
     readiness_text: str,
+    receipt_exists: bool = False,
 ) -> list[str]:
-    """Pure checker: returns a list of failures (empty == pass)."""
+    """Pure checker: returns a list of failures (empty == pass).
+
+    ``receipt_exists`` reflects whether a committed replay receipt is
+    present in the repository (evidence state, not caller intent).
+    """
     failures: list[str] = []
     for section in REQUIRED_SECTIONS:
         if section not in status:
@@ -152,7 +157,7 @@ def verify_frozen_state(
                 engine_engine_hash=sha256_of(REPLAY_ENGINE) if REPLAY_ENGINE.exists() else None,
             )
         )
-    elif replay_state and receipt_path_exists():
+    elif replay_state and receipt_exists:
         failures.append(
             "a replay receipt exists but the status is not a passing state; "
             "promote the status in a reviewed release change instead"
@@ -309,6 +314,7 @@ def main() -> int:
         registry=registry,
         file_hashes=file_hashes,
         readiness_text=QDM_READINESS.read_text(),
+        receipt_exists=RECEIPT_PATH.exists(),
     )
     if failures:
         for failure in failures:
