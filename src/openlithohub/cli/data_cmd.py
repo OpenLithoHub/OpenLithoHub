@@ -9,11 +9,10 @@ helper, not the eval path. For benchmark runs use ``openlithohub eval run``.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import numpy as np
 import typer
-from typing import NoReturn
 
 from openlithohub.data.base import DatasetAdapter
 
