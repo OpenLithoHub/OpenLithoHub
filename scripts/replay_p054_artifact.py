@@ -26,6 +26,8 @@ import os
 import platform
 import sys
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -43,7 +45,7 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def atomic_write_json(path: Path, payload: dict) -> Path:
+def atomic_write_json(path: Path, payload: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     part = path.with_suffix(path.suffix + ".part")
     part.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -51,7 +53,7 @@ def atomic_write_json(path: Path, payload: dict) -> Path:
     return path
 
 
-def result_digest(diagram) -> str:
+def result_digest(diagram: Any) -> str:
     """Deterministic digest of the FULL theorem-facing replay surface."""
     payload = {
         "schema": diagram.model_schema,
@@ -98,28 +100,41 @@ def result_digest(diagram) -> str:
 
 
 def validate_fetch_report(
-    fetch_report: dict,
+    fetch_report: dict[str, Any],
     *,
     artifact_sha256: str,
     artifact_bytes: int,
+    expected_profile: str = "p054-arf37",
+    allowed_hosts: tuple[str, ...] = ("zenodo.org", "www.zenodo.org"),
 ) -> str:
     """Bind the fetch report to the verified artifact; return its URL.
 
-    The fetch report is provenance evidence: its recorded identity must
-    match the actual verified artifact exactly, and it must carry a
-    non-empty HTTPS effective URL.
+    Provenance binding (PR-5E6): schema, profile, artifact sha256/bytes
+    and the effective-URL host are all validated — a report for another
+    profile, or with an off-provenance transport origin, is rejected even
+    when the artifact identity itself matches.
     """
     if fetch_report.get("schema") != "P054.fetch-report.v1":
         raise ValueError(
             f"fetch report schema {fetch_report.get('schema')!r} != 'P054.fetch-report.v1'"
         )
+    if fetch_report.get("profile") != expected_profile:
+        raise ValueError(
+            f"fetch report profile {fetch_report.get('profile')!r} != expected {expected_profile!r}"
+        )
     if fetch_report.get("artifact_sha256") != artifact_sha256:
         raise ValueError("fetch report artifact_sha256 does not match the verified artifact")
     if fetch_report.get("artifact_bytes") != artifact_bytes:
         raise ValueError("fetch report artifact_bytes does not match the verified artifact")
-    effective_url = fetch_report.get("effective_url", "")
+    effective_url: str = fetch_report.get("effective_url", "")
     if not effective_url.startswith("https://"):
         raise ValueError("fetch report effective_url must be an https URL")
+    host = urlparse(effective_url).hostname or ""
+    if allowed_hosts and host not in allowed_hosts:
+        raise ValueError(
+            f"fetch report effective_url host {host!r} is outside the "
+            f"expected provenance {list(allowed_hosts)}"
+        )
     return effective_url
 
 

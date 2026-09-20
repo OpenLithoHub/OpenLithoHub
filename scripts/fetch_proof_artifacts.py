@@ -64,8 +64,20 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def fetch(entry: dict, destination: Path) -> int:
-    """Download one entry and verify it before declaring success."""
+def fetch(
+    entry: dict,
+    destination: Path,
+    *,
+    profile: str,
+    fetch_report_out: Path | None = None,
+) -> int:
+    """Download one entry and verify it before declaring success.
+
+    ``profile`` is the requested CLI profile and is bound into the fetch
+    report.  ``fetch_report_out`` is the canonical report path; when
+    omitted a deterministic default next to the artifact is used — the
+    path is never silently ignored.
+    """
     download_url = entry.get("download_url")
     expected = entry.get("sha256")
     if not download_url or not expected:
@@ -115,7 +127,13 @@ def fetch(entry: dict, destination: Path) -> int:
     # the final effective URL (after redirects) — the validated origin is
     # the request that actually produced the accepted bytes, and the
     # payload is never transferred twice.
-    fetch_report_path = destination.parent / (Path(entry["name"]).stem + ".fetch-report.json")
+    # PR-5E6: the report path comes from the explicit CLI argument; when
+    # omitted a deterministic default next to the artifact is used.
+    fetch_report_path = (
+        fetch_report_out
+        if fetch_report_out is not None
+        else destination.parent / (Path(entry["name"]).stem + ".fetch-report.json")
+    )
 
     def cleanup_partial() -> None:
         """Remove the partial download and any report sidecar together."""
@@ -133,19 +151,24 @@ def fetch(entry: dict, destination: Path) -> int:
         cleanup_partial()
         print(f"FETCH-FAILED: {entry['name']}", file=sys.stderr)
         return 2
-    if entry.get("source") == "zenodo":
-        from urllib.parse import urlparse
+    # PR-5E6: parse the effective URL for EVERY source, then apply
+    # source-specific host policy — the generic parser never leaves
+    # effective_url undefined.
+    from urllib.parse import urlparse
 
-        lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip()]
-        effective_url = lines[-1] if lines else ""
-        host = urlparse(effective_url).hostname or ""
-        if host not in ("zenodo.org", "www.zenodo.org"):
-            cleanup_partial()
-            print(
-                f"REDIRECT-REJECTED: {entry['name']} landed off-origin at {host!r}",
-                file=sys.stderr,
-            )
-            return 2
+    lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip()]
+    effective_url = lines[-1] if lines else ""
+    parsed_host = urlparse(effective_url).hostname or ""
+    if entry.get("source") == "zenodo" and parsed_host not in (
+        "zenodo.org",
+        "www.zenodo.org",
+    ):
+        cleanup_partial()
+        print(
+            f"REDIRECT-REJECTED: {entry['name']} landed off-origin at {parsed_host!r}",
+            file=sys.stderr,
+        )
+        return 2
     # PR-5E2: capture the size BEFORE unlinking so the mismatch path cannot
     # crash with FileNotFoundError instead of the intended diagnosis.
     actual_bytes = part.stat().st_size
@@ -165,7 +188,7 @@ def fetch(entry: dict, destination: Path) -> int:
     # hash validation all succeeded.
     write_fetch_report(
         fetch_report_path,
-        profile=entry.get("profiles", ["p054-arf37"])[0],
+        profile=profile,
         effective_url=effective_url,
         artifact_sha256=actual,
         artifact_bytes=actual_bytes,
@@ -205,11 +228,27 @@ def verify_entry(entry: dict) -> tuple[int, str]:
     return (0, "VERIFIED")
 
 
-def main() -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
+    """The fetcher's public CLI contract (PR-5E6) — testable in isolation."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("--profile", default="p054-arf37", help="frozen profile to fetch for")
+    ap.add_argument(
+        "--profile",
+        default="p054-arf37",
+        help="frozen profile to fetch for",
+    )
     ap.add_argument("--verify-only", action="store_true")
-    args = ap.parse_args()
+    ap.add_argument(
+        "--fetch-report-out",
+        type=Path,
+        default=None,
+        help="canonical fetch report path (P054.fetch-report.v1); defaults "
+        "to a deterministic path next to the artifact",
+    )
+    return ap
+
+
+def main() -> int:
+    args = build_arg_parser().parse_args()
 
     registry = json.loads(REGISTRY.read_text())
     failures = 0
@@ -232,7 +271,17 @@ def main() -> int:
                 if entry.get("sha256") is None:
                     failures += 1
                     continue
-            failures += fetch(entry, destination)
+            fetch_report_path = args.fetch_report_out
+            if fetch_report_path is None:
+                fetch_report_path = destination.parent / (
+                    Path(entry["name"]).stem + ".fetch-report.json"
+                )
+            failures += fetch(
+                entry,
+                destination,
+                profile=args.profile,
+                fetch_report_out=fetch_report_path,
+            )
     if failures:
         print(f"{failures} artifact failure(s)", file=sys.stderr)
         return 1

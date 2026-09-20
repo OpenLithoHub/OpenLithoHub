@@ -150,3 +150,84 @@ def test_pr3e4_no_activation_condition_outside_activation_job():
         assert "steps.activation_preflight" not in raw, (
             f"{job_name} references the activation preflight but has no preflight step"
         )
+
+
+# ---------------------------------------------------------------------------
+# PR-5E6 — CLI contract + fetch report preservation (audit items 1–4)
+# ---------------------------------------------------------------------------
+
+
+def _activation_fetch_step() -> dict:
+    for step in _activation_steps():
+        if "Fetch frozen artifact" in step.get("name", ""):
+            return step
+    raise AssertionError("activation fetch step missing")
+
+
+def _full_replay_fetch_cmd() -> str:
+    for step in _jobs()["p054-full-replay"]["steps"]:
+        if "Fetch frozen artifact" in step.get("name", ""):
+            return step.get("run", "")
+    raise AssertionError("full-replay fetch step missing")
+
+
+def test_cli_accepts_exact_workflow_arguments():
+    # the workflow invokes: --profile p054-arf37 --fetch-report-out <path>
+    # (plus --verify-only); the real parser must accept all of them.
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(WORKFLOW.parents[2] / "scripts"))
+    from fetch_proof_artifacts import build_arg_parser
+
+    parser = build_arg_parser()
+    args = parser.parse_args(
+        [
+            "--profile",
+            "p054-arf37",
+            "--fetch-report-out",
+            "/tmp/report.json",
+            "--verify-only",
+        ]
+    )
+    assert args.profile == "p054-arf37"
+    assert args.fetch_report_out == Path("/tmp/report.json")
+    assert args.verify_only is True
+
+
+def test_full_replay_fetch_uses_fetch_report_out():
+    cmd = _full_replay_fetch_cmd()
+    assert "--fetch-report-out" in cmd
+
+
+def test_activation_fetch_uses_fetch_report_out():
+    step = _activation_fetch_step()
+    assert "--fetch-report-out" in step.get("run", "")
+
+
+def test_both_replay_jobs_pass_fetch_report():
+    for step in _activation_steps():
+        if "FRESH receipt" in step.get("name", ""):
+            assert "fetch-report" in step.get("run", "")
+            break
+    else:
+        raise AssertionError("activation replay step missing")
+    full_replay = _jobs()["p054-full-replay"]
+    for job_step in full_replay["steps"]:
+        if "Produce the canonical replay receipt" in job_step.get("name", ""):
+            assert "--fetch-report" in job_step.get("run", "")
+            break
+    else:
+        raise AssertionError("canonical replay receipt step missing")
+
+
+def test_both_evidence_uploads_include_fetch_report():
+    doc = _doc()
+    found = 0
+    for job in doc["jobs"].values():
+        for step in job.get("steps", []):
+            upload = step.get("with", {})
+            if "path" in upload and "p054-activation-evidence" in upload.get("name", ""):
+                assert "fetch-report" in upload["path"]
+                found += 1
+    assert found == 1

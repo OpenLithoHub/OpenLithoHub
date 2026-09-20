@@ -96,6 +96,7 @@ jobs:
           path: |
             p054-replay-receipt.json
             p054-replay-report.json
+            proof_artifacts/p054/external/p054-arf37-frozen-artifact.fetch-report.json
             pytest-output.txt
           if-no-files-found: error
 
@@ -214,5 +215,6 @@ jobs:
             activation-preflight.json
             replay-receipt-fresh.json
             replay-report-fresh.json
+            proof_artifacts/p054/external/p054-arf37-frozen-artifact.fetch-report.json
             pytest-output.txt
           if-no-files-found: error

@@ -97,3 +97,36 @@ def test_producer_report_carries_effective_url():
     source = inspect.getsource(producer)
     assert "validate_fetch_report" in source
     assert '"effective_url": effective_url' in source
+
+
+# ---------------------------------------------------------------------------
+# PR-5E6 — provenance binding: profile + Zenodo host
+# ---------------------------------------------------------------------------
+
+
+def test_l6_profile_mismatch_rejected():
+    with pytest.raises(ValueError, match="!= expected"):
+        validate_fetch_report(
+            _report(),
+            artifact_sha256=SHA,
+            artifact_bytes=4096,
+            expected_profile="other-profile",
+        )
+
+
+def test_l7_off_zenodo_host_rejected_for_zenodo_provenance():
+    with pytest.raises(ValueError, match="outside the expected provenance"):
+        validate_fetch_report(
+            _report(effective_url="https://mirror.example.org/files/p054.zip"),
+            artifact_sha256=SHA,
+            artifact_bytes=4096,
+        )
+
+
+def test_l8_www_zenodo_host_accepted():
+    url = validate_fetch_report(
+        _report(effective_url="https://www.zenodo.org/records/22843141/files/p054.zip"),
+        artifact_sha256=SHA,
+        artifact_bytes=4096,
+    )
+    assert url.startswith("https://www.zenodo.org/")
