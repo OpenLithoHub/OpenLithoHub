@@ -39,20 +39,19 @@ def _jobs() -> dict:
     return _doc()["jobs"]
 
 
-def test_producer_script_covered_by_both_triggers():
-    doc = _doc()
-    push_paths = set(doc[True]["push"]["paths"])  # `on:` parses as True
-    pr_paths = set(doc[True]["pull_request"]["paths"])
-    for path in PROTECTED:
-        assert path in push_paths, f"{path} missing from push.paths"
-        assert path in pr_paths, f"{path} missing from pull_request.paths"
-
-
-def test_path_filters_are_symmetric():
+def test_producer_script_covered_by_push_trigger():
     doc = _doc()
     push_paths = set(doc[True]["push"]["paths"])
-    pr_paths = set(doc[True]["pull_request"]["paths"])
-    assert push_paths == pr_paths, "push/pull_request path filters diverged"
+    for path in PROTECTED:
+        assert path in push_paths, f"{path} missing from push.paths"
+
+
+def test_pull_request_trigger_is_deliberately_unfiltered():
+    # PR-5F5 hardening: the stable p054-governance-gate must report on
+    # EVERY pull request; pull_request events are intentionally not
+    # path-filtered (the p054-scope job decides relevance instead).
+    pr_trigger = _doc()[True]["pull_request"]
+    assert "paths" not in pr_trigger
 
 
 def test_activation_job_has_preflight_before_fetch():
@@ -485,3 +484,64 @@ def test_scheduled_equality_script_uses_exact_whole_document_comparison():
             assert "raise SystemExit" in run
             return
     raise AssertionError("scheduled equality step missing")
+
+
+# ---------------------------------------------------------------------------
+# PR-5F5 governance hardening — stable gate, scope job, no path filter (R137+)
+# ---------------------------------------------------------------------------
+
+
+def _governance_gate_step():
+    gate = _jobs()["p054-governance-gate"]
+    assert gate.get("if") == "always() && github.event_name == 'pull_request'"
+    return gate
+
+
+def test_pull_request_trigger_has_no_workflow_level_paths():
+    # The stable p054-governance-gate must report on EVERY pull request;
+    # a workflow-level paths filter would suppress it entirely.
+    pr_trigger = _doc()[True]["pull_request"]
+    assert isinstance(pr_trigger, dict)
+    assert "paths" not in pr_trigger, (
+        "pull_request.paths would suppress the stable governance gate on unrelated PRs"
+    )
+    assert pr_trigger.get("branches") == ["main"]
+
+
+def test_builder_path_is_governed_surface():
+    push_paths = _doc()[True]["push"]["paths"]
+    assert "scripts/build_p054_frozen_artifact.py" in push_paths
+
+
+def test_governance_gate_exists_and_always_reports():
+    gate = _governance_gate_step()
+    assert gate.get("if") == "always() && github.event_name == 'pull_request'"
+    assert gate.get("needs") == ["p054-scope", "p054-fast-gate", "p054-release-activation"]
+
+
+def test_aggregator_enforces_relevant_pr_requirements():
+    gate = _governance_gate_step()
+    enforce = next(
+        s["run"] for s in gate["steps"] if "Enforce P-054 governance result" in s["name"]
+    )
+    # relevant PR: heavy gates must be explicitly successful
+    assert '[ "$FAST_RESULT" != "success" ]' in enforce
+    assert '[ "$ACTIVATION_RESULT" != "success" ]' in enforce
+    # unrelated PR: heavy gates must be explicitly skipped
+    assert '"$FAST_RESULT" != "skipped"' in enforce
+    assert '"$ACTIVATION_RESULT" != "skipped"' in enforce
+    # scope detection failure is fail-closed
+    assert 'SCOPE_RESULT" != "success"' in enforce
+
+
+def test_release_activation_gated_on_scope():
+    job = _jobs()["p054-release-activation"]
+    cond = job.get("if", "")
+    assert "github.event_name == 'pull_request'" in cond
+    assert "needs.p054-scope.outputs.relevant == 'true'" in cond
+
+
+def test_fast_gate_gated_on_scope():
+    job = _jobs()["p054-fast-gate"]
+    assert job.get("needs") == "p054-scope"
+    assert job.get("if") == "needs.p054-scope.outputs.relevant == 'true'"
