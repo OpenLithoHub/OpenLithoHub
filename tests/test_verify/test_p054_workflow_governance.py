@@ -9,6 +9,7 @@ guaranteed external-fetch failure while the artifact is unpublished.
 import hashlib
 import json
 import subprocess
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -377,3 +378,42 @@ def test_existing_verified_destination_short_circuits_without_fetch(tmp_path, mo
     finally:
         fetcher.REGISTRY = real_registry
         fetcher.ROOT = real_root
+
+
+def test_fetch_curl_command_includes_download_url():
+    # R127/R128 regression: a curl command without the download URL fails
+    # with "no URL specified" — the URL must be part of every fetch.
+    import scripts.fetch_proof_artifacts as fetcher
+
+    entry = {
+        "name": "x.zip",
+        "profiles": ["p054-arf37"],
+        "sha256": "a" * 64,
+        "bytes": 6,
+        "download_url": "https://zenodo.org/records/1/files/x.zip?download=1",
+        "source": "zenodo",
+        "required_for": ["p054-full-replay"],
+    }
+    destination = Path(tempfile.mkdtemp()) / "x.zip"
+    captured = []
+
+    def fake_curl(cmd, **kwargs):
+        captured.append(list(cmd))
+        out = cmd[cmd.index("-o") + 1]
+        Path(out).write_bytes(b"BYTES!")
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout="https://zenodo.org/records/1/files/x.zip\n", stderr=""
+        )
+
+    orig_run = fetcher.subprocess.run
+    fetcher.subprocess.run = fake_curl
+    try:
+        fetcher.fetch(entry, destination, profile="p054-arf37")
+    finally:
+        fetcher.subprocess.run = orig_run
+    assert captured, "transport must have run"
+    cmd = captured[0]
+    # the load-bearing regression: the download URL must be in the command
+    assert entry["download_url"] in cmd, "download URL missing from curl command"
+    # curl writes to destination + ".part" (atomic download, PR-5E2)
+    assert str(destination) + ".part" in cmd

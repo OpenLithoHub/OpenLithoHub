@@ -140,7 +140,7 @@ def fetch(
         part.unlink(missing_ok=True)
         fetch_report_path.unlink(missing_ok=True)
 
-    curl_cmd += ["-w", "%{url_effective}\\n", "-o", str(part)]
+    curl_cmd += ["-w", "%{url_effective}\\n", "-o", str(part), download_url]
     proc = subprocess.run(  # noqa: S603 — fixed argv from the registry
         curl_cmd,
         capture_output=True,
@@ -149,7 +149,11 @@ def fetch(
     )
     if proc.returncode != 0:
         cleanup_partial()
-        print(f"FETCH-FAILED: {entry['name']}", file=sys.stderr)
+        print(
+            f"FETCH-FAILED: {entry['name']} (curl rc={proc.returncode}) "
+            f"stderr: {proc.stderr[-400:]}",
+            file=sys.stderr,
+        )
         return 2
     # PR-5E6: parse the effective URL for EVERY source, then apply
     # source-specific host policy — the generic parser never leaves
