@@ -28,7 +28,7 @@
         "target-topology chamber focus boundaries and component counts",
         "z5 ownership-invisibility witness (equal non-null owners + certified owner interval)"
       ],
-      "status": "ZENODO_PUBLISHED_PENDING_ACTIVATION"
+      "status": "ZENODO_REMOTE_REPLAY_VERIFIED"
     }
   ]
 }

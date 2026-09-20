@@ -1,0 +1,14 @@
+{
+  "artifact_bytes": 90673,
+  "artifact_sha256": "5a6abec06dc4f58df8d3435f77877e5525c505d0992f193f15e227dd3d55bc3e",
+  "chamber_count": 4,
+  "event_count": 8,
+  "implementation_commit": "348fa5d86d5355465af98e2c4ce3deac60081a4c",
+  "manifest_sha256": "bc7e802011631952266af67cbe6247aa1cf6c97a98ba9aa5594b49288b8184f6",
+  "profile": "p054-arf37",
+  "replay_engine_sha256": "9676ca6e52b6467182dddc1b240d1e6b51ad940ff1690be8813cdd86d14411ae",
+  "replay_mode": "IMPORTED_CERTIFICATE_VERIFIED",
+  "result_digest": "5f86d33ff68d250f18c6440e2afe0405a1a200d6a75172211780370836f7f72a",
+  "schema": "P054.replay-receipt.v2",
+  "witness_count": 1
+}
