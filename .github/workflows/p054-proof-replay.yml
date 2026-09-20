@@ -109,8 +109,8 @@ jobs:
       - uses: actions/setup-python@0a5c61591373683505ea898d09fdccdc57c2ab49
         with:
           python-version: "3.12"
-      - name: Install (minimal hermetic activation environment)
-        run: python -m pip install pytest
+      # ENV2: the activation checker/replay/producer are stdlib-only — no
+      # pip install at all, so the environment cannot drift.
       - name: Preflight — fetch only when evidence requires it (PR-3E2)
         run: |
           python - <<'PY'

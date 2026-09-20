@@ -59,7 +59,7 @@ def fetch(entry: dict, destination: Path) -> int:
     ):
         print(
             f"FETCH-REJECTED: {entry['name']} declares Zenodo provenance but "
-            f"the download URL is off-origin",
+            f"the initial URL is off-origin",
             file=sys.stderr,
         )
         return 2
@@ -92,10 +92,46 @@ def fetch(entry: dict, destination: Path) -> int:
         part.unlink(missing_ok=True)
         print(f"FETCH-FAILED: {entry['name']}", file=sys.stderr)
         return 2
-    if entry.get("bytes") is not None and part.stat().st_size != entry["bytes"]:
+    # PR-5E2: validate the FINAL effective host — curl may have followed
+    # redirects away from the declared origin.
+    if entry.get("source") == "zenodo":
+        effective = part.with_suffix(".url")
+        effective.write_text(
+            subprocess.run(  # noqa: S603 — fixed argv
+                [
+                    "curl",
+                    "-Ls",
+                    "--proto",
+                    "=https",
+                    "-o",
+                    "/dev/null",
+                    "-w",
+                    "%{url_effective}",
+                    download_url,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            ).stdout
+        )
+        host = effective.read_text().strip()
+        from urllib.parse import urlparse
+
+        if urlparse(host).hostname not in ("zenodo.org", "www.zenodo.org"):
+            part.unlink(missing_ok=True)
+            effective.unlink(missing_ok=True)
+            print(
+                f"REDIRECT-REJECTED: {entry['name']} landed off-origin at {host!r}",
+                file=sys.stderr,
+            )
+            return 2
+    # PR-5E2: capture the size BEFORE unlinking so the mismatch path cannot
+    # crash with FileNotFoundError instead of the intended diagnosis.
+    actual_bytes = part.stat().st_size
+    if entry.get("bytes") is not None and actual_bytes != entry["bytes"]:
         part.unlink(missing_ok=True)
         print(
-            f"BYTE-LENGTH-MISMATCH: {name_of(entry)} {part.stat().st_size} != {entry['bytes']}",
+            f"BYTE-LENGTH-MISMATCH: {name_of(entry)} {actual_bytes} != {entry['bytes']}",
             file=sys.stderr,
         )
         return 1
