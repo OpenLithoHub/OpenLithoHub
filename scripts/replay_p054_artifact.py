@@ -97,6 +97,32 @@ def result_digest(diagram) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
+def validate_fetch_report(
+    fetch_report: dict,
+    *,
+    artifact_sha256: str,
+    artifact_bytes: int,
+) -> str:
+    """Bind the fetch report to the verified artifact; return its URL.
+
+    The fetch report is provenance evidence: its recorded identity must
+    match the actual verified artifact exactly, and it must carry a
+    non-empty HTTPS effective URL.
+    """
+    if fetch_report.get("schema") != "P054.fetch-report.v1":
+        raise ValueError(
+            f"fetch report schema {fetch_report.get('schema')!r} != 'P054.fetch-report.v1'"
+        )
+    if fetch_report.get("artifact_sha256") != artifact_sha256:
+        raise ValueError("fetch report artifact_sha256 does not match the verified artifact")
+    if fetch_report.get("artifact_bytes") != artifact_bytes:
+        raise ValueError("fetch report artifact_bytes does not match the verified artifact")
+    effective_url = fetch_report.get("effective_url", "")
+    if not effective_url.startswith("https://"):
+        raise ValueError("fetch report effective_url must be an https URL")
+    return effective_url
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--profile", default="p054-arf37")
@@ -104,9 +130,12 @@ def main() -> int:
     ap.add_argument("--receipt-out", type=Path, required=True)
     ap.add_argument("--report-out", type=Path, required=True)
     ap.add_argument(
-        "--effective-url",
-        default="",
-        help="final effective URL captured by the fetch (evidence provenance)",
+        "--fetch-report",
+        type=Path,
+        default=None,
+        help="canonical fetch report (P054.fetch-report.v1) produced by the "
+        "fetch; when present its identity is validated against the artifact "
+        "and its effective_url is copied into the replay report",
     )
     args = ap.parse_args()
 
@@ -121,6 +150,28 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001 — the failure IS the result
         print(f"REPLAY-FAILED: {exc}", file=sys.stderr)
         return 1
+
+    # PR-5E5: provenance handoff — when a canonical fetch report is
+    # supplied, validate it against the verified artifact and carry the
+    # real effective URL into the replay report.
+    actual_sha = sha256_of(args.artifact)
+    actual_bytes = args.artifact.stat().st_size
+    effective_url = ""
+    if args.fetch_report is not None:
+        try:
+            fetch_report = json.loads(args.fetch_report.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            print(f"FAIL: fetch report is not valid JSON: {exc}", file=sys.stderr)
+            return 1
+        try:
+            effective_url = validate_fetch_report(
+                fetch_report,
+                artifact_sha256=actual_sha,
+                artifact_bytes=actual_bytes,
+            )
+        except ValueError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 1
 
     receipt = diagram.receipt
     assert receipt is not None  # the verified factory always attaches one
@@ -139,7 +190,7 @@ def main() -> int:
         "witness_count": len(diagram.witnesses),
     }
     report = {
-        "effective_url": args.effective_url,
+        "effective_url": effective_url,
         "environment": {
             "python": sys.version,
             "platform": platform.platform(),

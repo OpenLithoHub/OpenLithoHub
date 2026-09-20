@@ -23,12 +23,37 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "proof_artifacts" / "registry.json"
+
+
+def write_fetch_report(
+    path: Path,
+    *,
+    profile: str,
+    effective_url: str,
+    artifact_sha256: str,
+    artifact_bytes: int,
+) -> Path:
+    """Canonical fetch evidence (PR-5E5): written only after host, size and
+    hash validation succeeded; removed together with the partial download
+    on any failure."""
+    report = {
+        "schema": "P054.fetch-report.v1",
+        "profile": profile,
+        "effective_url": effective_url,
+        "artifact_sha256": artifact_sha256,
+        "artifact_bytes": artifact_bytes,
+    }
+    part = path.with_suffix(path.suffix + ".part")
+    part.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(part, path)
+    return path
 
 
 def sha256_of(path: Path) -> str:
@@ -90,12 +115,12 @@ def fetch(entry: dict, destination: Path) -> int:
     # the final effective URL (after redirects) — the validated origin is
     # the request that actually produced the accepted bytes, and the
     # payload is never transferred twice.
-    effective_url_file = part.with_suffix(".effective-url")
+    fetch_report_path = destination.parent / (Path(entry["name"]).stem + ".fetch-report.json")
 
     def cleanup_partial() -> None:
-        """Remove the partial download and any sidecar evidence together."""
+        """Remove the partial download and any report sidecar together."""
         part.unlink(missing_ok=True)
-        effective_url_file.unlink(missing_ok=True)
+        fetch_report_path.unlink(missing_ok=True)
 
     curl_cmd += ["-w", "%{url_effective}\\n", "-o", str(part)]
     proc = subprocess.run(  # noqa: S603 — fixed argv from the registry
@@ -121,7 +146,6 @@ def fetch(entry: dict, destination: Path) -> int:
                 file=sys.stderr,
             )
             return 2
-        effective_url_file.write_text(effective_url + "\n", encoding="utf-8")
     # PR-5E2: capture the size BEFORE unlinking so the mismatch path cannot
     # crash with FileNotFoundError instead of the intended diagnosis.
     actual_bytes = part.stat().st_size
@@ -137,7 +161,16 @@ def fetch(entry: dict, destination: Path) -> int:
         cleanup_partial()
         print(f"HASH-MISMATCH: {entry['name']} {actual} != {expected}", file=sys.stderr)
         return 1
-    effective_url_file.unlink(missing_ok=True)  # promoted: sidecar no longer needed
+    # PR-5E5: write the canonical fetch report ONLY after host, size and
+    # hash validation all succeeded.
+    write_fetch_report(
+        fetch_report_path,
+        profile=entry.get("profiles", ["p054-arf37"])[0],
+        effective_url=effective_url,
+        artifact_sha256=actual,
+        artifact_bytes=actual_bytes,
+    )
+    print(f"fetch report: {fetch_report_path}")
     part.replace(destination)
     print(f"VERIFIED after fetch: {entry['name']} [{actual[:12]}…]")
     return 0

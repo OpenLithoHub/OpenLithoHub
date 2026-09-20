@@ -45,6 +45,7 @@ the declared frozen fixture.
 | `chamber_catalog.json` | event-free chambers; target component sequence `1 → 3 → 5 → 4` |
 | `frozen-basis.json` | immutable release anchor: content hashes of the profile files + external artifact identity |
 | `../registry.json` | **single source of truth** for external artifact identity (DOI provenance + file-level download URL + SHA-256) |
+| `*.fetch-report.json` | canonical fetch evidence: effective URL + artifact SHA/bytes, written after validation (PR-5E5) |
 | `../verification-status.json` | machine-readable status consumed by CI (`scripts/check_verification_status.py`) |
 
 ## Replay
@@ -56,9 +57,11 @@ the declared frozen fixture.
   **not** source-native recomputation):
 
   ```bash
-  python scripts/fetch_proof_artifacts.py --profile p054-arf37
+  python scripts/fetch_proof_artifacts.py --profile p054-arf37 \
+      --fetch-report-out proof_artifacts/p054/external/p054-arf37-frozen-artifact.fetch-report.json
   python scripts/fetch_proof_artifacts.py --profile p054-arf37 --verify-only
-  B04_PROOF_REPLAY_STRICT=1 pytest -q tests/test_verify/test_p054_full_replay.py -m proof_artifact_required
+  B04_PROOF_REPLAY_STRICT=1 \
+      pytest -q tests/test_verify/test_p054_full_replay.py -m proof_artifact_required
   ```
 
   Missing artifacts or hash/model-identity mismatches are **hard failures**

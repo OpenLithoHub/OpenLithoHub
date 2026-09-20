@@ -73,20 +73,19 @@ jobs:
       - name: Install (minimal hermetic replay environment)
         run: python -m pip install pytest
       - name: Fetch frozen artifact (download + hash-verify)
-        run: python scripts/fetch_proof_artifacts.py --profile p054-arf37
+        run: python scripts/fetch_proof_artifacts.py --profile p054-arf37 --fetch-report-out proof_artifacts/p054/external/p054-arf37-frozen-artifact.fetch-report.json
       - name: Re-verify artifact identity
         run: python scripts/fetch_proof_artifacts.py --profile p054-arf37 --verify-only
       - name: Imported-certificate verification shard
         run: PYTHONPATH=src pytest -q tests/test_verify/test_p054_full_replay.py -m proof_artifact_required
       - name: Produce the canonical replay receipt
         run: |
-          EFFECTIVE_URL="$(cat proof_artifacts/p054/external/p054-arf37-frozen-artifact.zip.effective-url 2>/dev/null || echo '')"
           PYTHONPATH=src python scripts/replay_p054_artifact.py \
             --profile p054-arf37 \
             --artifact proof_artifacts/p054/external/p054-arf37-frozen-artifact.zip \
             --receipt-out p054-replay-receipt.json \
             --report-out p054-replay-report.json \
-            --effective-url "$EFFECTIVE_URL"
+            --fetch-report proof_artifacts/p054/external/p054-arf37-frozen-artifact.fetch-report.json
       - name: Status manifest after replay
         run: python scripts/check_verification_status.py
       - name: Preserve replay evidence (never the frozen artifact itself)
@@ -161,7 +160,7 @@ jobs:
         id: fetch
         if: steps.activation_preflight.outputs.needs_replay == 'true'
         run: |
-          python scripts/fetch_proof_artifacts.py --profile p054-arf37
+          python scripts/fetch_proof_artifacts.py --profile p054-arf37 --fetch-report-out proof_artifacts/p054/external/p054-arf37-frozen-artifact.fetch-report.json
           python scripts/fetch_proof_artifacts.py --profile p054-arf37 --verify-only
       - name: Replay and produce a FRESH receipt
         if: steps.activation_preflight.outputs.needs_replay == 'true'
@@ -170,7 +169,8 @@ jobs:
             --profile p054-arf37 \
             --artifact proof_artifacts/p054/external/p054-arf37-frozen-artifact.zip \
             --receipt-out /tmp/p054-replay-receipt.json \
-            --report-out /tmp/p054-replay-report.json
+            --report-out /tmp/p054-replay-report.json \
+            --fetch-report proof_artifacts/p054/external/p054-arf37-frozen-artifact.fetch-report.json
           cp /tmp/p054-replay-receipt.json replay-receipt-fresh.json
           cp /tmp/p054-replay-report.json replay-report-fresh.json
       - name: Compare fresh receipt with the committed one (exact equality)
