@@ -9,9 +9,9 @@
         "p054-arf37"
       ],
       "record_doi": "10.5281/zenodo.22843141",
-      "record_id": null,
+      "record_id": 22843141,
       "file_name": "p054-arf37-frozen-artifact.zip",
-      "download_url": null,
+      "download_url": "https://zenodo.org/records/22843141/files/p054-arf37-frozen-artifact.zip?download=1",
       "sha256": "5a6abec06dc4f58df8d3435f77877e5525c505d0992f193f15e227dd3d55bc3e",
       "bytes": 90673,
       "source": "zenodo",
@@ -28,7 +28,7 @@
         "target-topology chamber focus boundaries and component counts",
         "z5 ownership-invisibility witness (equal non-null owners + certified owner interval)"
       ],
-      "status": "LOCAL_CANDIDATE_STAGED"
+      "status": "ZENODO_PUBLISHED_PENDING_ACTIVATION"
     }
   ]
 }
