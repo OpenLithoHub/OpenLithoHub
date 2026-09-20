@@ -113,9 +113,7 @@ class TestRegistryPluginDiscovery:
         sim = get_simulator("diffcfd_litho")
         assert sim.name == "diffcfd_litho"
 
-    def test_get_simulator_diffcfd_requires_extra_when_unavailable(
-        self, monkeypatch
-    ):
+    def test_get_simulator_diffcfd_requires_extra_when_unavailable(self, monkeypatch):
         # Deterministic base-environment error path (PR-5F5-D): the registry
         # must fail closed with the install hint even without the extra.
         import openlithohub.simulators.registry as registry
