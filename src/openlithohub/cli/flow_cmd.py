@@ -8,6 +8,7 @@ an aggregated tile-level manufacturability report (EPE, PV Band, DRC, MRC).
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +63,19 @@ def run(
         "-o",
         help="Path to save JSON report.",
     ),
+    report_json: Path | None = typer.Option(
+        None,
+        "--report-json",
+        help=(
+            "Path to save the machine-readable JSON report, including the "
+            "performance profile section."
+        ),
+    ),
+    profile: bool = typer.Option(
+        False,
+        "--profile",
+        help="Print a per-phase performance profile table (parser, forward, metrics, peak RSS).",
+    ),
     deterministic: bool = typer.Option(
         False,
         "--deterministic/--no-deterministic",
@@ -70,6 +84,10 @@ def run(
 ) -> None:
     """Run the design→litho→manufacturability pipeline on a layout."""
     console = Console()
+    import resource
+    import time as _time
+
+    t_start = _time.perf_counter()
 
     if deterministic:
         from openlithohub._utils.determinism import set_deterministic
@@ -119,6 +137,7 @@ def run(
         tile_nm=tile_nm,
         drop_empty_tiles=True,
     )
+    t_load = _time.perf_counter()
     console.print(f"Loaded {len(dataset)} tiles from {gds_path.name}")
 
     # Build simulator
@@ -153,10 +172,15 @@ def run(
 
     all_metrics: list[dict[str, float]] = []
     n_tiles = len(dataset)
+    t_forward_s = 0.0
+    t_metrics_s = 0.0
     for i in range(n_tiles):
         sample = dataset[i]
+        _t0 = _time.perf_counter()
         result = simulator.simulate(sample.design)
+        t_forward_s += _time.perf_counter() - _t0
 
+        _t0 = _time.perf_counter()
         tile_metrics: dict[str, float] = {}
 
         # L2 wafer error
@@ -190,6 +214,7 @@ def run(
             tile_metrics["drc_passed"] = float(drc_result.passed)
 
         all_metrics.append(tile_metrics)
+        t_metrics_s += _time.perf_counter() - _t0
 
     # Aggregate
     aggregated = _aggregate(all_metrics)
@@ -198,12 +223,34 @@ def run(
     aggregated["layer_number"] = list(layer_tuple)
     aggregated["num_tiles"] = n_tiles
 
+    # Performance profile — opt-in observability: where did the time and
+    # memory go? Explicitly requested via --profile / --report-json.
+    perf: dict[str, Any] = {
+        "parse_and_tile_wall_s": round(t_load - t_start, 6),
+        "tile_count": n_tiles,
+        "forward_wall_s_total": round(t_forward_s, 6),
+        "metrics_wall_s_total": round(t_metrics_s, 6),
+        "end_to_end_wall_s": round(_time.perf_counter() - t_start, 6),
+        "peak_rss_bytes": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        * (1 if sys.platform == "darwin" else 1024),
+        "forward_calls": n_tiles,
+    }
+
     # Print report
     _print_report(console, aggregated)
+
+    if profile:
+        _print_profile(console, perf)
 
     if output:
         output.write_text(json.dumps(aggregated, indent=2, default=str))
         console.print(f"Report saved to {output}")
+
+    if report_json:
+        report_json.write_text(
+            json.dumps({"report": aggregated, "profile": perf}, indent=2, default=str)
+        )
+        console.print(f"Machine-readable report saved to {report_json}")
 
 
 def _resolve_input(path: Path, console: Console) -> Path | None:
@@ -248,6 +295,21 @@ def _print_report(console: Console, data: dict[str, Any]) -> None:
     for key, value in sorted(data.items()):
         if isinstance(value, float):
             table.add_row(key, f"{value:.4f}")
+        else:
+            table.add_row(key, str(value))
+    console.print(table)
+
+
+def _print_profile(console: Console, profile: dict[str, Any]) -> None:
+    """Print the opt-in performance profile table."""
+    table = Table(title="Flow Profile", show_header=True)
+    table.add_column("Phase", style="bold")
+    table.add_column("Value", justify="right")
+    for key, value in profile.items():
+        if key.endswith("_wall_s"):
+            table.add_row(key, f"{float(value) * 1000:.1f} ms")
+        elif key == "peak_rss_bytes":
+            table.add_row(key, f"{int(value) / (1 << 20):.1f} MiB")
         else:
             table.add_row(key, str(value))
     console.print(table)

@@ -117,8 +117,8 @@ def test_get_or_load_model_returns_per_key_lock() -> None:
     _MODEL_CACHE.clear()
     _MODEL_LOCKS.clear()
     try:
-        model_a, lock_a = _get_or_load_model("dummy-identity", {})
-        model_b, lock_b = _get_or_load_model("dummy-identity", {})
+        model_a, lock_a, _key_a = _get_or_load_model("dummy-identity", {})
+        model_b, lock_b, _key_b = _get_or_load_model("dummy-identity", {})
         assert model_a is model_b
         assert lock_a is lock_b
         assert isinstance(lock_a, type(threading.Lock()))
@@ -141,7 +141,7 @@ def test_get_or_load_model_concurrent_requests_load_once() -> None:
     _MODEL_CACHE.clear()
     _MODEL_LOCKS.clear()
     try:
-        results: list[tuple[object, object]] = []
+        results: list[tuple[object, object, object]] = []
         barrier = threading.Barrier(4)
 
         def worker() -> None:
@@ -153,10 +153,31 @@ def test_get_or_load_model_concurrent_requests_load_once() -> None:
             t.start()
         for t in threads:
             t.join()
-        assert len({id(m) for m, _ in results}) == 1
-        assert len({id(lock) for _, lock in results}) == 1
+        assert len({id(m) for m, _, _ in results}) == 1
+        assert len({id(lock) for _, lock, _ in results}) == 1
     finally:
         _MODEL_CACHE.clear()
         _MODEL_LOCKS.clear()
         _MODEL_CACHE.update(saved_cache)
         _MODEL_LOCKS.update(saved_locks)
+
+
+def test_version(client: TestClient) -> None:
+    response = client.get("/v1/version")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["api"] == "v1"
+    assert body["package"] == "openlithohub"
+    assert body["version"]
+    assert isinstance(body["git_commit"], str) and body["git_commit"]
+    assert body["torch"]
+
+
+def test_capabilities(client: TestClient) -> None:
+    response = client.get("/v1/capabilities")
+    assert response.status_code == 200
+    body = response.json()
+    assert "dummy-identity" in body["models"]
+    assert "hopkins" in body["simulator_backends"]
+    assert isinstance(body["gpu"]["available"], bool)
+    assert body["streaming_pipeline"] is True

@@ -284,6 +284,37 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/v1/version")
+    def version() -> dict[str, str]:
+        from openlithohub._version import __version__
+        from openlithohub.benchmark.industrial import git_commit
+
+        return {
+            "api": "v1",
+            "package": "openlithohub",
+            "version": __version__,
+            "git_commit": git_commit(),
+            "torch": torch.__version__,
+        }
+
+    @app.get("/v1/capabilities")
+    def capabilities() -> dict[str, Any]:
+        from openlithohub.models.registry import register_builtin_models, registry
+        from openlithohub.simulators.registry import list_simulators
+
+        register_builtin_models()
+        gpu: dict[str, Any] = {"available": bool(torch.cuda.is_available())}
+        if torch.cuda.is_available():
+            gpu["device_count"] = torch.cuda.device_count()
+            gpu["device_name"] = torch.cuda.get_device_name(0)
+        return {
+            "models": sorted(registry.list_models()),
+            "simulator_backends": sorted(list_simulators()),
+            "gpu": gpu,
+            "streaming_pipeline": True,
+            "proof_verification": "p054-governed (see proof_artifacts/p054/README.md)",
+        }
+
     @app.get("/v1/models")
     def list_models() -> dict[str, list[str]]:
         from openlithohub.models.registry import register_builtin_models, registry

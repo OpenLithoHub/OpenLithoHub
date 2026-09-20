@@ -1,0 +1,1375 @@
+{
+  "claim_scope": {
+    "commercial_tool_comparison": "NONE",
+    "ladder_forward_model": "deterministic 9x9 separable finite-support zero-preserving blur (identical to B04 INC28)",
+    "physics_claim": "NOT_FOUNDRY_CALIBRATED",
+    "quality_forward_model": "Hopkins SOCS, 193nm, NA 1.35, sigma 0.7, 24 kernels, CTR threshold 0.225"
+  },
+  "dataset": {
+    "design": "ibex_core (32-bit RISC-V CPU core, two-stage pipeline)",
+    "layer": "66:44",
+    "license_note": "public dataset; shipped as adapter-only, not redistributed",
+    "name": "pdb-sky130hd-ibex",
+    "pdk": "sky130hd",
+    "pixel_size_nm": 1.0,
+    "source": "SJTU-YONGFU-RESEARCH-GRP/PDB-Physical-Design-Database",
+    "source_commit": "9e1e3399b1b707f26fee853bce1ff91ab466ce24"
+  },
+  "datasets": {
+    "iccad16-testcase1": {
+      "aggregate": {
+        "dummy-identity": {
+          "degenerate_blank_any_rep": false,
+          "epe_mean_nm": {
+            "max": 0.0,
+            "median": 0.0,
+            "min": 0.0,
+            "n": 1,
+            "p10": 0.0,
+            "p90": 0.0
+          },
+          "mask_foreground_fraction": {
+            "max": 0.26416015625,
+            "median": 0.26416015625,
+            "min": 0.26416015625,
+            "n": 1,
+            "p10": 0.26416015625,
+            "p90": 0.26416015625
+          },
+          "mrc_violation_rate": {
+            "max": 0.1272125244140625,
+            "median": 0.1272125244140625,
+            "min": 0.1272125244140625,
+            "n": 1,
+            "p10": 0.1272125244140625,
+            "p90": 0.1272125244140625
+          },
+          "optimization_wall_s": {
+            "max": 3.924989141523838e-05,
+            "median": 3.924989141523838e-05,
+            "min": 3.924989141523838e-05,
+            "n": 1,
+            "p10": 3.924989141523838e-05,
+            "p90": 3.924989141523838e-05
+          },
+          "pvband_max_nm": {
+            "max": 8.0,
+            "median": 8.0,
+            "min": 8.0,
+            "n": 1,
+            "p10": 8.0,
+            "p90": 8.0
+          },
+          "pvband_mean_nm": {
+            "max": 8.0,
+            "median": 8.0,
+            "min": 8.0,
+            "n": 1,
+            "p10": 8.0,
+            "p90": 8.0
+          },
+          "shot_count": {
+            "max": 11080.0,
+            "median": 11080.0,
+            "min": 11080.0,
+            "n": 1,
+            "p10": 11080.0,
+            "p90": 11080.0
+          },
+          "wafer_epe_mean_nm": {
+            "max": 3.7673425674438477,
+            "median": 3.7673425674438477,
+            "min": 3.7673425674438477,
+            "n": 1,
+            "p10": 3.7673425674438477,
+            "p90": 3.7673425674438477
+          }
+        },
+        "levelset-ilt": {
+          "degenerate_blank_any_rep": true,
+          "epe_mean_nm": {
+            "max": Infinity,
+            "median": Infinity,
+            "min": Infinity,
+            "n": 1,
+            "p10": Infinity,
+            "p90": Infinity
+          },
+          "mask_foreground_fraction": {
+            "max": 0.0,
+            "median": 0.0,
+            "min": 0.0,
+            "n": 1,
+            "p10": 0.0,
+            "p90": 0.0
+          },
+          "mrc_violation_rate": {
+            "max": 0.0,
+            "median": 0.0,
+            "min": 0.0,
+            "n": 1,
+            "p10": 0.0,
+            "p90": 0.0
+          },
+          "optimization_wall_s": {
+            "max": 5.253224354702979,
+            "median": 5.253224354702979,
+            "min": 5.253224354702979,
+            "n": 1,
+            "p10": 5.253224354702979,
+            "p90": 5.253224354702979
+          },
+          "pvband_max_nm": {
+            "max": 0.0,
+            "median": 0.0,
+            "min": 0.0,
+            "n": 1,
+            "p10": 0.0,
+            "p90": 0.0
+          },
+          "pvband_mean_nm": {
+            "max": 0.0,
+            "median": 0.0,
+            "min": 0.0,
+            "n": 1,
+            "p10": 0.0,
+            "p90": 0.0
+          },
+          "shot_count": {
+            "max": 0.0,
+            "median": 0.0,
+            "min": 0.0,
+            "n": 1,
+            "p10": 0.0,
+            "p90": 0.0
+          },
+          "wafer_epe_mean_nm": {
+            "max": Infinity,
+            "median": Infinity,
+            "min": Infinity,
+            "n": 1,
+            "p10": Infinity,
+            "p90": Infinity
+          }
+        },
+        "rule-based-opc": {
+          "degenerate_blank_any_rep": false,
+          "epe_mean_nm": {
+            "max": 1.9213508367538452,
+            "median": 1.9213508367538452,
+            "min": 1.9213508367538452,
+            "n": 1,
+            "p10": 1.9213508367538452,
+            "p90": 1.9213508367538452
+          },
+          "mask_foreground_fraction": {
+            "max": 0.3386077880859375,
+            "median": 0.3386077880859375,
+            "min": 0.3386077880859375,
+            "n": 1,
+            "p10": 0.3386077880859375,
+            "p90": 0.3386077880859375
+          },
+          "mrc_violation_rate": {
+            "max": 0.242034912109375,
+            "median": 0.242034912109375,
+            "min": 0.242034912109375,
+            "n": 1,
+            "p10": 0.242034912109375,
+            "p90": 0.242034912109375
+          },
+          "optimization_wall_s": {
+            "max": 0.005059750052168965,
+            "median": 0.005059750052168965,
+            "min": 0.005059750052168965,
+            "n": 1,
+            "p10": 0.005059750052168965,
+            "p90": 0.005059750052168965
+          },
+          "pvband_max_nm": {
+            "max": 8.0,
+            "median": 8.0,
+            "min": 8.0,
+            "n": 1,
+            "p10": 8.0,
+            "p90": 8.0
+          },
+          "pvband_mean_nm": {
+            "max": 8.0,
+            "median": 8.0,
+            "min": 8.0,
+            "n": 1,
+            "p10": 8.0,
+            "p90": 8.0
+          },
+          "shot_count": {
+            "max": 14202.0,
+            "median": 14202.0,
+            "min": 14202.0,
+            "n": 1,
+            "p10": 14202.0,
+            "p90": 14202.0
+          },
+          "wafer_epe_mean_nm": {
+            "max": 1.9426220655441284,
+            "median": 1.9426220655441284,
+            "min": 1.9426220655441284,
+            "n": 1,
+            "p10": 1.9426220655441284,
+            "p90": 1.9426220655441284
+          }
+        },
+        "surrogate-ilt": {
+          "degenerate_blank_any_rep": true,
+          "epe_mean_nm": {
+            "max": 499.7230529785156,
+            "median": 499.7230529785156,
+            "min": 499.7230529785156,
+            "n": 1,
+            "p10": 499.7230529785156,
+            "p90": 499.7230529785156
+          },
+          "mask_foreground_fraction": {
+            "max": 0.0038604736328125,
+            "median": 0.0038604736328125,
+            "min": 0.0038604736328125,
+            "n": 1,
+            "p10": 0.0038604736328125,
+            "p90": 0.0038604736328125
+          },
+          "mrc_violation_rate": {
+            "max": 0.004791259765625,
+            "median": 0.004791259765625,
+            "min": 0.004791259765625,
+            "n": 1,
+            "p10": 0.004791259765625,
+            "p90": 0.004791259765625
+          },
+          "optimization_wall_s": {
+            "max": 31.89928631251678,
+            "median": 31.89928631251678,
+            "min": 31.89928631251678,
+            "n": 1,
+            "p10": 31.89928631251678,
+            "p90": 31.89928631251678
+          },
+          "pvband_max_nm": {
+            "max": 8.0,
+            "median": 8.0,
+            "min": 8.0,
+            "n": 1,
+            "p10": 8.0,
+            "p90": 8.0
+          },
+          "pvband_mean_nm": {
+            "max": 8.0,
+            "median": 8.0,
+            "min": 8.0,
+            "n": 1,
+            "p10": 8.0,
+            "p90": 8.0
+          },
+          "shot_count": {
+            "max": 162.0,
+            "median": 162.0,
+            "min": 162.0,
+            "n": 1,
+            "p10": 162.0,
+            "p90": 162.0
+          },
+          "wafer_epe_mean_nm": {
+            "max": 512.4719848632812,
+            "median": 512.4719848632812,
+            "min": 512.4719848632812,
+            "n": 1,
+            "p10": 512.4719848632812,
+            "p90": 512.4719848632812
+          }
+        }
+      },
+      "comparisons": {
+        "identity_vs_levelset": {
+          "mrc_violation_rate": {
+            "baseline": "dummy-identity",
+            "baseline_median": 0.1272125244140625,
+            "candidate": "levelset-ilt",
+            "candidate_median": 0.0,
+            "metric": "mrc_violation_rate",
+            "reduction_pct": 100.0
+          },
+          "pvband_mean_nm": {
+            "baseline": "dummy-identity",
+            "baseline_median": 8.0,
+            "candidate": "levelset-ilt",
+            "candidate_median": 0.0,
+            "metric": "pvband_mean_nm",
+            "reduction_pct": 100.0
+          },
+          "wafer_epe_mean_nm": {
+            "baseline": "dummy-identity",
+            "baseline_median": 3.7673425674438477,
+            "candidate": "levelset-ilt",
+            "candidate_median": Infinity,
+            "metric": "wafer_epe_mean_nm",
+            "reduction_pct": -Infinity
+          }
+        },
+        "levelset_vs_surrogate_runtime": {
+          "baseline": "levelset-ilt",
+          "baseline_median_s": 5.253224354702979,
+          "candidate": "surrogate-ilt",
+          "candidate_median_s": 31.89928631251678
+        }
+      },
+      "description": "ICCAD16 Problem C testcase1 (N7 EUV, 4nm/px, 13.5nm NA0.33 optics); design-as-target, no reference OPC mask ships with the dataset",
+      "policy": {
+        "iccad16_crop_px": 256,
+        "ilt_iterations": 200,
+        "n_tiles": 1,
+        "optical_config": "Hopkins SOCS, 13.5nm, NA 0.33, sigma 0.7, 24 kernels, threshold 0.5",
+        "quality_reps": 2,
+        "surrogate_epochs": 3,
+        "surrogate_train_samples": 16,
+        "tile_size_px": [
+          256,
+          256
+        ]
+      }
+    },
+    "sky130hd-ibex-tiles": {
+      "aggregate": {
+        "dummy-identity": {
+          "degenerate_blank_any_rep": false,
+          "epe_mean_nm": {
+            "max": 0.0,
+            "median": 0.0,
+            "min": 0.0,
+            "n": 4,
+            "p10": 0.0,
+            "p90": 0.0
+          },
+          "mask_foreground_fraction": {
+            "max": 0.06452560424804688,
+            "median": 0.05755424499511719,
+            "min": 0.05512237548828125,
+            "n": 4,
+            "p10": 0.05512237548828125,
+            "p90": 0.06316375732421875
+          },
+          "mrc_violation_rate": {
+            "max": 0.0047016143798828125,
+            "median": 0.0014095306396484375,
+            "min": 0.0,
+            "n": 4,
+            "p10": 0.0,
+            "p90": 0.004136848449707031
+          },
+          "optimization_wall_s": {
+            "max": 8.204183541238308e-05,
+            "median": 6.563554052263498e-05,
+            "min": 4.93957195430994e-05,
+            "n": 4,
+            "p10": 5.404578987509012e-05,
+            "p90": 7.73418229073286e-05
+          },
+          "pvband_max_nm": {
+            "max": 4.0,
+            "median": 3.0,
+            "min": 2.0,
+            "n": 4,
+            "p10": 2.0,
+            "p90": 4.0
+          },
+          "pvband_mean_nm": {
+            "max": 2.103971481323242,
+            "median": 2.009532928466797,
+            "min": 2.0,
+            "n": 4,
+            "p10": 2.0,
+            "p90": 2.0784997940063477
+          },
+          "shot_count": {
+            "max": 2706.0,
+            "median": 2414.0,
+            "min": 2312.0,
+            "n": 4,
+            "p10": 2312.0,
+            "p90": 2649.0
+          },
+          "wafer_epe_mean_nm": {
+            "max": 37.292240142822266,
+            "median": 11.71101975440979,
+            "min": 4.948568344116211,
+            "n": 4,
+            "p10": 4.95728144645691,
+            "p90": 31.6378963470459
+          }
+        },
+        "levelset-ilt": {
+          "degenerate_blank_any_rep": false,
+          "epe_mean_nm": {
+            "max": 2.2566657066345215,
+            "median": 0.1499873660504818,
+            "min": 0.10704433172941208,
+            "n": 4,
+            "p10": 0.10783429145812988,
+            "p90": 1.636755155026913
+          },
+          "mask_foreground_fraction": {
+            "max": 0.06523799896240234,
+            "median": 0.057836055755615234,
+            "min": 0.0549468994140625,
+            "n": 4,
+            "p10": 0.054948043823242185,
+            "p90": 0.06388301849365234
+          },
+          "mrc_violation_rate": {
+            "max": 0.004788398742675781,
+            "median": 0.00099945068359375,
+            "min": 0.0,
+            "n": 4,
+            "p10": 0.0,
+            "p90": 0.003951549530029297
+          },
+          "optimization_wall_s": {
+            "max": 21.533741103485227,
+            "median": 20.873288343660533,
+            "min": 20.678469582926482,
+            "n": 4,
+            "p10": 20.684452970628627,
+            "p90": 21.38806751605589
+          },
+          "pvband_max_nm": {
+            "max": 4.0,
+            "median": 3.0,
+            "min": 2.0,
+            "n": 4,
+            "p10": 2.0,
+            "p90": 4.0
+          },
+          "pvband_mean_nm": {
+            "max": 2.083139419555664,
+            "median": 2.005324125289917,
+            "min": 2.0,
+            "n": 4,
+            "p10": 2.0,
+            "p90": 2.061392068862915
+          },
+          "shot_count": {
+            "max": 2736.0,
+            "median": 2426.0,
+            "min": 2305.0,
+            "n": 4,
+            "p10": 2305.0,
+            "p90": 2679.3
+          },
+          "wafer_epe_mean_nm": {
+            "max": 43.91492462158203,
+            "median": 11.872798442840576,
+            "min": 4.9572858810424805,
+            "n": 4,
+            "p10": 4.967151260375976,
+            "p90": 36.36707515716553
+          }
+        },
+        "rule-based-opc": {
+          "degenerate_blank_any_rep": false,
+          "epe_mean_nm": {
+            "max": 0.5006260871887207,
+            "median": 0.5006055235862732,
+            "min": 0.5005817413330078,
+            "n": 4,
+            "p10": 0.5005888760089874,
+            "p90": 0.5006199181079865
+          },
+          "mask_foreground_fraction": {
+            "max": 0.06610488891601562,
+            "median": 0.058887481689453125,
+            "min": 0.056427001953125,
+            "n": 4,
+            "p10": 0.056427001953125,
+            "p90": 0.06467781066894532
+          },
+          "mrc_violation_rate": {
+            "max": 0.004428863525390625,
+            "median": 0.0013012886047363281,
+            "min": 0.0,
+            "n": 4,
+            "p10": 0.0,
+            "p90": 0.0038809776306152344
+          },
+          "optimization_wall_s": {
+            "max": 0.02233412442728877,
+            "median": 0.02143979142419994,
+            "min": 0.020919645437970757,
+            "n": 4,
+            "p10": 0.021061039203777908,
+            "p90": 0.022080474556423722
+          },
+          "pvband_max_nm": {
+            "max": 4.0,
+            "median": 3.0,
+            "min": 2.0,
+            "n": 4,
+            "p10": 2.0,
+            "p90": 4.0
+          },
+          "pvband_mean_nm": {
+            "max": 2.079714775085449,
+            "median": 2.0215827226638794,
+            "min": 2.0,
+            "n": 4,
+            "p10": 2.0,
+            "p90": 2.0687499761581423
+          },
+          "shot_count": {
+            "max": 2773.0,
+            "median": 2470.0,
+            "min": 2367.0,
+            "n": 4,
+            "p10": 2367.0,
+            "p90": 2713.0
+          },
+          "wafer_epe_mean_nm": {
+            "max": 39.404720306396484,
+            "median": 12.058119773864746,
+            "min": 5.188782215118408,
+            "n": 4,
+            "p10": 5.190157651901245,
+            "p90": 33.26016597747803
+          }
+        },
+        "surrogate-ilt": {
+          "degenerate_blank_any_rep": false,
+          "epe_mean_nm": {
+            "max": 2.3741707801818848,
+            "median": 0.176321841776371,
+            "min": 0.13732083141803741,
+            "n": 4,
+            "p10": 0.13732083141803741,
+            "p90": 1.726516401767731
+          },
+          "mask_foreground_fraction": {
+            "max": 0.06517696380615234,
+            "median": 0.05779600143432617,
+            "min": 0.054912567138671875,
+            "n": 4,
+            "p10": 0.054912567138671875,
+            "p90": 0.06382770538330078
+          },
+          "mrc_violation_rate": {
+            "max": 0.004802703857421875,
+            "median": 0.0009965896606445312,
+            "min": 0.0,
+            "n": 4,
+            "p10": 0.0,
+            "p90": 0.003959846496582032
+          },
+          "optimization_wall_s": {
+            "max": 189.5968794580549,
+            "median": 179.81555624958128,
+            "min": 178.17763900011778,
+            "n": 4,
+            "p10": 178.5817627436947,
+            "p90": 186.74973392677495
+          },
+          "pvband_max_nm": {
+            "max": 4.0,
+            "median": 3.0,
+            "min": 2.0,
+            "n": 4,
+            "p10": 2.0,
+            "p90": 4.0
+          },
+          "pvband_mean_nm": {
+            "max": 2.095018148422241,
+            "median": 2.0053224563598633,
+            "min": 2.0,
+            "n": 4,
+            "p10": 2.0,
+            "p90": 2.069706177711487
+          },
+          "shot_count": {
+            "max": 2734.0,
+            "median": 2424.0,
+            "min": 2303.0,
+            "n": 4,
+            "p10": 2303.0,
+            "p90": 2677.3
+          },
+          "wafer_epe_mean_nm": {
+            "max": 43.851707458496094,
+            "median": 11.861042737960815,
+            "min": 4.961044788360596,
+            "n": 4,
+            "p10": 4.970008087158203,
+            "p90": 36.315544128417976
+          }
+        }
+      },
+      "comparisons": {
+        "identity_vs_levelset": {
+          "mrc_violation_rate": {
+            "baseline": "dummy-identity",
+            "baseline_median": 0.0014095306396484375,
+            "candidate": "levelset-ilt",
+            "candidate_median": 0.00099945068359375,
+            "metric": "mrc_violation_rate",
+            "reduction_pct": 29.093369418132614
+          },
+          "pvband_mean_nm": {
+            "baseline": "dummy-identity",
+            "baseline_median": 2.009532928466797,
+            "candidate": "levelset-ilt",
+            "candidate_median": 2.005324125289917,
+            "metric": "pvband_mean_nm",
+            "reduction_pct": 0.2094418617012189
+          },
+          "wafer_epe_mean_nm": {
+            "baseline": "dummy-identity",
+            "baseline_median": 11.71101975440979,
+            "candidate": "levelset-ilt",
+            "candidate_median": 11.872798442840576,
+            "metric": "wafer_epe_mean_nm",
+            "reduction_pct": -1.3814227268284498
+          }
+        },
+        "levelset_vs_surrogate_runtime": {
+          "baseline": "levelset-ilt",
+          "baseline_median_s": 20.873288343660533,
+          "candidate": "surrogate-ilt",
+          "candidate_median_s": 179.81555624958128
+        }
+      },
+      "description": "real routed sky130hd ibex tiles (1024px @ 1nm/px), 193nm NA1.35 optics",
+      "policy": {
+        "ilt_iterations": 50,
+        "max_tiles": 4,
+        "min_tile_occupancy": 0.02,
+        "n_tiles": 4,
+        "optical_config": "Hopkins SOCS, 193nm, NA 1.35, sigma 0.7, 24 kernels, CTR threshold 0.225",
+        "quality_reps": 2,
+        "surrogate_epochs": 3,
+        "surrogate_train_samples": 16,
+        "tile_size_px": 1024
+      }
+    }
+  },
+  "git_commit": "6bcbf7fcf76bcec36258a03349f18fc7f51535ea",
+  "hardware": {
+    "cpu_count": 15,
+    "cpu_model": "Apple M5 Pro",
+    "gpu": null,
+    "machine": "arm64",
+    "os": "Darwin 25.6.0",
+    "physical_ram_bytes": 51539607552
+  },
+  "kind": "quality",
+  "reproducibility": {
+    "command": "python benchmarks/industrial/run_industrial_benchmark.py --gds <ibex.gds> --out benchmarks/results/industrial --repeats 5",
+    "seed": 0
+  },
+  "schema": "OpenLithoHub.industrial-benchmark.v1",
+  "software": {
+    "cuda_available": false,
+    "device": "cpu",
+    "klayout": "0.30.12",
+    "openlithohub": "0.1.0a3.dev272+gbc5d73fb5.d20260910",
+    "openlithohub_commit": "6bcbf7fcf76bcec36258a03349f18fc7f51535ea",
+    "python": "3.12.10",
+    "torch": "2.14.0"
+  },
+  "status": "SUCCESS",
+  "tile_rows": {
+    "iccad16-testcase1": [
+      {
+        "occupancy": 0.26416015625,
+        "padding": {
+          "crop_offset_px": [
+            60,
+            106
+          ],
+          "crop_px": [
+            256,
+            256
+          ],
+          "mode": "center crop + symmetric zero pad (same input for all models)",
+          "original_px": [
+            377,
+            469
+          ],
+          "padded_px": [
+            256,
+            256
+          ]
+        },
+        "rows": [
+          {
+            "deterministic_across_reps": true,
+            "iterations": 200,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 0.0,
+              "epe_mean_nm": 0.0,
+              "l2_error_pixels": 17312.0,
+              "mask_foreground_fraction": 0.26416015625,
+              "mrc_passed": false,
+              "mrc_violation_rate": 0.1272125244140625,
+              "pvband_max_nm": 8.0,
+              "pvband_mean_nm": 8.0,
+              "shot_count": 11080,
+              "valid": true,
+              "wafer_epe_max_nm": 115.16944122314453,
+              "wafer_epe_mean_nm": 3.7673425674438477
+            },
+            "model": "dummy-identity",
+            "optimization_wall_s": {
+              "max": 4.699965938925743e-05,
+              "median": 3.924989141523838e-05,
+              "min": 3.150012344121933e-05,
+              "n": 2,
+              "p10": 3.305007703602314e-05,
+              "p90": 4.544970579445362e-05
+            }
+          },
+          {
+            "deterministic_across_reps": true,
+            "iterations": 200,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 5.656854152679443,
+              "epe_mean_nm": 1.9213508367538452,
+              "l2_error_pixels": 17312.0,
+              "mask_foreground_fraction": 0.3386077880859375,
+              "mrc_passed": false,
+              "mrc_violation_rate": 0.242034912109375,
+              "pvband_max_nm": 8.0,
+              "pvband_mean_nm": 8.0,
+              "shot_count": 14202,
+              "valid": true,
+              "wafer_epe_max_nm": 108.811767578125,
+              "wafer_epe_mean_nm": 1.9426220655441284
+            },
+            "model": "rule-based-opc",
+            "optimization_wall_s": {
+              "max": 0.005852832924574614,
+              "median": 0.005059750052168965,
+              "min": 0.004266667179763317,
+              "n": 2,
+              "p10": 0.004425283754244447,
+              "p90": 0.005694216350093484
+            }
+          },
+          {
+            "deterministic_across_reps": true,
+            "iterations": 200,
+            "metrics": {
+              "degenerate_blank": true,
+              "epe_max_nm": Infinity,
+              "epe_mean_nm": Infinity,
+              "l2_error_pixels": 17312.0,
+              "mask_foreground_fraction": 0.0,
+              "mrc_passed": true,
+              "mrc_violation_rate": 0.0,
+              "pvband_max_nm": 0.0,
+              "pvband_mean_nm": 0.0,
+              "shot_count": 0,
+              "valid": false,
+              "wafer_epe_max_nm": Infinity,
+              "wafer_epe_mean_nm": Infinity
+            },
+            "model": "levelset-ilt",
+            "optimization_wall_s": {
+              "max": 5.306821709033102,
+              "median": 5.253224354702979,
+              "min": 5.199627000372857,
+              "n": 2,
+              "p10": 5.210346471238881,
+              "p90": 5.2961022381670775
+            }
+          },
+          {
+            "deterministic_across_reps": false,
+            "iterations": 200,
+            "metrics": {
+              "degenerate_blank": true,
+              "epe_max_nm": 1107.1982421875,
+              "epe_mean_nm": 499.7230529785156,
+              "l2_error_pixels": 17312.0,
+              "mask_foreground_fraction": 0.0038604736328125,
+              "mrc_passed": false,
+              "mrc_violation_rate": 0.004791259765625,
+              "pvband_max_nm": 8.0,
+              "pvband_mean_nm": 8.0,
+              "shot_count": 162,
+              "valid": true,
+              "wafer_epe_max_nm": 1116.8526611328125,
+              "wafer_epe_mean_nm": 512.4719848632812
+            },
+            "model": "surrogate-ilt",
+            "optimization_wall_s": {
+              "max": 31.967396250460297,
+              "median": 31.89928631251678,
+              "min": 31.83117637457326,
+              "n": 2,
+              "p10": 31.844798362161967,
+              "p90": 31.953774262871594
+            }
+          }
+        ],
+        "tile_px": [
+          256,
+          256
+        ]
+      }
+    ],
+    "sky130hd-ibex-tiles": [
+      {
+        "forward_wall_s": {
+          "max": 0.25153116695582867,
+          "median": 0.24303983291611075,
+          "min": 0.2418675827793777,
+          "n": 5,
+          "p10": 0.24222046649083495,
+          "p90": 0.2491643834859133
+        },
+        "occupancy": 0.06452560424804688,
+        "rows": [
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 0.0,
+              "epe_mean_nm": 0.0,
+              "l2_error_pixels": 12857.0,
+              "mask_foreground_fraction": 0.06452560424804688,
+              "mrc_passed": false,
+              "mrc_violation_rate": 0.0047016143798828125,
+              "pvband_max_nm": 4.0,
+              "pvband_mean_nm": 2.103971481323242,
+              "shot_count": 2706,
+              "valid": true,
+              "wafer_epe_max_nm": 346.83135986328125,
+              "wafer_epe_mean_nm": 18.444427490234375
+            },
+            "model": "dummy-identity",
+            "optimization_wall_s": {
+              "max": 5.025044083595276e-05,
+              "median": 4.93957195430994e-05,
+              "min": 4.854099825024605e-05,
+              "n": 2,
+              "p10": 4.871194250881672e-05,
+              "p90": 5.0079496577382085e-05
+            }
+          },
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 1.4142135381698608,
+              "epe_mean_nm": 0.5006260871887207,
+              "l2_error_pixels": 13115.0,
+              "mask_foreground_fraction": 0.06610488891601562,
+              "mrc_passed": false,
+              "mrc_violation_rate": 0.004428863525390625,
+              "pvband_max_nm": 4.0,
+              "pvband_mean_nm": 2.079714775085449,
+              "shot_count": 2773,
+              "valid": true,
+              "wafer_epe_max_nm": 348.5283203125,
+              "wafer_epe_mean_nm": 18.92287254333496
+            },
+            "model": "rule-based-opc",
+            "optimization_wall_s": {
+              "max": 0.02151999995112419,
+              "median": 0.020919645437970757,
+              "min": 0.020319290924817324,
+              "n": 2,
+              "p10": 0.02043936182744801,
+              "p90": 0.021399929048493506
+            }
+          },
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 6.0,
+              "epe_mean_nm": 0.1902972012758255,
+              "l2_error_pixels": 12892.0,
+              "mask_foreground_fraction": 0.06523799896240234,
+              "mrc_passed": false,
+              "mrc_violation_rate": 0.004788398742675781,
+              "pvband_max_nm": 4.0,
+              "pvband_mean_nm": 2.083139419555664,
+              "shot_count": 2736,
+              "valid": true,
+              "wafer_epe_max_nm": 346.83135986328125,
+              "wafer_epe_mean_nm": 18.75542640686035
+            },
+            "model": "levelset-ilt",
+            "optimization_wall_s": {
+              "max": 20.73945812508464,
+              "median": 20.678469582926482,
+              "min": 20.617481040768325,
+              "n": 2,
+              "p10": 20.629678749199957,
+              "p90": 20.72726041665301
+            }
+          },
+          {
+            "deterministic_across_reps": false,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 6.0,
+              "epe_mean_nm": 0.2153228521347046,
+              "l2_error_pixels": 12900.0,
+              "mask_foreground_fraction": 0.06517696380615234,
+              "mrc_passed": false,
+              "mrc_violation_rate": 0.004802703857421875,
+              "pvband_max_nm": 4.0,
+              "pvband_mean_nm": 2.095018148422241,
+              "shot_count": 2734,
+              "valid": true,
+              "wafer_epe_max_nm": 346.83135986328125,
+              "wafer_epe_mean_nm": 18.731163024902344
+            },
+            "model": "surrogate-ilt",
+            "optimization_wall_s": {
+              "max": 190.8995020831935,
+              "median": 189.5968794580549,
+              "min": 188.2942568329163,
+              "n": 2,
+              "p10": 188.55478135794402,
+              "p90": 190.63897755816578
+            }
+          }
+        ],
+        "tile_px": [
+          0,
+          3072,
+          1024
+        ]
+      },
+      {
+        "forward_wall_s": {
+          "max": 0.24734654230996966,
+          "median": 0.24629558296874166,
+          "min": 0.24583700019866228,
+          "n": 5,
+          "p10": 0.24590836688876153,
+          "p90": 0.247046675439924
+        },
+        "occupancy": 0.059986114501953125,
+        "rows": [
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 0.0,
+              "epe_mean_nm": 0.0,
+              "l2_error_pixels": 9197.0,
+              "mask_foreground_fraction": 0.059986114501953125,
+              "mrc_passed": false,
+              "mrc_violation_rate": 0.002819061279296875,
+              "pvband_max_nm": 4.0,
+              "pvband_mean_nm": 2.0190658569335938,
+              "shot_count": 2516,
+              "valid": true,
+              "wafer_epe_max_nm": 713.71142578125,
+              "wafer_epe_mean_nm": 37.292240142822266
+            },
+            "model": "dummy-identity",
+            "optimization_wall_s": {
+              "max": 7.05840066075325e-05,
+              "median": 6.489595398306847e-05,
+              "min": 5.920790135860443e-05,
+              "n": 2,
+              "p10": 6.034551188349724e-05,
+              "p90": 6.94463960826397e-05
+            }
+          },
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 1.4142135381698608,
+              "epe_mean_nm": 0.5005817413330078,
+              "l2_error_pixels": 9496.0,
+              "mask_foreground_fraction": 0.06134796142578125,
+              "mrc_passed": false,
+              "mrc_violation_rate": 0.0026025772094726562,
+              "pvband_max_nm": 4.0,
+              "pvband_mean_nm": 2.043165445327759,
+              "shot_count": 2573,
+              "valid": true,
+              "wafer_epe_max_nm": 713.71142578125,
+              "wafer_epe_mean_nm": 39.404720306396484
+            },
+            "model": "rule-based-opc",
+            "optimization_wall_s": {
+              "max": 0.02227245829999447,
+              "median": 0.021390957990661263,
+              "min": 0.020509457681328058,
+              "n": 2,
+              "p10": 0.0206857577431947,
+              "p90": 0.022096158238127828
+            }
+          },
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 76.0,
+              "epe_mean_nm": 2.2566657066345215,
+              "l2_error_pixels": 9622.0,
+              "mask_foreground_fraction": 0.060721397399902344,
+              "mrc_passed": false,
+              "mrc_violation_rate": 0.0019989013671875,
+              "pvband_max_nm": 4.0,
+              "pvband_mean_nm": 2.010648250579834,
+              "shot_count": 2547,
+              "valid": true,
+              "wafer_epe_max_nm": 713.71142578125,
+              "wafer_epe_mean_nm": 43.91492462158203
+            },
+            "model": "levelset-ilt",
+            "optimization_wall_s": {
+              "max": 20.720190208870918,
+              "median": 20.698414208600298,
+              "min": 20.676638208329678,
+              "n": 2,
+              "p10": 20.680993408383802,
+              "p90": 20.715835008816796
+            }
+          },
+          {
+            "deterministic_across_reps": false,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 77.0,
+              "epe_mean_nm": 2.3741707801818848,
+              "l2_error_pixels": 9630.0,
+              "mask_foreground_fraction": 0.06067943572998047,
+              "mrc_passed": false,
+              "mrc_violation_rate": 0.0019931793212890625,
+              "pvband_max_nm": 4.0,
+              "pvband_mean_nm": 2.0106449127197266,
+              "shot_count": 2545,
+              "valid": true,
+              "wafer_epe_max_nm": 713.71142578125,
+              "wafer_epe_mean_nm": 43.851707458496094
+            },
+            "model": "surrogate-ilt",
+            "optimization_wall_s": {
+              "max": 179.08740450022742,
+              "median": 178.17763900011778,
+              "min": 177.26787350000814,
+              "n": 2,
+              "p10": 177.44982660003006,
+              "p90": 178.9054514002055
+            }
+          }
+        ],
+        "tile_px": [
+          0,
+          2048,
+          1024
+        ]
+      },
+      {
+        "forward_wall_s": {
+          "max": 0.27856179187074304,
+          "median": 0.27642462495714426,
+          "min": 0.2661835830658674,
+          "n": 5,
+          "p10": 0.2682178497314453,
+          "p90": 0.2779924583621323
+        },
+        "occupancy": 0.05512237548828125,
+        "rows": [
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 0.0,
+              "epe_mean_nm": 0.0,
+              "l2_error_pixels": 7090.0,
+              "mask_foreground_fraction": 0.05512237548828125,
+              "mrc_passed": true,
+              "mrc_violation_rate": 0.0,
+              "pvband_max_nm": 2.0,
+              "pvband_mean_nm": 2.0,
+              "shot_count": 2312,
+              "valid": true,
+              "wafer_epe_max_nm": 18.384777069091797,
+              "wafer_epe_mean_nm": 4.948568344116211
+            },
+            "model": "dummy-identity",
+            "optimization_wall_s": {
+              "max": 7.791724056005478e-05,
+              "median": 6.63751270622015e-05,
+              "min": 5.483301356434822e-05,
+              "n": 2,
+              "p10": 5.714143626391888e-05,
+              "p90": 7.560881786048412e-05
+            }
+          },
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 1.4142135381698608,
+              "epe_mean_nm": 0.5006055235862732,
+              "l2_error_pixels": 7538.0,
+              "mask_foreground_fraction": 0.056427001953125,
+              "mrc_passed": true,
+              "mrc_violation_rate": 0.0,
+              "pvband_max_nm": 2.0,
+              "pvband_mean_nm": 2.0,
+              "shot_count": 2367,
+              "valid": true,
+              "wafer_epe_max_nm": 16.970561981201172,
+              "wafer_epe_mean_nm": 5.193367004394531
+            },
+            "model": "rule-based-opc",
+            "optimization_wall_s": {
+              "max": 0.023580667097121477,
+              "median": 0.021488624857738614,
+              "min": 0.01939658261835575,
+              "n": 2,
+              "p10": 0.019814991066232326,
+              "p90": 0.023162258649244906
+            }
+          },
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 4.242640495300293,
+              "epe_mean_nm": 0.10967753082513809,
+              "l2_error_pixels": 7103.0,
+              "mask_foreground_fraction": 0.0549468994140625,
+              "mrc_passed": true,
+              "mrc_violation_rate": 0.0,
+              "pvband_max_nm": 2.0,
+              "pvband_mean_nm": 2.0,
+              "shot_count": 2305,
+              "valid": true,
+              "wafer_epe_max_nm": 18.384777069091797,
+              "wafer_epe_mean_nm": 4.9572858810424805
+            },
+            "model": "levelset-ilt",
+            "optimization_wall_s": {
+              "max": 23.345350916031748,
+              "median": 21.533741103485227,
+              "min": 19.722131290938705,
+              "n": 2,
+              "p10": 20.08445325344801,
+              "p90": 22.983028953522442
+            }
+          },
+          {
+            "deterministic_across_reps": false,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 5.0,
+              "epe_mean_nm": 0.13732083141803741,
+              "l2_error_pixels": 7107.0,
+              "mask_foreground_fraction": 0.054912567138671875,
+              "mrc_passed": true,
+              "mrc_violation_rate": 0.0,
+              "pvband_max_nm": 2.0,
+              "pvband_mean_nm": 2.0,
+              "shot_count": 2303,
+              "valid": true,
+              "wafer_epe_max_nm": 18.384777069091797,
+              "wafer_epe_mean_nm": 4.961044788360596
+            },
+            "model": "surrogate-ilt",
+            "optimization_wall_s": {
+              "max": 180.50982495769858,
+              "median": 180.10639435378835,
+              "min": 179.7029637498781,
+              "n": 2,
+              "p10": 179.78364987066016,
+              "p90": 180.42913883691654
+            }
+          }
+        ],
+        "tile_px": [
+          2048,
+          2048,
+          1024
+        ]
+      },
+      {
+        "forward_wall_s": {
+          "max": 0.28284716699272394,
+          "median": 0.2792698750272393,
+          "min": 0.278354125097394,
+          "n": 5,
+          "p10": 0.27864862494170667,
+          "p90": 0.2826768333092332
+        },
+        "occupancy": 0.05512237548828125,
+        "rows": [
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 0.0,
+              "epe_mean_nm": 0.0,
+              "l2_error_pixels": 7136.0,
+              "mask_foreground_fraction": 0.05512237548828125,
+              "mrc_passed": true,
+              "mrc_violation_rate": 0.0,
+              "pvband_max_nm": 2.0,
+              "pvband_mean_nm": 2.0,
+              "shot_count": 2312,
+              "valid": true,
+              "wafer_epe_max_nm": 18.384777069091797,
+              "wafer_epe_mean_nm": 4.977612018585205
+            },
+            "model": "dummy-identity",
+            "optimization_wall_s": {
+              "max": 8.425023406744003e-05,
+              "median": 8.204183541238308e-05,
+              "min": 7.983343675732613e-05,
+              "n": 2,
+              "p10": 8.027511648833752e-05,
+              "p90": 8.380855433642864e-05
+            }
+          },
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 1.4142135381698608,
+              "epe_mean_nm": 0.5006055235862732,
+              "l2_error_pixels": 7528.0,
+              "mask_foreground_fraction": 0.056427001953125,
+              "mrc_passed": true,
+              "mrc_violation_rate": 0.0,
+              "pvband_max_nm": 2.0,
+              "pvband_mean_nm": 2.0,
+              "shot_count": 2367,
+              "valid": true,
+              "wafer_epe_max_nm": 16.970561981201172,
+              "wafer_epe_mean_nm": 5.188782215118408
+            },
+            "model": "rule-based-opc",
+            "optimization_wall_s": {
+              "max": 0.023237165994942188,
+              "median": 0.02233412442728877,
+              "min": 0.021431082859635353,
+              "n": 2,
+              "p10": 0.021611691173166036,
+              "p90": 0.023056557681411505
+            }
+          },
+          {
+            "deterministic_across_reps": true,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 4.242640495300293,
+              "epe_mean_nm": 0.10704433172941208,
+              "l2_error_pixels": 7146.0,
+              "mask_foreground_fraction": 0.054950714111328125,
+              "mrc_passed": true,
+              "mrc_violation_rate": 0.0,
+              "pvband_max_nm": 2.0,
+              "pvband_mean_nm": 2.0,
+              "shot_count": 2305,
+              "valid": true,
+              "wafer_epe_max_nm": 18.384777069091797,
+              "wafer_epe_mean_nm": 4.990170478820801
+            },
+            "model": "levelset-ilt",
+            "optimization_wall_s": {
+              "max": 22.34850004175678,
+              "median": 21.04816247872077,
+              "min": 19.74782491568476,
+              "n": 2,
+              "p10": 20.00789242829196,
+              "p90": 22.08843252914958
+            }
+          },
+          {
+            "deterministic_across_reps": false,
+            "iterations": 50,
+            "metrics": {
+              "degenerate_blank": false,
+              "epe_max_nm": 5.0,
+              "epe_mean_nm": 0.13732083141803741,
+              "l2_error_pixels": 7148.0,
+              "mask_foreground_fraction": 0.054912567138671875,
+              "mrc_passed": true,
+              "mrc_violation_rate": 0.0,
+              "pvband_max_nm": 2.0,
+              "pvband_mean_nm": 2.0,
+              "shot_count": 2303,
+              "valid": true,
+              "wafer_epe_max_nm": 18.384777069091797,
+              "wafer_epe_mean_nm": 4.990922451019287
+            },
+            "model": "surrogate-ilt",
+            "optimization_wall_s": {
+              "max": 180.05427679093555,
+              "median": 179.5247181453742,
+              "min": 178.99515949981287,
+              "n": 2,
+              "p10": 179.10107122892512,
+              "p90": 179.9483650618233
+            }
+          }
+        ],
+        "tile_px": [
+          2048,
+          3072,
+          1024
+        ]
+      }
+    ]
+  },
+  "tile_selection": {
+    "_key": "tile_selection",
+    "tiles": [
+      {
+        "occupancy": 0.06452560424804688,
+        "x": 0,
+        "y": 3072
+      },
+      {
+        "occupancy": 0.059986114501953125,
+        "x": 0,
+        "y": 2048
+      },
+      {
+        "occupancy": 0.05512237548828125,
+        "x": 2048,
+        "y": 2048
+      },
+      {
+        "occupancy": 0.05512237548828125,
+        "x": 2048,
+        "y": 3072
+      }
+    ]
+  },
+  "timestamp_utc": "2026-09-20T16:11:40Z"
+}

@@ -74,3 +74,8 @@ proof_artifacts/B04_K24_DirectRunSpectrum_AliasFreeIntensity_2026-09-10.npz
 
 # P-054 fetched external proof bytes and transport evidence
 proof_artifacts/p054/external/
+
+# Industrial benchmark v1: per-run fixtures and checkpoint journals stay
+# local; only the JSON artifacts + manifest are committed.
+benchmarks/results/industrial/fixtures/
+benchmarks/results/industrial/checkpoints/
