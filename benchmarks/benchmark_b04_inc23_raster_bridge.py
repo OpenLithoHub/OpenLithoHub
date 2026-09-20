@@ -96,9 +96,7 @@ def main() -> None:
 
     exact = exact_fixture_mask()
     if int(exact.sum()) != 90032:
-        raise RuntimeError(
-            f"analytic fixture area drifted: {int(exact.sum())} != 90032"
-        )
+        raise RuntimeError(f"analytic fixture area drifted: {int(exact.sum())} != 90032")
 
     source = KLayoutAlignedRunSource.from_file(gds, pixel_size_nm=8.0, layer="1:0", top_cell="TOP")
     streamed = (

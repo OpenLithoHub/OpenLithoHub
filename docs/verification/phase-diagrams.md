@@ -42,9 +42,9 @@ the target discriminant)?
 from openlithohub.verify.phase_diagram import load_frozen_phase_diagram, PhaseLayer
 
 pd = load_frozen_phase_diagram("p054-arf37")
-pd.events_by_layer(PhaseLayer.OWNERSHIP)   # typed ownership certificates
-pd.event("z5")                             # ownership-invisible pitchfork
-pd.verify_manifest()                       # structural replay (offline)
+pd.events_by_layer(PhaseLayer.OWNERSHIP)  # typed ownership certificates
+pd.event("z5")  # ownership-invisible pitchfork
+pd.verify_manifest()  # structural replay (offline)
 ```
 
 Numeric focus intervals and chamber boundaries live in the frozen external

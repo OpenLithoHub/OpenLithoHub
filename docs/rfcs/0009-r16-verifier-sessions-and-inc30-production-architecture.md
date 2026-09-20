@@ -68,7 +68,7 @@ class VerifierSession:
     def __init__(self, plugin: VerificationPlugin) -> None:
         self.plugin = plugin
         self._results: dict[str, TileVerificationResult] = {}
-        self._superseded: set[str] = set()   # R16.2: subdivided parents
+        self._superseded: set[str] = set()  # R16.2: subdivided parents
 
     def record(self, result: TileVerificationResult) -> None:
         self._results[result.tile_id] = result
@@ -241,13 +241,13 @@ Inc30 promotes the *report schema* to a typed, versioned contract:
 
 ```python
 @dataclass(frozen=True)
-class ScalingReport:            # stream report → verify_layout result
-    schema_version: int          # 1
+class ScalingReport:  # stream report → verify_layout result
+    schema_version: int  # 1
     full_chip_pixels: int
     active_pixels: int
     screened_out_pixels: int
     accounted_pct: float
-    peak_rss_bytes: int          # sampled from resource in pipeline
+    peak_rss_bytes: int  # sampled from resource in pipeline
     max_window_px: tuple[int, int]
     dense_allocation_events: int
 ```
