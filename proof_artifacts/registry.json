@@ -5,16 +5,20 @@
     {
       "name": "p054-arf37-frozen-artifact.zip",
       "kind": "coefficient_tensor+fixture+event_intervals+chambers+witnesses",
-      "profiles": ["p054-arf37"],
+      "profiles": [
+        "p054-arf37"
+      ],
       "record_doi": "10.5281/zenodo.22843141",
       "record_id": null,
       "file_name": "p054-arf37-frozen-artifact.zip",
       "download_url": null,
-      "sha256": null,
-      "bytes": null,
+      "sha256": "7212a7d8442159f1bb74c13949cf0f49b02142145b06efc6577728590b9a3d07",
+      "bytes": 92082,
       "source": "zenodo",
       "destination": "proof_artifacts/p054/external/",
-      "required_for": ["p054-full-replay"],
+      "required_for": [
+        "p054-full-replay"
+      ],
       "provides": [
         "replay_manifest.json",
         "mask_sha256",
@@ -23,7 +27,8 @@
         "event focus intervals (z1,z2,z3,z4,z5,zV,zH,zP)",
         "chamber focus boundaries and owners",
         "z5 ownership-invisibility witness (non-null owners)"
-      ]
+      ],
+      "status": "LOCAL_CANDIDATE_STAGED"
     }
   ]
 }

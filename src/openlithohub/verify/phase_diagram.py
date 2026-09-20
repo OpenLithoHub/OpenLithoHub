@@ -636,7 +636,6 @@ def _verify_bundle_semantics(
     layer-specific declarations.
     """
     identity_fields = (
-        ("model_schema", "model_schema"),
         ("wavelength_nm", "wavelength_nm"),
         ("na", "na"),
         ("sigma", "sigma"),

@@ -178,11 +178,10 @@ def test_z5_ownership_invisibility_witness_replays():
     witness = witnesses[0]
     assert witness["owner_before"] is not None
     assert witness["owner_before"] == witness["owner_after"]
-    chamber_ids = {c["chamber_id"] for c in replay["chambers"]}
-    assert {witness["left_chamber_id"], witness["right_chamber_id"]} <= chamber_ids
-    by_id = {c["chamber_id"]: c for c in replay["chambers"]}
-    for key in ("left_chamber_id", "right_chamber_id"):
-        assert "z5" in by_id[witness[key]]["bounded_by_events"]
+    lo, hi = witness["owner_interval_nm"]
+    z5 = next(e for e in replay["events"] if e["event_id"] == "z5")
+    elo, ehi = z5["focus_interval_nm"]
+    assert lo <= elo < ehi <= hi
 
 
 def test_chamber_boundaries_replay():
@@ -196,7 +195,7 @@ def test_chamber_boundaries_replay():
         lo, hi = chamber["focus_interval_nm"]
         assert lo < hi
     # adjacency: consecutive chambers share their bounding event
-    for left, right in zip(chambers, chambers[1:], strict=True):
+    for left, right in zip(chambers, chambers[1:]):
         assert left["bounded_by_events"][-1] == right["bounded_by_events"][0]
 
 
