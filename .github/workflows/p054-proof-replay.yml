@@ -8,17 +8,16 @@ on:
       - "scripts/check_verification_status.py"
       - "scripts/fetch_proof_artifacts.py"
       - "scripts/replay_p054_artifact.py"
+      - "scripts/build_p054_frozen_artifact.py"
       - ".github/workflows/p054-proof-replay.yml"
       - "tests/test_verify/test_p054_*.py"
+
+  # PR events are deliberately NOT path-filtered: the p054-governance-gate
+  # must report a stable required check on every pull request, with the
+  # p054-scope job deciding whether the heavy gates run.
   pull_request:
-    paths:
-      - "src/openlithohub/verify/**"
-      - "proof_artifacts/**"
-      - "scripts/check_verification_status.py"
-      - "scripts/fetch_proof_artifacts.py"
-      - "scripts/replay_p054_artifact.py"
-      - ".github/workflows/p054-proof-replay.yml"
-      - "tests/test_verify/test_p054_*.py"
+    branches: [main]
+
   workflow_dispatch:
   schedule:
     # weekly full replay, Sundays 03:17 UTC
@@ -28,9 +27,56 @@ permissions:
   contents: read
 
 jobs:
+  p054-scope:
+    # Scope detection: governed paths make a PR relevant; every non-PR
+    # event (push/dispatch/schedule) is always relevant.  Fail-closed: if
+    # detection itself fails the gate reports failure, not a free pass.
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.scope.outputs.relevant }}
+    steps:
+      - name: Non-PR events are relevant
+        if: github.event_name != 'pull_request'
+        id: non_pr
+        run: echo "relevant=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+
+      - name: Detect P-054 governed paths
+        if: github.event_name == 'pull_request'
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          relevant=false
+
+          while IFS= read -r path; do
+            case "$path" in
+              src/openlithohub/verify/*|\
+              proof_artifacts/*|\
+              scripts/check_verification_status.py|\
+              scripts/fetch_proof_artifacts.py|\
+              scripts/replay_p054_artifact.py|\
+              scripts/build_p054_frozen_artifact.py|\
+              .github/workflows/p054-proof-replay.yml|\
+              tests/test_verify/test_p054_*.py)
+                relevant=true
+                ;;
+            esac
+          done < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+
+          echo "relevant=$relevant" >> "$GITHUB_OUTPUT"
+          echo "P-054 governed path relevant=$relevant"
+
   p054-fast-gate:
     # Offline structural replay: schemas, layer/type stratification,
     # claim firewall, status manifest.  No external artifacts needed.
+    needs: p054-scope
+    if: needs.p054-scope.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -58,10 +104,14 @@ jobs:
     # file-level download_url + sha256), verifies it, and runs the
     # artifact-required numeric shard in strict mode.  Missing artifacts,
     # hash mismatches, model-identity mismatches and proof-level downgrades
-    # are HARD failures here — never silent skips.
+    # are HARD failures here — never silent skips.  Schedule/manual only.
     runs-on: ubuntu-latest
-    needs: p054-fast-gate
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs:
+      - p054-scope
+      - p054-fast-gate
+    if: >
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     timeout-minutes: 30
     env:
       B04_PROOF_REPLAY_STRICT: "1"
@@ -129,8 +179,11 @@ jobs:
     # Release-authority PRs must prove the promoted status against the
     # EXACT external bytes: fetch, verify, replay, and compare a FRESH
     # receipt with the committed one.  Missing/absent evidence is fatal.
+    needs: p054-scope
+    if: >
+      github.event_name == 'pull_request' &&
+      needs.p054-scope.outputs.relevant == 'true'
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -249,3 +302,53 @@ jobs:
             proof_artifacts/p054/external/p054-arf37-frozen-artifact.fetch-report.json
             pytest-output.txt
           if-no-files-found: error
+
+  p054-governance-gate:
+    # The stable required check for every pull request.  Never skipped:
+    # it always reports, and enforces the governance semantics —
+    # unrelated PRs must show both heavy gates skipped; governed PRs
+    # must show fast-gate and release-activation both successful.
+    name: p054-governance-gate
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'pull_request'
+    needs:
+      - p054-scope
+      - p054-fast-gate
+      - p054-release-activation
+    steps:
+      - name: Enforce P-054 governance result
+        env:
+          SCOPE_RESULT: ${{ needs.p054-scope.result }}
+          RELEVANT: ${{ needs.p054-scope.outputs.relevant }}
+          FAST_RESULT: ${{ needs.p054-fast-gate.result }}
+          ACTIVATION_RESULT: ${{ needs.p054-release-activation.result }}
+        run: |
+          echo "scope=$SCOPE_RESULT relevant=$RELEVANT"
+          echo "fast=$FAST_RESULT activation=$ACTIVATION_RESULT"
+
+          if [ "$SCOPE_RESULT" != "success" ]; then
+            echo "FAIL: P-054 scope detection did not succeed"
+            exit 1
+          fi
+
+          if [ "$RELEVANT" = "false" ]; then
+            if [ "$FAST_RESULT" != "skipped" ] || \
+               [ "$ACTIVATION_RESULT" != "skipped" ]; then
+              echo "FAIL: unrelated PR unexpectedly executed P-054 heavy gates"
+              exit 1
+            fi
+            echo "PASS: unrelated PR; P-054 activation not required"
+            exit 0
+          fi
+
+          if [ "$FAST_RESULT" != "success" ]; then
+            echo "FAIL: p054-fast-gate=$FAST_RESULT"
+            exit 1
+          fi
+
+          if [ "$ACTIVATION_RESULT" != "success" ]; then
+            echo "FAIL: p054-release-activation=$ACTIVATION_RESULT"
+            exit 1
+          fi
+
+          echo "PASS: P-054 governed change passed fast gate and release activation"
