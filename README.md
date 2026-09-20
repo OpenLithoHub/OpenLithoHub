@@ -52,7 +52,7 @@ Dose-response is **monotonically decreasing** (19.4× from 10→100 ph/nm²), ma
 
 <!-- governance smoke: ruleset-activated normal-CI validation marker -->
 
-**Honesty boundaries:** Leaderboard/reference model-quality numbers remain benchmark-relative and are not foundry validation. The repository also contains public-layout engineering benchmarks (sky130 / Ibex routed GDS) for scaling, semantics, and work-avoidance studies. No result should be interpreted as wafer-process qualification without external calibration/SEM validation. CPU-only timing. See [BENCHMARKS.md](BENCHMARKS.md) for full methodology and [proof_artifacts/p054/README.md](proof_artifacts/p054/README.md) for the canonical frozen proof entry point.
+**Honesty boundaries (governance):** Leaderboard/reference model-quality numbers remain benchmark-relative and are not foundry validation. Frozen-proof governance state is tracked in `proof_artifacts/verification-status.json` and enforced by `p054-governance-gate`. The repository also contains public-layout engineering benchmarks (sky130 / Ibex routed GDS) for scaling, semantics, and work-avoidance studies. No result should be interpreted as wafer-process qualification without external calibration/SEM validation. CPU-only timing. See [BENCHMARKS.md](BENCHMARKS.md) for full methodology and [proof_artifacts/p054/README.md](proof_artifacts/p054/README.md) for the canonical frozen proof entry point.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
