@@ -183,6 +183,7 @@ def main() -> int:
                 fetch_report,
                 artifact_sha256=actual_sha,
                 artifact_bytes=actual_bytes,
+                expected_profile=args.profile,
             )
         except ValueError as exc:
             print(f"FAIL: {exc}", file=sys.stderr)

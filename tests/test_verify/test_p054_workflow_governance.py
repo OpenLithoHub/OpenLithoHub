@@ -222,12 +222,19 @@ def test_both_replay_jobs_pass_fetch_report():
 
 
 def test_both_evidence_uploads_include_fetch_report():
+    """R129/P2-B: BOTH evidence uploads — the scheduled `p054-replay-logs`
+    and the PR `p054-activation-evidence` — must carry the canonical fetch
+    report, so a regression in either upload is caught."""
     doc = _doc()
-    found = 0
+    uploads: dict[str, str] = {}
     for job in doc["jobs"].values():
         for step in job.get("steps", []):
             upload = step.get("with", {})
-            if "path" in upload and "p054-activation-evidence" in upload.get("name", ""):
-                assert "fetch-report" in upload["path"]
-                found += 1
-    assert found == 1
+            name = upload.get("name", "")
+            if "path" in upload and name in ("p054-replay-logs", "p054-activation-evidence"):
+                uploads[name] = upload["path"]
+    assert set(uploads) == {"p054-replay-logs", "p054-activation-evidence"}, (
+        f"expected exactly one scheduled and one activation evidence upload, got {sorted(uploads)}"
+    )
+    for name, path in uploads.items():
+        assert "fetch-report" in path, f"{name} upload lost the canonical fetch report"
