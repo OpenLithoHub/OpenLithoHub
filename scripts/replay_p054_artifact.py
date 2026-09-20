@@ -103,6 +103,11 @@ def main() -> int:
     ap.add_argument("--artifact", type=Path, required=True)
     ap.add_argument("--receipt-out", type=Path, required=True)
     ap.add_argument("--report-out", type=Path, required=True)
+    ap.add_argument(
+        "--effective-url",
+        default="",
+        help="final effective URL captured by the fetch (evidence provenance)",
+    )
     args = ap.parse_args()
 
     if not args.artifact.exists():
@@ -134,6 +139,7 @@ def main() -> int:
         "witness_count": len(diagram.witnesses),
     }
     report = {
+        "effective_url": args.effective_url,
         "environment": {
             "python": sys.version,
             "platform": platform.platform(),

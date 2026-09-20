@@ -6,6 +6,8 @@ activation job must carry the preflight that spares ordinary PRs from a
 guaranteed external-fetch failure while the artifact is unpublished.
 """
 
+import json
+
 import yaml
 
 WORKFLOW = (
@@ -134,3 +136,17 @@ def test_g7_ordinary_unfetched_path_leaves_job_successful():
     assert "needs_replay=" in run
     names = [s.get("name", "") for s in _activation_steps()]
     assert any("Offline status manifest" in n for n in names)
+
+
+def test_pr3e4_no_activation_condition_outside_activation_job():
+    # PR-3E4: steps.activation_preflight.* may only appear inside the
+    # p054-release-activation job — a cross-job leak silently skips
+    # steps in jobs that have no preflight.
+    jobs = _jobs()
+    for job_name, job in jobs.items():
+        raw = json.dumps(job)
+        if job_name == "p054-release-activation":
+            continue
+        assert "steps.activation_preflight" not in raw, (
+            f"{job_name} references the activation preflight but has no preflight step"
+        )

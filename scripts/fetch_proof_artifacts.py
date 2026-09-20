@@ -91,6 +91,12 @@ def fetch(entry: dict, destination: Path) -> int:
     # the request that actually produced the accepted bytes, and the
     # payload is never transferred twice.
     effective_url_file = part.with_suffix(".effective-url")
+
+    def cleanup_partial() -> None:
+        """Remove the partial download and any sidecar evidence together."""
+        part.unlink(missing_ok=True)
+        effective_url_file.unlink(missing_ok=True)
+
     curl_cmd += ["-w", "%{url_effective}\\n", "-o", str(part)]
     proc = subprocess.run(  # noqa: S603 — fixed argv from the registry
         curl_cmd,
@@ -99,7 +105,7 @@ def fetch(entry: dict, destination: Path) -> int:
         check=False,
     )
     if proc.returncode != 0:
-        part.unlink(missing_ok=True)
+        cleanup_partial()
         print(f"FETCH-FAILED: {entry['name']}", file=sys.stderr)
         return 2
     if entry.get("source") == "zenodo":
@@ -109,7 +115,7 @@ def fetch(entry: dict, destination: Path) -> int:
         effective_url = lines[-1] if lines else ""
         host = urlparse(effective_url).hostname or ""
         if host not in ("zenodo.org", "www.zenodo.org"):
-            part.unlink(missing_ok=True)
+            cleanup_partial()
             print(
                 f"REDIRECT-REJECTED: {entry['name']} landed off-origin at {host!r}",
                 file=sys.stderr,
@@ -120,7 +126,7 @@ def fetch(entry: dict, destination: Path) -> int:
     # crash with FileNotFoundError instead of the intended diagnosis.
     actual_bytes = part.stat().st_size
     if entry.get("bytes") is not None and actual_bytes != entry["bytes"]:
-        part.unlink(missing_ok=True)
+        cleanup_partial()
         print(
             f"BYTE-LENGTH-MISMATCH: {name_of(entry)} {actual_bytes} != {entry['bytes']}",
             file=sys.stderr,
@@ -128,9 +134,10 @@ def fetch(entry: dict, destination: Path) -> int:
         return 1
     actual = sha256_of(part)
     if actual != expected:
-        part.unlink(missing_ok=True)
+        cleanup_partial()
         print(f"HASH-MISMATCH: {entry['name']} {actual} != {expected}", file=sys.stderr)
         return 1
+    effective_url_file.unlink(missing_ok=True)  # promoted: sidecar no longer needed
     part.replace(destination)
     print(f"VERIFIED after fetch: {entry['name']} [{actual[:12]}…]")
     return 0

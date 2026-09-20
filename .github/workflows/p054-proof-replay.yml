@@ -75,17 +75,18 @@ jobs:
       - name: Fetch frozen artifact (download + hash-verify)
         run: python scripts/fetch_proof_artifacts.py --profile p054-arf37
       - name: Re-verify artifact identity
-        if: steps.activation_preflight.outputs.needs_replay == 'true'
         run: python scripts/fetch_proof_artifacts.py --profile p054-arf37 --verify-only
       - name: Imported-certificate verification shard
         run: PYTHONPATH=src pytest -q tests/test_verify/test_p054_full_replay.py -m proof_artifact_required
       - name: Produce the canonical replay receipt
         run: |
+          EFFECTIVE_URL="$(cat proof_artifacts/p054/external/p054-arf37-frozen-artifact.zip.effective-url 2>/dev/null || echo '')"
           PYTHONPATH=src python scripts/replay_p054_artifact.py \
             --profile p054-arf37 \
             --artifact proof_artifacts/p054/external/p054-arf37-frozen-artifact.zip \
             --receipt-out p054-replay-receipt.json \
-            --report-out p054-replay-report.json
+            --report-out p054-replay-report.json \
+            --effective-url "$EFFECTIVE_URL"
       - name: Status manifest after replay
         run: python scripts/check_verification_status.py
       - name: Preserve replay evidence (never the frozen artifact itself)
