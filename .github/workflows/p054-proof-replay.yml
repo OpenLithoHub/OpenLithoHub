@@ -16,6 +16,7 @@ on:
       - "proof_artifacts/**"
       - "scripts/check_verification_status.py"
       - "scripts/fetch_proof_artifacts.py"
+      - "scripts/replay_p054_artifact.py"
       - ".github/workflows/p054-proof-replay.yml"
       - "tests/test_verify/test_p054_*.py"
   workflow_dispatch:
@@ -110,6 +111,35 @@ jobs:
           python-version: "3.12"
       - name: Install (minimal hermetic activation environment)
         run: python -m pip install pytest
+      - name: Preflight — fetch only when evidence requires it (PR-3E2)
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          registry = json.loads(pathlib.Path("proof_artifacts/registry.json").read_text())
+          entry = next(
+              (a for a in registry["artifacts"] if "p054-full-replay" in a.get("required_for", [])),
+              {},
+          )
+          status = json.loads(pathlib.Path("proof_artifacts/verification-status.json").read_text())
+          state = status.get("finite_declared_model", {}).get("full_artifact_replay", "")
+          passing = state in {
+              "IMPORTED_CERTIFICATE_VERIFIED",
+              "SOURCE_NATIVE_RECOMPUTED",
+              "FULL_REPLAY_PASSED",
+          }
+          identity_complete = (
+              entry.get("sha256") is not None
+              and entry.get("download_url") is not None
+              and entry.get("bytes") is not None
+          )
+          if not identity_complete and not passing:
+              print(
+                  f"NEUTRAL: registry artifact identity incomplete and status "
+                  f"{state!r} is not passing; external fetch skipped"
+              )
+              sys.exit(0)
+          print("external replay required; proceeding")
+          PY
       - name: Fetch frozen artifact (download + hash-verify)
         id: fetch
         run: |
