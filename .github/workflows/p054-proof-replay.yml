@@ -70,10 +70,12 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: "3.12"
-      - name: Install (minimal hermetic replay environment)
-        # numpy is needed by tests/conftest.py; the replay producer itself
-        # is stdlib-only and stays the release authority.
-        run: python -m pip install pytest numpy
+      - name: Install (replay environment)
+        # The receipt producer is stdlib-only; the pytest shard needs the
+        # project import chain (numpy/torch via the core dependency).
+        run: |
+          python -m pip install -U pip wheel
+          python -m pip install -e ".[workflow]" pytest numpy
       - name: Fetch frozen artifact (download + hash-verify)
         run: python scripts/fetch_proof_artifacts.py --profile p054-arf37 --fetch-report-out proof_artifacts/p054/external/p054-arf37-frozen-artifact.fetch-report.json
       - name: Re-verify artifact identity
