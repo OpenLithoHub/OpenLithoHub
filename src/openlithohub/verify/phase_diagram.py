@@ -544,6 +544,53 @@ def _numeric_event_from_bundle(
     )
 
 
+MAX_BUNDLE_MEMBERS = 64
+MAX_BUNDLE_MEMBER_BYTES = 1 << 30
+
+
+def _reject_duplicate_json_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    seen: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ValueError(f"duplicate JSON key in bundle: {key!r}")
+        seen[key] = value
+    return seen
+
+
+def load_replay_bundle(artifact: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
+    """Canonical frozen-bundle parser (PR-5D2) — the ONLY bundle entry.
+
+    Hardening: duplicate ZIP member names, member-count and per-member
+    uncompressed-size caps, and duplicate JSON keys are rejected before
+    anything is trusted.  Producer, shard and factory all parse through
+    this function so no parallel, weaker parser can exist.
+    """
+    with zipfile.ZipFile(artifact) as zf:
+        names = zf.namelist()
+        if len(names) != len(set(names)):
+            raise ValueError("duplicate ZIP member names in the frozen bundle")
+        if len(names) > MAX_BUNDLE_MEMBERS:
+            raise ValueError(
+                f"frozen bundle exceeds the member limit: {len(names)} > {MAX_BUNDLE_MEMBERS}"
+            )
+        for info in zf.infolist():
+            if info.file_size > MAX_BUNDLE_MEMBER_BYTES:
+                raise ValueError(
+                    f"bundle member {info.filename!r} exceeds the per-member "
+                    f"size limit ({info.file_size} > {MAX_BUNDLE_MEMBER_BYTES})"
+                )
+        if "replay_manifest.json" not in names:
+            raise ValueError("frozen bundle lacks replay_manifest.json")
+        replay = json.loads(
+            zf.read("replay_manifest.json"),
+            object_pairs_hook=_reject_duplicate_json_keys,
+        )
+        members = {name: zf.read(name) for name in names if name != "replay_manifest.json"}
+    return replay, members
+
+
 def _verify_bundle_semantics(
     replay: dict[str, Any],
     members: dict[str, bytes],
@@ -575,27 +622,35 @@ def _verify_bundle_semantics(
                 f"bundle {replay_key} {replay.get(replay_key)!r} != frozen "
                 f"fixture {fixture.get(fixture_key)!r}"
             )
-    for declared_key in ("source_snapshot_sha256", "coefficient_tensor_sha256"):
-        declared = replay.get(declared_key)
-        if not declared:
-            raise ValueError(f"bundle manifest lacks {declared_key}")
-        matches = [
-            hashlib.sha256(payload).hexdigest()
-            for name, payload in members.items()
-            if declared_key.split("_")[0] in name
-        ]
-        if declared not in matches:
-            raise ValueError(f"bundle {declared_key} does not match any member content hash")
+    # PR-5D2: exact canonical member identity — the bundle manifest names
+    # the one member carrying each payload, and exactly that member is
+    # hashed (no substring guessing).
+    for hash_key, file_key in (
+        ("source_snapshot_sha256", "source_snapshot_file"),
+        ("coefficient_tensor_sha256", "coefficient_file"),
+    ):
+        declared = replay.get(hash_key)
+        member_name = replay.get(file_key)
+        if not declared or not member_name:
+            raise ValueError(
+                f"bundle manifest lacks {hash_key}/{file_key}: exact member identity is required"
+            )
+        if member_name not in members:
+            raise ValueError(f"bundle member {member_name!r} is missing")
+        if hashlib.sha256(members[member_name]).hexdigest() != declared:
+            raise ValueError(f"bundle member {member_name!r} hash does not match {hash_key}")
+    # PR-5D2: exact event SEQUENCE equality and globally ordered focus
+    # intervals — a permuted or globally inconsistent bundle cannot pass.
     catalog = structure.events
-    raw_events: list[dict[str, Any]] = list(replay.get("events", []))
+    raw_events = replay.get("events", [])
     raw_ids = [e.get("event_id") for e in raw_events]
-    if len(raw_ids) != len(set(raw_ids)):
-        raise ValueError("duplicate event ids in the bundle")
-    if set(raw_ids) != {e.event_id for e in catalog}:
-        raise ValueError("bundle event set differs from the frozen catalog")
+    if raw_ids != [e.event_id for e in catalog]:
+        raise ValueError(
+            f"bundle event sequence differs from the frozen catalog (bundle: {raw_ids})"
+        )
     catalog_by_id = {e.event_id: e for e in catalog}
-    bundle_by_id = {e["event_id"]: e for e in raw_events}
-    for event_id, declared in bundle_by_id.items():
+    previous_hi: float | None = None
+    for event_id, declared in zip(raw_ids, raw_events, strict=True):
         structural = catalog_by_id[event_id]
         if declared.get("layer") != structural.layer.value:
             raise ValueError(f"bundle layer mismatch for {event_id}")
@@ -613,13 +668,28 @@ def _verify_bundle_semantics(
             or declared.get("component_count_after") != structural.component_count_after
         ):
             raise ValueError(f"bundle component counts mismatch for {event_id}")
+        interval = declared.get("focus_interval_nm")
+        interval_bad = (
+            not isinstance(interval, list)
+            or len(interval) != 2
+            or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in interval)
+            or interval[0] >= interval[1]
+        )
+        if interval_bad:
+            raise ValueError(f"event {event_id}: bundle focus interval must be finite and ordered")
+        if previous_hi is not None and interval[0] < previous_hi:
+            raise ValueError(
+                f"event {event_id}: focus interval starts before the previous "
+                "event ends (global focus ordering violated)"
+            )
+        previous_hi = interval[1]
     raw_chambers: list[dict[str, Any]] = list(replay.get("chambers", []))
     raw_chamber_ids = [c.get("chamber_id") for c in raw_chambers]
-    if len(raw_chamber_ids) != len(set(raw_chamber_ids)):
-        raise ValueError("duplicate chamber ids in the bundle")
+    if raw_chamber_ids != [c.chamber_id for c in structure.chambers]:
+        raise ValueError(
+            f"bundle chamber sequence differs from the frozen catalog (bundle: {raw_chamber_ids})"
+        )
     catalog_chambers = {c.chamber_id: c for c in structure.chambers}
-    if set(raw_chamber_ids) != set(catalog_chambers):
-        raise ValueError("bundle chamber set differs from the frozen catalog")
     for declared in raw_chambers:
         structural_chamber = catalog_chambers[declared["chamber_id"]]
         interval = declared.get("focus_interval_nm")
@@ -692,16 +762,7 @@ def load_verified_frozen_phase_diagram(
 
     structure = load_frozen_phase_diagram(profile, root=root)
     fixture = json.loads((base / "p054" / "fixture.json").read_text())
-    with zipfile.ZipFile(artifact) as zf:
-        names = zf.namelist()
-        if len(names) != len(set(names)):
-            raise ValueError("frozen artifact has duplicate ZIP member names")
-        if len(names) > 64:
-            raise ValueError("frozen artifact exceeds the member count limit")
-        if "replay_manifest.json" not in names:
-            raise ValueError("frozen artifact lacks replay_manifest.json")
-        replay = json.loads(zf.read("replay_manifest.json"))
-        members = {name: zf.read(name) for name in names if name != "replay_manifest.json"}
+    replay, members = load_replay_bundle(artifact)
     if replay.get("fixture_id") != profile:
         raise ValueError("bundle fixture_id mismatch")
     if replay.get("implementation_commit") != structure.implementation_commit:
