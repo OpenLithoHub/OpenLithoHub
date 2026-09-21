@@ -74,7 +74,13 @@ FROM runtime AS server
 USER root
 RUN set -eux; \
     whl="$(ls /wheels/openlithohub-*.whl)"; \
-    /opt/venv/bin/pip install --no-cache-dir "${whl}[server]"; \
+    # --no-deps + explicit extra pins: resolving the wheel's dependency set
+    # would make pip re-fetch the diff-surrogate git requirement, and the
+    # slim runtime stage has no git. Every other wheel dep is already
+    # satisfied by the builder-installed venv.
+    /opt/venv/bin/pip install --no-deps --no-cache-dir "${whl}[server]"; \
+    /opt/venv/bin/pip install --no-cache-dir \
+        "fastapi>=0.110" "uvicorn[standard]>=0.27" "python-multipart>=0.0.9"; \
     chown -R openlithohub:openlithohub /opt/venv
 USER openlithohub
 
