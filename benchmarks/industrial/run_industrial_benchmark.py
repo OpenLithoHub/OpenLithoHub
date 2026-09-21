@@ -1178,7 +1178,17 @@ def publish_family(run_dir: Path, out: Path, identity: str) -> None:
         "industrial-quality.json",
         "industrial-fulldie.json",
         "industrial-run-config.json",
+        "industrial-distribution-freeze.txt",
     ]
+    # P0.9: the run workspace must carry EXACTLY the expected family —
+    # unexpected industrial-* members refuse promotion.
+    actual_candidates = {p.name for p in run_dir.glob("industrial-*")}
+    unexpected = actual_candidates - set(expected)
+    if unexpected:
+        raise RuntimeError(
+            f"run workspace carries unexpected industrial-* members {sorted(unexpected)}; "
+            "refusing promotion (exact family set enforced)"
+        )
     missing = [n for n in expected if not (run_dir / n).exists()]
     if missing:
         raise RuntimeError(
@@ -1216,6 +1226,9 @@ def publish_family(run_dir: Path, out: Path, identity: str) -> None:
     if problems:
         raise RuntimeError(f"family closure failed; nothing published: {problems}")
 
+    # Neither manifest.json nor SHA256SUMS.txt can index their own bytes;
+    # they index the five data members. The manifest is the commit marker
+    # written last (P0.8).
     entries = [
         {"file": n, "sha256": rs.sha256_file(run_dir / n), "bytes": (run_dir / n).stat().st_size}
         for n in expected
@@ -1239,7 +1252,10 @@ def publish_family(run_dir: Path, out: Path, identity: str) -> None:
     if manifest_problems:
         raise RuntimeError(f"manifest failed validation: {manifest_problems}")
 
-    # Atomic promotion: stage in a temp dir, then move the complete family.
+    # Publication (P0.8): manifest.json is the COMMIT MARKER and is
+    # written to the public root LAST. Earlier files may transiently
+    # coexist, but readers MUST validate the manifest/SHA256SUMS family
+    # before consuming — per-file replacement is not cross-file atomic.
     staging = out / ".publish-staging"
     if staging.exists():
         shutil.rmtree(staging)
@@ -1248,12 +1264,13 @@ def publish_family(run_dir: Path, out: Path, identity: str) -> None:
     for name in family:
         shutil.copyfile(run_dir / name, staging / name)
     sums = ""
-    for name in family:
+    for name in expected:
         digest = rs.sha256_file(staging / name)
         sums += f"{digest}  {name}\n"
     (staging / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
-    for name in family + ["SHA256SUMS.txt"]:
-        os.replace(staging / name, out / name)
+    for name in expected + ["SHA256SUMS.txt"]:
+        shutil.copyfile(staging / name, out / name)
+    shutil.copyfile(staging / "manifest.json", out / "manifest.json")  # commit marker last
     shutil.rmtree(staging, ignore_errors=True)
     log(f"published complete family for identity {identity[:16]} to {out}")
 
@@ -1323,8 +1340,10 @@ def main() -> int:
     (run_dir / "industrial-run-config.json").write_text(
         rs.strict_dumps(_sanitize(run_config)) + "\n", encoding="utf-8"
     )
-    # Distribution freeze persisted next to the artifacts it locks (B0.2).
-    (run_dir / "distribution-freeze.txt").write_text(freeze_text, encoding="utf-8")
+    # Distribution freeze persisted + PUBLISHED next to the artifacts it
+    # locks (B0.2 / third-pass P0.6): the bytes, not just the hash, are
+    # part of the public family.
+    (run_dir / "industrial-distribution-freeze.txt").write_text(freeze_text, encoding="utf-8")
     (run_dir / "run-config.json").write_text(rs.strict_dumps(run_config) + "\n", encoding="utf-8")
     rs.init_run_log(run_dir / "RUN.log")
     args.fixture_block = rs.validate_parent_layout(

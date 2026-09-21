@@ -26,6 +26,15 @@ jobs:
             echo "tag commit $GITHUB_SHA is NOT reachable from origin/main — refusing to publish"; exit 1; }
       - name: Install build tools
         run: pip install build twine cyclonedx-bom
+      - name: Bake build identity into the wheel (P2.2)
+        run: |
+          cat > src/openlithohub/_build.py <<BUILD_EOF
+          \"\""Build identity, populated by the release pipeline.\"\"\"
+
+          BUILD_COMMIT = "${GITHUB_SHA}"
+          BUILD_TIMESTAMP = "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          BUILD_RUN_ID = "${GITHUB_RUN_ID}"
+          BUILD_EOF
       - name: Build wheel and sdist
         run: python -m build
       - name: Wheel smoke on the release bytes (audit P1.4/E1)
@@ -43,14 +52,18 @@ jobs:
             echo "tag $tag does not match wheel version $version_file"; exit 1; }
       - name: Twine check (audit P1.7)
         run: twine check dist/*
-      - name: Generate runtime CycloneDX SBOM from the release wheel (audit P1.8/E3)
+      - name: Generate runtime CycloneDX SBOM from the release wheel (audit P1.8/E3, P2.1)
         run: |
-          # E3: SBOM of the RUNTIME environment (clean venv holding ONLY the
-          # release wheel + its resolved deps), not of the build tools.
-          python -m venv /tmp/sbomvenv
-          /tmp/sbomvenv/bin/pip install --no-cache-dir dist/*.whl cyclonedx-bom
-          /tmp/sbomvenv/bin/cyclonedx-py environment \
-            --output-format json --output-file sbom.cdx.json
+          # E3 + P2.1: SBOM of the RUNTIME environment only. The runtime
+          # venv holds exactly the release wheel + resolved deps; the
+          # cyclonedx generator runs OUTSIDE it against a freeze of that
+          # venv, so the generator never appears in its own SBOM.
+          python -m venv /tmp/runtimevenv
+          /tmp/runtimevenv/bin/pip install --no-cache-dir dist/*.whl
+          /tmp/runtimevenv/bin/pip freeze --all > runtime-requirements.txt
+          pip install cyclonedx-bom
+          cyclonedx-py requirements --output-format json \
+            --output-file sbom.cdx.json -i runtime-requirements.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom

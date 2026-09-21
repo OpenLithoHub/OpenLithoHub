@@ -91,6 +91,8 @@ _JOBS: OrderedDict[str, dict[str, Any]] = OrderedDict()
 _JOB_LOCK = threading.Lock()
 _JOB_HISTORY_CAP = 100
 _JOB_QUEUE_DEPTH = int(os.environ.get("OPENLITHOHUB_JOB_QUEUE_DEPTH", "8"))
+if _JOB_QUEUE_DEPTH < 1:
+    raise RuntimeError("OPENLITHOHUB_JOB_QUEUE_DEPTH must be >= 1")
 _JOB_QUEUE: queue.Queue[tuple[str, dict[str, Any]]] = queue.Queue(maxsize=_JOB_QUEUE_DEPTH)
 _JOB_TTL_SECONDS = float(os.environ.get("OPENLITHOHUB_JOB_TTL_SECONDS", "3600"))
 _JOB_COUNTER = itertools.count(1)
@@ -110,17 +112,39 @@ def _evict_terminal_locked(now: float) -> None:
             shutil.rmtree(record.get("scratch_dir", ""), ignore_errors=True)
 
 
+_JOB_WORKER_STARTED = threading.Event()
+
+
+def _admit_blocking_with_shutdown(timeout: float = 1.0) -> bool:
+    """Wait (in bounded sleeps) for admission capacity. Queued jobs are
+    patient: transient contention with synchronous /v1/optimize must not
+    permanently fail a legitimately queued job (audit P1.3)."""
+    while True:
+        if _JOB_WORKER_SHUTDOWN.is_set():
+            return False
+        if _ADMIT.acquire(blocking=False):
+            return True
+        _time.sleep(timeout)
+
+
+_JOB_WORKER_SHUTDOWN = threading.Event()
+
+
 def _start_job_worker(app: Any) -> None:
     """Single fixed worker draining the bounded job queue (audit C3):
     a real queue with locked state transitions and scratch cleanup, not
-    one daemon thread per request."""
+    one daemon thread per request.  Idempotent (audit P1.1): repeated
+    create_app() calls reuse the one process-global worker."""
+    if _JOB_WORKER_STARTED.is_set():
+        return
+    _JOB_WORKER_STARTED.set()
 
     def _worker() -> None:
         while True:
             job_id, params = _JOB_QUEUE.get()
             with _JOB_LOCK:
                 record = _JOBS.get(job_id)
-                if record is None or record["status"] == "cancelled":
+                if record is None or record["status"] in ("cancelled", "uploading"):
                     shutil.rmtree(
                         record.get("scratch_dir", "") if record else "",
                         ignore_errors=True,
@@ -128,8 +152,15 @@ def _start_job_worker(app: Any) -> None:
                     _JOB_QUEUE.task_done()
                     continue
                 record["status"] = "running"
+            admitted = _admit_blocking_with_shutdown()
+            if not admitted:
+                _JOB_QUEUE.task_done()
+                continue
             try:
-                summary = _run_optimize_admitted(**params)
+                # The worker HOLDS the admission slot for the whole run:
+                # queued jobs wait patiently for capacity (P1.3) instead of
+                # racing the synchronous endpoint for a slot.
+                summary = _run_optimize(**params)
                 with _JOB_LOCK:
                     record = _JOBS.get(job_id)
                     if record is not None:
@@ -147,6 +178,7 @@ def _start_job_worker(app: Any) -> None:
                     if record is not None:
                         shutil.rmtree(record.get("scratch_dir", ""), ignore_errors=True)
             finally:
+                _release_admit()
                 _JOB_QUEUE.task_done()
 
     threading.Thread(target=_worker, name="olh-job-worker", daemon=True).start()
@@ -424,19 +456,43 @@ def _release_admit() -> None:
     _ADMIT.release()
 
 
-def _put_job(record: dict[str, Any], params: dict[str, Any]) -> tuple[str, bool]:
-    """Register a queued job and enqueue it. Returns (job_id, enqueued);
-    enqueued=False means the bounded queue is FULL and nothing was
-    registered (the caller cleans up scratch and answers 429)."""
+_JOB_QUEUE_RESERVED = 0
+
+
+def _try_reserve_slot() -> bool:
+    """Reserve a queue slot BEFORE ingesting a large upload (audit P1.4).
+
+    The reservation counter is checked+incremented with the queue size
+    under one lock, so capacity can never be oversubscribed between the
+    reservation and the actual enqueue."""
+    global _JOB_QUEUE_RESERVED
     with _JOB_LOCK:
-        if _JOB_QUEUE.qsize() >= _JOB_QUEUE_DEPTH:
-            return "", False
+        if _JOB_QUEUE.qsize() + _JOB_QUEUE_RESERVED >= _JOB_QUEUE_DEPTH:
+            return False
+        _JOB_QUEUE_RESERVED += 1
+        return True
+
+
+def _release_slot_reservation() -> None:
+    global _JOB_QUEUE_RESERVED
+    with _JOB_LOCK:
+        _JOB_QUEUE_RESERVED -= 1
+
+
+def _put_job(record: dict[str, Any], params: dict[str, Any]) -> tuple[str, bool]:
+    """Register a queued job and enqueue it WITHOUT blocking (audit P1.2):
+    put_nowait + rollback of the registration on Full. Returns
+    (job_id, enqueued)."""
+    with _JOB_LOCK:
         job_id = f"job-{next(_JOB_COUNTER)}-{uuid.uuid4().hex[:8]}"
+        try:
+            _JOB_QUEUE.put_nowait((job_id, params))
+        except queue.Full:
+            return "", False
         record["job_id"] = job_id
         record["_created_monotonic"] = _time.monotonic()
         _JOBS[job_id] = record
         _evict_terminal_locked(_time.monotonic())
-    _JOB_QUEUE.put((job_id, params))
     return job_id, True
 
 
@@ -529,6 +585,12 @@ def create_app() -> FastAPI:
                 "scratch_writable": writable,
                 "admission_slots_free": _ADMIT._value,  # noqa: SLF001 - introspection
             },
+            "metrics": {
+                "job_queue_depth": _JOB_QUEUE_DEPTH,
+                "job_queue_size": _JOB_QUEUE.qsize(),
+                "job_queue_reserved": _JOB_QUEUE_RESERVED,
+                "jobs_tracked": len(_JOBS),
+            },
         }
         if not ready_now:
             from fastapi import HTTPException
@@ -537,16 +599,35 @@ def create_app() -> FastAPI:
         return body
 
     @app.get("/v1/version")
-    def version() -> dict[str, str]:
+    def version() -> dict[str, Any]:
         from openlithohub._version import __version__
         from openlithohub.benchmark.industrial import git_commit
 
         commit = git_commit()
+        # P2.2: release wheels/containers carry a baked build identity
+        # (no .git checkout); a source checkout falls back to git.
+        build_info: dict[str, str] = {}
+        try:
+            # Release builds bake a _build module into the wheel/container
+            # (see publish.yml); source checkouts do not have one.
+            import openlithohub as _pkg
+
+            build_mod = getattr(_pkg, "_build", None)
+            if build_mod is not None:
+                build_info = {
+                    "build_commit": getattr(build_mod, "BUILD_COMMIT", ""),
+                    "build_timestamp": getattr(build_mod, "BUILD_TIMESTAMP", ""),
+                    "build_run_id": getattr(build_mod, "BUILD_RUN_ID", ""),
+                }
+        except Exception:  # noqa: BLE001 - source checkouts have no _build
+            build_info = {}
+        build_commit = build_info.get("build_commit") or ""
         return {
             "api": "v1",
             "package": "openlithohub",
             "version": __version__,
-            "git_commit": commit if commit else "unknown",
+            "git_commit": commit or build_commit or "unknown",
+            "build": build_info,
             "torch": torch.__version__,
         }
 
@@ -570,8 +651,15 @@ def create_app() -> FastAPI:
             "input_formats": ["npy", "pt", "oas", "gds"],
             "export_formats": ["oasis", "gds", "pt"],
             "proof_verification": {
+                # P4.3: report what THIS installed artifact can actually do,
+                # separate from repository governance provenance.
+                "runtime_available": (
+                    Path(__file__).resolve().parents[2] / "proof_artifacts/p054/replay-receipt.json"
+                ).exists(),
                 "level": "p054-governed",
-                "reference": "proof_artifacts/p054/README.md",
+            },
+            "build_provenance": {
+                "p054_governance": "see proof_artifacts/p054/README.md in the source repository",
             },
         }
 
@@ -726,6 +814,14 @@ def create_app() -> FastAPI:
     ) -> JSONResponse:
         if not layout.filename:
             raise HTTPException(status_code=400, detail="layout upload missing filename")
+        # P1.4: reserve the queue slot BEFORE copying the (possibly large)
+        # upload — a full queue answers 429 without ingesting the body.
+        if not _try_reserve_slot():
+            raise HTTPException(
+                status_code=429,
+                detail="job queue is full",
+                headers={"Retry-After": "10"},
+            )
         suffix = Path(layout.filename).suffix or ".bin"
         tmp_path = make_scratch_dir("olh_job_")
         input_path = tmp_path / f"input{suffix}"
@@ -738,6 +834,7 @@ def create_app() -> FastAPI:
                     break
                 bytes_read += len(chunk)
                 if bytes_read > _MAX_UPLOAD_BYTES:
+                    _release_slot_reservation()
                     shutil.rmtree(tmp_path, ignore_errors=True)
                     raise HTTPException(status_code=413, detail="layout upload too large")
                 out_f.write(chunk)
@@ -764,6 +861,7 @@ def create_app() -> FastAPI:
             },
             params,
         )
+        _release_slot_reservation()  # the enqueued item now owns the slot
         if not queued:
             shutil.rmtree(tmp_path, ignore_errors=True)
             raise HTTPException(
@@ -778,17 +876,23 @@ def create_app() -> FastAPI:
 
     @app.get("/v1/jobs/{job_id}")
     def get_job(job_id: str) -> dict[str, Any]:
-        job = _JOBS.get(job_id)
-        if job is None:
-            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
-        return {
-            "api_schema_version": "1",
-            "job_id": job_id,
-            "status": job["status"],
-            "created_utc": job["created_utc"],
-            "summary": job["summary"],
-            "error": job["error"],
-        }
+        # P1.5: reads also drive time-based eviction of terminal jobs.
+        with _JOB_LOCK:
+            _evict_terminal_locked(_time.monotonic())
+            job = _JOBS.get(job_id)
+            if job is None:
+                raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
+            # P1.6: snapshot copy under the lock — worker threads mutate
+            # the live record concurrently.
+            snapshot = {
+                "api_schema_version": "1",
+                "job_id": job_id,
+                "status": job["status"],
+                "created_utc": job["created_utc"],
+                "summary": job["summary"],
+                "error": job["error"],
+            }
+        return snapshot
 
     @app.get("/v1/jobs/{job_id}/artifact", response_model=None)
     def get_job_artifact(job_id: str) -> FileResponse:

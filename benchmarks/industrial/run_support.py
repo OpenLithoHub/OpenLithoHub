@@ -325,10 +325,7 @@ def environment_lock(repo_root: Path) -> tuple[dict[str, Any], str]:
         parallel_info = "unavailable"
 
     thread_env = {k: os.environ.get(k) for k in _THREAD_ENV_KEYS}
-    freeze_text = (
-        "\n".join(sorted(f"{d.metadata['Name']}=={d.version}" for d in metadata.distributions()))
-        + "\n"
-    )
+    freeze_text = _distribution_freeze() + "\n"
     lock: dict[str, Any] = {
         "python": platform.python_version(),
         "platform": f"{platform.system()} {platform.release()} {platform.machine()}",
@@ -351,6 +348,41 @@ def environment_lock(repo_root: Path) -> tuple[dict[str, Any], str]:
     lock["lock_sha256"] = hashlib.sha256(strict_dumps(lock).encode()).hexdigest()
     _ = repo_root
     return lock, freeze_text
+
+
+def _distribution_freeze() -> str:
+    """Full distribution freeze WITH direct-reference provenance (P0.5).
+
+    A plain ``name==version`` line loses PEP 610 identity: two different
+    git commits of diff-surrogate expose the same version.  Distributions
+    carrying ``direct_url.json`` are frozen as ``name @ url`` with the
+    immutable VCS commit when available; editables carry their source
+    path.
+    """
+    lines: list[str] = []
+    for dist in metadata.distributions():
+        name = (dist.metadata.get("Name") or "?").strip()
+        version = dist.version
+        direct = None
+        try:
+            direct_json = dist.read_text("direct_url.json")
+            if direct_json:
+                direct = json.loads(direct_json)
+        except Exception:  # noqa: BLE001 - metadata best-effort
+            direct = None
+        if isinstance(direct, dict) and direct.get("url"):
+            url = str(direct["url"])
+            vcs = direct.get("vcs_info") or {}
+            commit = str(vcs.get("commit") or "")
+            if commit:
+                lines.append(f"{name} @ {url}@{commit}")
+            elif direct.get("editable"):
+                lines.append(f"{name} @ {url}  # editable")
+            else:
+                lines.append(f"{name} @ {url}")
+        else:
+            lines.append(f"{name}=={version}")
+    return "\n".join(sorted(lines))
 
 
 def _cpu_model() -> str:

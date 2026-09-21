@@ -84,22 +84,33 @@ argument. All mutable run state lives under:
 
 ```text
 benchmarks/results/industrial/runs/<run_identity>/
-    run-config.json    # the full identity payload
+    run-config.json    # the full identity payload (its own schema,
+                       # OpenLithoHub.industrial-run-config.v1)
     fixtures/          # derived crops with per-file identity records
     checkpoints/       # strict-JSON rows, each carrying the run identity
     progress.json      # stage, done/total, in-flight row, ETA
     RUN.log
+    industrial-distribution-freeze.txt
 ```
 
 A checkpoint row from any other identity is a hard error — code,
 argument or fixture changes can never silently reuse stale results.
 Derived fixtures are reused only when their recorded identity (parent
 hash, derived hash, generator commit/harness hash) still matches;
-mismatched fixtures refuse to load. Final artifacts are published to
-`benchmarks/results/industrial/` with `manifest.json` and
-`SHA256SUMS.txt`; the CI verifier re-hashes the recorded source files
-**as committed** (`git show <commit>:<path>`) and cross-checks every
-claim's artifact hash. Operators run
+mismatched fixtures refuse to load. The published family (P0.6/P0.7/P0.8) is:
+`industrial-runtime.json`, `industrial-quality.json`,
+`industrial-fulldie.json`, `industrial-run-config.json`,
+`industrial-distribution-freeze.txt`, plus `manifest.json` (the COMMIT
+MARKER, written last) and `SHA256SUMS.txt` (indexing the five data
+members — a manifest/sums cannot index their own bytes). `manifest.json`
+membership, per-entry SHA-256 and byte sizes are closed exactly against
+the family by the verifier; the freeze bytes are re-hashed against
+`environment_lock.distribution_freeze_sha256`; and the verifier
+RECOMPUTES the run identity from the published run-config and the
+environment-lock hash from the lock body — the identity is
+content-addressed, not a label. The CI verifier re-hashes the recorded
+source files **as committed** (`git show <commit>:<path>`) and
+cross-checks every claim's artifact hash. Operators run
 `python scripts/preflight_industrial_benchmark.py --gds <ibex.gds>`
 before launching a formal measurement; the harness refuses a dirty
 tracked tree unless `OPENLITHOHUB_ALLOW_DIRTY_MEASUREMENT=1` is set

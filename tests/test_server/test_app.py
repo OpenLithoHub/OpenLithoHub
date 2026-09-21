@@ -407,3 +407,58 @@ def test_api_key_rejects_without_header(monkeypatch) -> None:
     assert fresh.get("/v1/health").status_code == 200  # liveness stays open
     ok = TestClient(create_app(), headers={"X-API-Key": "sekrit"})
     assert ok.get("/v1/models").status_code == 200
+
+
+def test_worker_start_is_idempotent() -> None:
+    """P1.1: repeated create_app() must not spawn additional workers."""
+    import threading
+
+    before = threading.active_count()
+    apps = [create_app() for _ in range(5)]
+    assert all(apps)
+    # bounded slack: other tests may hold transient threads, but the
+    # worker pool itself must not grow by create_app() count.
+    after = threading.active_count()
+    assert after - before <= 1
+
+
+def test_job_queue_full_before_upload_returns_429_without_copy(monkeypatch) -> None:
+    """P1.4: the queue slot is reserved BEFORE the upload is ingested."""
+    from openlithohub.server import app as app_mod
+
+    monkeypatch.setattr(app_mod, "_JOB_QUEUE_DEPTH", 1)
+    monkeypatch.setattr(app_mod, "_JOB_QUEUE", __import__("queue").Queue(maxsize=1))
+    import io
+
+    import numpy as np
+
+    client = TestClient(create_app())
+    buf = io.BytesIO()
+    np.save(buf, np.zeros((32, 32), dtype=np.float32))
+    buf.seek(0)
+    # fill the queue with a real queued record so the reservation fails
+    with JobReserveGuard(app_mod):
+        response = client.post(
+            "/v1/jobs/optimize",
+            files={"layout": ("in.npy", buf, "application/octet-stream")},
+            data={"model": "dummy-identity", "node": "45nm"},
+        )
+    assert response.status_code == 429
+    assert response.headers.get("Retry-After") == "10"
+
+
+class JobReserveGuard:
+    """Fill the job queue for the duration of the request."""
+
+    def __init__(self, app_mod) -> None:
+        self.app_mod = app_mod
+
+    def __enter__(self):
+        self.app_mod._JOB_QUEUE.put(("sentinel", {}))
+        return self
+
+    def __exit__(self, *exc):
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            self.app_mod._JOB_QUEUE.get_nowait()

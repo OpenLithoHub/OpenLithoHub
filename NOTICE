@@ -19,6 +19,9 @@ This project depends on the following third-party components.
 
 | Component | License | URL |
 |-----------|---------|-----|
+| diff-surrogate | Apache-2.0 (CORE dependency, pinned commit 6b0ec10916f58297a0b48cb3af470e7d1ad99b45) | https://github.com/telleroutlook/diff-surrogate |
+| PyYAML | MIT (https://pypi.org/project/PyYAML/) | https://github.com/yaml/pyyaml |
+| tomli (Python < 3.11) | MIT | https://github.com/hukkin/tomli |
 | NumPy | BSD-3-Clause | https://github.com/numpy/numpy |
 | PyTorch | BSD-3-Clause | https://github.com/pytorch/pytorch |
 | Typer | MIT | https://github.com/tiangolo/typer |
@@ -37,7 +40,6 @@ This project depends on the following third-party components.
 
 | Component | License | URL |
 |-----------|---------|-----|
-| diff-surrogate | Apache-2.0 (CORE dependency, pinned commit 6b0ec10916f58297a0b48cb3af470e7d1ad99b45) | https://github.com/telleroutlook/diff-surrogate |
 | KLayout (Python bindings) | GPL-3.0 (optional import; **installed inside the published Docker image** — see note below) | https://www.klayout.de/ |
 | SciPy | BSD-3-Clause | https://github.com/scipy/scipy |
 

@@ -517,6 +517,107 @@ def validate_artifact_family(artifacts: dict[str, dict[str, Any]]) -> list[str]:
     return problems
 
 
+RUN_CONFIG_SCHEMA = "OpenLithoHub.industrial-run-config.v1"
+
+
+def build_run_identity_payload(config: dict[str, Any]) -> dict[str, Any]:
+    """Canonical identity payload FROM a published run-config (P0.3).
+
+    Mirrors the harness's identity payload exactly: source commit + file
+    hashes, environment-lock hash, fixture hashes and every semantic
+    argument.  The verifier re-hashes this and compares with
+    ``config["run_identity"]`` — turning the identity from a label into
+    content-addressed authority.
+    """
+    source = config.get("source") or {}
+    fixtures = config.get("fixtures") or {}
+    return {
+        "schema": "OpenLithoHub.industrial-run-identity.v1",
+        "source": {
+            "commit": source.get("commit"),
+            "harness_sha256": source.get("harness_sha256"),
+            "industrial_core_sha256": source.get("industrial_core_sha256"),
+            "claim_generator_sha256": source.get("claim_generator_sha256"),
+            "run_support_sha256": source.get("run_support_sha256"),
+        },
+        "environment_lock_sha256": (config.get("environment_lock") or {}).get("lock_sha256"),
+        "fixtures": {
+            "parent_gds_sha256": fixtures.get("parent_gds_sha256"),
+            "iccad": fixtures.get("iccad") or {},
+        },
+        "args": config.get("args") or {},
+    }
+
+
+def recompute_run_identity(config: dict[str, Any]) -> str:
+    """Recompute the run identity from a published run-config."""
+    return hashlib.sha256(_canonical_dumps(build_run_identity_payload(config)).encode()).hexdigest()
+
+
+def validate_run_config(config: dict[str, Any]) -> list[str]:
+    """Structural + semantic validation of industrial-run-config.json."""
+    problems: list[str] = []
+    if config.get("schema") != RUN_CONFIG_SCHEMA:
+        problems.append(f"schema must be {RUN_CONFIG_SCHEMA}, got {config.get('schema')!r}")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(config.get("run_identity") or "")):
+        problems.append("run_identity must be a 64-hex sha256")
+    source = config.get("source") or {}
+    if not re.fullmatch(r"[0-9a-f]{40}", str(source.get("commit") or "")):
+        problems.append("source.commit must be a full 40-hex commit")
+    for key in (
+        "harness_sha256",
+        "industrial_core_sha256",
+        "claim_generator_sha256",
+        "run_support_sha256",
+    ):
+        if not re.fullmatch(r"[0-9a-f]{64}", str(source.get(key) or "")):
+            problems.append(f"source.{key} must be a 64-hex sha256")
+    fixtures = config.get("fixtures") or {}
+    if not re.fullmatch(r"[0-9a-f]{64}", str(fixtures.get("parent_gds_sha256") or "")):
+        problems.append("fixtures.parent_gds_sha256 must be a 64-hex sha256")
+    problems.extend(validate_environment_lock(config.get("environment_lock") or {}))
+    if not isinstance(config.get("args"), dict) or not config["args"]:
+        problems.append("args must be a non-empty object of semantic arguments")
+    # P0.3: the identity must be the content-addressed digest of exactly
+    # this configuration.
+    recomputed = recompute_run_identity(config)
+    if recomputed != str(config.get("run_identity")):
+        problems.append(
+            "run_identity does not match the recomputed digest of the "
+            "published configuration (identity is not content-addressed)"
+        )
+    return problems
+
+
+def _canonical_dumps(payload: dict[str, Any]) -> str:
+    """Canonical JSON serialization used for every recomputed digest.
+
+    Identical to run_support.strict_dumps: sort_keys + allow_nan=False.
+    """
+    return json.dumps(payload, sort_keys=True, allow_nan=False)
+
+
+def validate_environment_lock(lock: dict[str, Any]) -> list[str]:
+    """Recompute the environment-lock hash over the lock WITHOUT
+    lock_sha256 and compare (audit P0.4)."""
+    problems: list[str] = []
+    if not isinstance(lock, dict) or not lock:
+        return ["environment_lock missing or empty"]
+    stored = str(lock.get("lock_sha256") or "")
+    if not re.fullmatch(r"[0-9a-f]{64}", stored):
+        problems.append("environment_lock.lock_sha256 must be a 64-hex sha256")
+        return problems
+    lock_body = {k: v for k, v in lock.items() if k != "lock_sha256"}
+    recomputed = hashlib.sha256(_canonical_dumps(lock_body).encode()).hexdigest()
+    if recomputed != stored:
+        problems.append(
+            "environment_lock.lock_sha256 does not match the recomputed hash of the lock body"
+        )
+    if not re.fullmatch(r"[0-9a-f]{64}", str(lock.get("distribution_freeze_sha256") or "")):
+        problems.append("environment_lock.distribution_freeze_sha256 must be a 64-hex sha256")
+    return problems
+
+
 def load_artifact(path: str | os.PathLike[str]) -> dict[str, Any]:
     """Load and validate one artifact JSON; raises on structural failure.
 

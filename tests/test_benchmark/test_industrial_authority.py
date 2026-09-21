@@ -8,6 +8,7 @@ always FAIL CLOSED.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sys
@@ -265,6 +266,8 @@ def make_artifact(run_identity: str) -> dict[str, Any]:
         "environment_lock": {"lock_sha256": "5" * 64},
     }
 
+
+class TestArtifactFamilyClosure:
     def test_mixed_run_family_rejected(self) -> None:
         from openlithohub.benchmark.industrial import validate_artifact_family
 
@@ -296,29 +299,9 @@ def make_artifact(run_identity: str) -> dict[str, Any]:
 
 class TestVerifierSetClosure:
     def _write_family(self, tmp_path: Path) -> None:
-        """Write a complete, self-consistent family for the verifier."""
-        for role in ("runtime", "quality", "fulldie", "run-config"):
-            name = f"industrial-{role}.json"
-            (tmp_path / name).write_text(json.dumps(make_artifact("1" * 64)), encoding="utf-8")
-        (tmp_path / "manifest.json").write_text(
-            json.dumps(make_artifact("1" * 64)), encoding="utf-8"
-        )
-        names = sorted(
-            n
-            for n in (
-                "industrial-runtime.json",
-                "industrial-quality.json",
-                "industrial-fulldie.json",
-                "industrial-run-config.json",
-                "manifest.json",
-            )
-        )
-        import hashlib
-
-        sums = ""
-        for n in names:
-            sums += hashlib.sha256((tmp_path / n).read_bytes()).hexdigest() + f"  {n}\n"
-        (tmp_path / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
+        """Reuse the production family builder: one canonical definition,
+        no second competing writer."""
+        _write_production_family(tmp_path)
 
     def test_missing_sha_entry_hard_fails(self, tmp_path: Path) -> None:
         self._write_family(tmp_path)
@@ -384,3 +367,183 @@ class TestPreflightIdentityMatchesHarness:
             env=config["environment_lock"]["lock_sha256"],
         )
         assert preflight_identity == harness_identity
+
+
+def test_family_closure_tests_are_collected() -> None:
+    """P0.2 regression guard: the family-closure tests must be real,
+    collected pytest tests — not unreachable nested functions."""
+    import inspect
+
+    source = inspect.getsource(sys.modules[__name__])
+    for name in (
+        "test_mixed_run_family_rejected",
+        "test_complete_family_passes",
+        "test_incomplete_family_rejected",
+    ):
+        # each must be defined at class-body indentation (4 spaces), not
+        # nested deeper inside a helper function (8+ spaces)
+        definition = f"    def {name}(self)"
+        assert definition in source, f"{name} is not a collected class method"
+        nested = f"        def {name}(self)"
+        assert nested not in source, f"{name} is nested after a return and never collected"
+
+
+def _write_production_family(tmp_path: Path) -> Path:
+    """P0.10: build a REAL-schema family exactly as publish_family would,
+    using the production build/sanitize/identity functions."""
+    harness_spec = importlib.util.spec_from_file_location(
+        "olh_harness2", REPO_ROOT / "benchmarks/industrial/run_industrial_benchmark.py"
+    )
+    assert harness_spec is not None and harness_spec.loader is not None
+    harness = importlib.util.module_from_spec(harness_spec)
+    sys.modules["olh_harness2"] = harness
+    harness_spec.loader.exec_module(harness)
+
+    ind_spec = importlib.util.spec_from_file_location(
+        "olh_ind3", REPO_ROOT / "src/openlithohub/benchmark/industrial.py"
+    )
+    assert ind_spec is not None and ind_spec.loader is not None
+    ind = importlib.util.module_from_spec(ind_spec)
+    sys.modules["olh_ind3"] = ind
+    ind_spec.loader.exec_module(ind)
+
+    commit = "c" * 40
+    source = {
+        "commit": commit,
+        "commit_valid": True,
+        "working_tree_dirty": False,
+        "harness_sha256": "1" * 64,
+        "industrial_core_sha256": "2" * 64,
+        "claim_generator_sha256": "3" * 64,
+        "run_support_sha256": "4" * 64,
+    }
+    lock = {"python": "3.12", "distribution_freeze_sha256": "d" * 64}
+    lock["lock_sha256"] = hashlib.sha256(ind._canonical_dumps(lock).encode()).hexdigest()
+    config = {
+        "schema": "OpenLithoHub.industrial-run-config.v1",
+        "source": source,
+        "environment_lock": lock,
+        "fixtures": {"parent_gds_sha256": "e" * 64, "iccad": {}},
+        "args": {"repeats": 5, "sizes": "4096", "layer": "66:44", "seed": 0},
+    }
+    payload = ind.build_run_identity_payload(config)
+    identity = hashlib.sha256(ind._canonical_dumps(payload).encode()).hexdigest()
+    config["run_identity"] = identity
+    (tmp_path / "industrial-run-config.json").write_text(
+        ind._canonical_dumps(config) + "\n", encoding="utf-8"
+    )
+    (tmp_path / "industrial-distribution-freeze.txt").write_text(
+        "diff-surrogate @ https://github.com/telleroutlook/diff-surrogate.git@6b0ec10916f58297a0b48cb3af470e7d1ad99b45\n"
+        "numpy==2.0.0\n",
+        encoding="utf-8",
+    )
+    lock["distribution_freeze_sha256"] = hashlib.sha256(
+        (tmp_path / "industrial-distribution-freeze.txt").read_bytes()
+    ).hexdigest()
+    # Mirror the real semantics: lock_sha256 covers the lock body WITHOUT
+    # the previous lock_sha256 key.
+    lock_body = {k: v for k, v in lock.items() if k != "lock_sha256"}
+    lock["lock_sha256"] = hashlib.sha256(ind._canonical_dumps(lock_body).encode()).hexdigest()
+    config["environment_lock"] = lock
+    config["run_identity"] = hashlib.sha256(
+        ind._canonical_dumps(ind.build_run_identity_payload(config)).encode()
+    ).hexdigest()
+    (tmp_path / "industrial-run-config.json").write_text(
+        ind._canonical_dumps(config) + "\n", encoding="utf-8"
+    )
+
+    def benchmark_artifact(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
+        base = {
+            "schema": ind.SCHEMA_NAME,
+            "kind": kind,
+            "status": "SUCCESS",
+            "git_commit": commit,
+            "timestamp_utc": "2026-09-21T00:00:00Z",
+            "hardware": {"cpu_model": "t", "physical_ram_bytes": 48 * (1 << 30), "gpu": None},
+            "software": {"python": "3.12"},
+            "claim_scope": {"physics_claim": "NOT_FOUNDRY_CALIBRATED"},
+            "reproducibility": {"command": "run"},
+            "measurement_source": source,
+            "fixture": {"sha256": "e" * 64, "bytes": 24_000_000},
+            "run_identity": config["run_identity"],
+            "environment_lock": lock,
+        }
+        base.update(payload)
+        return ind._sanitize(base)
+
+    runtime_payload = {
+        "memory": {
+            "per_size": {
+                "4096": {
+                    "dense_full": {"peak_rss_bytes_median": 1 << 30},
+                    "b04_selective": {"peak_rss_bytes_median": 400 * (1 << 20)},
+                    "streaming_memory_reduction_pct": 60.0,
+                }
+            },
+            "max_streamed_size_px": 65536,
+            "dense_not_run_under_memory_policy_px": [65536],
+        },
+        "comparisons": {},
+        "rows": [],
+        "policy": {"repeats": 5},
+    }
+    for role, payload in (
+        ("runtime", runtime_payload),
+        ("quality", {"datasets": {}}),
+        ("fulldie", {"dense_die_status": "INFEASIBLE_ON_REFERENCE_MACHINE"}),
+    ):
+        artifact = benchmark_artifact(role, payload)
+        (tmp_path / f"industrial-{role}.json").write_text(
+            ind._canonical_dumps(artifact) + "\n", encoding="utf-8"
+        )
+    # manifest LAST (commit marker), entries over the canonical family
+    family_names = [
+        "industrial-runtime.json",
+        "industrial-quality.json",
+        "industrial-fulldie.json",
+        "industrial-run-config.json",
+        "industrial-distribution-freeze.txt",
+    ]
+    manifest_entries = [
+        {
+            "file": name,
+            "sha256": rs.sha256_file(tmp_path / name),
+            "bytes": (tmp_path / name).stat().st_size,
+        }
+        for name in family_names
+    ]
+    manifest = benchmark_artifact(
+        "manifest",
+        {"artifacts": manifest_entries, "run_identity": config["run_identity"]},
+    )
+    (tmp_path / "manifest.json").write_text(ind._canonical_dumps(manifest) + "\n", encoding="utf-8")
+    sums = ""
+    for name in family_names:
+        sums += rs.sha256_file(tmp_path / name) + f"  {name}\n"
+    (tmp_path / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
+    return tmp_path
+
+
+def test_production_verifier_accepts_real_schema_family(tmp_path: Path) -> None:
+    """P0.10: the PRODUCTION verifier must accept one valid real-schema
+    family (including the run-config member) end-to-end."""
+    family_dir = _write_production_family(tmp_path)
+    problems = verifier.verify(family_dir, REPO_ROOT)
+    # source closure will try git-show of the synthetic commit; that check
+    # is not under test here, so filter its (expected) failures.
+    problems = [p for p in problems if "source closure" not in p]
+    assert problems == [], problems
+
+
+def test_production_verifier_rejects_identity_tamper(tmp_path: Path) -> None:
+    family_dir = _write_production_family(tmp_path)
+    config_path = family_dir / "industrial-run-config.json"
+    config = json.loads(config_path.read_text())
+    config["args"]["repeats"] = 4  # semantic change while keeping the label
+    config_path.write_text(_ind_str(config) + "\n", encoding="utf-8")
+    problems = verifier.verify(family_dir, REPO_ROOT)
+    assert any("recomputed" in p for p in problems), problems
+
+
+def _ind_str(config: dict[str, Any]) -> str:
+    return json.dumps(config, indent=2, sort_keys=True, allow_nan=False) + "\n"

@@ -54,7 +54,6 @@ ENV HOME=/home/openlithohub \
     OLH_SCRATCH_DIR=/app/scratch
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /wheels /wheels
 ENV PATH="/opt/venv/bin:${PATH}"
 
 USER openlithohub
@@ -71,6 +70,10 @@ CMD ["--help"]
 # ---------------------------------------------------------------------------
 FROM runtime AS server
 
+# P4.1: the CLI image does not carry build wheels; the server stage
+# copies them straight from the builder and deletes them after install.
+COPY --from=builder /wheels /wheels
+
 USER root
 RUN set -eux; \
     whl="$(ls /wheels/openlithohub-*.whl)"; \
@@ -81,6 +84,7 @@ RUN set -eux; \
     /opt/venv/bin/pip install --no-deps --no-cache-dir "${whl}[server]"; \
     /opt/venv/bin/pip install --no-cache-dir \
         "fastapi>=0.110" "uvicorn[standard]>=0.27" "python-multipart>=0.0.9"; \
+    rm -rf /wheels; \
     chown -R openlithohub:openlithohub /opt/venv
 USER openlithohub
 
