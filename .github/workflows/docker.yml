@@ -50,6 +50,15 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Extract server image metadata
+        id: meta_server
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}},suffix=-server
+            type=sha,suffix=-server
+
       - name: Build server image (and push on tag)
         id: build_server
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
@@ -60,15 +69,6 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta_server.outputs.tags }}
           labels: ${{ steps.meta_server.outputs.labels }}
-
-      - name: Extract server image metadata
-        id: meta_server
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}},suffix=-server
-            type=sha,suffix=-server
 
       - name: Resolve smoke-test image tag
         id: smoketag
