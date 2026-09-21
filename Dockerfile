@@ -20,7 +20,6 @@ COPY src/ src/
 
 ARG VERSION=0.0.0
 ARG BUILD_COMMIT=unknown
-ARG BUILD_RUN_ID=unknown
 # P0.9/P0.11: bake the build identity into the wheel bytes so the running
 # container reports its true provenance without a .git checkout.
 RUN SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} \

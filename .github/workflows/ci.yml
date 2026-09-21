@@ -176,7 +176,6 @@ jobs:
           pip install pyyaml
           python scripts/write_build_info.py \
             --commit "$GITHUB_SHA" \
-            --run-id "$GITHUB_RUN_ID" \
             --version "0.0.0.dev0"
       - name: Build sdist + wheel
         run: |

@@ -69,7 +69,6 @@ jobs:
           build-args: |
             VERSION=${{ steps.buildid.outputs.version }}
             BUILD_COMMIT=${{ steps.buildid.outputs.commit }}
-            BUILD_RUN_ID=${{ steps.buildid.outputs.run_id }}
 
       - name: Extract server image metadata
         id: meta_server
@@ -93,7 +92,6 @@ jobs:
           build-args: |
             VERSION=${{ steps.buildid.outputs.version }}
             BUILD_COMMIT=${{ steps.buildid.outputs.commit }}
-            BUILD_RUN_ID=${{ steps.buildid.outputs.run_id }}
 
       - name: Resolve smoke-test image tag
         id: smoketag
