@@ -282,7 +282,7 @@ def validate_runtime_code_identity(
         "openlithohub.models.registry": getattr(openlithohub.models.registry, "__file__", ""),
     }
     all_ok = True
-    for name, fpath in checks.items():
+    for _name, fpath in checks.items():
         if not fpath or not Path(fpath).resolve().is_relative_to(src_root):
             all_ok = False
             break
