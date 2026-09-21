@@ -31,9 +31,6 @@ dependencies = [
     "pydantic>=2.0",
     "rich>=13.0",
     "tomli>=2.0; python_version<'3.11'",
-    # P1.1: pinned to the exact v0.3.0 commit (a VCS dep until diff-surrogate
-    # is published to PyPI; see NOTICE).
-    "diff-surrogate @ git+https://github.com/telleroutlook/diff-surrogate.git@6b0ec10916f58297a0b48cb3af470e7d1ad99b45",
 ]
 
 [project.optional-dependencies]
@@ -101,13 +98,12 @@ export = [
 diffnano = [
     # DiffNano — differentiable nanophotonics (high-precision resist, RCWA/FDTD EM).
     # Early-stage research code; opt-in to keep core lightweight.
-    "diffnano @ git+https://github.com/OpenLithoHub/DiffNano.git@2ec61b8",
 ]
 diffcfd = [
     # DiffCFD — differentiable CFD (spin coating, Dill/Mack lithography, joint opt).
     # Early-stage research code; opt-in to keep core lightweight.
-    "diffcfd @ git+https://github.com/OpenLithoHub/DiffCFD.git@a95b64e",
 ]
+surrogate = ["openlithohub[models]"]
 plugins = ["openlithohub[diffnano]", "openlithohub[diffcfd]"]
 # P2.1: `all` = every RUNTIME optional feature. Development tooling
 # (pytest/mypy/ruff/pre-commit/mkdocs) lives in `dev`/`docs` and the
@@ -124,9 +120,6 @@ Issues = "https://github.com/OpenLithoHub/OpenLithoHub/issues"
 
 [project.scripts]
 openlithohub = "openlithohub.cli.app:app"
-
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [tool.hatch.version]
 source = "vcs"
@@ -197,6 +190,7 @@ warn_return_any = true
 warn_unused_configs = true
 packages = ["openlithohub"]
 mypy_path = "src"
+surrogate = ["openlithohub[models]"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
@@ -209,6 +203,19 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["openlithohub.server.app"]
 disallow_untyped_decorators = false
+warn_unused_ignores = false
+
+[[tool.mypy.overrides]]
+# P0.9: convergence types are conditionally None when diff-surrogate is
+# absent; the import/ignore pattern may be "unused" locally but needed in CI.
+module = ["openlithohub._utils", "openlithohub._utils.*"]
+warn_unused_ignores = false
+
+[[tool.mypy.overrides]]
+# P0.9: convergence types are conditionally None when diff-surrogate is
+# absent (optional dependency). mypy can't express this cleanly.
+module = ["openlithohub._utils", "openlithohub._utils.*"]
+disable_error_code = ["misc", "assignment", "no-redef"]
 # starlette ships typing but is a transitive dep: resolved locally, often
 # unresolved in slimmer CI typecheck envs — accept either reality.
 warn_unused_ignores = false

@@ -1,11 +1,19 @@
 """Internal shared utilities."""
 
-from openlithohub._utils.convergence import (
-    ConvergenceAction,
-    ConvergenceConfig,
-    ConvergenceMonitor,
-    hybrid_z_score,
-)
+try:
+    from openlithohub._utils.convergence import (  # type: ignore[import-not-found]
+        ConvergenceAction,
+        ConvergenceConfig,
+        ConvergenceMonitor,
+        hybrid_z_score,
+    )
+except ImportError:
+    # diff-surrogate is an optional dependency (P0.9): the core package
+    # must be importable without it.
+    ConvergenceAction = None  # type: ignore[assignment, misc]
+    ConvergenceConfig = None  # type: ignore[assignment, misc]
+    ConvergenceMonitor = None  # type: ignore[assignment, misc]
+    hybrid_z_score = None  # type: ignore[assignment, misc]
 from openlithohub._utils.helmholtz_filter import apply_helmholtz_filter
 from openlithohub._utils.hopkins import (
     HopkinsParams,
