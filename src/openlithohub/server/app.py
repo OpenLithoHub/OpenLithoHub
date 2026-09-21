@@ -26,10 +26,15 @@ hitting the same cached model cannot stomp on its mutable state.
 from __future__ import annotations
 
 import asyncio
+import itertools
+import json
 import logging
+import os
 import shutil
 import tempfile
 import threading
+import time as _time
+import uuid
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
@@ -64,6 +69,27 @@ _MODEL_LOCKS: dict[tuple[str, frozenset[tuple[str, Any]]], threading.Lock] = {}
 # last holder releases it.
 _MODEL_REFCOUNTS: dict[tuple[str, frozenset[tuple[str, Any]]], int] = {}
 _PENDING_TEARDOWN: OrderedDict[tuple[str, frozenset[tuple[str, Any]]], Any] = OrderedDict()
+
+# Resource admission control (P1.14): concurrent optimize jobs can each
+# allocate significant CPU/RAM; without a global bound, different model
+# keys running in parallel exhaust the host.  One bounded semaphore
+# admits at most MAX_CONCURRENT_OPTIMIZE jobs; excess requests get
+# 429 + Retry-After instead of degrading the host.
+MAX_CONCURRENT_OPTIMIZE = max(1, int(os.environ.get("OPENLITHOHUB_MAX_CONCURRENT_OPTIMIZE", "2")))
+_ADMIT = threading.BoundedSemaphore(MAX_CONCURRENT_OPTIMIZE)
+
+# Optional API key boundary (P1.17): when set, every /v1 request must
+# present it in the X-API-Key header.  The server is an on-prem/private
+# service; full IAM belongs to a reverse proxy / service mesh.
+API_KEY = os.environ.get("OPENLITHOHUB_API_KEY") or ""
+
+# In-memory job store for long-running optimizations (P1.15).  Jobs are
+# process-local (restart clears them) and bounded: the oldest terminal
+# jobs are evicted beyond _JOB_HISTORY_CAP.
+_JOBS: OrderedDict[str, dict[str, Any]] = OrderedDict()
+_JOB_LOCK = threading.Lock()
+_JOB_HISTORY_CAP = 100
+_JOB_COUNTER = itertools.count(1)
 
 # Hard cap on multipart upload size for /v1/optimize. Mirrors the 2 GB ceiling
 # enforced by ``ModelHub._download_url`` for incoming weights — uniform
@@ -149,7 +175,7 @@ def _get_or_load_model(
                 _MODEL_CACHE[key] = parked
                 return _acquire_locked(key, parked, per_key_lock)
 
-        model = registry.get(name, **kwargs)
+        model = registry.get(name, ignore_unsupported=False, **kwargs)
         model.setup()
 
         to_teardown: list[tuple[tuple[str, frozenset[tuple[str, Any]]], Any]] = []
@@ -206,6 +232,20 @@ def _release_model(key: tuple[str, frozenset[tuple[str, Any]]]) -> None:
             _MODEL_LOCKS.pop(key, None)
     if model is not None:
         _teardown_model(key, model)
+
+
+class AdmissionDeniedError(RuntimeError):
+    """Raised when the global optimize admission semaphore is exhausted."""
+
+
+def _run_optimize_admitted(**kwargs: Any) -> dict[str, Any]:
+    """Run one optimize under the global admission semaphore (P1.14)."""
+    if not _admit_sync():
+        raise AdmissionDeniedError()
+    try:
+        return _run_optimize(**kwargs)
+    finally:
+        _release_admit()
 
 
 def _run_optimize(
@@ -300,6 +340,30 @@ def _run_optimize(
     }
 
 
+def _admit_sync() -> bool:
+    """Non-blocking admission probe for worker threads (P1.14)."""
+    return _ADMIT.acquire(blocking=False)
+
+
+def _release_admit() -> None:
+    _ADMIT.release()
+
+
+def _put_job(record: dict[str, Any]) -> str:
+    with _JOB_LOCK:
+        job_id = f"job-{next(_JOB_COUNTER)}-{uuid.uuid4().hex[:8]}"
+        record["job_id"] = job_id
+        _JOBS[job_id] = record
+        while len(_JOBS) > _JOB_HISTORY_CAP:
+            for existing_id, existing in list(_JOBS.items()):
+                if existing["status"] in ("succeeded", "failed", "cancelled"):
+                    _JOBS.pop(existing_id, None)
+                    break
+            else:
+                break
+    return job_id
+
+
 def create_app() -> FastAPI:
     """Build the FastAPI app. Factored so tests can spin up a fresh
     instance with TestClient without depending on import-time globals."""
@@ -313,9 +377,85 @@ def create_app() -> FastAPI:
         version="1",
     )
 
+    @app.middleware("http")
+    async def _request_observability(request: Any, call_next: Any) -> Any:
+        # P1.18: request id + timing on every response; structured enough
+        # for log-based queue/latency analysis without a metrics stack.
+        import logging as _logging
+
+        request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+        if (
+            API_KEY
+            and request.url.path != "/v1/health"
+            and request.headers.get("X-API-Key") != API_KEY
+        ):
+            from fastapi.responses import JSONResponse as _JSONResponse
+
+            return _JSONResponse(
+                status_code=401, content={"detail": "invalid or missing X-API-Key"}
+            )
+        start = _time.perf_counter()
+        response = await call_next(request)
+        elapsed_ms = round((_time.perf_counter() - start) * 1000, 3)
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-OLH-Duration-Ms"] = str(elapsed_ms)
+        _logging.getLogger("openlithohub.server.access").info(
+            json.dumps(
+                {
+                    "event": "request",
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status": response.status_code,
+                    "duration_ms": elapsed_ms,
+                }
+            )
+        )
+        return response
+
+    def _require_api_key(request: Any) -> None:
+        if API_KEY and request.headers.get("X-API-Key") != API_KEY:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=401, detail="invalid or missing X-API-Key")
+
     @app.get("/v1/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/v1/ready")
+    def ready() -> dict[str, Any]:
+        # P1.16: readiness — can this instance accept work RIGHT NOW?
+        import tempfile as _tempfile
+
+        from openlithohub.models.registry import register_builtin_models, registry
+
+        registry_ok = True
+        try:
+            register_builtin_models()
+            registry_ok = len(registry.list_models()) > 0
+        except Exception:  # noqa: BLE001
+            registry_ok = False
+        writable = True
+        try:
+            probe = Path(_tempfile.mkstemp(prefix="olh_ready_")[1])
+            probe.unlink()
+        except OSError:
+            writable = False
+        ready_now = registry_ok and writable
+        body: dict[str, Any] = {
+            "ready": ready_now,
+            "checks": {
+                "models_registered": registry_ok,
+                "scratch_writable": writable,
+                "admission_slots_free": _ADMIT._value,  # noqa: SLF001 - introspection
+            },
+        }
+        if not ready_now:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=503, detail=body)
+        return body
 
     @app.get("/v1/version")
     def version() -> dict[str, str]:
@@ -342,11 +482,18 @@ def create_app() -> FastAPI:
             gpu["device_count"] = torch.cuda.device_count()
             gpu["device_name"] = torch.cuda.get_device_name(0)
         return {
+            "api_schema_version": "1",
+            "capability_schema_version": "1",
             "models": sorted(registry.list_models()),
             "simulator_backends": sorted(list_simulators()),
             "gpu": gpu,
             "streaming_pipeline": True,
-            "proof_verification": "p054-governed (see proof_artifacts/p054/README.md)",
+            "input_formats": ["npy", "pt", "oas", "gds"],
+            "export_formats": ["oasis", "gds", "pt"],
+            "proof_verification": {
+                "level": "p054-governed",
+                "reference": "proof_artifacts/p054/README.md",
+            },
         }
 
     @app.get("/v1/models")
@@ -379,7 +526,8 @@ def create_app() -> FastAPI:
             description=(
                 "Drop curvilinear shapes below this polygon area (nm^2) at export. "
                 "Default 0.0 keeps every shape (Hackathon-safe); set >0 for "
-                "fab-ready MRC-compliant output."
+                "fab-oriented export quality. This export does NOT establish foundry "
+                "sign-off or complete manufacturing-rule compliance."
             ),
         ),
     ) -> Response | JSONResponse:
@@ -423,7 +571,7 @@ def create_app() -> FastAPI:
                 # would otherwise stall every other in-flight request for
                 # seconds-to-minutes per optimization.
                 summary = await asyncio.to_thread(
-                    _run_optimize,
+                    _run_optimize_admitted,
                     input_path=input_path,
                     output_path=output_path,
                     model_name=model,
@@ -435,6 +583,12 @@ def create_app() -> FastAPI:
                     pretrained=pretrained,
                     min_area_nm2=min_area_nm2,
                 )
+            except AdmissionDeniedError:
+                raise HTTPException(
+                    status_code=429,
+                    detail="server at maximum concurrent optimizations",
+                    headers={"Retry-After": "5"},
+                ) from None
             except KeyError as e:
                 # Both unknown model names and unknown node names raise KeyError;
                 # disambiguate by message so the client gets the right status.
@@ -473,5 +627,130 @@ def create_app() -> FastAPI:
         except BaseException:
             shutil.rmtree(tmp_path, ignore_errors=True)
             raise
+
+    # ---- Long-task job API (P1.15): minute-scale OPC/ILT should not hold
+    # an HTTP connection open. Same core as /v1/optimize, executed in a
+    # worker thread under the same admission semaphore; jobs live in the
+    # process (restart clears them) and are bounded by _JOB_HISTORY_CAP.
+
+    @app.post("/v1/jobs/optimize", response_model=None)
+    async def create_optimize_job(
+        layout: UploadFile = File(..., description="Layout file (.oas, .gds, .pt, .npy)"),
+        model: str = Form(..., description="Registered model name."),
+        node: str = Form("3nm-euv", description="Process node."),
+        pixel_nm: float | None = Form(None, description="Pixel size in nanometers."),
+        tile_size: int = Form(2048, description="Tile size in pixels."),
+        writer: str = Form("mbmw", description="Target writer: mbmw or vsb."),
+        layer: str | None = Form(None, description="OASIS/GDSII layer 'LAYER:DTYPE'."),
+        pretrained: bool = Form(False, description="Load pretrained weights."),
+        min_area_nm2: float = Form(0.0, description="Drop shapes below this area (nm^2)."),
+    ) -> JSONResponse:
+        if not layout.filename:
+            raise HTTPException(status_code=400, detail="layout upload missing filename")
+        suffix = Path(layout.filename).suffix or ".bin"
+        tmp_path = Path(tempfile.mkdtemp(prefix="olh_job_"))
+        input_path = tmp_path / f"input{suffix}"
+        output_path = tmp_path / "optimized.oas"
+        bytes_read = 0
+        with input_path.open("wb") as out_f:
+            while True:
+                chunk = await layout.read(1024 * 1024)
+                if not chunk:
+                    break
+                bytes_read += len(chunk)
+                if bytes_read > _MAX_UPLOAD_BYTES:
+                    shutil.rmtree(tmp_path, ignore_errors=True)
+                    raise HTTPException(status_code=413, detail="layout upload too large")
+                out_f.write(chunk)
+        params: dict[str, Any] = dict(
+            input_path=input_path,
+            output_path=output_path,
+            model_name=model,
+            node=node,
+            pixel_nm=pixel_nm,
+            tile_size=tile_size,
+            writer=writer,
+            layer=layer,
+            pretrained=pretrained,
+            min_area_nm2=min_area_nm2,
+        )
+        job_id = _put_job(
+            {
+                "status": "queued",
+                "created_utc": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+                "scratch_dir": str(tmp_path),
+                "summary": None,
+                "error": None,
+                "output_path": None,
+            }
+        )
+
+        def _run() -> None:
+            record = _JOBS.get(job_id)
+            if record is None or record["status"] == "cancelled":
+                shutil.rmtree(tmp_path, ignore_errors=True)
+                return
+            record["status"] = "running"
+            try:
+                summary = _run_optimize_admitted(**params)
+                with _JOB_LOCK:
+                    record["status"] = "succeeded"
+                    record["summary"] = summary
+                    record["output_path"] = str(summary["output_path"])
+            except Exception as e:  # noqa: BLE001 - surfaced via job status
+                with _JOB_LOCK:
+                    record["status"] = "failed"
+                    record["error"] = str(e)
+
+        threading.Thread(target=_run, name=f"olh-{job_id}", daemon=True).start()
+        return JSONResponse(
+            status_code=202,
+            content={"job_id": job_id, "status": "queued", "poll": f"/v1/jobs/{job_id}"},
+        )
+
+    @app.get("/v1/jobs/{job_id}")
+    def get_job(job_id: str) -> dict[str, Any]:
+        job = _JOBS.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
+        return {
+            "api_schema_version": "1",
+            "job_id": job_id,
+            "status": job["status"],
+            "created_utc": job["created_utc"],
+            "summary": job["summary"],
+            "error": job["error"],
+        }
+
+    @app.get("/v1/jobs/{job_id}/artifact", response_model=None)
+    def get_job_artifact(job_id: str) -> FileResponse:
+        job = _JOBS.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
+        if job["status"] != "succeeded" or not job.get("output_path"):
+            raise HTTPException(status_code=409, detail=f"job {job_id} has no artifact yet")
+        return FileResponse(
+            job["output_path"],
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{Path(job["output_path"]).name}"',
+            },
+        )
+
+    @app.delete("/v1/jobs/{job_id}")
+    def delete_job(job_id: str) -> dict[str, str]:
+        with _JOB_LOCK:
+            job = _JOBS.get(job_id)
+            if job is None:
+                raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
+            if job["status"] == "running":
+                raise HTTPException(status_code=409, detail="running job cannot be deleted")
+            if job["status"] == "queued":
+                job["status"] = "cancelled"
+            _JOBS.pop(job_id, None)
+            scratch = job.get("scratch_dir")
+        if scratch:
+            shutil.rmtree(scratch, ignore_errors=True)
+        return {"deleted": job_id}
 
     return app

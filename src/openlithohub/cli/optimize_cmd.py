@@ -111,7 +111,7 @@ def run(
         help=(
             "Drop curvilinear shapes below this polygon area (nm^2) at export. "
             "Default 0.0 keeps every shape so academic / Hackathon scoring "
-            "stays bit-exact. Set >0 for fab-ready exports where MRC would "
+            "stays bit-exact. Set >0 for fab-oriented exports where MRC would "
             "reject the smallest SRAFs an ILT can produce."
         ),
     ),

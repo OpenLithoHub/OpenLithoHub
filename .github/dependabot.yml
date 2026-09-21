@@ -1,0 +1,21 @@
+# Dependency maintenance (audit P1.6). Weekly cadence; groups minor/patch
+# bumps to keep review load low. Docker digest pinning for the base image
+# is handled here as well (the Dockerfile pins an exact digest).
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns:
+          - "*"
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"

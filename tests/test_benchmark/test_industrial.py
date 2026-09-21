@@ -139,6 +139,8 @@ def _valid_artifact() -> dict:
             "working_tree_dirty": False,
             "harness_sha256": SHA,
             "industrial_core_sha256": SHA,
+            "claim_generator_sha256": SHA,
+            "run_support_sha256": SHA,
         },
         "fixture": {"sha256": SHA, "bytes": 1234, "top_cell": "ibex_core"},
     }

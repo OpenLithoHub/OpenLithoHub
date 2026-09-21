@@ -68,8 +68,43 @@ Real routed silicon layout, not a synthetic showcase:
 | Integrity | fixture SHA-256 recorded in every artifact; measurement fingerprints mix dataset hash + harness arguments |
 
 The die is 555,355 nm per side. At 1 nm/px a dense raster would need
-**1.23 TB** — structurally infeasible on benchmark hardware (48 GB), and
-recorded as such.
+**1.23 TB (1.12 TiB)** — it exceeds the 48 GiB of reference-hardware RAM,
+and is recorded with the machine-relative status
+`INFEASIBLE_ON_REFERENCE_MACHINE` (the arithmetic is shown in the
+artifact; memory figures use GiB = 2^30 bytes).
+
+## Run identity and workspace (v1.1)
+
+Every invocation computes a **run identity**: a single SHA-256 over the
+measurement source (commit + SHA-256 of the harness, core module, claim
+generator and run-support module), the environment lock (package
+versions, torch build/threads, thread env vars, CPU/RAM identity), the
+parent and optional ICCAD fixture hashes, and EVERY semantic CLI
+argument. All mutable run state lives under:
+
+```text
+benchmarks/results/industrial/runs/<run_identity>/
+    run-config.json    # the full identity payload
+    fixtures/          # derived crops with per-file identity records
+    checkpoints/       # strict-JSON rows, each carrying the run identity
+    progress.json      # stage, done/total, in-flight row, ETA
+    RUN.log
+```
+
+A checkpoint row from any other identity is a hard error — code,
+argument or fixture changes can never silently reuse stale results.
+Derived fixtures are reused only when their recorded identity (parent
+hash, derived hash, generator commit/harness hash) still matches;
+mismatched fixtures refuse to load. Final artifacts are published to
+`benchmarks/results/industrial/` with `manifest.json` and
+`SHA256SUMS.txt`; the CI verifier re-hashes the recorded source files
+**as committed** (`git show <commit>:<path>`) and cross-checks every
+claim's artifact hash. Operators run
+`python scripts/preflight_industrial_benchmark.py --gds <ibex.gds>`
+before launching a formal measurement; the harness refuses a dirty
+tracked tree unless `OPENLITHOHUB_ALLOW_DIRTY_MEASUREMENT=1` is set
+(provisional runs — the artifact records the dirty state and CI rejects
+it).
 
 ## Benchmark protocol
 

@@ -18,7 +18,12 @@ When reporting, please include:
 
 ## Supported Versions
 
-Only the latest minor release on the `main` branch is actively supported
+Supported versions:
+
+- **Stable releases published on PyPI** (e.g. `0.1.0aN`) are supported
+  until the next stable release.
+- The `main` branch carries pre-release (`0.0.0.devN`) code and is NOT a
+  supported version — report issues against the latest PyPI release.
 with security fixes. Older releases may receive fixes at the maintainers'
 discretion.
 
@@ -40,8 +45,12 @@ This policy covers the OpenLithoHub source code in this repository.
 
 Out of scope:
 
-- Vulnerabilities in third-party dependencies (please report those
-  upstream — see [NOTICE](NOTICE) for the dependency list)
+- Vulnerabilities in third-party dependencies *as such* (please report
+  those upstream — see [NOTICE](NOTICE) for the dependency list).
+  However, if a dependency exposure is exploitable **through
+  OpenLithoHub's supported configuration** (e.g. our server defaults, our
+  dataset adapters), we DO want to hear about it and will coordinate the
+  fix and disclosure.
 - Vulnerabilities in datasets accessed via OpenLithoHub adapters
   (those datasets retain their own maintainers — see
   [DATA-LICENSES.md](DATA-LICENSES.md))

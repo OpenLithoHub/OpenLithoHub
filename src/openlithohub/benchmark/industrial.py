@@ -438,9 +438,13 @@ def validate_artifact(artifact: dict[str, Any]) -> list[str]:
                 "measurement_source.working_tree_dirty must be false: artifacts "
                 "must be produced from a clean committed checkout"
             )
-        for key in ("harness_sha256", "industrial_core_sha256"):
-            value = source.get(key)
-            if value is not None and not re.fullmatch(r"[0-9a-f]{64}", str(value)):
+        for key in (
+            "harness_sha256",
+            "industrial_core_sha256",
+            "claim_generator_sha256",
+            "run_support_sha256",
+        ):
+            if not re.fullmatch(r"[0-9a-f]{64}", str(source.get(key) or "")):
                 problems.append(f"measurement_source.{key} must be a 64-hex sha256")
     fixture = artifact.get("fixture")
     fixture_hash = str(fixture.get("sha256", "")) if isinstance(fixture, dict) else ""

@@ -245,8 +245,12 @@ curl -X POST http://localhost:8000/v1/optimize \
 ```
 
 模型常驻进程内存，重复请求不会重新加载权重。
-服务发现端点：`GET /v1/health`（存活探测）、`GET /v1/version`（包/git/torch 版本）、
-`GET /v1/capabilities`（可用模型、仿真后端、GPU 可用性），均以 JSON 返回且不泄露主机敏感信息。
+服务发现端点：`GET /v1/health`（存活探测）、`GET /v1/ready`（就绪探测：模型注册、scratch 可写）、
+`GET /v1/version`（包/git/torch 版本）、`GET /v1/capabilities`（可用模型、仿真后端、GPU 可用性、schema 版本），
+均以 JSON 返回且不泄露主机敏感信息。运维项：`OPENLITHOHUB_MAX_CONCURRENT_OPTIMIZE` 限制并发优化数
+（超额请求返回 `429` + `Retry-After`）；`OPENLITHOHUB_API_KEY` 要求除 `/v1/health` 外全部端点携带 `X-API-Key`；
+每个响应带 `X-Request-ID` 便于追踪。长任务：`POST /v1/jobs/optimize` → `GET /v1/jobs/{id}` →
+`GET /v1/jobs/{id}/artifact` → `DELETE /v1/jobs/{id}`，分钟级 OPC/ILT 不再长时间占用 HTTP 连接。
 浏览器打开 `http://localhost:8000/docs` 即可看到自动生成的 Swagger UI：
 每个端点都有 JSON Schema 文档，并支持直接上传文件交互调试，
 无需先写客户端代码。
@@ -548,6 +552,10 @@ python3 scripts/plot_benchmarks.py \
 
 ## 光学前向模型
 
+> 稳定性说明：`openlithohub._utils.*` 属于内部命名空间（见
+> [docs/api-stability.md](docs/api-stability.md)），以下示例仅作说明用途。
+> 长期代码请使用公共门面（`Mask` / `LitheEngine`）或注册表中的模型/仿真器。
+
 OpenLithoHub 提供两个可微分的前向模型，全部用纯 PyTorch 实现，所以整个 ILT
 循环端到端可自动求导：
 
@@ -617,7 +625,7 @@ ruff format src/ tests/
 
 ## 竞争定位
 
-**定位：** 开源计算光刻评测与工作流工具集——ILT、OPC、掩膜优化与工艺窗口分析，内建诚实自评。
+**定位：** 厂商中立的计算光刻平台——OPC/ILT 基准评测、可扩展版图处理、可制造性分析、模型部署与证明携带式验证，内建诚实自评。
 
 **领先之处：**
 - **开放 ILT 评测与诚实基线：** 唯一提供标准化 ILT 基准（SARIF 导出、形态学 MRC、切片一致性指标、随机感知损失）的开源项目。商业工具（Calibre MML、cuLitho）闭源且无公开基准。

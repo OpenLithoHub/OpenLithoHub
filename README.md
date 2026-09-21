@@ -55,7 +55,7 @@ Dose-response is **monotonically decreasing** (19.4× from 10→100 ph/nm²), ma
 - **Standardized metrics** — EPE, L2, PV Band, shot count, stochastic robustness, imec defect rates, hotspot detection
 - **Bayesian stochastic model** — per-pixel failure probability, LER, LWR heatmaps via Poisson-MC or MC-Dropout
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gates
-- **OASIS / GDSII workflow** — end-to-end tensor→fab-ready mask (manhattan & curvilinear)
+- **OASIS / GDSII workflow** — end-to-end tensor→mask-writer-oriented export (manhattan & curvilinear); NOT a foundry sign-off
 - **Model-agnostic evaluation** — plug any OPC/ILT model via minimal interface
 - **Streaming full-chip pipeline** — core/halo tiling with out-of-core sources/sinks; layout growth adds tiles, not memory (RFC 0008)
 - **Proof-carrying verification** — theorem-facing `PASS`/`FAIL`/`INCONCLUSIVE` certificates with certified-halo brackets, coverage contract, and the source-native verification contract and replay infrastructure; rigorous certification capability is profile/backend-specific (RFC 0007 / B04 / P-054)
@@ -265,9 +265,17 @@ curl -X POST http://localhost:8000/v1/optimize \
 
 Models stay resident in-process; repeat requests skip weight loading.
 Machine-readable service discovery: `GET /v1/health` (liveness),
+`GET /v1/ready` (readiness: models registered, scratch writable),
 `GET /v1/version` (package/git/torch versions) and `GET /v1/capabilities`
-(available models, simulator backends, GPU availability) return JSON
-without leaking host details. Open `http://localhost:8000/docs` in a
+(available models, simulator backends, GPU availability, schema versions)
+return JSON without leaking host details. Operations:
+`OPENLITHOHUB_MAX_CONCURRENT_OPTIMIZE` bounds concurrent optimizations
+(excess requests get `429` + `Retry-After`); `OPENLITHOHUB_API_KEY`
+requires an `X-API-Key` header on all endpoints except `/v1/health`;
+every response carries `X-Request-ID` for tracing. Long-running jobs:
+`POST /v1/jobs/optimize` -> `GET /v1/jobs/{id}` -> `GET /v1/jobs/{id}/artifact`
+-> `DELETE /v1/jobs/{id}`, so minute-scale OPC/ILT never holds an HTTP
+connection open. Open `http://localhost:8000/docs` in a
 browser for the auto-generated Swagger UI: every endpoint is documented
 with its JSON schema and can be exercised interactively (file upload
 included), no client code needed.
@@ -625,6 +633,11 @@ for readability in both light and dark GitHub themes.
 
 ## Optical forward models
 
+> Stability note: `openlithohub._utils.*` is an INTERNAL namespace
+> (see [docs/api-stability.md](docs/api-stability.md)); the examples below
+> are illustrative. Prefer the public façade (`Mask` / `LitheEngine`) or
+> the registered models/simulators for long-lived code.
+
 OpenLithoHub ships two differentiable forward models, both written in pure
 PyTorch so the entire ILT loop is end-to-end auto-differentiable:
 
@@ -967,7 +980,7 @@ results = multiproc_predict(model, tiles, n_workers=2)
 
 ## Competitive Positioning
 
-**What it is:** An open-source computational lithography benchmarking and workflow toolkit — ILT, OPC, mask optimization, and process window analysis with honest self-measurement.
+**What it is:** A vendor-neutral computational lithography platform — OPC/ILT benchmarking, scalable layout processing, manufacturability analysis, model deployment, and proof-carrying verification with honest self-measurement.
 
 **Where it leads:**
 - **Open ILT benchmark with honest baselines:** The only open-source project providing standardized ILT benchmarks with SARIF export, morphological MRC, tile-consistency metrics, and stochastic-aware loss. Commercial tools (Calibre MML, cuLitho) are closed-source with no public benchmarks.

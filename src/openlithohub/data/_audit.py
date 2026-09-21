@@ -25,11 +25,14 @@ free to call ``download`` without any I/O side-effect.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
+from importlib import metadata
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +50,21 @@ def _audit_dir() -> Path | None:
     except OSError:
         return None
     return p
+
+
+_SECRET_KEY_RE = re.compile(
+    r"token|password|passwd|secret|auth|cookie|api[_-]?key|signature|signed",
+    re.IGNORECASE,
+)
+
+
+def redact_secrets(mapping: dict[str, Any]) -> dict[str, Any]:
+    """Mask values whose KEY looks secret-bearing (audit P2.1).
+
+    Download APIs currently take no credentials, but this runs *before*
+    any future key is added: a leaked token in an audit log is forever.
+    """
+    return {k: ("<redacted>" if _SECRET_KEY_RE.search(str(k)) else v) for k, v in mapping.items()}
 
 
 def _safe_repr(value: Any) -> str:
@@ -91,8 +109,11 @@ def wrap_download(adapter_cls: type) -> None:
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "adapter": f"{adapter_cls.__module__}.{adapter_cls.__qualname__}",
             "root": str(root),
-            "args": [_safe_repr(a) for a in args],
-            "kwargs": {k: _safe_repr(v) for k, v in kwargs.items()},
+            "args": [_safe_repr(redact_secrets(a) if isinstance(a, dict) else a) for a in args],
+            "kwargs": {
+                k: ("<redacted>" if _SECRET_KEY_RE.search(str(k)) else _safe_repr(v))
+                for k, v in kwargs.items()
+            },
         }
         start = time.monotonic()
         try:
@@ -109,7 +130,9 @@ def wrap_download(adapter_cls: type) -> None:
             record["outcome"] = "success"
             record["elapsed_ms"] = int((time.monotonic() - start) * 1000)
             record["size_bytes"] = _dir_size(Path(root))
+            record["adapter_version"] = metadata.version("openlithohub")
             _append_record(audit_dir, adapter_cls, record)
+            _write_dataset_manifest(audit_dir, adapter_cls, Path(root), record)
             return result
 
     wrapped.__openlithohub_audited = True  # type: ignore[attr-defined]
@@ -117,6 +140,43 @@ def wrap_download(adapter_cls: type) -> None:
     wrapped.__name__ = original.__name__
     wrapped.__doc__ = original.__doc__
     adapter_cls.download = wrapped  # type: ignore[attr-defined]
+
+
+def _write_dataset_manifest(
+    audit_dir: Path, adapter_cls: type, root: Path, record: dict[str, Any]
+) -> None:
+    """Standardized per-download manifest (audit P2.2): DATASET_MANIFEST.json
+    plus a MANIFEST.SHA256 over it, written into the data root. Records
+    source identity, license pointer and file hashes for every downloaded
+    dataset so provenance travels WITH the data."""
+    from openlithohub._version import __version__
+
+    try:
+        files = {
+            str(f.relative_to(root)): f"sha256:{hashlib.sha256(f.read_bytes()).hexdigest()}"
+            for f in sorted(root.rglob("*"))
+            if f.is_file() and f.stat().st_size <= (64 << 20)
+        }
+        manifest = {
+            "schema": "OpenLithoHub.dataset-manifest.v1",
+            "adapter": record["adapter"],
+            "downloaded_utc": record["timestamp"],
+            "adapter_version": __version__,
+            "data_root": str(root),
+            "license_note": "see DATA-LICENSES.md; adapter support is NOT license clearance",
+            "files": files,
+        }
+        (root / "DATASET_MANIFEST.json").write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        digest = hashlib.sha256((root / "DATASET_MANIFEST.json").read_bytes()).hexdigest()
+        (root / "MANIFEST.SHA256").write_text(
+            f"{digest}  DATASET_MANIFEST.json\n", encoding="utf-8"
+        )
+    except OSError:
+        return  # auditing must never break the download
+    except Exception:  # noqa: BLE001 — manifest is best-effort
+        return
 
 
 def _append_record(audit_dir: Path, adapter_cls: type, record: dict[str, Any]) -> None:

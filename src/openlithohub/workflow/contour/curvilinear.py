@@ -245,7 +245,7 @@ def export_oasis_mbw(
     sampled polygon with absolute area below this threshold is dropped
     before insertion. Default ``0.0`` keeps every shape so academic /
     Hackathon evaluation stays bit-exact. A positive value is intended for
-    fab-ready exports where MRC would otherwise reject the smallest SRAFs
+    fab-oriented exports where MRC would otherwise reject the smallest SRAFs
     a curvilinear ILT can produce; the count of dropped shapes is logged
     at INFO level so the filter is auditable.
 

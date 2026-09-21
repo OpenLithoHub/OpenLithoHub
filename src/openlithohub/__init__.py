@@ -1,4 +1,6 @@
-"""OpenLithoHub — Open-source computational lithography benchmarking and workflow tool."""
+"""OpenLithoHub — vendor-neutral computational lithography platform for OPC/ILT
+benchmarking, scalable layout processing, manufacturability analysis, model
+deployment, and proof-carrying verification."""
 
 from openlithohub._version import __version__
 from openlithohub.api import LitheEngine, Mask, Report

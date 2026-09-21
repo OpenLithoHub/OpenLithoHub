@@ -325,3 +325,85 @@ def test_sidecar_state_bounded_under_churn(monkeypatch) -> None:
         )
         app_mod._MODEL_CACHE_CAP = saved[4]
         monkeypatch.setattr(registry_mod, "registry", real_registry)
+
+
+def test_job_optimize_lifecycle() -> None:
+    """POST /v1/jobs/optimize → poll → download artifact (P1.15)."""
+    import io
+    import time as time_mod
+
+    import numpy as np
+
+    client = TestClient(create_app())
+    layout = np.zeros((64, 64), dtype=np.float32)
+    layout[16:48, 16:48] = 1.0
+    buf = io.BytesIO()
+    np.save(buf, layout)
+    buf.seek(0)
+    created = client.post(
+        "/v1/jobs/optimize",
+        files={"layout": ("in.npy", buf, "application/octet-stream")},
+        data={"model": "dummy-identity", "node": "45nm"},
+    )
+    assert created.status_code == 202, created.text
+    job_id = created.json()["job_id"]
+    for _ in range(100):
+        status = client.get(f"/v1/jobs/{job_id}").json()
+        if status["status"] in ("succeeded", "failed"):
+            break
+        time_mod.sleep(0.1)
+    assert status["status"] == "succeeded", status
+    artifact = client.get(f"/v1/jobs/{job_id}/artifact")
+    assert artifact.status_code == 200
+    assert len(artifact.content) > 0
+    deleted = client.delete(f"/v1/jobs/{job_id}")
+    assert deleted.status_code == 200
+    assert client.get(f"/v1/jobs/{job_id}").status_code == 404
+
+
+def test_ready_endpoint(client: TestClient) -> None:
+    response = client.get("/v1/ready")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready"] is True
+    assert body["checks"]["models_registered"] is True
+
+
+def test_admission_returns_429_when_exhausted(monkeypatch) -> None:
+    """When the admission semaphore is exhausted, /v1/optimize answers 429."""
+    from openlithohub.server import app as app_mod
+
+    class _LockedSemaphore:
+        def acquire(self, blocking: bool = True, timeout: float | None = None) -> bool:
+            return False
+
+        def release(self) -> None:
+            pass
+
+    monkeypatch.setattr(app_mod, "_ADMIT", _LockedSemaphore())
+    import io
+
+    import numpy as np
+
+    client = TestClient(create_app())
+    buf = io.BytesIO()
+    np.save(buf, np.zeros((32, 32), dtype=np.float32))
+    buf.seek(0)
+    response = client.post(
+        "/v1/optimize",
+        files={"layout": ("in.npy", buf, "application/octet-stream")},
+        data={"model": "dummy-identity", "node": "45nm"},
+    )
+    assert response.status_code == 429
+    assert response.headers.get("Retry-After") == "5"
+
+
+def test_api_key_rejects_without_header(monkeypatch) -> None:
+    from openlithohub.server import app as app_mod
+
+    monkeypatch.setattr(app_mod, "API_KEY", "sekrit")
+    fresh = TestClient(create_app())
+    assert fresh.get("/v1/models").status_code == 401
+    assert fresh.get("/v1/health").status_code == 200  # liveness stays open
+    ok = TestClient(create_app(), headers={"X-API-Key": "sekrit"})
+    assert ok.get("/v1/models").status_code == 200

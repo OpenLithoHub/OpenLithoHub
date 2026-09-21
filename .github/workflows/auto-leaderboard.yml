@@ -13,7 +13,10 @@ on:
     # head SHA — safe because the only PR-author input we ever read is
     # the submission YAML (allow-listed by the regex in the fetch step
     # below) and validated by the strict ``BenchmarkResult`` schema.
-    types: [opened, reopened, synchronize, labeled]
+    # Issue #29: external forks cannot add the ``submission`` label, so
+    # the label is no longer required to run validation — a PR that only
+    # touches submissions/**/*.yaml is auto-validated.
+    types: [opened, reopened, synchronize]
     paths:
       - "submissions/**.yaml"
       - "submissions/**.yml"
@@ -28,11 +31,10 @@ permissions:
 
 jobs:
   validate-submission:
-    if: contains(github.event.pull_request.labels.*.name, 'submission')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout base ref (never PR head)
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.event.pull_request.base.ref }}
           # peter-evans/create-pull-request can't compose with the
@@ -66,7 +68,7 @@ jobs:
           echo "Fetched submissions:"
           find _pr_submissions -type f
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0 # v6.3.0
         with:
           python-version: "3.12"
 
@@ -83,7 +85,7 @@ jobs:
         run: python scripts/leaderboard_append_entries.py
 
       - name: Open follow-up PR with updated leaderboard
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           add-paths: |
@@ -102,7 +104,7 @@ jobs:
             See `docs/leaderboard-submission.md` for the submission policy.
 
       - name: Comment on the originating PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             github.rest.issues.createComment({

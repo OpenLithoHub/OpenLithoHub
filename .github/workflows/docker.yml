@@ -8,6 +8,8 @@ on:
       - "Dockerfile"
       - ".github/workflows/docker.yml"
       - "pyproject.toml"
+      - "src/**"
+      - "NOTICE"
 
 permissions:
   contents: read
@@ -17,11 +19,11 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Log in to GitHub Container Registry
         if: github.event_name == 'push'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -29,7 +31,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
@@ -37,15 +39,36 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
 
-      - name: Build (and push on tag)
+      - name: Build CLI image (and push on tag)
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
+          target: runtime
           load: ${{ github.event_name != 'push' }}
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Build server image (and push on tag)
+        id: build_server
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: .
+          target: server
+          load: ${{ github.event_name != 'push' }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta_server.outputs.tags }}
+          labels: ${{ steps.meta_server.outputs.labels }}
+
+      - name: Extract server image metadata
+        id: meta_server
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}},suffix=-server
+            type=sha,suffix=-server
 
       - name: Resolve smoke-test image tag
         id: smoketag
@@ -60,6 +83,22 @@ jobs:
         run: |
           docker run --rm --entrypoint python "${{ steps.smoketag.outputs.tag }}" \
             -c "import klayout.db; import openlithohub; print('ok')"
+
+      - name: Smoke test — server image starts and answers /v1/health
+        run: |
+          server_tag="$(echo "${{ steps.meta_server.outputs.tags }}" | head -n1)"
+          docker run -d --rm --name olh-server-smoke -p 8000:8000 "$server_tag"
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/v1/health > /dev/null; then
+              echo "server healthy"; docker logs olh-server-smoke | tail -5
+              docker rm -f olh-server-smoke > /dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs olh-server-smoke | tail -20
+          docker rm -f olh-server-smoke > /dev/null
+          exit 1
 
       - name: Report final image size
         run: |

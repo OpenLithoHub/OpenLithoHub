@@ -79,3 +79,4 @@ proof_artifacts/p054/external/
 # local; only the JSON artifacts + manifest are committed.
 benchmarks/results/industrial/fixtures/
 benchmarks/results/industrial/checkpoints/
+benchmarks/results/industrial/runs/
