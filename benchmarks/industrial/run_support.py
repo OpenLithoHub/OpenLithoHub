@@ -255,10 +255,64 @@ def _git(repo_root: Path, argv: list[str]) -> str | None:
     return out.stdout.strip() or None
 
 
+def validate_runtime_code_identity(
+    repo_root: Path,
+    *,
+    commit: str | None = None,
+) -> dict[str, Any]:
+    """Prove the actually-imported openlithohub package resolves to the
+    measurement repo's source tree (audit P0.1).
+
+    Checks that ``openlithohub.__file__``,
+    ``openlithohub.benchmark.industrial.__file__`` and
+    ``openlithohub.models.registry.__file__`` all resolve under
+    ``<repo>/src/openlithohub/``.  If a baked build module exists, also
+    checks ``BUILD_COMMIT == measurement commit``.
+    """
+    import openlithohub
+    import openlithohub.benchmark.industrial
+    import openlithohub.models.registry
+
+    src_root = str((repo_root / "src" / "openlithohub").resolve())
+    checks = {
+        "openlithohub": getattr(openlithohub, "__file__", ""),
+        "openlithohub.benchmark.industrial": getattr(
+            openlithohub.benchmark.industrial, "__file__", ""
+        ),
+        "openlithohub.models.registry": getattr(openlithohub.models.registry, "__file__", ""),
+    }
+    all_ok = True
+    for name, fpath in checks.items():
+        if not fpath or not Path(fpath).resolve().is_relative_to(src_root):
+            all_ok = False
+            break
+
+    build_commit = ""
+    try:
+        import openlithohub._build as _build
+
+        build_commit = getattr(_build, "BUILD_COMMIT", "")
+    except (ImportError, AttributeError):
+        pass
+
+    build_matches = commit is not None and build_commit != "" and build_commit == commit
+
+    mode = "source-tree" if all_ok else "UNKNOWN"
+    return {
+        "mode": mode,
+        "resolved_root": src_root,
+        "checks": {k: str(v) for k, v in checks.items()},
+        "build_commit": build_commit,
+        "matches_measurement_commit": build_matches,
+        "all_source_tree": all_ok,
+        "valid": all_ok,
+    }
+
+
 def measurement_source(repo_root: Path) -> dict[str, Any]:
     """Exact provenance of the committed source tree doing the measuring."""
     commit = _git(repo_root, ["rev-parse", "HEAD"])
-    status = _git(repo_root, ["status", "--porcelain", "--untracked-files=no"])
+    status = _git(repo_root, ["status", "--porcelain"])
     tracked_dirty = status is None or status != ""
 
     def file_hash(relative: str) -> str | None:

@@ -109,7 +109,12 @@ def _evict_terminal_locked(now: float) -> list[str]:
         record = _JOBS[job_id]
         if record["status"] not in ("succeeded", "failed", "cancelled"):
             continue
-        age = now - record.get("_created_monotonic", now)
+        # P0.15: TTL for succeeded jobs is based on last access, not creation
+        last_activity = max(
+            record.get("_created_monotonic", 0),
+            record.get("_last_access_monotonic", 0),
+        )
+        age = now - last_activity
         if len(_JOBS) > _JOB_HISTORY_CAP or age > _JOB_TTL_SECONDS:
             _JOBS.pop(job_id, None)
             doomed.append(str(record.get("scratch_dir") or ""))
@@ -149,18 +154,25 @@ def _start_job_worker(app: Any) -> None:
     _JOB_WORKER_STARTED.set()
 
     def _worker() -> None:
-        while True:
-            job_id, params = _JOB_QUEUE.get()
+        while not _JOB_WORKER_SHUTDOWN.is_set():
+            try:
+                job_id, params = _JOB_QUEUE.get(timeout=1.0)
+            except queue.Empty:
+                continue
+            doomed_scratch: list[str] = []
+            skip = False
             with _JOB_LOCK:
                 record = _JOBS.get(job_id)
                 if record is None or record["status"] in ("cancelled", "uploading"):
-                    shutil.rmtree(
-                        record.get("scratch_dir", "") if record else "",
-                        ignore_errors=True,
-                    )
+                    doomed_scratch.append(record.get("scratch_dir", "") if record else "")
                     _JOB_QUEUE.task_done()
-                    continue
-                record["status"] = "running"
+                    skip = True
+                else:
+                    record["status"] = "running"
+            # P0.16: rmtree AFTER releasing the lock
+            _cleanup_scratch_dirs(doomed_scratch)
+            if skip:
+                continue
             admitted = _admit_blocking_with_shutdown()
             if not admitted:
                 _JOB_QUEUE.task_done()
@@ -179,14 +191,15 @@ def _start_job_worker(app: Any) -> None:
                         doomed = _evict_terminal_locked(_time.monotonic())
                 _cleanup_scratch_dirs(doomed)
             except Exception as e:  # noqa: BLE001 - surfaced via job status
+                failed_scratch = ""
                 with _JOB_LOCK:
                     record = _JOBS.get(job_id)
                     if record is not None:
                         record["status"] = "failed"
                         record["error"] = str(e)
-                    # failed jobs have no artifact: their scratch goes now
-                    if record is not None:
-                        shutil.rmtree(record.get("scratch_dir", ""), ignore_errors=True)
+                        failed_scratch = record.get("scratch_dir") or ""
+                if failed_scratch:
+                    shutil.rmtree(failed_scratch, ignore_errors=True)
             finally:
                 _release_admit()
                 _JOB_QUEUE.task_done()
@@ -559,6 +572,7 @@ def create_app() -> FastAPI:
         thread = _JOB_WORKER_THREAD
         if thread is not None and thread.is_alive():
             thread.join(timeout=5.0)
+        _JOB_WORKER_STARTED.clear()
 
     @app.middleware("http")
     async def _request_observability(request: Any, call_next: Any) -> Any:
@@ -602,6 +616,8 @@ def create_app() -> FastAPI:
 
             raise HTTPException(status_code=401, detail="invalid or missing X-API-Key")
 
+    # P0.13: _start_job_worker is idempotent (Event guard). The lifespan
+    # shutdown handler below is what actually drains the worker on exit.
     _start_job_worker(app)
 
     @app.get("/v1/health")
@@ -876,6 +892,7 @@ def create_app() -> FastAPI:
                 detail="job queue is full",
                 headers={"Retry-After": "10"},
             )
+        _reserved = True
         try:
             tmp_path = make_scratch_dir("olh_job_")
             suffix = Path(layout.filename).suffix or ".bin"
@@ -922,6 +939,7 @@ def create_app() -> FastAPI:
                     headers={"Retry-After": "10"},
                 )
             _release_slot_reservation()
+            _reserved = False
             return JSONResponse(
                 status_code=202,
                 content={
@@ -931,7 +949,8 @@ def create_app() -> FastAPI:
                 },
             )
         except BaseException:
-            _release_slot_reservation()
+            if _reserved:
+                _release_slot_reservation()
             shutil.rmtree(tmp_path, ignore_errors=True)
             raise
 

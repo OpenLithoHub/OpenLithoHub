@@ -54,7 +54,6 @@ validate_environment_lock = _ind.validate_environment_lock
 validate_artifact_family = _ind.validate_artifact_family
 recompute_run_identity = _ind.recompute_run_identity
 load_artifact = _ind.load_artifact
-validate_artifact = _ind.validate_artifact
 load_artifact = _ind.load_artifact
 
 _SHA_LINE = re.compile(r"^([0-9a-f]{64})  (.+)$")
@@ -266,14 +265,29 @@ CANONICAL_ROOT = {
 def verify(artifacts_dir: Path, repo_root: Path) -> list[str]:
     problems: list[str] = []
     json_files = sorted(artifacts_dir.glob("*.json"))
-    if not json_files:
+    # P0.6: check for ANY canonical family member, not just JSON.  If a
+    # freeze file or SHA256SUMS exists without JSON, that's a partial root.
+    freeze_exists = (artifacts_dir / "industrial-distribution-freeze.txt").exists()
+    sums_exists = (artifacts_dir / "SHA256SUMS.txt").exists()
+    if not json_files and not freeze_exists and not sums_exists:
         print("no industrial artifacts present — skipping authority checks")
+        return problems
+    if not json_files:
+        problems.append(
+            "partial authority root: non-JSON canonical members present "
+            "but no JSON artifacts — the family is incomplete"
+        )
         return problems
 
     # P0.5: the authority root must contain only canonical files.
-    unknown = {p.name for p in json_files} - CANONICAL_ROOT
-    if unknown:
-        problems.append(f"unknown authority-root JSON files: {sorted(unknown)}")
+    # Check both JSON and non-JSON industrial-* entries.
+    all_industrial = {p.name for p in artifacts_dir.glob("industrial-*")}
+    unknown_industrial = all_industrial - CANONICAL_ROOT
+    if unknown_industrial:
+        problems.append(f"unknown authority-root industrial-* files: {sorted(unknown_industrial)}")
+    unknown_json = {p.name for p in json_files} - CANONICAL_ROOT
+    if unknown_json:
+        problems.append(f"unknown authority-root JSON files: {sorted(unknown_json)}")
 
     sums_path = artifacts_dir / "SHA256SUMS.txt"
     if not sums_path.exists():

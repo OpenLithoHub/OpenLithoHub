@@ -494,6 +494,7 @@ def test_job_upload_too_large_releases_reservation(monkeypatch) -> None:
     from openlithohub.server import app as app_mod
 
     monkeypatch.setattr(app_mod, "_MAX_UPLOAD_BYTES", 10)
+    initial = app_mod._JOB_QUEUE_RESERVED
     client = TestClient(create_app(), raise_server_exceptions=False)
     buf = io.BytesIO(b"x" * 100)
     response = client.post(
@@ -502,30 +503,29 @@ def test_job_upload_too_large_releases_reservation(monkeypatch) -> None:
         data={"model": "dummy-identity"},
     )
     assert response.status_code == 413
-    assert app_mod._JOB_QUEUE_RESERVED == 0, "reservation leaked on 413"
+    assert initial == app_mod._JOB_QUEUE_RESERVED, "reservation leaked on 413"
 
 
 def test_get_job_artifact_returns_409_for_failed_job() -> None:
 
     from openlithohub.server import app as app_mod
 
-    try:
-        with app_mod._JOB_LOCK:
-            app_mod._JOBS["test-failed"] = {
-                "status": "failed",
-                "error": "boom",
-                "summary": None,
-                "output_path": None,
-                "scratch_dir": "",
-                "created_utc": "now",
-                "job_id": "test-failed",
-            }
-        client = TestClient(create_app())
-        response = client.get("/v1/jobs/test-failed/artifact")
-        assert response.status_code == 409
-    finally:
-        with app_mod._JOB_LOCK:
-            app_mod._JOBS.clear()
+    client = TestClient(create_app())
+    with app_mod._JOB_LOCK:
+        app_mod._JOBS["test-failed"] = {
+            "status": "failed",
+            "error": "boom",
+            "summary": None,
+            "output_path": None,
+            "scratch_dir": "",
+            "created_utc": "now",
+            "job_id": "test-failed",
+            "_created_monotonic": __import__("time").monotonic(),
+        }
+    response = client.get("/v1/jobs/test-failed/artifact")
+    assert response.status_code == 409
+    with app_mod._JOB_LOCK:
+        app_mod._JOBS.clear()
 
 
 def test_job_delete_running_returns_409() -> None:

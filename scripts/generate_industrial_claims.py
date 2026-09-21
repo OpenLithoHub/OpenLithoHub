@@ -603,7 +603,17 @@ def main() -> int:
     manifest_path = args.artifacts / "manifest.json"
     if not manifest_path.exists():
         if args.check:
-            # No artifacts yet → no headline claims exist → nothing to drift.
+            # P0.3: fail-closed — if generated claims or README quotes exist
+            # but artifacts don't, that's a stale state that must not pass.
+            stale_generated = args.out_json.exists() or args.out_md.exists()
+            if stale_generated:
+                print(
+                    f"CHECK FAIL: artifacts missing at {args.artifacts} "
+                    f"but generated claims exist at {args.out_json.parent} — "
+                    "delete stale claims or restore artifacts",
+                    file=sys.stderr,
+                )
+                return 1
             print(
                 f"no industrial artifacts at {args.artifacts} — "
                 "claims check skipped (benchmark not yet measured)"

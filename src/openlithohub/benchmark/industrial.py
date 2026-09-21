@@ -201,7 +201,7 @@ def working_tree_clean(repo_root: Path | None = None) -> bool:
     root = repo_root or Path(__file__).resolve().parents[3]
     try:
         out = subprocess.run(
-            ["git", "status", "--porcelain", "--untracked-files=no"],
+            ["git", "status", "--porcelain"],
             cwd=str(root),
             capture_output=True,
             text=True,

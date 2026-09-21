@@ -994,8 +994,8 @@ def build_artifact(
         "run_identity": args.run_identity,
         "claim_scope": dict(PHYSICS_SCOPE),
         "reproducibility": {
-            "command": "python benchmarks/industrial/run_industrial_benchmark.py "
-            f"--gds <ibex.gds> --out {args.out} --repeats {args.repeats}",
+            "entrypoint": "benchmarks/industrial/run_industrial_benchmark.py",
+            "run_config": "industrial-run-config.json",
             "seed": SEED,
         },
     }
@@ -1089,6 +1089,7 @@ def compute_run_identity_from_args(
         "schema": "OpenLithoHub.industrial-run-config.v1",
         "run_identity": identity,
         "source": source,
+        "runtime_code_identity": getattr(args, "runtime_code_identity", None),
         "environment_lock": env_lock,
         "fixtures": {
             "parent_gds_sha256": args.parent_gds_sha256,
@@ -1309,11 +1310,25 @@ def publish_family(run_dir: Path, out: Path, identity: str) -> None:
         digest = rs.sha256_file(staging / name)
         sums += f"{digest}  {name}\n"
     (staging / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
+    # P0.8: crash-durable publication — temp + fsync + os.replace per file;
+    # manifest.json is the commit marker written last.
     for name in expected:
-        shutil.copyfile(staging / name, out / name)
-    (staging / "SHA256SUMS.txt").replace(out / "SHA256SUMS.txt")
+        tmp = out / (name + ".tmp")
+        shutil.copyfile(staging / name, tmp)
+        with open(tmp, "rb") as f:
+            os.fsync(f.fileno())
+        os.replace(tmp, out / name)
+    sums_tmp = out / ("SHA256SUMS.txt.tmp")
+    shutil.copyfile(staging / "SHA256SUMS.txt", sums_tmp)
+    with open(sums_tmp, "rb") as f:
+        os.fsync(f.fileno())
+    os.replace(sums_tmp, out / "SHA256SUMS.txt")
     # Commit marker last.
-    shutil.copyfile(manifest_path, out / "manifest.json")
+    manifest_tmp = out / ("manifest.json.tmp")
+    shutil.copyfile(manifest_path, manifest_tmp)
+    with open(manifest_tmp, "rb") as f:
+        os.fsync(f.fileno())
+    os.replace(manifest_tmp, out / "manifest.json")
     shutil.rmtree(staging, ignore_errors=True)
     log(f"published complete family for identity {identity[:16]} to {out}")
 
@@ -1378,6 +1393,16 @@ def main() -> int:
         )
     if source["working_tree_dirty"]:
         log("WARNING: dirty-tree run allowed by override; artifacts are provisional")
+
+    # P0.1: prove the actually-imported openlithohub comes from this repo.
+    runtime_id = rs.validate_runtime_code_identity(repo_root, commit=source["commit"])
+    if not runtime_id["valid"]:
+        raise SystemExit(
+            f"runtime code identity mismatch: imported openlithohub does not "
+            f"resolve to {repo_root / 'src' / 'openlithohub'}"
+        )
+    args.runtime_code_identity = runtime_id
+    log(f"runtime code identity: mode={runtime_id['mode']}")
 
     # P0.6: --models is a real configuration knob — canonicalize, validate
     # against the registry, and bind the result into the run identity.

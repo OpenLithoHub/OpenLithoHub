@@ -171,6 +171,13 @@ jobs:
           python-version: "3.12"
       - name: Install build tooling
         run: pip install build twine
+      - name: Bake build identity (P0.11)
+        run: |
+          pip install pyyaml
+          python scripts/write_build_info.py \
+            --commit "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --version "0.0.0.dev0"
       - name: Build sdist + wheel
         run: |
           SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0 python -m build
@@ -183,6 +190,9 @@ jobs:
           /tmp/smokevenv/bin/python -c "import openlithohub; from openlithohub import Mask; print('import ok')"
           /tmp/smokevenv/bin/openlithohub --help > /dev/null
           /tmp/smokevenv/bin/python -c "from openlithohub.data import generate_dummy_layout; m = generate_dummy_layout(size=64, seed=0); assert m.shape == (64, 64)"
+      - name: Assert baked build identity (P0.11)
+        run: |
+          /tmp/smokevenv/bin/python -c "import os, openlithohub._build as b; assert b.BUILD_COMMIT == os.environ.get('GITHUB_SHA') or b.BUILD_COMMIT != '', b.BUILD_COMMIT; print('build identity present')"
           echo "wheel smoke OK"
 
   perf-sentinel:
