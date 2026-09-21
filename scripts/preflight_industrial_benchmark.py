@@ -106,7 +106,6 @@ def main() -> int:
     identity_ok = False
     identity_detail = ""
     if gds_ok and env_ok:
-
         iccad_hashes = {}
         if args.iccad16_dir:
             for rel in ("testcase1.oas", "test1.csv"):

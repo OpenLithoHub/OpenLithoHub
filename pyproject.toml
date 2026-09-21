@@ -24,6 +24,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
 ]
 dependencies = [
+    "pyyaml>=6.0",
     "numpy>=1.24",
     "torch>=2.12",
     "typer[all]>=0.9",
@@ -68,7 +69,6 @@ dev = [
     "pre-commit>=3.4",
     "Pillow>=10.0",
     "types-PyYAML",
-    "pyyaml>=6.0",
 ]
 docs = [
     "mkdocs-material>=9.4,<10",
