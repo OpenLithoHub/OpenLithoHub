@@ -18,6 +18,10 @@ from typing import Any
 
 import pytest
 
+# Canonical import first so coverage attributes lines to the package module
+# (the spec-loaded aliases below reuse the same source file).
+import openlithohub.benchmark.industrial  # noqa: F401 - coverage anchor
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # --- load run_support (sibling of the harness) ------------------------------
