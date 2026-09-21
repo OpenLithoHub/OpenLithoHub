@@ -146,7 +146,7 @@ def _write_dataset_manifest(
     audit_dir: Path, adapter_cls: type, root: Path, record: dict[str, Any]
 ) -> None:
     """Standardized per-download manifest (audit P2.2): DATASET_MANIFEST.json
-    plus a MANIFEST.SHA256 over it, written into the data root. Records
+    plus a DATASET_MANIFEST.SHA256 over it, written into the data root. Records
     source identity, license pointer and file hashes for every downloaded
     dataset so provenance travels WITH the data."""
     from openlithohub._version import __version__
@@ -169,8 +169,14 @@ def _write_dataset_manifest(
         (root / "DATASET_MANIFEST.json").write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+        # B0.8: deliberately NOT named MANIFEST.SHA256 — that name is the
+        # existing FULL-DATA integrity contract consumed by
+        # verify_manifest(); this file only describes provenance.
         digest = hashlib.sha256((root / "DATASET_MANIFEST.json").read_bytes()).hexdigest()
-        (root / "MANIFEST.SHA256").write_text(
+        # B0.8: deliberately NOT named MANIFEST.SHA256 — that name is the
+        # existing FULL-DATA integrity contract consumed by
+        # verify_manifest(); this file only describes provenance.
+        (root / "DATASET_MANIFEST.SHA256").write_text(
             f"{digest}  DATASET_MANIFEST.json\n", encoding="utf-8"
         )
     except OSError:

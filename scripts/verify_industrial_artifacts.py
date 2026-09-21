@@ -71,6 +71,51 @@ def _git_show_sha256(commit: str, path: str, repo_root: Path) -> str:
     return hashlib.sha256(out.stdout).hexdigest()
 
 
+def verify_family_closure(parsed: list[tuple[Path, dict]]) -> list[str]:
+    """All published artifacts must belong to ONE run (audit B0.4)."""
+    problems: list[str] = []
+    if not parsed:
+        return problems
+    roles = {path.name for path, _ in parsed}
+    required = {
+        "industrial-runtime.json",
+        "industrial-quality.json",
+        "industrial-fulldie.json",
+        "industrial-run-config.json",
+        "manifest.json",
+    }
+    missing = required - roles
+    if missing:
+        problems.append(f"incomplete published family: missing {sorted(missing)}")
+    run_ids = {str(data.get("run_identity")) for _, data in parsed}
+    if len(run_ids) > 1:
+        problems.append(
+            f"artifact family MIXES run identities: {sorted(run_ids)} — this is a "
+            "cross-run contamination and can never be published"
+        )
+        return problems
+    commits = {str(data.get("git_commit")) for _, data in parsed}
+    if len(commits) > 1:
+        problems.append(f"artifact family MIXES commits: {sorted(commits)}")
+    fixture_shas = {str((data.get("fixture") or {}).get("sha256")) for _, data in parsed}
+    if len(fixture_shas) > 1:
+        problems.append(f"artifact family MIXES fixture hashes: {sorted(fixture_shas)}")
+    locks = {str((data.get("environment_lock") or {}).get("lock_sha256")) for _, data in parsed}
+    if len(locks) > 1:
+        problems.append(f"artifact family MIXES environment locks: {sorted(locks)}")
+    # The manifest must claim the same identity as the family.
+    for path, data in parsed:
+        if path.name == "manifest.json":
+            claimed = str(data.get("run_identity"))
+            family_rid = next(iter(run_ids))
+            if claimed != family_rid:
+                problems.append(
+                    f"manifest.json claims run_identity {claimed} but the family "
+                    f"carries {family_rid}"
+                )
+    return problems
+
+
 def verify_source_closure(artifacts: list[tuple[Path, dict]], repo_root: Path) -> list[str]:
     """Each artifact's stored source hashes must match the committed bytes.
 
@@ -167,16 +212,6 @@ def verify(artifacts_dir: Path, repo_root: Path) -> list[str]:
             problems.extend(f"{path.name}: {p}" for p in validate_artifact(data))
             parsed.append((path, data))
 
-    for path in json_files:
-        try:
-            with open(path, encoding="utf-8") as handle:
-                data = json.load(handle, parse_constant=_reject_constant)
-        except ValueError as e:
-            problems.append(f"{path.name}: NOT strict JSON: {e}")
-            continue
-        if isinstance(data, dict) and data.get("schema") == SCHEMA_NAME:
-            problems.extend(f"{path.name}: {p}" for p in validate_artifact(data))
-
     sums = artifacts_dir / "SHA256SUMS.txt"
     if sums.exists():
         for line in sums.read_text(encoding="utf-8").splitlines():
@@ -199,8 +234,45 @@ def verify(artifacts_dir: Path, repo_root: Path) -> list[str]:
     else:
         problems.append("SHA256SUMS.txt missing — artifact index is not verifiable")
 
+    sums = artifacts_dir / "SHA256SUMS.txt"
+    sums_index: dict[str, str] = {}
+    if sums.exists():
+        for line in sums.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            m = _SHA_LINE.match(line)
+            if not m:
+                problems.append(f"SHA256SUMS.txt: malformed line {line!r}")
+                continue
+            expected, name = m.group(1), m.group(2)
+            sums_index[name] = expected
+            target = artifacts_dir / name
+            if not target.exists():
+                problems.append(f"SHA256SUMS.txt: missing file {name}")
+                continue
+            actual = hashlib.sha256(target.read_bytes()).hexdigest()
+            if actual != expected:
+                problems.append(
+                    f"SHA256SUMS.txt: {name} hash mismatch (expected {expected}, actual {actual})"
+                )
+        # B0.5: exact set equality over the artifact family — every artifact
+        # must be indexed, and any entry NOT indexing a family artifact is
+        # stale/foreign. (SHA256SUMS.txt cannot index itself: the file would
+        # change when written.)
+        artifact_names = {p.name for p in json_files}
+        missing_from_sums = artifact_names - set(sums_index)
+        extra_in_sums = set(sums_index) - artifact_names
+        if missing_from_sums:
+            problems.append(f"SHA256SUMS.txt: no entry for {sorted(missing_from_sums)}")
+        if extra_in_sums:
+            problems.append(f"SHA256SUMS.txt: stale entries for {sorted(extra_in_sums)}")
+    else:
+        problems.append("SHA256SUMS.txt missing — artifact index is not verifiable")
+
+    # B0.4/B0.5: family closure + exact SHA256SUMS set — only attempted
+    # once the basic parse layer is clean.
     if not problems:
-        # Deeper authority checks only run once the basic layer is clean.
+        problems.extend(verify_family_closure(parsed))
         problems.extend(verify_source_closure(parsed, repo_root))
         problems.extend(
             verify_claims_linkage(

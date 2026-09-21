@@ -142,6 +142,8 @@ def _valid_artifact() -> dict:
             "claim_generator_sha256": SHA,
             "run_support_sha256": SHA,
         },
+        "run_identity": SHA,
+        "environment_lock": {"lock_sha256": SHA},
         "fixture": {"sha256": SHA, "bytes": 1234, "top_cell": "ibex_core"},
     }
 

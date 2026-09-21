@@ -30,8 +30,9 @@ import itertools
 import json
 import logging
 import os
+import queue
 import shutil
-import tempfile
+import tempfile as _tempfile
 import threading
 import time as _time
 import uuid
@@ -89,7 +90,67 @@ API_KEY = os.environ.get("OPENLITHOHUB_API_KEY") or ""
 _JOBS: OrderedDict[str, dict[str, Any]] = OrderedDict()
 _JOB_LOCK = threading.Lock()
 _JOB_HISTORY_CAP = 100
+_JOB_QUEUE_DEPTH = int(os.environ.get("OPENLITHOHUB_JOB_QUEUE_DEPTH", "8"))
+_JOB_QUEUE: queue.Queue[tuple[str, dict[str, Any]]] = queue.Queue(maxsize=_JOB_QUEUE_DEPTH)
+_JOB_TTL_SECONDS = float(os.environ.get("OPENLITHOHUB_JOB_TTL_SECONDS", "3600"))
 _JOB_COUNTER = itertools.count(1)
+
+
+def _evict_terminal_locked(now: float) -> None:
+    """Evict terminal jobs beyond the history cap or TTL. CALLER HOLDS
+    _JOB_LOCK. Scratch of evicted FAILED/CANCELLED jobs goes with them;
+    succeeded jobs keep their artifact until eviction too."""
+    for job_id in list(_JOBS.keys()):
+        record = _JOBS[job_id]
+        if record["status"] not in ("succeeded", "failed", "cancelled"):
+            continue
+        age = now - record.get("_created_monotonic", now)
+        if len(_JOBS) > _JOB_HISTORY_CAP or age > _JOB_TTL_SECONDS:
+            _JOBS.pop(job_id, None)
+            shutil.rmtree(record.get("scratch_dir", ""), ignore_errors=True)
+
+
+def _start_job_worker(app: Any) -> None:
+    """Single fixed worker draining the bounded job queue (audit C3):
+    a real queue with locked state transitions and scratch cleanup, not
+    one daemon thread per request."""
+
+    def _worker() -> None:
+        while True:
+            job_id, params = _JOB_QUEUE.get()
+            with _JOB_LOCK:
+                record = _JOBS.get(job_id)
+                if record is None or record["status"] == "cancelled":
+                    shutil.rmtree(
+                        record.get("scratch_dir", "") if record else "",
+                        ignore_errors=True,
+                    )
+                    _JOB_QUEUE.task_done()
+                    continue
+                record["status"] = "running"
+            try:
+                summary = _run_optimize_admitted(**params)
+                with _JOB_LOCK:
+                    record = _JOBS.get(job_id)
+                    if record is not None:
+                        record["status"] = "succeeded"
+                        record["summary"] = summary
+                        record["output_path"] = str(summary["output_path"])
+                        _evict_terminal_locked(_time.monotonic())
+            except Exception as e:  # noqa: BLE001 - surfaced via job status
+                with _JOB_LOCK:
+                    record = _JOBS.get(job_id)
+                    if record is not None:
+                        record["status"] = "failed"
+                        record["error"] = str(e)
+                    # failed jobs have no artifact: their scratch goes now
+                    if record is not None:
+                        shutil.rmtree(record.get("scratch_dir", ""), ignore_errors=True)
+            finally:
+                _JOB_QUEUE.task_done()
+
+    threading.Thread(target=_worker, name="olh-job-worker", daemon=True).start()
+
 
 # Hard cap on multipart upload size for /v1/optimize. Mirrors the 2 GB ceiling
 # enforced by ``ModelHub._download_url`` for incoming weights — uniform
@@ -340,6 +401,20 @@ def _run_optimize(
     }
 
 
+def scratch_root() -> Path:
+    """Configured scratch root (audit C2): Docker sets OLH_SCRATCH_DIR;
+    bare environments fall back to the system temp dir.  Request/job
+    temp files and the readiness probe all use THIS path."""
+    base = os.environ.get("OLH_SCRATCH_DIR") or _tempfile.gettempdir()
+    path = Path(base)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def make_scratch_dir(prefix: str) -> Path:
+    return Path(_tempfile.mkdtemp(prefix=prefix, dir=str(scratch_root())))
+
+
 def _admit_sync() -> bool:
     """Non-blocking admission probe for worker threads (P1.14)."""
     return _ADMIT.acquire(blocking=False)
@@ -349,19 +424,20 @@ def _release_admit() -> None:
     _ADMIT.release()
 
 
-def _put_job(record: dict[str, Any]) -> str:
+def _put_job(record: dict[str, Any], params: dict[str, Any]) -> tuple[str, bool]:
+    """Register a queued job and enqueue it. Returns (job_id, enqueued);
+    enqueued=False means the bounded queue is FULL and nothing was
+    registered (the caller cleans up scratch and answers 429)."""
     with _JOB_LOCK:
+        if _JOB_QUEUE.qsize() >= _JOB_QUEUE_DEPTH:
+            return "", False
         job_id = f"job-{next(_JOB_COUNTER)}-{uuid.uuid4().hex[:8]}"
         record["job_id"] = job_id
+        record["_created_monotonic"] = _time.monotonic()
         _JOBS[job_id] = record
-        while len(_JOBS) > _JOB_HISTORY_CAP:
-            for existing_id, existing in list(_JOBS.items()):
-                if existing["status"] in ("succeeded", "failed", "cancelled"):
-                    _JOBS.pop(existing_id, None)
-                    break
-            else:
-                break
-    return job_id
+        _evict_terminal_locked(_time.monotonic())
+    _JOB_QUEUE.put((job_id, params))
+    return job_id, True
 
 
 def create_app() -> FastAPI:
@@ -419,6 +495,8 @@ def create_app() -> FastAPI:
 
             raise HTTPException(status_code=401, detail="invalid or missing X-API-Key")
 
+    _start_job_worker(app)
+
     @app.get("/v1/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -426,7 +504,6 @@ def create_app() -> FastAPI:
     @app.get("/v1/ready")
     def ready() -> dict[str, Any]:
         # P1.16: readiness — can this instance accept work RIGHT NOW?
-        import tempfile as _tempfile
 
         from openlithohub.models.registry import register_builtin_models, registry
 
@@ -438,8 +515,10 @@ def create_app() -> FastAPI:
             registry_ok = False
         writable = True
         try:
-            probe = Path(_tempfile.mkstemp(prefix="olh_ready_")[1])
+            probe = make_scratch_dir("olh_ready_") / "probe"
+            probe.write_text("ok")
             probe.unlink()
+            probe.parent.rmdir()
         except OSError:
             writable = False
         ready_now = registry_ok and writable
@@ -539,7 +618,7 @@ def create_app() -> FastAPI:
         # output must outlive this handler so the response can stream it
         # from disk; a BackgroundTask removes the dir after the response
         # completes. On any failure path we clean up before re-raising.
-        tmp_path = Path(tempfile.mkdtemp(prefix="olh_req_"))
+        tmp_path = make_scratch_dir("olh_req_")
         try:
             input_path = tmp_path / f"input{suffix}"
             output_path = tmp_path / "optimized.oas"
@@ -648,7 +727,7 @@ def create_app() -> FastAPI:
         if not layout.filename:
             raise HTTPException(status_code=400, detail="layout upload missing filename")
         suffix = Path(layout.filename).suffix or ".bin"
-        tmp_path = Path(tempfile.mkdtemp(prefix="olh_job_"))
+        tmp_path = make_scratch_dir("olh_job_")
         input_path = tmp_path / f"input{suffix}"
         output_path = tmp_path / "optimized.oas"
         bytes_read = 0
@@ -674,7 +753,7 @@ def create_app() -> FastAPI:
             pretrained=pretrained,
             min_area_nm2=min_area_nm2,
         )
-        job_id = _put_job(
+        job_id, queued = _put_job(
             {
                 "status": "queued",
                 "created_utc": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
@@ -682,27 +761,16 @@ def create_app() -> FastAPI:
                 "summary": None,
                 "error": None,
                 "output_path": None,
-            }
+            },
+            params,
         )
-
-        def _run() -> None:
-            record = _JOBS.get(job_id)
-            if record is None or record["status"] == "cancelled":
-                shutil.rmtree(tmp_path, ignore_errors=True)
-                return
-            record["status"] = "running"
-            try:
-                summary = _run_optimize_admitted(**params)
-                with _JOB_LOCK:
-                    record["status"] = "succeeded"
-                    record["summary"] = summary
-                    record["output_path"] = str(summary["output_path"])
-            except Exception as e:  # noqa: BLE001 - surfaced via job status
-                with _JOB_LOCK:
-                    record["status"] = "failed"
-                    record["error"] = str(e)
-
-        threading.Thread(target=_run, name=f"olh-{job_id}", daemon=True).start()
+        if not queued:
+            shutil.rmtree(tmp_path, ignore_errors=True)
+            raise HTTPException(
+                status_code=429,
+                detail="job queue is full",
+                headers={"Retry-After": "10"},
+            )
         return JSONResponse(
             status_code=202,
             content={"job_id": job_id, "status": "queued", "poll": f"/v1/jobs/{job_id}"},
@@ -746,6 +814,8 @@ def create_app() -> FastAPI:
             if job["status"] == "running":
                 raise HTTPException(status_code=409, detail="running job cannot be deleted")
             if job["status"] == "queued":
+                # The worker drops cancelled jobs (and their scratch) when
+                # dequeued; mark cancelled so it is never executed.
                 job["status"] = "cancelled"
             _JOBS.pop(job_id, None)
             scratch = job.get("scratch_dir")

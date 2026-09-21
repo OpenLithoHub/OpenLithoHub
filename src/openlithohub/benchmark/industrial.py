@@ -429,6 +429,13 @@ def validate_artifact(artifact: dict[str, Any]) -> list[str]:
             "git_commit must be a full 40-character lowercase hex commit "
             "(placeholders like UNKNOWN are not auditable)"
         )
+    if not re.fullmatch(r"[0-9a-f]{64}", str(artifact.get("run_identity") or "")):
+        problems.append("run_identity must be a 64-hex sha256 (missing or malformed)")
+    env_lock = artifact.get("environment_lock")
+    if not isinstance(env_lock, dict) or not re.fullmatch(
+        r"[0-9a-f]{64}", str(env_lock.get("lock_sha256") or "")
+    ):
+        problems.append("environment_lock.lock_sha256 must be a 64-hex sha256")
     source = artifact.get("measurement_source")
     if isinstance(source, dict):
         if not is_full_commit(source.get("commit")):
@@ -465,6 +472,49 @@ def validate_artifact(artifact: dict[str, Any]) -> list[str]:
 
 def _reject_constant(token: str) -> float:
     raise ValueError(f"non-finite JSON constant {token!r} is not allowed in artifacts")
+
+
+_FAMILY_FIELDS = ("run_identity", "git_commit")
+
+
+def validate_artifact_family(artifacts: dict[str, dict[str, Any]]) -> list[str]:
+    """Cross-artifact closure: every member of one published family must
+    come from the SAME run (audit B0.4).
+
+    ``artifacts`` maps a family role ("runtime", "quality", ...) to its
+    validated artifact dict.  Checks shared identity fields (run_identity,
+    git_commit, fixture hash, environment lock) and that the family set is
+    exactly the expected one — a family assembled from two runs, or a
+    partial family, is rejected.
+    """
+    problems: list[str] = []
+    expected_roles = {"runtime", "quality", "fulldie", "run-config"}
+    missing = expected_roles - set(artifacts)
+    if missing:
+        problems.append(f"incomplete family: missing {sorted(missing)}")
+    roles = ["runtime", "quality", "fulldie", "run-config"]
+
+    def _value(artifact: dict[str, Any], kind: str) -> str:
+        # The run-config stores the same facts under its own layout.
+        if kind == "commit":
+            from_source = (artifact.get("source") or {}).get("commit") or ""
+            return str(artifact.get("git_commit") or from_source)
+        if kind == "fixture":
+            return str(
+                (artifact.get("fixture") or {}).get("sha256")
+                or (artifact.get("fixtures") or {}).get("parent_gds_sha256")
+                or ""
+            )
+        if kind == "lock":
+            return str((artifact.get("environment_lock") or {}).get("lock_sha256") or "")
+        return str(artifact.get(kind) or "")
+
+    for kind in ("run_identity", "commit", "fixture", "lock"):
+        values = {role: _value(artifacts[role], kind) for role in roles if role in artifacts}
+        present = {r: v for r, v in values.items() if v and v != "None"}
+        if len(present) >= 2 and len(set(present.values())) > 1:
+            problems.append(f"family {kind} mismatch: {present}")
+    return problems
 
 
 def load_artifact(path: str | os.PathLike[str]) -> dict[str, Any]:

@@ -37,8 +37,8 @@ This project depends on the following third-party components.
 
 | Component | License | URL |
 |-----------|---------|-----|
+| diff-surrogate | Apache-2.0 (CORE dependency, pinned commit 6b0ec10916f58297a0b48cb3af470e7d1ad99b45) | https://github.com/telleroutlook/diff-surrogate |
 | KLayout (Python bindings) | GPL-3.0 (optional import; **installed inside the published Docker image** — see note below) | https://www.klayout.de/ |
-| diff-surrogate | Apache-2.0 | https://github.com/telleroutlook/diff-surrogate (pinned commit 6b0ec10916f58297a0b48cb3af470e7d1ad99b45) |
 | SciPy | BSD-3-Clause | https://github.com/scipy/scipy |
 
 ## Optional: models extras
@@ -84,12 +84,6 @@ GPL-3.0 for the KLayout component (source:
 https://github.com/KLayout/klayout). Historically this notice claimed
 KLayout was "not redistributed" — that was inaccurate while the image
 installed it, and this paragraph is the corrected record (audit P1.13).
-OpenLithoHub treats KLayout as an optional external tool — it is loaded
-dynamically only when the `workflow` extra is installed and is not
-statically linked or redistributed. Users who install the `workflow`
-extra are responsible for compliance with KLayout's license in their
-deployment context.
-
 ---
 
 This NOTICE file is provided in compliance with Apache License 2.0,

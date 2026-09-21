@@ -299,8 +299,16 @@ _LOCKED_PACKAGES = (
 )
 
 
-def environment_lock(repo_root: Path) -> dict[str, Any]:
-    """Exact, hashable snapshot of the benchmark software environment."""
+def environment_lock(repo_root: Path) -> tuple[dict[str, Any], str]:
+    """Exact, hashable snapshot of the benchmark software environment.
+
+    Returns ``(lock, freeze_text)``.  The full distribution freeze is
+    computed FIRST and its SHA-256 is part of the canonical lock hash
+    (audit B0.2), so a changed environment always changes the run
+    identity.  The caller persists ``freeze_text`` as
+    ``runs/<identity>/distribution-freeze.txt``; the verifier re-hashes
+    that file against ``distribution_freeze_sha256``.
+    """
     packages: dict[str, str] = {}
     for name in _LOCKED_PACKAGES:
         try:
@@ -317,7 +325,11 @@ def environment_lock(repo_root: Path) -> dict[str, Any]:
         parallel_info = "unavailable"
 
     thread_env = {k: os.environ.get(k) for k in _THREAD_ENV_KEYS}
-    lock = {
+    freeze_text = (
+        "\n".join(sorted(f"{d.metadata['Name']}=={d.version}" for d in metadata.distributions()))
+        + "\n"
+    )
+    lock: dict[str, Any] = {
         "python": platform.python_version(),
         "platform": f"{platform.system()} {platform.release()} {platform.machine()}",
         "cpu_model": _cpu_model(),
@@ -332,21 +344,13 @@ def environment_lock(repo_root: Path) -> dict[str, Any]:
         },
         "thread_env": thread_env,
         "packages": packages,
+        # Canonical ordering: the freeze hash is INSIDE the lock hash so
+        # the full distribution is covered by the run identity.
+        "distribution_freeze_sha256": hashlib.sha256(freeze_text.encode()).hexdigest(),
     }
-    lock["lock_sha256"] = hashlib.sha256(
-        json.dumps({k: v for k, v in lock.items() if k != "lock_sha256"}, sort_keys=True).encode()
-    ).hexdigest()
-    # Keep a full distribution freeze next to the lock for forensics.
-    try:
-        freeze = sorted(f"{d.metadata['Name']}=={d.version}" for d in metadata.distributions())
-        (repo_root / ".env-freeze.tmp").write_text("\n".join(freeze) + "\n", encoding="utf-8")
-        freeze_sha = sha256_file(repo_root / ".env-freeze.tmp")
-        (repo_root / ".env-freeze.tmp").unlink(missing_ok=True)
-        lock["distribution_freeze_sha256"] = freeze_sha
-    except Exception:  # noqa: BLE001 - freeze is forensic best-effort
-        lock["distribution_freeze_sha256"] = None
-    _ = repo_root  # freeze is written next to the caller's out dir instead
-    return lock
+    lock["lock_sha256"] = hashlib.sha256(strict_dumps(lock).encode()).hexdigest()
+    _ = repo_root
+    return lock, freeze_text
 
 
 def _cpu_model() -> str:

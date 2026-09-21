@@ -651,19 +651,36 @@ def main() -> int:
         "claims": claims,
     }
 
+    expected_json = json.dumps(_sanitize(doc), indent=2, sort_keys=True, allow_nan=False) + "\n"
+    expected_md = render_markdown(claims, hashes, hw)
+
     if args.check:
-        problems = check_readme(claims, args.readme)
+        # B0.6: a TRUE drift gate — deterministically re-render the claims
+        # documents from the artifacts and byte-compare with the checked-in
+        # files. Stale or hand-edited generated files fail even when no
+        # README quote references them.
+        problems: list[str] = []
+        if not args.out_json.exists():
+            problems.append(f"{args.out_json} missing — run without --check to generate")
+        elif args.out_json.read_text(encoding="utf-8") != expected_json:
+            problems.append(
+                f"{args.out_json} drifted from the artifacts (regenerate without --check)"
+            )
+        if not args.out_md.exists():
+            problems.append(f"{args.out_md} missing — run without --check to generate")
+        elif args.out_md.read_text(encoding="utf-8") != expected_md:
+            problems.append(
+                f"{args.out_md} drifted from the artifacts (regenerate without --check)"
+            )
+        problems.extend(check_readme(claims, args.readme))
         for p in problems:
             print(f"CHECK FAIL: {p}", file=sys.stderr)
         return 1 if problems else 0
 
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_md.parent.mkdir(parents=True, exist_ok=True)
-    doc = _sanitize(doc)
-    args.out_json.write_text(
-        json.dumps(doc, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8"
-    )
-    args.out_md.write_text(render_markdown(claims, hashes, hw), encoding="utf-8")
+    args.out_json.write_text(expected_json, encoding="utf-8")
+    args.out_md.write_text(expected_md, encoding="utf-8")
     print(f"wrote {args.out_json} and {args.out_md} ({len(claims)} claims)")
     return 0
 

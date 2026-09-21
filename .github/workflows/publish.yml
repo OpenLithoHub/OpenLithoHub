@@ -4,8 +4,9 @@ on:
   push:
     tags: ["v*"]
 
+# E2: default least privilege; the publish job grants id-token: write
+# for OIDC Trusted Publishing and nothing else does.
 permissions:
-  id-token: write
   contents: read
 
 jobs:
@@ -18,10 +19,20 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
+      - name: Release preflight — tag commit must be on protected main (E1)
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "tag commit $GITHUB_SHA is NOT reachable from origin/main — refusing to publish"; exit 1; }
       - name: Install build tools
         run: pip install build twine cyclonedx-bom
       - name: Build wheel and sdist
         run: python -m build
+      - name: Wheel smoke on the release bytes (audit P1.4/E1)
+        run: |
+          python -m venv /tmp/relvenv
+          /tmp/relvenv/bin/pip install --no-cache-dir dist/*.whl
+          /tmp/relvenv/bin/python -c "import openlithohub; print('release import ok')"
       - name: Tag/version consistency (audit P1.7)
         run: |
           expected="v${SETUPTOOLS_SCM_PRETEND_VERSION:-}"
@@ -32,10 +43,14 @@ jobs:
             echo "tag $tag does not match wheel version $version_file"; exit 1; }
       - name: Twine check (audit P1.7)
         run: twine check dist/*
-      - name: Generate CycloneDX SBOM (audit P1.8)
+      - name: Generate runtime CycloneDX SBOM from the release wheel (audit P1.8/E3)
         run: |
-          pip install dist/*.whl
-          cyclonedx-py environment --output-format json --output-file sbom.cdx.json
+          # E3: SBOM of the RUNTIME environment (clean venv holding ONLY the
+          # release wheel + its resolved deps), not of the build tools.
+          python -m venv /tmp/sbomvenv
+          /tmp/sbomvenv/bin/pip install --no-cache-dir dist/*.whl cyclonedx-bom
+          /tmp/sbomvenv/bin/cyclonedx-py environment \
+            --output-format json --output-file sbom.cdx.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom

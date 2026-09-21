@@ -24,7 +24,7 @@ Supported versions:
   until the next stable release.
 - The `main` branch carries pre-release (`0.0.0.devN`) code and is NOT a
   supported version — report issues against the latest PyPI release.
-with security fixes. Older releases may receive fixes at the maintainers'
+Older releases may receive fixes at the maintainers'
 discretion.
 
 ## Disclosure Timeline

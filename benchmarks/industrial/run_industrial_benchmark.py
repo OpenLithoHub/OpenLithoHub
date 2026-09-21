@@ -46,7 +46,6 @@ never produces marketing numbers.  Public claims are derived only by
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import os
@@ -187,15 +186,28 @@ def make_die_sample_tiles(
     )
     bb = facts["die_bbox_dbu"]
     die_w = bb[2] - bb[0]
-    derived_side = -(-die_w // tile_px)
-    tiles_per_side = derived_side if tiles_per_side_override is None else tiles_per_side_override
-    if tiles_per_side < derived_side:
-        raise RuntimeError(
-            f"die tiles_per_side override {tiles_per_side} does not cover the die "
-            f"(needs >= {derived_side})"
-        )
-    last = tiles_per_side - 1
-    sample_positions = [(0, 0), (last, 0), (0, last), (last, last), (last // 2, last // 2)]
+    die_h = bb[3] - bb[1]
+    # C4: rectangular dies get independent grid counts per axis.
+    derived_x = -(-die_w // tile_px)
+    derived_y = -(-die_h // tile_px)
+    if tiles_per_side_override is None:
+        grid_x, grid_y = derived_x, derived_y
+    else:
+        # A single override applies to both axes and must cover BOTH.
+        grid_x, grid_y = tiles_per_side_override, tiles_per_side_override
+        if grid_x < derived_x or grid_y < derived_y:
+            raise RuntimeError(
+                f"die tiles_per_side override {tiles_per_side_override} does not "
+                f"cover the die (needs >= {derived_x}x{derived_y})"
+            )
+    last_x, last_y = grid_x - 1, grid_y - 1
+    sample_positions = [
+        (0, 0),
+        (last_x, 0),
+        (0, last_y),
+        (last_x, last_y),
+        (last_x // 2, last_y // 2),
+    ]
     entries = []
     layout = kdb.Layout()
     layout.read(str(parent_gds))
@@ -234,10 +246,11 @@ def make_die_sample_tiles(
         "die_bbox_dbu": bb,
         "die_size_px": facts["die_size_px"],
         "tile_px": tile_px,
-        "tiles_per_side": tiles_per_side,
-        "tiles_per_side_derived": derived_side,
+        "grid_tiles_x": grid_x,
+        "grid_tiles_y": grid_y,
+        "tiles_per_side_derived": [derived_x, derived_y],
         "tiles_per_side_override": tiles_per_side_override,
-        "n_grid_tiles": tiles_per_side * tiles_per_side,
+        "n_grid_tiles": grid_x * grid_y,
         "n_sample_tiles": len(entries),
         "tiles": entries,
     }
@@ -924,7 +937,7 @@ def stage_fulldie(
     return {
         "die_size_px": die_px,
         "tile_px": grid["tile_px"],
-        "grid_tiles_per_side": grid["tiles_per_side"],
+        "grid_tiles_per_side": [grid["grid_tiles_x"], grid["grid_tiles_y"]],
         "n_grid_tiles": total_grid_tiles,
         "n_sample_tiles": len(rows),
         "sample_rows": rows,
@@ -989,9 +1002,13 @@ def build_artifact(
     return artifact
 
 
-def write_artifact(run_dir: Path, out: Path, name: str, artifact: dict[str, Any]) -> Path:
-    # Strict-JSON contract: non-finite values are sanitized to None before
-    # writing, and allow_nan=False makes any leak a hard error.
+def write_artifact(run_dir: Path, name: str, artifact: dict[str, Any]) -> Path:
+    """Write an artifact into the RUN WORKSPACE only (audit B0.1).
+
+    The public artifact root is populated exclusively by
+    :func:`publish_family` after the complete family passes closure
+    validation — a partial or mixed-run family can never appear there.
+    """
     artifact = _sanitize(artifact)
     problems = validate_artifact(artifact)
     # Local-iteration escape hatch: a dirty tree can produce *provisional*
@@ -1004,12 +1021,8 @@ def write_artifact(run_dir: Path, out: Path, name: str, artifact: dict[str, Any]
         log("WARNING: provisional artifact from a DIRTY tree (not CI-admissible)")
     elif problems:
         raise RuntimeError(f"artifact {name} failed validation: {problems}")
-    path = out / name
-    path.write_text(
-        rs.strict_dumps(artifact) + "\n",
-        encoding="utf-8",
-    )
-    shutil.copyfile(path, run_dir / name)
+    path = run_dir / name
+    path.write_text(rs.strict_dumps(artifact) + "\n", encoding="utf-8")
     log(f"wrote {path}")
     return path
 
@@ -1025,8 +1038,14 @@ def _iccad_fixture_hashes(iccad_dir: Path) -> dict[str, str]:
 
 def compute_run_identity_from_args(
     args: argparse.Namespace, source: dict[str, Any]
-) -> tuple[str, dict[str, Any]]:
-    env_lock = rs.environment_lock(script_repo_root())
+) -> tuple[str, dict[str, Any], str]:
+    """Compute the run identity + full run config from parsed harness args.
+
+    This is the SINGLE source of the identity — ``--print-run-identity``
+    and the preflight script both use it, so a preflight identity is by
+    construction the formal run identity (audit B0.3).
+    """
+    env_lock, freeze_text = rs.environment_lock(script_repo_root())
     iccad_hashes = _iccad_fixture_hashes(args.iccad16_dir) if args.iccad16_dir else None
     args_payload = {
         "repeats": args.repeats,
@@ -1072,14 +1091,16 @@ def compute_run_identity_from_args(
         },
         "args": args_payload,
     }
-    return identity, config
+    return identity, config, freeze_text
 
 
 def script_repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def main() -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
+    """The harness argument parser — shared with the preflight script so
+    a preflight identity is computed from exactly the same configuration."""
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--gds", type=Path, help="parent routed GDS (ibex.gds)")
     ap.add_argument("--out", type=Path, default=Path("benchmarks/results/industrial"))
@@ -1118,7 +1139,6 @@ def main() -> int:
         help="optional: directory with testcase1.oas/test1.csv for the second quality dataset",
     )
     ap.add_argument("--large-repeats", type=int, default=3, help="repeats for sizes > 16384px")
-
     ap.add_argument("--worker", action="store_true")
     ap.add_argument("--job")
     ap.add_argument("--mode")
@@ -1132,7 +1152,120 @@ def main() -> int:
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--models", default=",".join(jobs.MODELS))
     ap.add_argument("--parent-pid", type=int, default=0)
-    args = ap.parse_args()
+    ap.add_argument(
+        "--print-run-identity",
+        action="store_true",
+        help="compute the run identity/config for the given args and exit "
+        "without measuring (used by the preflight gate)",
+    )
+    return ap
+
+
+def publish_family(run_dir: Path, out: Path, identity: str) -> None:
+    """Family-closure gate + atomic promotion to the public root (B0.1).
+
+    Loads every stage artifact from the RUN WORKSPACE, requires the exact
+    expected family set, validates each artifact and the cross-artifact
+    family closure (same run identity / commit / fixture / environment
+    lock), builds the manifest from run_dir only, then promotes the
+    complete family atomically.  The shared public root can therefore
+    never contain a mixed or partial family.
+    """
+    import openlithohub.benchmark.industrial as industrial_mod
+
+    expected = [
+        "industrial-runtime.json",
+        "industrial-quality.json",
+        "industrial-fulldie.json",
+        "industrial-run-config.json",
+    ]
+    missing = [n for n in expected if not (run_dir / n).exists()]
+    if missing:
+        raise RuntimeError(
+            f"refusing to publish an incomplete family from {run_dir}: "
+            f"missing {missing} — run the missing stages under the SAME identity"
+        )
+
+    dirty_override = os.environ.get("OPENLITHOHUB_ALLOW_DIRTY_MEASUREMENT") == "1"
+    parsed: dict[str, dict[str, Any]] = {}
+    problems: list[str] = []
+    for name in expected:
+        data = json.loads(
+            (run_dir / name).read_text(encoding="utf-8"),
+            parse_constant=lambda tok: (_ for _ in ()).throw(ValueError(f"non-finite token {tok}")),
+        )
+        role = name.replace("industrial-", "").replace(".json", "")
+        if role == "run-config":
+            # The run config carries its own schema and field layout; the
+            # family validator compares it through those fields.
+            if data.get("schema") != "OpenLithoHub.industrial-run-config.v1":
+                problems.append(
+                    f"{name}: schema {data.get('schema')!r} is not "
+                    "OpenLithoHub.industrial-run-config.v1"
+                )
+        else:
+            if data.get("schema") != SCHEMA_NAME:
+                problems.append(f"{name}: schema {data.get('schema')!r} is not {SCHEMA_NAME}")
+            else:
+                role_problems = validate_artifact(data)
+                if dirty_override:
+                    role_problems = [p for p in role_problems if "working_tree_dirty" not in p]
+                problems.extend(f"{name}: {p}" for p in role_problems)
+        parsed[role] = data
+    problems.extend(f"family: {p}" for p in industrial_mod.validate_artifact_family(parsed))
+    if problems:
+        raise RuntimeError(f"family closure failed; nothing published: {problems}")
+
+    entries = [
+        {"file": n, "sha256": rs.sha256_file(run_dir / n), "bytes": (run_dir / n).stat().st_size}
+        for n in expected
+    ]
+    manifest = build_artifact(
+        "manifest",
+        STATUS_SUCCESS,
+        {
+            "artifacts": entries,
+            "run_identity": identity,
+            "run_config": "industrial-run-config.json",
+        },
+        _PUBLISH_ARGS,
+        env_lock=parsed["run-config"]["environment_lock"],
+    )
+    manifest_path = run_dir / "manifest.json"
+    manifest_path.write_text(rs.strict_dumps(_sanitize(manifest)) + "\n", encoding="utf-8")
+    manifest_problems = validate_artifact(_sanitize(manifest))
+    if dirty_override:
+        manifest_problems = [p for p in manifest_problems if "working_tree_dirty" not in p]
+    if manifest_problems:
+        raise RuntimeError(f"manifest failed validation: {manifest_problems}")
+
+    # Atomic promotion: stage in a temp dir, then move the complete family.
+    staging = out / ".publish-staging"
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+    family = expected + ["manifest.json"]
+    for name in family:
+        shutil.copyfile(run_dir / name, staging / name)
+    sums = ""
+    for name in family:
+        digest = rs.sha256_file(staging / name)
+        sums += f"{digest}  {name}\n"
+    (staging / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
+    for name in family + ["SHA256SUMS.txt"]:
+        os.replace(staging / name, out / name)
+    shutil.rmtree(staging, ignore_errors=True)
+    log(f"published complete family for identity {identity[:16]} to {out}")
+
+
+# Set by main() before stages run; publish_family needs the args context
+# (fixture block, measurement source) to build the manifest.
+_PUBLISH_ARGS: argparse.Namespace | None = None
+
+
+def main() -> int:
+    global _PUBLISH_ARGS
+    args = build_arg_parser().parse_args()
 
     script = Path(__file__).resolve()
     out = args.out
@@ -1182,10 +1315,16 @@ def main() -> int:
         log("WARNING: dirty-tree run allowed by override; artifacts are provisional")
 
     args.parent_gds_sha256 = rs.sha256_file(Path(args.gds))
-    identity, run_config = compute_run_identity_from_args(args, source)
+    identity, run_config, freeze_text = compute_run_identity_from_args(args, source)
     args.run_identity = identity
     run_dir = out / "runs" / identity
     run_dir.mkdir(parents=True, exist_ok=True)
+    # Publishable run config (audit B0.9): the public family includes it.
+    (run_dir / "industrial-run-config.json").write_text(
+        rs.strict_dumps(_sanitize(run_config)) + "\n", encoding="utf-8"
+    )
+    # Distribution freeze persisted next to the artifacts it locks (B0.2).
+    (run_dir / "distribution-freeze.txt").write_text(freeze_text, encoding="utf-8")
     (run_dir / "run-config.json").write_text(rs.strict_dumps(run_config) + "\n", encoding="utf-8")
     rs.init_run_log(run_dir / "RUN.log")
     args.fixture_block = rs.validate_parent_layout(
@@ -1199,7 +1338,19 @@ def main() -> int:
         "filename": Path(args.gds).name,
         "pixel_size_nm": 1.0,
     }
+    _PUBLISH_ARGS = args
     log(f"run identity {identity[:16]} workspace {run_dir}")
+
+    if args.print_run_identity:
+        print(
+            json.dumps(
+                {"run_identity": identity, "run_config": run_config},
+                indent=2,
+                sort_keys=True,
+                allow_nan=False,
+            )
+        )
+        return 0
 
     stages = (
         ["prepare", "runtime", "quality", "fulldie", "manifest"]
@@ -1215,7 +1366,6 @@ def main() -> int:
         runtime = stage_runtime(args, run_dir, script, identity, prepared)
         write_artifact(
             run_dir,
-            out,
             "industrial-runtime.json",
             build_artifact(
                 "runtime",
@@ -1231,7 +1381,6 @@ def main() -> int:
         quality = stage_quality(args, run_dir, script, identity, prepared)
         write_artifact(
             run_dir,
-            out,
             "industrial-quality.json",
             build_artifact(
                 "quality",
@@ -1247,7 +1396,6 @@ def main() -> int:
         fulldie = stage_fulldie(args, run_dir, script, identity, prepared)
         write_artifact(
             run_dir,
-            out,
             "industrial-fulldie.json",
             build_artifact(
                 "full_die",
@@ -1258,27 +1406,7 @@ def main() -> int:
             ),
         )
     if "manifest" in stages:
-        files = sorted(out.glob("industrial-*.json"))
-        entries = [
-            {"file": p.name, "sha256": rs.sha256_file(p), "bytes": p.stat().st_size} for p in files
-        ]
-        manifest = build_artifact(
-            "manifest",
-            STATUS_SUCCESS,
-            {
-                "artifacts": entries,
-                "run_identity": identity,
-                "run_config": f"runs/{identity}/run-config.json",
-            },
-            args,
-            env_lock=run_config["environment_lock"],
-        )
-        path = write_artifact(run_dir, out, "manifest.json", manifest)
-        sha = hashlib.sha256(path.read_bytes()).hexdigest()
-        (out / "SHA256SUMS.txt").write_text(
-            "".join(f"{e['sha256']}  {e['file']}\n" for e in entries) + f"{sha}  manifest.json\n",
-            encoding="utf-8",
-        )
+        publish_family(run_dir, out, identity)
     return 0
 
 
