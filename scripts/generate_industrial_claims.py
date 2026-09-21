@@ -588,10 +588,15 @@ def check_readme(claims: list[dict[str, Any]], readme_path: Path) -> list[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--artifacts", type=Path, default=Path("benchmarks/results/industrial"))
-    ap.add_argument("--out-json", type=Path, default=Path("docs/generated/industrial-claims.json"))
-    ap.add_argument("--out-md", type=Path, default=Path("docs/generated/industrial-claims.md"))
-    ap.add_argument("--readme", type=Path, default=Path("README.md"))
+    repo = Path(__file__).resolve().parents[1]
+    ap.add_argument("--artifacts", type=Path, default=repo / "benchmarks/results/industrial")
+    ap.add_argument(
+        "--out-json",
+        type=Path,
+        default=repo / "docs/generated/industrial-claims.json",
+    )
+    ap.add_argument("--out-md", type=Path, default=repo / "docs/generated/industrial-claims.md")
+    ap.add_argument("--readme", type=Path, default=repo / "README.md")
     ap.add_argument("--check", action="store_true", help="validate README quotes and exit")
     args = ap.parse_args()
 

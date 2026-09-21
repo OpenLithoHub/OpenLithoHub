@@ -8,6 +8,7 @@ always FAIL CLOSED.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import importlib.util
 import json
@@ -547,3 +548,344 @@ def test_production_verifier_rejects_identity_tamper(tmp_path: Path) -> None:
 
 def _ind_str(config: dict[str, Any]) -> str:
     return json.dumps(config, indent=2, sort_keys=True, allow_nan=False) + "\n"
+
+
+class TestPEP610Provenance:
+    def test_vcs_commit_id_preserved(self) -> None:
+        """P0.2: PEP 610 uses commit_id — the exact installed commit must
+        survive into the freeze line."""
+        direct = {
+            "url": "https://github.com/x/y.git",
+            "vcs_info": {
+                "vcs": "git",
+                "requested_revision": "v0.3.0",
+                "commit_id": "abcdef1234567890abcdef1234567890abcdef12",
+            },
+        }
+        line = rs.format_direct_reference("diff-surrogate", "0.3.0", direct)
+        assert "abcdef1234567890abcdef1234567890abcdef12" in line
+        assert "diff-surrogate @ https://github.com/x/y.git@v0.3.0@abcdef" in line
+
+    def test_editable_from_dir_info(self) -> None:
+        direct = {
+            "url": "file:///src/diff-surrogate",
+            "dir_info": {"editable": True},
+        }
+        line = rs.format_direct_reference("diff-surrogate", "0.3.0", direct)
+        assert "# editable" in line
+
+    def test_regular_distribution_uses_version(self) -> None:
+        assert rs.format_direct_reference("numpy", "2.5.1", {}) == "numpy==2.5.1"
+
+
+# ---------------------------------------------------------------------------
+# P0.8: production drill — REAL publish_family → PRODUCTION verifier →
+# PRODUCTION claims --check. Source hashes are the real working-tree bytes
+# and git-show reads the working tree, so closure is genuinely exercised
+# with NO problem filtering.
+# ---------------------------------------------------------------------------
+
+
+_harness_spec = importlib.util.spec_from_file_location(
+    "olh_harness_drill", REPO_ROOT / "benchmarks/industrial/run_industrial_benchmark.py"
+)
+assert _harness_spec is not None and _harness_spec.loader is not None
+harness = importlib.util.module_from_spec(_harness_spec)
+sys.modules["olh_harness_drill"] = harness
+_harness_spec.loader.exec_module(harness)
+
+ind_spec_drill = importlib.util.spec_from_file_location(
+    "olh_ind_drill", REPO_ROOT / "src/openlithohub/benchmark/industrial.py"
+)
+ind = importlib.util.module_from_spec(ind_spec_drill)
+sys.modules["olh_ind_drill"] = ind
+ind_spec_drill.loader.exec_module(ind)
+
+
+_gen_spec = importlib.util.spec_from_file_location(
+    "olh_gen", REPO_ROOT / "scripts/generate_industrial_claims.py"
+)
+assert _gen_spec is not None and _gen_spec.loader is not None
+gen = importlib.util.module_from_spec(_gen_spec)
+sys.modules["olh_gen"] = gen
+_gen_spec.loader.exec_module(gen)
+
+
+def _drill_source() -> dict[str, Any]:
+    """Source dict whose hashes are the REAL working-tree bytes."""
+    import hashlib
+
+    source = {
+        "commit": "d" * 40,
+        "commit_valid": True,
+        "working_tree_dirty": False,
+        "harness_sha256": "",
+        "industrial_core_sha256": "",
+        "claim_generator_sha256": "",
+        "run_support_sha256": "",
+    }
+    for key, rel in (
+        ("harness_sha256", "benchmarks/industrial/run_industrial_benchmark.py"),
+        ("industrial_core_sha256", "src/openlithohub/benchmark/industrial.py"),
+        ("claim_generator_sha256", "scripts/generate_industrial_claims.py"),
+        ("run_support_sha256", "benchmarks/industrial/run_support.py"),
+    ):
+        source[key] = hashlib.sha256((REPO_ROOT / rel).read_bytes()).hexdigest()
+    return source
+
+
+class TestProductionFamilyDrill:
+    @pytest.fixture
+    def run_dir_and_out(self, tmp_path: Path, monkeypatch):
+        """Build a synthetic run workspace, then run the REAL
+        publish_family. git-show is replaced by a working-tree read for
+        the synthetic commit — the closure still compares stored vs
+        actual bytes with no filtering."""
+        import hashlib
+
+        source = _drill_source()
+        monkeypatch.setattr(
+            verifier,
+            "_git_show_sha256",
+            lambda commit, rel, root: hashlib.sha256((root / rel).read_bytes()).hexdigest(),
+        )
+        out = tmp_path / "public"
+        out.mkdir(parents=True)
+
+        lock = {"python": "3.12", "distribution_freeze_sha256": ""}
+        freeze_text = (
+            "numpy==2.0.0\n"
+            "diff-surrogate @ https://github.com/x/y.git@"
+            "abcdef1234567890abcdef1234567890abcdef12\n"
+        )
+        lock["distribution_freeze_sha256"] = hashlib.sha256(freeze_text.encode()).hexdigest()
+        lock["lock_sha256"] = hashlib.sha256(ind._canonical_dumps(lock).encode()).hexdigest()
+        config = {
+            "schema": ind.RUN_CONFIG_SCHEMA,
+            "source": source,
+            "environment_lock": lock,
+            "fixtures": {"parent_gds_sha256": "f" * 64, "iccad": {}},
+            "args": {"repeats": 5, "sizes": "4096", "layer": "66:44", "seed": 0},
+        }
+        identity = hashlib.sha256(
+            ind._canonical_dumps(ind.build_run_identity_payload(config)).encode()
+        ).hexdigest()
+        config["run_identity"] = identity
+        run_dir = tmp_path / "runs" / identity
+        run_dir.mkdir(parents=True)
+        (run_dir / "industrial-run-config.json").write_text(
+            ind._canonical_dumps(config) + "\n", encoding="utf-8"
+        )
+        (run_dir / "industrial-distribution-freeze.txt").write_text(freeze_text, encoding="utf-8")
+
+        def benchmark_artifact(kind: str, extra: dict[str, Any]) -> dict[str, Any]:
+            base = {
+                "schema": ind.SCHEMA_NAME,
+                "kind": kind,
+                "status": "SUCCESS",
+                "git_commit": source["commit"],
+                "timestamp_utc": "2026-09-21T00:00:00Z",
+                "hardware": {
+                    "cpu_model": "t",
+                    "physical_ram_bytes": 48 * (1 << 30),
+                    "gpu": None,
+                },
+                "software": {"python": "3.12"},
+                "claim_scope": {"physics_claim": "NOT_FOUNDRY_CALIBRATED"},
+                "reproducibility": {"command": "run"},
+                "measurement_source": source,
+                "fixture": {"sha256": "f" * 64, "bytes": 1000},
+                "run_identity": identity,
+                "environment_lock": lock,
+            }
+            base.update(extra)
+            return ind._sanitize(base)
+
+        runtime = benchmark_artifact(
+            "runtime",
+            {
+                "memory": {
+                    "per_size": {
+                        "4096": {
+                            "dense_full": {"peak_rss_bytes_median": 1 << 30},
+                            "b04_selective": {"peak_rss_bytes_median": 400 * (1 << 20)},
+                            "streaming_memory_reduction_pct": 60.0,
+                        }
+                    },
+                    "max_streamed_size_px": 65536,
+                    "dense_not_run_under_memory_policy_px": [65536],
+                },
+                "comparisons": {},
+                "rows": [],
+                "policy": {"repeats": 5},
+            },
+        )
+        (run_dir / "industrial-runtime.json").write_text(
+            ind._canonical_dumps(runtime) + "\n", encoding="utf-8"
+        )
+        (run_dir / "industrial-quality.json").write_text(
+            ind._canonical_dumps(benchmark_artifact("quality", {"datasets": {}})) + "\n",
+            encoding="utf-8",
+        )
+        (run_dir / "industrial-fulldie.json").write_text(
+            ind._canonical_dumps(
+                benchmark_artifact(
+                    "fulldie", {"dense_die_status": "INFEASIBLE_ON_REFERENCE_MACHINE"}
+                )
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return run_dir, out, identity, source
+
+    def test_publish_verify_claims_end_to_end(
+        self, tmp_path: Path, run_dir_and_out, monkeypatch
+    ) -> None:
+        run_dir, out, identity, source = run_dir_and_out
+        publish_args = argparse.Namespace(
+            gds=REPO_ROOT / "x.gds",
+            fixture_block={"sha256": "f" * 64, "bytes": 1000},
+            measurement_source=source,
+            run_identity=identity,
+            out=out,
+            repeats=5,
+            seed=0,
+        )
+        monkeypatch.setattr(harness, "_PUBLISH_ARGS", publish_args)
+        # REAL production publication.
+        harness.publish_family(run_dir, out, identity)
+
+        # Published root contains exactly the canonical family.
+        published = {p.name for p in out.iterdir()}
+        assert published == {
+            "industrial-runtime.json",
+            "industrial-quality.json",
+            "industrial-fulldie.json",
+            "industrial-run-config.json",
+            "industrial-distribution-freeze.txt",
+            "manifest.json",
+            "SHA256SUMS.txt",
+        }
+
+        # PRODUCTION verifier accepts the family with NO problem filtering.
+        problems = verifier.verify(out, REPO_ROOT)
+        assert problems == [], problems
+
+        # PRODUCTION claims generator runs and its --check passes against
+        # the published artifacts (drift gate over a real generated doc).
+        claims_json = tmp_path / "gen" / "industrial-claims.json"
+        claims_md = tmp_path / "gen" / "industrial-claims.md"
+        readme = tmp_path / "README.md"
+        readme.write_text("# test\n", encoding="utf-8")
+        argv = sys.argv
+        sys.argv = [
+            "generate_industrial_claims.py",
+            "--artifacts",
+            str(out),
+            "--out-json",
+            str(claims_json),
+            "--out-md",
+            str(claims_md),
+            "--readme",
+            str(readme),
+        ]
+        try:
+            assert gen.main() == 0
+            assert claims_json.exists() and claims_md.exists()
+            sys.argv = [
+                "generate_industrial_claims.py",
+                "--artifacts",
+                str(out),
+                "--out-json",
+                str(claims_json),
+                "--out-md",
+                str(claims_md),
+                "--readme",
+                str(readme),
+                "--check",
+            ]
+            assert gen.main() == 0
+        finally:
+            sys.argv = argv
+
+    def test_freeze_byte_mutation_fails_verifier(
+        self, tmp_path: Path, run_dir_and_out, monkeypatch
+    ) -> None:
+        run_dir, out, identity, source = run_dir_and_out
+        publish_args = argparse.Namespace(
+            gds=REPO_ROOT / "x.gds",
+            fixture_block={"sha256": "f" * 64, "bytes": 1000},
+            measurement_source=source,
+            run_identity=identity,
+            out=out,
+            repeats=5,
+            seed=0,
+        )
+        monkeypatch.setattr(harness, "_PUBLISH_ARGS", publish_args)
+        harness.publish_family(run_dir, out, identity)
+        freeze = out / "industrial-distribution-freeze.txt"
+        freeze.write_text(freeze.read_text().replace("numpy", "NUMPY"), encoding="utf-8")
+        problems = verifier.verify(out, REPO_ROOT)
+        assert any(
+            "distribution-freeze" in p and ("mismatch" in p or "does not match" in p)
+            for p in problems
+        ), problems
+
+    def test_run_config_arg_mutation_fails_verifier(
+        self, tmp_path: Path, run_dir_and_out, monkeypatch
+    ) -> None:
+        run_dir, out, identity, source = run_dir_and_out
+        publish_args = argparse.Namespace(
+            gds=REPO_ROOT / "x.gds",
+            fixture_block={"sha256": "f" * 64, "bytes": 1000},
+            measurement_source=source,
+            run_identity=identity,
+            out=out,
+            repeats=5,
+            seed=0,
+        )
+        monkeypatch.setattr(harness, "_PUBLISH_ARGS", publish_args)
+        harness.publish_family(run_dir, out, identity)
+        config_path = out / "industrial-run-config.json"
+        config = json.loads(config_path.read_text())
+        config["args"]["repeats"] = 4
+        config_path.write_text(ind._canonical_dumps(config) + "\n", encoding="utf-8")
+        problems = verifier.verify(out, REPO_ROOT)
+        assert any("recomputed" in p for p in problems), problems
+
+    def test_artifact_byte_mutation_fails_verifier(
+        self, tmp_path: Path, run_dir_and_out, monkeypatch
+    ) -> None:
+        run_dir, out, identity, source = run_dir_and_out
+        publish_args = argparse.Namespace(
+            gds=REPO_ROOT / "x.gds",
+            fixture_block={"sha256": "f" * 64, "bytes": 1000},
+            measurement_source=source,
+            run_identity=identity,
+            out=out,
+            repeats=5,
+            seed=0,
+        )
+        monkeypatch.setattr(harness, "_PUBLISH_ARGS", publish_args)
+        harness.publish_family(run_dir, out, identity)
+        target = out / "industrial-quality.json"
+        target.write_text(target.read_text().replace("cpu_model", "cpu_model_x"))
+        problems = verifier.verify(out, REPO_ROOT)
+        assert any("hash mismatch" in p or "sha256 != actual" in p for p in problems)
+
+    def test_unknown_root_json_fails(self, tmp_path: Path, run_dir_and_out, monkeypatch) -> None:
+        run_dir, out, identity, source = run_dir_and_out
+        publish_args = argparse.Namespace(
+            gds=REPO_ROOT / "x.gds",
+            fixture_block={"sha256": "f" * 64, "bytes": 1000},
+            measurement_source=source,
+            run_identity=identity,
+            out=out,
+            repeats=5,
+            seed=0,
+        )
+        monkeypatch.setattr(harness, "_PUBLISH_ARGS", publish_args)
+        harness.publish_family(run_dir, out, identity)
+        (out / "industrial-rogue.json").write_text("{}", encoding="utf-8")
+        problems = verifier.verify(out, REPO_ROOT)
+        assert any("unknown authority-root JSON" in p for p in problems)

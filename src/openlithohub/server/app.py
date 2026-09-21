@@ -26,6 +26,7 @@ hitting the same cached model cannot stomp on its mutable state.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import itertools
 import json
 import logging
@@ -98,10 +99,12 @@ _JOB_TTL_SECONDS = float(os.environ.get("OPENLITHOHUB_JOB_TTL_SECONDS", "3600"))
 _JOB_COUNTER = itertools.count(1)
 
 
-def _evict_terminal_locked(now: float) -> None:
+def _evict_terminal_locked(now: float) -> list[str]:
     """Evict terminal jobs beyond the history cap or TTL. CALLER HOLDS
-    _JOB_LOCK. Scratch of evicted FAILED/CANCELLED jobs goes with them;
-    succeeded jobs keep their artifact until eviction too."""
+    _JOB_LOCK — only bookkeeping happens here.  Returns the scratch dirs
+    to remove; the CALLER runs ``shutil.rmtree`` AFTER releasing the lock
+    (audit P1.3: slow directory deletion must not block job state)."""
+    doomed: list[str] = []
     for job_id in list(_JOBS.keys()):
         record = _JOBS[job_id]
         if record["status"] not in ("succeeded", "failed", "cancelled"):
@@ -109,10 +112,19 @@ def _evict_terminal_locked(now: float) -> None:
         age = now - record.get("_created_monotonic", now)
         if len(_JOBS) > _JOB_HISTORY_CAP or age > _JOB_TTL_SECONDS:
             _JOBS.pop(job_id, None)
-            shutil.rmtree(record.get("scratch_dir", ""), ignore_errors=True)
+            doomed.append(str(record.get("scratch_dir") or ""))
+    return doomed
+
+
+def _cleanup_scratch_dirs(doomed: list[str]) -> None:
+    for d in doomed:
+        if d:
+            shutil.rmtree(d, ignore_errors=True)
 
 
 _JOB_WORKER_STARTED = threading.Event()
+_JOB_WORKER_SHUTDOWN = threading.Event()
+_JOB_WORKER_THREAD: threading.Thread | None = None
 
 
 def _admit_blocking_with_shutdown(timeout: float = 1.0) -> bool:
@@ -125,9 +137,6 @@ def _admit_blocking_with_shutdown(timeout: float = 1.0) -> bool:
         if _ADMIT.acquire(blocking=False):
             return True
         _time.sleep(timeout)
-
-
-_JOB_WORKER_SHUTDOWN = threading.Event()
 
 
 def _start_job_worker(app: Any) -> None:
@@ -167,7 +176,8 @@ def _start_job_worker(app: Any) -> None:
                         record["status"] = "succeeded"
                         record["summary"] = summary
                         record["output_path"] = str(summary["output_path"])
-                        _evict_terminal_locked(_time.monotonic())
+                        doomed = _evict_terminal_locked(_time.monotonic())
+                _cleanup_scratch_dirs(doomed)
             except Exception as e:  # noqa: BLE001 - surfaced via job status
                 with _JOB_LOCK:
                     record = _JOBS.get(job_id)
@@ -181,7 +191,9 @@ def _start_job_worker(app: Any) -> None:
                 _release_admit()
                 _JOB_QUEUE.task_done()
 
-    threading.Thread(target=_worker, name="olh-job-worker", daemon=True).start()
+    global _JOB_WORKER_THREAD
+    _JOB_WORKER_THREAD = threading.Thread(target=_worker, name="olh-job-worker", daemon=True)
+    _JOB_WORKER_THREAD.start()
 
 
 # Hard cap on multipart upload size for /v1/optimize. Mirrors the 2 GB ceiling
@@ -464,7 +476,8 @@ def _try_reserve_slot() -> bool:
 
     The reservation counter is checked+incremented with the queue size
     under one lock, so capacity can never be oversubscribed between the
-    reservation and the actual enqueue."""
+    reservation and the actual enqueue.  Prefer :func:`reserve_job_slot`.
+    """
     global _JOB_QUEUE_RESERVED
     with _JOB_LOCK:
         if _JOB_QUEUE.qsize() + _JOB_QUEUE_RESERVED >= _JOB_QUEUE_DEPTH:
@@ -476,7 +489,27 @@ def _try_reserve_slot() -> bool:
 def _release_slot_reservation() -> None:
     global _JOB_QUEUE_RESERVED
     with _JOB_LOCK:
-        _JOB_QUEUE_RESERVED -= 1
+        _JOB_QUEUE_RESERVED = max(0, _JOB_QUEUE_RESERVED - 1)
+
+
+@contextlib.contextmanager
+def reserve_job_slot() -> Any:
+    """Exception-safe slot reservation (audit P1.1): the reservation is
+    released on EVERY exit path unless explicitly committed by the
+    enqueue (which releases it itself)."""
+    if not _try_reserve_slot():
+        raise JobQueueFullError()
+    committed = False
+    try:
+        yield
+        committed = True
+    finally:
+        if not committed:
+            _release_slot_reservation()
+
+
+class JobQueueFullError(RuntimeError):
+    """Raised when the bounded job queue has no free slot."""
 
 
 def _put_job(record: dict[str, Any], params: dict[str, Any]) -> tuple[str, bool]:
@@ -492,13 +525,19 @@ def _put_job(record: dict[str, Any], params: dict[str, Any]) -> tuple[str, bool]
         record["job_id"] = job_id
         record["_created_monotonic"] = _time.monotonic()
         _JOBS[job_id] = record
-        _evict_terminal_locked(_time.monotonic())
+        doomed = _evict_terminal_locked(_time.monotonic())
+    _cleanup_scratch_dirs(doomed)
     return job_id, True
 
 
 def create_app() -> FastAPI:
     """Build the FastAPI app. Factored so tests can spin up a fresh
-    instance with TestClient without depending on import-time globals."""
+    instance with TestClient without depending on import-time globals.
+
+    P1.4: the job worker is owned by the app LIFESPAN — started once
+    (idempotently across repeated create_app calls) and shut down with a
+    bounded drain when the app exits.
+    """
     app = FastAPI(
         title="OpenLithoHub Engine",
         description=(
@@ -508,6 +547,18 @@ def create_app() -> FastAPI:
         ),
         version="1",
     )
+
+    @app.on_event("startup")
+    def _start_worker_lifespan() -> None:
+        _JOB_WORKER_SHUTDOWN.clear()
+        _start_job_worker(app)
+
+    @app.on_event("shutdown")
+    def _stop_worker_lifespan() -> None:
+        _JOB_WORKER_SHUTDOWN.set()
+        thread = _JOB_WORKER_THREAD
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=5.0)
 
     @app.middleware("http")
     async def _request_observability(request: Any, call_next: Any) -> Any:
@@ -608,18 +659,21 @@ def create_app() -> FastAPI:
         # (no .git checkout); a source checkout falls back to git.
         build_info: dict[str, str] = {}
         try:
-            # Release builds bake a _build module into the wheel/container
+            # P0.10: explicitly IMPORT the module (the package __init__ does
+            # not reference it) — release wheels/containers bake _build.py
             # (see publish.yml); source checkouts do not have one.
-            import openlithohub as _pkg
+            from importlib import import_module
 
-            build_mod = getattr(_pkg, "_build", None)
-            if build_mod is not None:
-                build_info = {
-                    "build_commit": getattr(build_mod, "BUILD_COMMIT", ""),
-                    "build_timestamp": getattr(build_mod, "BUILD_TIMESTAMP", ""),
-                    "build_run_id": getattr(build_mod, "BUILD_RUN_ID", ""),
-                }
-        except Exception:  # noqa: BLE001 - source checkouts have no _build
+            build_mod = import_module("openlithohub._build")
+            build_info = {
+                "build_commit": getattr(build_mod, "BUILD_COMMIT", ""),
+                "build_timestamp": getattr(build_mod, "BUILD_TIMESTAMP", ""),
+                "build_run_id": getattr(build_mod, "BUILD_RUN_ID", ""),
+                "build_version": getattr(build_mod, "BUILD_VERSION", ""),
+            }
+        except ModuleNotFoundError:
+            build_info = {}
+        except Exception:  # noqa: BLE001 - build metadata is best-effort
             build_info = {}
         build_commit = build_info.get("build_commit") or ""
         return {
@@ -814,14 +868,18 @@ def create_app() -> FastAPI:
     ) -> JSONResponse:
         if not layout.filename:
             raise HTTPException(status_code=400, detail="layout upload missing filename")
-        # P1.4: reserve the queue slot BEFORE copying the (possibly large)
-        # upload — a full queue answers 429 without ingesting the body.
-        if not _try_reserve_slot():
+        # P1.4/P1.1: reserve the queue slot BEFORE copying the (possibly
+        # large) upload, via an exception-safe context manager — every
+        # failure path releases the reservation automatically.
+        try:
+            reserve_cm = reserve_job_slot()
+            reserve_cm.__enter__()
+        except JobQueueFullError:
             raise HTTPException(
                 status_code=429,
                 detail="job queue is full",
                 headers={"Retry-After": "10"},
-            )
+            ) from None
         suffix = Path(layout.filename).suffix or ".bin"
         tmp_path = make_scratch_dir("olh_job_")
         input_path = tmp_path / f"input{suffix}"
@@ -834,7 +892,7 @@ def create_app() -> FastAPI:
                     break
                 bytes_read += len(chunk)
                 if bytes_read > _MAX_UPLOAD_BYTES:
-                    _release_slot_reservation()
+                    reserve_cm.__exit__(None, None, None)
                     shutil.rmtree(tmp_path, ignore_errors=True)
                     raise HTTPException(status_code=413, detail="layout upload too large")
                 out_f.write(chunk)
@@ -877,8 +935,9 @@ def create_app() -> FastAPI:
     @app.get("/v1/jobs/{job_id}")
     def get_job(job_id: str) -> dict[str, Any]:
         # P1.5: reads also drive time-based eviction of terminal jobs.
+        doomed: list[str] = []
         with _JOB_LOCK:
-            _evict_terminal_locked(_time.monotonic())
+            doomed = _evict_terminal_locked(_time.monotonic())
             job = _JOBS.get(job_id)
             if job is None:
                 raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
@@ -892,20 +951,30 @@ def create_app() -> FastAPI:
                 "summary": job["summary"],
                 "error": job["error"],
             }
+        _cleanup_scratch_dirs(doomed)
         return snapshot
 
     @app.get("/v1/jobs/{job_id}/artifact", response_model=None)
     def get_job_artifact(job_id: str) -> FileResponse:
-        job = _JOBS.get(job_id)
-        if job is None:
-            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
-        if job["status"] != "succeeded" or not job.get("output_path"):
-            raise HTTPException(status_code=409, detail=f"job {job_id} has no artifact yet")
+        # P1.2: snapshot status/output path UNDER the lock, same contract
+        # as get_job; a successful GET also refreshes the job TTL so the
+        # janitor cannot delete the artifact mid-download.
+        doomed: list[str] = []
+        with _JOB_LOCK:
+            doomed = _evict_terminal_locked(_time.monotonic())
+            job = _JOBS.get(job_id)
+            if job is None:
+                raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
+            if job["status"] != "succeeded" or not job.get("output_path"):
+                raise HTTPException(status_code=409, detail=f"job {job_id} has no artifact yet")
+            output_path = str(job["output_path"])
+            job["_last_access_monotonic"] = _time.monotonic()
+        _cleanup_scratch_dirs(doomed)
         return FileResponse(
-            job["output_path"],
+            output_path,
             media_type="application/octet-stream",
             headers={
-                "Content-Disposition": f'attachment; filename="{Path(job["output_path"]).name}"',
+                "Content-Disposition": f'attachment; filename="{Path(output_path).name}"',
             },
         )
 

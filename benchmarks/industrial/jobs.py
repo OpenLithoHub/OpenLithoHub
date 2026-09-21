@@ -85,6 +85,31 @@ def dense_allowed(size: int, *, bytes_per_px: int = 4, tensors: int = 3, budget_
 # ---------------------------------------------------------------------------
 
 
+def canonicalize_models(spec: str) -> list[str]:
+    """Normalize a --models comma spec into the executed model list.
+
+    Driver contract (audit P0.6): unknown models hard-fail, duplicates
+    normalize to the first occurrence, empty entries hard-fail.  The
+    result drives execution AND the run identity — a --models value that
+    silently changed nothing would be a config-contract bug.
+    """
+    if not spec or not spec.strip():
+        raise ValueError("--models is empty; at least one model is required")
+    from openlithohub.models.registry import register_builtin_models, registry
+
+    register_builtin_models()
+    seen: dict[str, None] = {}
+    for raw in spec.split(","):
+        name = raw.strip()
+        if not name:
+            raise ValueError("--models contains an empty entry")
+        if name not in registry.list_models():
+            available = ", ".join(sorted(registry.list_models()))
+            raise ValueError(f"unknown model {name!r}; available: [{available}]")
+        seen.setdefault(name, None)
+    return list(seen)
+
+
 def load_source(gds: Path, top_cell: str) -> KLayoutAlignedRunSource:
     return KLayoutAlignedRunSource.from_file(gds, pixel_size_nm=1.0, layer=LAYER, top_cell=top_cell)
 

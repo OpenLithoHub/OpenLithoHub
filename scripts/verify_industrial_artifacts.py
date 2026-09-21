@@ -122,16 +122,18 @@ def verify_family_closure(parsed: dict[str, dict]) -> list[str]:
     return problems
 
 
-def verify_source_closure(artifacts: list[tuple[Path, dict]], repo_root: Path) -> list[str]:
+def verify_source_closure(parsed: dict[str, dict], repo_root: Path) -> list[str]:
     """Each artifact's stored source hashes must match the committed bytes.
 
     ``git show <measurement commit>:<file>`` is re-hashed and compared to
     the artifact's recorded harness/core/generator/support hashes: the
     artifact really was produced by the committed source it names.
+    Failures are ALWAYS reported as problems — never as a verifier crash
+    (audit P0.3: the role/name is a string, never a Path attribute).
     """
     problems: list[str] = []
     checked: set[tuple[str, str, str]] = set()
-    for path, data in artifacts:
+    for role, data in sorted(parsed.items()):
         source = data.get("measurement_source") or {}
         commit = source.get("commit")
         if not isinstance(commit, str):
@@ -150,11 +152,11 @@ def verify_source_closure(artifacts: list[tuple[Path, dict]], repo_root: Path) -
             try:
                 actual = _git_show_sha256(commit, rel, repo_root)
             except Exception as e:  # noqa: BLE001 - surfaced as a failure
-                problems.append(f"{path.name}: source closure git show failed: {e}")
+                problems.append(f"{role}: source closure git show failed: {e}")
                 continue
             if actual != stored:
                 problems.append(
-                    f"{path.name}: source closure MISMATCH for {rel}: "
+                    f"{role}: source closure MISMATCH for {rel}: "
                     f"artifact {stored} != committed {actual} at {commit[:12]}"
                 )
     return problems
@@ -199,6 +201,68 @@ def verify_claims_linkage(artifacts_dir: Path, claims_path: Path, sums_path: Pat
     return problems
 
 
+def parse_sha_index(sums_path: Path) -> tuple[dict[str, str], list[str]]:
+    """Single-pass SHA256SUMS parser/validator (audit P0.4).
+
+    Rejects: malformed lines, duplicate filenames, absolute paths and
+    ``..`` path traversal.  Returns (index, problems).
+    """
+    index: dict[str, str] = {}
+    problems: list[str] = []
+    for line in sums_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        m = _SHA_LINE.match(line)
+        if not m:
+            problems.append(f"SHA256SUMS.txt: malformed line {line!r}")
+            continue
+        expected, name = m.group(1), m.group(2)
+        if name in index:
+            problems.append(f"SHA256SUMS.txt: duplicate entry for {name}")
+            continue
+        if name.startswith("/") or ".." in Path(name).parts:
+            problems.append(f"SHA256SUMS.txt: unsafe path {name!r}")
+            continue
+        index[name] = expected
+    return index, problems
+
+
+def validate_sha_index(
+    artifacts_dir: Path, index: dict[str, str], data_members: set[str]
+) -> list[str]:
+    """Every data member must be indexed exactly once with the right hash;
+    no stale/foreign entries; every indexed file must exist and match."""
+    problems: list[str] = []
+    missing_from_sums = data_members - set(index)
+    if missing_from_sums:
+        problems.append(f"SHA256SUMS.txt: no entry for {sorted(missing_from_sums)}")
+    extra_in_sums = set(index) - data_members
+    if extra_in_sums:
+        problems.append(f"SHA256SUMS.txt: stale entries for {sorted(extra_in_sums)}")
+    for name in sorted(set(index) & data_members):
+        target = artifacts_dir / name
+        if not target.exists():
+            problems.append(f"SHA256SUMS.txt: missing file {name}")
+            continue
+        actual = hashlib.sha256(target.read_bytes()).hexdigest()
+        if actual != index[name]:
+            problems.append(
+                f"SHA256SUMS.txt: {name} hash mismatch (expected {index[name]}, actual {actual})"
+            )
+    return problems
+
+
+CANONICAL_ROOT = {
+    "industrial-runtime.json",
+    "industrial-quality.json",
+    "industrial-fulldie.json",
+    "industrial-run-config.json",
+    "industrial-distribution-freeze.txt",
+    "manifest.json",
+    "SHA256SUMS.txt",
+}
+
+
 def verify(artifacts_dir: Path, repo_root: Path) -> list[str]:
     problems: list[str] = []
     json_files = sorted(artifacts_dir.glob("*.json"))
@@ -206,6 +270,19 @@ def verify(artifacts_dir: Path, repo_root: Path) -> list[str]:
         print("no industrial artifacts present — skipping authority checks")
         return problems
 
+    # P0.5: the authority root must contain only canonical files.
+    unknown = {p.name for p in json_files} - CANONICAL_ROOT
+    if unknown:
+        problems.append(f"unknown authority-root JSON files: {sorted(unknown)}")
+
+    sums_path = artifacts_dir / "SHA256SUMS.txt"
+    if not sums_path.exists():
+        problems.append("SHA256SUMS.txt missing — artifact index is not verifiable")
+        return problems
+    sums_index, index_problems = parse_sha_index(sums_path)
+    problems.extend(index_problems)
+
+    # Role-aware strict parse + schema validation (audit P0.1).
     parsed: dict[str, dict] = {}
     for path in json_files:
         try:
@@ -215,12 +292,11 @@ def verify(artifacts_dir: Path, repo_root: Path) -> list[str]:
             problems.append(f"{path.name}: NOT strict JSON: {e}")
             continue
         if not isinstance(data, dict):
+            problems.append(f"{path.name}: not a JSON object")
             continue
         schema = data.get("schema")
         role = path.name.replace("industrial-", "").replace(".json", "")
         if schema == SCHEMA_NAME:
-            # P0.4: every benchmark artifact ties git_commit to its source
-            # commit (identity fields checked in family closure).
             problems.extend(f"{path.name}: {p}" for p in validate_artifact(data))
             source_commit = str((data.get("measurement_source") or {}).get("commit") or "")
             git_commit = str(data.get("git_commit") or "")
@@ -231,73 +307,13 @@ def verify(artifacts_dir: Path, repo_root: Path) -> list[str]:
                 )
             parsed[role] = data
         elif schema == RUN_CONFIG_SCHEMA:
-            # P0.1: run-config is a first-class family member with its own
-            # schema and validator; structural + identity-recompute checks
-            # happen in family closure.
             problems.extend(f"{path.name}: {p}" for p in validate_run_config(data))
             parsed["run-config"] = data
+        else:
+            # P0.5: unknown schemas never silently pass in the authority root.
+            problems.append(f"{path.name}: unknown schema {schema!r} in the authority root")
 
-    sums = artifacts_dir / "SHA256SUMS.txt"
-    if sums.exists():
-        for line in sums.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            m = _SHA_LINE.match(line)
-            if not m:
-                problems.append(f"SHA256SUMS.txt: malformed line {line!r}")
-                continue
-            expected, name = m.group(1), m.group(2)
-            target = artifacts_dir / name
-            if not target.exists():
-                problems.append(f"SHA256SUMS.txt: missing file {name}")
-                continue
-            actual = hashlib.sha256(target.read_bytes()).hexdigest()
-            if actual != expected:
-                problems.append(
-                    f"SHA256SUMS.txt: {name} hash mismatch (expected {expected}, actual {actual})"
-                )
-    else:
-        problems.append("SHA256SUMS.txt missing — artifact index is not verifiable")
-
-    sums = artifacts_dir / "SHA256SUMS.txt"
-    sums_index: dict[str, str] = {}
-    if sums.exists():
-        for line in sums.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            m = _SHA_LINE.match(line)
-            if not m:
-                problems.append(f"SHA256SUMS.txt: malformed line {line!r}")
-                continue
-            expected, name = m.group(1), m.group(2)
-            sums_index[name] = expected
-            target = artifacts_dir / name
-            if not target.exists():
-                problems.append(f"SHA256SUMS.txt: missing file {name}")
-                continue
-            actual = hashlib.sha256(target.read_bytes()).hexdigest()
-            if actual != expected:
-                problems.append(
-                    f"SHA256SUMS.txt: {name} hash mismatch (expected {expected}, actual {actual})"
-                )
-        # B0.5: exact set equality over the DATA members — every data
-        # artifact must be indexed; any entry NOT indexing a data artifact
-        # is stale/foreign. (manifest.json is the commit marker and
-        # SHA256SUMS.txt cannot index itself.)
-        data_members = ({p.name for p in json_files} - {"manifest.json"}) | {
-            "industrial-distribution-freeze.txt"
-        }
-        missing_from_sums = data_members - set(sums_index)
-        extra_in_sums = set(sums_index) - data_members
-        if missing_from_sums:
-            problems.append(f"SHA256SUMS.txt: no entry for {sorted(missing_from_sums)}")
-        if extra_in_sums:
-            problems.append(f"SHA256SUMS.txt: stale entries for {sorted(extra_in_sums)}")
-    else:
-        problems.append("SHA256SUMS.txt missing — artifact index is not verifiable")
-
-    # P0.6/P0.7: distribution-freeze bytes + manifest membership/hash/size
-    # closure — attempted once the basic layer is clean.
+    # P0.6: distribution-freeze bytes must match the environment lock.
     freeze_path = artifacts_dir / "industrial-distribution-freeze.txt"
     freeze_sha = ""
     if freeze_path.exists():
@@ -316,23 +332,21 @@ def verify(artifacts_dir: Path, repo_root: Path) -> list[str]:
     else:
         problems.append("industrial-distribution-freeze.txt missing from the published family")
 
+    data_members = ({p.name for p in json_files} - {"manifest.json"}) | {
+        "industrial-distribution-freeze.txt"
+    }
+    problems.extend(validate_sha_index(artifacts_dir, sums_index, data_members))
+
+    problems.extend(verify_manifest_closure(artifacts_dir, parsed, freeze_sha, sums_index))
+    problems.extend(verify_family_closure(parsed))
+    problems.extend(verify_source_closure(parsed, repo_root))
     problems.extend(
-        verify_manifest_closure(
-            artifacts_dir, parsed, freeze_sha, sums_index if sums.exists() else {}
+        verify_claims_linkage(
+            artifacts_dir,
+            repo_root / "docs/generated/industrial-claims.json",  # P0.7: repo-anchored
+            sums_path,
         )
     )
-
-    # B0.4 family closure + source closure + claims linkage.
-    if not problems:
-        problems.extend(verify_family_closure(parsed))
-        problems.extend(verify_source_closure(sorted(parsed.items()), repo_root))
-        problems.extend(
-            verify_claims_linkage(
-                artifacts_dir,
-                Path("docs/generated/industrial-claims.json"),
-                artifacts_dir / "SHA256SUMS.txt",
-            )
-        )
 
     return problems
 
@@ -344,8 +358,8 @@ def verify_manifest_closure(
     sums_index: dict[str, str],
 ) -> list[str]:
     """Manifest membership/hash/size closure (audit P0.7): the manifest's
-    artifact set must equal the canonical family exactly, and every entry
-    must agree with SHA256SUMS and the actual bytes."""
+    artifact set must equal the canonical data family exactly, and every
+    entry must agree with SHA256SUMS and the actual bytes."""
     problems: list[str] = []
     manifest = parsed.get("manifest")
     if manifest is None:
@@ -358,11 +372,7 @@ def verify_manifest_closure(
         "industrial-distribution-freeze.txt",
     }
     entries = manifest.get("artifacts") or []
-    declared = {
-        e.get("file"): e
-        for e in entries
-        if isinstance(e, dict) and e.get("file") != "manifest.json"
-    }
+    declared = {e.get("file"): e for e in entries if isinstance(e, dict)}
     declared_names = set(declared)
     if declared_names != canonical:
         problems.append(
@@ -394,8 +404,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--artifacts", type=Path, default=Path("benchmarks/results/industrial"))
     args = ap.parse_args()
+    repo_root = Path(__file__).resolve().parents[1]
 
-    problems = verify(args.artifacts, Path.cwd())
+    problems = verify(args.artifacts, repo_root)
     for p in problems:
         print(f"VERIFY FAIL: {p}", file=sys.stderr)
     if problems:

@@ -15,7 +15,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md LICENSE ./
+COPY scripts/write_build_info.py /tmp/write_build_info.py
 COPY src/ src/
+
+ARG VERSION=0.0.0
+ARG BUILD_COMMIT=unknown
+ARG BUILD_RUN_ID=unknown
+# P0.9/P0.11: bake the build identity into the wheel bytes so the running
+# container reports its true provenance without a .git checkout.
+RUN SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} \
+    python /tmp/write_build_info.py \
+      --commit "${BUILD_COMMIT}" --run-id "${BUILD_RUN_ID}" \
+      --version "${VERSION}" --out src/openlithohub/_build.py
 
 # Build into a relocatable venv so the runtime stage can copy /opt/venv
 # wholesale; also build a wheel so the `server` stage can add the [server]

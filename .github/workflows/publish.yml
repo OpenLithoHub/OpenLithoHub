@@ -26,15 +26,14 @@ jobs:
             echo "tag commit $GITHUB_SHA is NOT reachable from origin/main — refusing to publish"; exit 1; }
       - name: Install build tools
         run: pip install build twine cyclonedx-bom
-      - name: Bake build identity into the wheel (P2.2)
+      - name: Bake build identity into the wheel (P2.2/P0.9)
         run: |
-          cat > src/openlithohub/_build.py <<BUILD_EOF
-          \"\""Build identity, populated by the release pipeline.\"\"\"
-
-          BUILD_COMMIT = "${GITHUB_SHA}"
-          BUILD_TIMESTAMP = "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          BUILD_RUN_ID = "${GITHUB_RUN_ID}"
-          BUILD_EOF
+          python scripts/write_build_info.py \
+            --commit "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --version "${GITHUB_REF_NAME#v}"
+      - name: Verify generated build module compiles
+        run: python -m py_compile src/openlithohub/_build.py
       - name: Build wheel and sdist
         run: python -m build
       - name: Wheel smoke on the release bytes (audit P1.4/E1)
@@ -42,6 +41,7 @@ jobs:
           python -m venv /tmp/relvenv
           /tmp/relvenv/bin/pip install --no-cache-dir dist/*.whl
           /tmp/relvenv/bin/python -c "import openlithohub; print('release import ok')"
+          /tmp/relvenv/bin/python -c "import os, openlithohub._build as b; assert b.BUILD_COMMIT == os.environ['GITHUB_SHA'], b.BUILD_COMMIT; print('build identity ok')"
       - name: Tag/version consistency (audit P1.7)
         run: |
           expected="v${SETUPTOOLS_SCM_PRETEND_VERSION:-}"

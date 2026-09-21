@@ -371,18 +371,33 @@ def _distribution_freeze() -> str:
         except Exception:  # noqa: BLE001 - metadata best-effort
             direct = None
         if isinstance(direct, dict) and direct.get("url"):
-            url = str(direct["url"])
-            vcs = direct.get("vcs_info") or {}
-            commit = str(vcs.get("commit") or "")
-            if commit:
-                lines.append(f"{name} @ {url}@{commit}")
-            elif direct.get("editable"):
-                lines.append(f"{name} @ {url}  # editable")
-            else:
-                lines.append(f"{name} @ {url}")
+            lines.append(format_direct_reference(name, version, direct))
         else:
             lines.append(f"{name}=={version}")
     return "\n".join(sorted(lines))
+
+
+def format_direct_reference(name: str, version: str, direct: dict[str, Any]) -> str:
+    """Render one PEP 610 direct_url.json entry as an exact freeze line.
+
+    Uses the REAL PEP 610 keys: ``vcs_info.commit_id`` (NOT ``commit``),
+    ``vcs_info.requested_revision`` and ``dir_info.editable`` (NOT a
+    top-level ``editable``) — audit P0.2.
+    """
+    url = str(direct.get("url") or "")
+    if not url:
+        return f"{name}=={version}"
+    vcs = direct.get("vcs_info") or {}
+    dir_info = direct.get("dir_info") or {}
+    commit = str(vcs.get("commit_id") or "")
+    requested = str(vcs.get("requested_revision") or "")
+    editable = bool(dir_info.get("editable"))
+    if commit:
+        rev = f"@{requested}" if requested else ""
+        return f"{name} @ {url}{rev}@{commit}"
+    if editable:
+        return f"{name} @ {url}  # editable"
+    return f"{name} @ {url}"
 
 
 def _cpu_model() -> str:

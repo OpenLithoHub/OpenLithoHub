@@ -46,6 +46,7 @@ never produces marketing numbers.  Public claims are derived only by
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -727,7 +728,7 @@ def stage_quality(
     ckpt = rs.Checkpoint(run_dir / "checkpoints" / "quality.jsonl", identity, "quality")
     progress = rs.get_progress(run_dir / "progress.json")
     crop = prepared["crops"]["4096"]
-    models = list(jobs.MODELS)
+    models = list(args.parsed_models)
 
     # deterministic tile selection: rank tiles of the 4096 crop by
     # occupancy (measured once, in-driver, untimed), keep the top K.
@@ -1045,6 +1046,10 @@ def compute_run_identity_from_args(
     and the preflight script both use it, so a preflight identity is by
     construction the formal run identity (audit B0.3).
     """
+    # P0.6: canonicalize/validate the model list HERE so every identity
+    # consumer (formal run, preflight, verifier recompute) shares exactly
+    # one model-list contract.
+    args.parsed_models = jobs.canonicalize_models(args.models)
     env_lock, freeze_text = rs.environment_lock(script_repo_root())
     iccad_hashes = _iccad_fixture_hashes(args.iccad16_dir) if args.iccad16_dir else None
     args_payload = {
@@ -1068,7 +1073,7 @@ def compute_run_identity_from_args(
         "surrogate_epochs": args.surrogate_epochs,
         "iccad16_crop_px": args.iccad16_crop_px,
         "iccad16_dir": str(args.iccad16_dir) if args.iccad16_dir else None,
-        "models": ",".join(jobs.MODELS),
+        "models": ",".join(args.parsed_models),
         "layer": LAYER,
         "pixel_size_nm": 1.0,
         "seed": SEED,
@@ -1150,7 +1155,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--tile-iy", type=int)
     ap.add_argument("--iters", type=int, default=50)
     ap.add_argument("--reps", type=int, default=3)
-    ap.add_argument("--models", default=",".join(jobs.MODELS))
+    ap.add_argument(
+        "--models",
+        default=",".join(jobs.MODELS),
+        help="comma-separated registered model names; validated, canonicalized"
+        " and bound into the run identity",
+    )
     ap.add_argument("--parent-pid", type=int, default=0)
     ap.add_argument(
         "--print-run-identity",
@@ -1162,24 +1172,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def publish_family(run_dir: Path, out: Path, identity: str) -> None:
-    """Family-closure gate + atomic promotion to the public root (B0.1).
+    """Family-closure gate + commit-marker publication (audit B0.1/P0.1).
 
-    Loads every stage artifact from the RUN WORKSPACE, requires the exact
-    expected family set, validates each artifact and the cross-artifact
-    family closure (same run identity / commit / fixture / environment
-    lock), builds the manifest from run_dir only, then promotes the
-    complete family atomically.  The shared public root can therefore
-    never contain a mixed or partial family.
+    JSON members are strict-parsed and schema-validated; the freeze is a
+    TEXT blob handled only as bytes (json.loads on it is a bug).  The
+    manifest is the COMMIT MARKER written to the public root last —
+    per-file replacement is not cross-file atomic, so readers must
+    validate the manifest/SHA256SUMS family before consuming.
     """
     import openlithohub.benchmark.industrial as industrial_mod
 
-    expected = [
+    json_members = [
         "industrial-runtime.json",
         "industrial-quality.json",
         "industrial-fulldie.json",
         "industrial-run-config.json",
-        "industrial-distribution-freeze.txt",
     ]
+    blob_members = ["industrial-distribution-freeze.txt"]
+    expected = json_members + blob_members
+
     # P0.9: the run workspace must carry EXACTLY the expected family —
     # unexpected industrial-* members refuse promotion.
     actual_candidates = {p.name for p in run_dir.glob("industrial-*")}
@@ -1199,36 +1210,68 @@ def publish_family(run_dir: Path, out: Path, identity: str) -> None:
     dirty_override = os.environ.get("OPENLITHOHUB_ALLOW_DIRTY_MEASUREMENT") == "1"
     parsed: dict[str, dict[str, Any]] = {}
     problems: list[str] = []
-    for name in expected:
-        data = json.loads(
-            (run_dir / name).read_text(encoding="utf-8"),
-            parse_constant=lambda tok: (_ for _ in ()).throw(ValueError(f"non-finite token {tok}")),
-        )
+
+    # --- JSON members: strict parse + role-specific validation (P0.1) ---
+    for name in json_members:
+        try:
+            data = json.loads(
+                (run_dir / name).read_text(encoding="utf-8"),
+                parse_constant=lambda tok: (_ for _ in ()).throw(
+                    ValueError(f"non-finite token {tok}")
+                ),
+            )
+        except ValueError as e:
+            problems.append(f"{name}: NOT strict JSON: {e}")
+            continue
         role = name.replace("industrial-", "").replace(".json", "")
         if role == "run-config":
-            # The run config carries its own schema and field layout; the
-            # family validator compares it through those fields.
-            if data.get("schema") != "OpenLithoHub.industrial-run-config.v1":
-                problems.append(
-                    f"{name}: schema {data.get('schema')!r} is not "
-                    "OpenLithoHub.industrial-run-config.v1"
-                )
+            role_problems = industrial_mod.validate_run_config(data)
         else:
-            if data.get("schema") != SCHEMA_NAME:
-                problems.append(f"{name}: schema {data.get('schema')!r} is not {SCHEMA_NAME}")
-            else:
-                role_problems = validate_artifact(data)
-                if dirty_override:
-                    role_problems = [p for p in role_problems if "working_tree_dirty" not in p]
-                problems.extend(f"{name}: {p}" for p in role_problems)
+            role_problems = validate_artifact(data)
+            source_commit = str((data.get("measurement_source") or {}).get("commit") or "")
+            git_commit = str(data.get("git_commit") or "")
+            if source_commit and git_commit != source_commit:
+                role_problems.append(
+                    f"git_commit {git_commit} != measurement_source.commit {source_commit}"
+                )
+        if dirty_override:
+            role_problems = [p for p in role_problems if "working_tree_dirty" not in p]
+        problems.extend(f"{name}: {p}" for p in role_problems)
         parsed[role] = data
+
+    # --- BLOB member: bytes only, never json.loads (P0.1) ---
+    freeze_name = blob_members[0]
+    freeze_bytes = (run_dir / freeze_name).read_bytes()
+    freeze_sha = hashlib.sha256(freeze_bytes).hexdigest()
+    config = parsed.get("run-config")
+    lock_freeze = (
+        str((config.get("environment_lock") or {}).get("distribution_freeze_sha256") or "")
+        if config
+        else ""
+    )
+    if not lock_freeze:
+        problems.append(f"{freeze_name}: run-config carries no freeze hash to bind")
+    elif freeze_sha != lock_freeze:
+        problems.append(
+            f"{freeze_name}: sha256 {freeze_sha} does not match "
+            f"environment_lock.distribution_freeze_sha256 {lock_freeze}"
+        )
+
+    # --- cross-member family closure (single validator) ---
     problems.extend(f"family: {p}" for p in industrial_mod.validate_artifact_family(parsed))
+    if "run-config" in parsed:
+        recomputed = industrial_mod.recompute_run_identity(parsed["run-config"])
+        for role, data in sorted(parsed.items()):
+            claimed = str(data.get("run_identity"))
+            if claimed != recomputed:
+                problems.append(
+                    f"{role}: run_identity {claimed} != recomputed {recomputed} "
+                    "from the published run-config"
+                )
     if problems:
         raise RuntimeError(f"family closure failed; nothing published: {problems}")
 
-    # Neither manifest.json nor SHA256SUMS.txt can index their own bytes;
-    # they index the five data members. The manifest is the commit marker
-    # written last (P0.8).
+    # --- manifest (commit marker) over the five data members ---
     entries = [
         {"file": n, "sha256": rs.sha256_file(run_dir / n), "bytes": (run_dir / n).stat().st_size}
         for n in expected
@@ -1244,35 +1287,40 @@ def publish_family(run_dir: Path, out: Path, identity: str) -> None:
         _PUBLISH_ARGS,
         env_lock=parsed["run-config"]["environment_lock"],
     )
-    manifest_path = run_dir / "manifest.json"
-    manifest_path.write_text(rs.strict_dumps(_sanitize(manifest)) + "\n", encoding="utf-8")
-    manifest_problems = validate_artifact(_sanitize(manifest))
-    if dirty_override:
-        manifest_problems = [p for p in manifest_problems if "working_tree_dirty" not in p]
+    manifest_problems = (
+        [p for p in validate_artifact(_sanitize(manifest)) if "working_tree_dirty" not in p]
+        if dirty_override
+        else validate_artifact(_sanitize(manifest))
+    )
     if manifest_problems:
         raise RuntimeError(f"manifest failed validation: {manifest_problems}")
+    manifest_path = run_dir / "manifest.json"
+    manifest_path.write_text(rs.strict_dumps(_sanitize(manifest)) + "\n", encoding="utf-8")
 
-    # Publication (P0.8): manifest.json is the COMMIT MARKER and is
-    # written to the public root LAST. Earlier files may transiently
-    # coexist, but readers MUST validate the manifest/SHA256SUMS family
-    # before consuming — per-file replacement is not cross-file atomic.
+    # --- publication: manifest LAST (commit marker) ---
     staging = out / ".publish-staging"
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir(parents=True)
-    family = expected + ["manifest.json"]
-    for name in family:
+    for name in expected:
         shutil.copyfile(run_dir / name, staging / name)
     sums = ""
     for name in expected:
         digest = rs.sha256_file(staging / name)
         sums += f"{digest}  {name}\n"
     (staging / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
-    for name in expected + ["SHA256SUMS.txt"]:
+    for name in expected:
         shutil.copyfile(staging / name, out / name)
-    shutil.copyfile(staging / "manifest.json", out / "manifest.json")  # commit marker last
+    (staging / "SHA256SUMS.txt").replace(out / "SHA256SUMS.txt")
+    # Commit marker last.
+    shutil.copyfile(manifest_path, out / "manifest.json")
     shutil.rmtree(staging, ignore_errors=True)
     log(f"published complete family for identity {identity[:16]} to {out}")
+
+
+# Set by main() before stages run; publish_family needs the args context
+# (fixture block, measurement source) to build the manifest.
+_PUBLISH_ARGS: argparse.Namespace | None = None
 
 
 # Set by main() before stages run; publish_family needs the args context
@@ -1331,6 +1379,12 @@ def main() -> int:
     if source["working_tree_dirty"]:
         log("WARNING: dirty-tree run allowed by override; artifacts are provisional")
 
+    # P0.6: --models is a real configuration knob — canonicalize, validate
+    # against the registry, and bind the result into the run identity.
+    try:
+        args.parsed_models = jobs.canonicalize_models(args.models)
+    except ValueError as e:
+        raise SystemExit(str(e)) from None
     args.parent_gds_sha256 = rs.sha256_file(Path(args.gds))
     identity, run_config, freeze_text = compute_run_identity_from_args(args, source)
     args.run_identity = identity

@@ -106,7 +106,12 @@ diffcfd = [
     "diffcfd @ git+https://github.com/OpenLithoHub/DiffCFD.git@a95b64e",
 ]
 plugins = ["openlithohub[diffnano]", "openlithohub[diffcfd]"]
-all = ["openlithohub[data,workflow,freepdk45-sram,models,dev,docs,jupyter,server,export,plugins]"]
+# P2.1: `all` = every RUNTIME optional feature. Development tooling
+# (pytest/mypy/ruff/pre-commit/mkdocs) lives in `dev`/`docs` and the
+# combined `dev-all` extra — installing `all` must not drag test/doc
+# tooling into production environments.
+all = ["openlithohub[data,workflow,freepdk45-sram,models,jupyter,server,export,plugins]"]
+dev-all = ["openlithohub[all,dev,docs]"]
 
 [project.urls]
 Homepage = "https://openlithohub.com"

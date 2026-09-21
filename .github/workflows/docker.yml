@@ -39,6 +39,20 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
 
+      - name: Resolve build identity (audit P0.11)
+        id: buildid
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.0.0.dev0"
+          fi
+          {
+            echo "version=${VERSION}"
+            echo "commit=${GITHUB_SHA}"
+            echo "run_id=${GITHUB_RUN_ID}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build CLI image (and push on tag)
         id: build
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
@@ -49,6 +63,10 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.buildid.outputs.version }}
+            BUILD_COMMIT=${{ steps.buildid.outputs.commit }}
+            BUILD_RUN_ID=${{ steps.buildid.outputs.run_id }}
 
       - name: Extract server image metadata
         id: meta_server
@@ -69,6 +87,10 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta_server.outputs.tags }}
           labels: ${{ steps.meta_server.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.buildid.outputs.version }}
+            BUILD_COMMIT=${{ steps.buildid.outputs.commit }}
+            BUILD_RUN_ID=${{ steps.buildid.outputs.run_id }}
 
       - name: Resolve smoke-test image tag
         id: smoketag
@@ -83,6 +105,14 @@ jobs:
         run: |
           docker run --rm --entrypoint python "${{ steps.smoketag.outputs.tag }}" \
             -c "import klayout.db; import openlithohub; print('ok')"
+
+      - name: Smoke test — package version and baked build identity (P0.11)
+        run: |
+          expected_version="${{ steps.buildid.outputs.version }}"
+          actual="$(docker run --rm --entrypoint openlithohub "${{ steps.smoketag.outputs.tag }}" --version)"
+          echo "openlithohub --version -> $actual (expected $expected_version)"
+          docker run --rm --entrypoint python "${{ steps.smoketag.outputs.tag }}" \
+            -c "import openlithohub._build as b; assert b.BUILD_COMMIT == '${{ steps.buildid.outputs.commit }}', b.BUILD_COMMIT; print('build identity ok')"
 
       - name: Smoke test — server image starts and answers /v1/health
         run: |
