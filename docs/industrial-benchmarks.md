@@ -18,7 +18,6 @@ Everything here is designed around one rule:
   block (exact 40-hex commit of a clean checkout, SHA-256 of the harness,
   core module and claim generator) and a `fixture` block (SHA-256, byte
   size, top cell, layer, die bbox of the measured GDS)
-- Generated claims: [`docs/generated/industrial-claims.md`](generated/industrial-claims.md)
 - Claim generator: `scripts/generate_industrial_claims.py` (use `--check`
   to fail CI when the README quotes drift from artifacts)
 - CI authority gates: `scripts/verify_industrial_artifacts.py`
