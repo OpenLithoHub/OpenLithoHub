@@ -25,8 +25,8 @@ ARG BUILD_RUN_ID=unknown
 # container reports its true provenance without a .git checkout.
 RUN SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} \
     python /tmp/write_build_info.py \
-      --commit "${BUILD_COMMIT}" --run-id "${BUILD_RUN_ID}" \
-      --version "${VERSION}" --out src/openlithohub/_build.py
+      --commit "${BUILD_COMMIT}" --version "${VERSION}" \
+      --out src/openlithohub/_build.py
 
 # Build into a relocatable venv so the runtime stage can copy /opt/venv
 # wholesale; also build a wheel so the `server` stage can add the [server]

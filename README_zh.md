@@ -69,6 +69,8 @@ Dose 响应**单调递减**（10→100 ph/nm² 下降 19.4×），符合已发�
 
 ## 工业基准测试结果（实测）
 
+<!-- BEGIN GENERATED INDUSTRIAL CLAIMS -->
+
 **工业基准 v1.1 重测进行中。** 正在加固 Industrial Benchmark v1 契约
 （严格 JSON artifact、测量源 provenance 闭合、fixture SHA-256、CI authority 门）；
 干净树重测完成后，头条指标将以 checked-in artifact 自动生成的形式回到此处。
@@ -86,6 +88,10 @@ python benchmarks/industrial/run_industrial_benchmark.py \
 （Calibre/Tachyon/cuLitho 仅为适配器）；不提供 GPU 性能数字（参考硬件为 CPU，见
 [`docs/self_hosted_deployment.md`](docs/self_hosted_deployment.md) 的溯源声明）；
 不从退化模型输出中提取质量主张；估算或策略决定永不冒充实测主张。
+
+---
+
+<!-- END GENERATED INDUSTRIAL CLAIMS -->
 
 ---
 

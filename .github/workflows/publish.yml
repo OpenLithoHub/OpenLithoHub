@@ -30,7 +30,6 @@ jobs:
         run: |
           python scripts/write_build_info.py \
             --commit "$GITHUB_SHA" \
-            --run-id "$GITHUB_RUN_ID" \
             --version "${GITHUB_REF_NAME#v}"
       - name: Verify generated build module compiles
         run: python -m py_compile src/openlithohub/_build.py

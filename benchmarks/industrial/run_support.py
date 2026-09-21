@@ -295,6 +295,10 @@ def validate_runtime_code_identity(
     except (ImportError, AttributeError):
         pass
 
+    # P0.4: stale/mismatched _build.BUILD_COMMIT invalidates the run
+    if build_commit and commit and build_commit != commit:
+        all_ok = False
+
     build_matches = commit is not None and build_commit != "" and build_commit == commit
 
     mode = "source-tree" if all_ok else "UNKNOWN"

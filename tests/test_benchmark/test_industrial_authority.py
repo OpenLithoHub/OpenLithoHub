@@ -616,12 +616,24 @@ _gen_spec.loader.exec_module(gen)
 
 
 def _drill_source() -> dict[str, Any]:
-    """Source dict whose hashes are the REAL working-tree bytes."""
-    import hashlib
+    """Source dict with the REAL measurement commit and REAL file hashes.
 
+    The production verifier's source closure runs ``git show <commit>:<path>``
+    and hashes the result; using the real HEAD commit and real file hashes
+    means this check genuinely passes without any filtering."""
+    import hashlib
+    import subprocess
+
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
     source = {
-        "commit": "d" * 40,
-        "commit_valid": True,
+        "commit": commit,
+        "commit_valid": len(commit) == 40,
         "working_tree_dirty": False,
         "harness_sha256": "",
         "industrial_core_sha256": "",
@@ -634,7 +646,15 @@ def _drill_source() -> dict[str, Any]:
         ("claim_generator_sha256", "scripts/generate_industrial_claims.py"),
         ("run_support_sha256", "benchmarks/industrial/run_support.py"),
     ):
-        source[key] = hashlib.sha256((REPO_ROOT / rel).read_bytes()).hexdigest()
+        # Hash the COMMITTED version (git show), matching what the
+        # verifier's source closure will check.
+        out = subprocess.run(
+            ["git", "show", f"{commit}:{rel}"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            check=True,
+        )
+        source[key] = hashlib.sha256(out.stdout).hexdigest()
     return source
 
 
@@ -667,6 +687,11 @@ class TestProductionFamilyDrill:
         config = {
             "schema": ind.RUN_CONFIG_SCHEMA,
             "source": source,
+            "runtime_code_identity": {
+                "mode": "source-tree",
+                "measurement_commit": source["commit"],
+                "source_tree_match": True,
+            },
             "environment_lock": lock,
             "fixtures": {"parent_gds_sha256": "f" * 64, "iccad": {}},
             "args": {"repeats": 5, "sizes": "4096", "layer": "66:44", "seed": 0},

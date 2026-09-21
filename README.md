@@ -81,6 +81,8 @@ Dose-response is **monotonically decreasing** (19.4× from 10→100 ph/nm²), ma
 
 ## Industrial benchmark results (measured)
 
+<!-- BEGIN GENERATED INDUSTRIAL CLAIMS -->
+
 **Benchmark v1.1 re-measurement in progress.** The Industrial Benchmark v1
 contract is being hardened (strict-JSON artifacts, measurement-source
 provenance closure, fixture SHA-256, CI authority gates); headline metrics
@@ -104,6 +106,10 @@ see the provenance notice in
 quality claims from degenerate model outputs; no estimate or policy decision
 promoted to a measured claim. Runtime speedups are reported together with
 quality so trade-offs stay visible.
+
+---
+
+<!-- END GENERATED INDUSTRIAL CLAIMS -->
 
 ---
 

@@ -26,6 +26,7 @@ Claim admission rules (fail-closed):
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import math
 import re
@@ -599,6 +600,26 @@ def main() -> int:
     ap.add_argument("--readme", type=Path, default=repo / "README.md")
     ap.add_argument("--check", action="store_true", help="validate README quotes and exit")
     args = ap.parse_args()
+
+    # P0.6: delegate to the production verifier (in-process, same module)
+    # before any claim generation.  If the family fails authority checks,
+    # claims are never generated.
+    import importlib.util as _ilu
+
+    _vspec = _ilu.spec_from_file_location(
+        "olh_verify",
+        Path(__file__).resolve().parents[1] / "scripts/verify_industrial_artifacts.py",
+    )
+    _vmod = importlib.util.module_from_spec(_vspec)
+    sys.modules["olh_verify"] = _vmod
+    _vspec.loader.exec_module(_vmod)
+    verifier_problems = _vmod.verify(args.artifacts, Path(__file__).resolve().parents[1])
+    if verifier_problems:
+        for vp in verifier_problems:
+            print(f"VERIFY FAIL: {vp}", file=sys.stderr)
+        raise SystemExit(
+            f"claims generation refused: production verifier failed for {args.artifacts}"
+        )
 
     manifest_path = args.artifacts / "manifest.json"
     if not manifest_path.exists():

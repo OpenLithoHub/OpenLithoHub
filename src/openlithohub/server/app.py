@@ -109,12 +109,13 @@ def _evict_terminal_locked(now: float) -> list[str]:
         record = _JOBS[job_id]
         if record["status"] not in ("succeeded", "failed", "cancelled"):
             continue
-        # P0.15: TTL for succeeded jobs is based on last access, not creation
-        last_activity = max(
-            record.get("_created_monotonic", 0),
+        # P0.20: TTL begins at completion (or last access for succeeded)
+        reference = max(
+            record.get("_completed_monotonic", 0),
             record.get("_last_access_monotonic", 0),
+            record.get("_created_monotonic", 0),
         )
-        age = now - last_activity
+        age = now - reference
         if len(_JOBS) > _JOB_HISTORY_CAP or age > _JOB_TTL_SECONDS:
             _JOBS.pop(job_id, None)
             doomed.append(str(record.get("scratch_dir") or ""))
@@ -175,6 +176,12 @@ def _start_job_worker(app: Any) -> None:
                 continue
             admitted = _admit_blocking_with_shutdown()
             if not admitted:
+                # P0.17: shutdown while waiting admission — mark terminal
+                with _JOB_LOCK:
+                    record = _JOBS.get(job_id)
+                    if record is not None:
+                        record["status"] = "cancelled"
+                        record["error"] = "server shutdown while waiting for admission"
                 _JOB_QUEUE.task_done()
                 continue
             try:
@@ -188,6 +195,8 @@ def _start_job_worker(app: Any) -> None:
                         record["status"] = "succeeded"
                         record["summary"] = summary
                         record["output_path"] = str(summary["output_path"])
+                        record["_completed_monotonic"] = _time.monotonic()
+                        record["_last_access_monotonic"] = _time.monotonic()
                         doomed = _evict_terminal_locked(_time.monotonic())
                 _cleanup_scratch_dirs(doomed)
             except Exception as e:  # noqa: BLE001 - surfaced via job status
@@ -197,6 +206,7 @@ def _start_job_worker(app: Any) -> None:
                     if record is not None:
                         record["status"] = "failed"
                         record["error"] = str(e)
+                        record["_completed_monotonic"] = _time.monotonic()
                         failed_scratch = record.get("scratch_dir") or ""
                 if failed_scratch:
                     shutil.rmtree(failed_scratch, ignore_errors=True)
@@ -502,7 +512,9 @@ def _try_reserve_slot() -> bool:
 def _release_slot_reservation() -> None:
     global _JOB_QUEUE_RESERVED
     with _JOB_LOCK:
-        _JOB_QUEUE_RESERVED = max(0, _JOB_QUEUE_RESERVED - 1)
+        if _JOB_QUEUE_RESERVED <= 0:
+            raise RuntimeError("reservation underflow: double-release detected")
+        _JOB_QUEUE_RESERVED -= 1
 
 
 @contextlib.contextmanager

@@ -531,6 +531,7 @@ def build_run_identity_payload(config: dict[str, Any]) -> dict[str, Any]:
     """
     source = config.get("source") or {}
     fixtures = config.get("fixtures") or {}
+    rci = config.get("runtime_code_identity") or {}
     return {
         "schema": "OpenLithoHub.industrial-run-identity.v1",
         "source": {
@@ -544,6 +545,11 @@ def build_run_identity_payload(config: dict[str, Any]) -> dict[str, Any]:
         "fixtures": {
             "parent_gds_sha256": fixtures.get("parent_gds_sha256"),
             "iccad": fixtures.get("iccad") or {},
+        },
+        "runtime_code_identity": {
+            "mode": rci.get("mode") or "source-tree",
+            "measurement_commit": rci.get("measurement_commit") or source.get("commit") or "",
+            "source_tree_match": bool(rci.get("source_tree_match", True)),
         },
         "args": config.get("args") or {},
     }
