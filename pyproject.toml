@@ -29,6 +29,9 @@ dependencies = [
     "torch>=2.12",
     "typer[all]>=0.9",
     "pydantic>=2.0",
+    # P0.9 deferred: diff-surrogate is a VCS dep until published to PyPI.
+    # The wheel METADATA check is informational (not blocking) for this reason.
+    "diff-surrogate @ git+https://github.com/telleroutlook/diff-surrogate.git@6b0ec10916f58297a0b48cb3af470e7d1ad99b45",
     "rich>=13.0",
     "tomli>=2.0; python_version<'3.11'",
 ]
