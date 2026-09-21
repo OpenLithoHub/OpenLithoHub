@@ -69,6 +69,9 @@ dev = [
     "pre-commit>=3.4",
     "Pillow>=10.0",
     "types-PyYAML",
+    "fastapi>=0.110",
+    "httpx>=0.27",
+    "python-multipart>=0.0.9",
 ]
 docs = [
     "mkdocs-material>=9.4,<10",
