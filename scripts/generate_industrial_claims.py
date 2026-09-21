@@ -33,13 +33,32 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from openlithohub.benchmark.industrial import (
-    REPRODUCED_INTERNAL,
-    SCHEMA_NAME,
-    _sanitize,
-    load_artifact,
-    relative_reduction_pct,
-)
+
+def _load_industrial_authority():
+    """Load the stdlib-only industrial module by file path.
+
+    The authority tooling must run in environments WITHOUT torch (the
+    lint job): importing ``openlithohub.benchmark.industrial`` normally
+    executes the package ``__init__`` and drags in the heavy stack.
+    """
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "src/openlithohub/benchmark/industrial.py"
+    spec = importlib.util.spec_from_file_location("olh_industrial_authority", path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod  # dataclasses resolve __module__ during exec
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_ind = _load_industrial_authority()
+SCHEMA_NAME = _ind.SCHEMA_NAME
+REPRODUCED_INTERNAL = _ind.REPRODUCED_INTERNAL
+_sanitize = _ind._sanitize
+load_artifact = _ind.load_artifact
+relative_reduction_pct = _ind.relative_reduction_pct
+
 
 CLAIMS_SCHEMA = "OpenLithoHub.industrial-claims.v1"
 

@@ -26,10 +26,29 @@ import re
 import sys
 from pathlib import Path
 
-from openlithohub.benchmark.industrial import (
-    SCHEMA_NAME,
-    validate_artifact,
-)
+
+def _load_industrial_authority():
+    """Load the stdlib-only industrial module by file path.
+
+    The authority tooling must run in environments WITHOUT torch (the
+    lint job): importing ``openlithohub.benchmark.industrial`` normally
+    executes the package ``__init__`` and drags in the heavy stack.
+    """
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "src/openlithohub/benchmark/industrial.py"
+    spec = importlib.util.spec_from_file_location("olh_industrial_authority", path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod  # dataclasses resolve __module__ during exec
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_ind = _load_industrial_authority()
+SCHEMA_NAME = _ind.SCHEMA_NAME
+validate_artifact = _ind.validate_artifact
+load_artifact = _ind.load_artifact
 
 _SHA_LINE = re.compile(r"^([0-9a-f]{64})  (.+)$")
 

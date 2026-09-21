@@ -72,8 +72,10 @@ CMD ["--help"]
 FROM runtime AS server
 
 USER root
-RUN /opt/venv/bin/pip install --no-cache-dir /wheels/openlithohub-*.whl[server] \
-    && chown -R openlithohub:openlithohub /opt/venv
+RUN set -eux; \
+    whl="$(ls /wheels/openlithohub-*.whl)"; \
+    /opt/venv/bin/pip install --no-cache-dir "${whl}[server]"; \
+    chown -R openlithohub:openlithohub /opt/venv
 USER openlithohub
 
 EXPOSE 8000
