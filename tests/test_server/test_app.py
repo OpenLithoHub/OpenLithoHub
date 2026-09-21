@@ -462,3 +462,90 @@ class JobReserveGuard:
 
         with contextlib.suppress(Exception):
             self.app_mod._JOB_QUEUE.get_nowait()
+
+
+def test_job_reservation_releases_on_scratch_error(monkeypatch) -> None:
+    """P1.1: if scratch creation fails after slot reservation, the slot
+    must be released — the queue must not permanently show full."""
+    from openlithohub.server import app as app_mod
+
+    monkeypatch.setattr(
+        app_mod,
+        "make_scratch_dir",
+        lambda prefix: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    client = TestClient(create_app(), raise_server_exceptions=False)
+    buf = io.BytesIO()
+    np.save(buf, np.zeros((32, 32), dtype=np.float32))
+    buf.seek(0)
+    response = client.post(
+        "/v1/jobs/optimize",
+        files={"layout": ("in.npy", buf, "application/octet-stream")},
+        data={"model": "dummy-identity", "node": "45nm"},
+    )
+    # 500 from unhandled OSError, but the reservation was released by the
+    # try/except BaseException in the endpoint.
+    assert response.status_code == 500
+    assert app_mod._JOB_QUEUE_RESERVED == 0, "reservation leaked"
+
+
+def test_job_upload_too_large_releases_reservation(monkeypatch) -> None:
+    """P1.1: 413 path must release the reservation."""
+    from openlithohub.server import app as app_mod
+
+    monkeypatch.setattr(app_mod, "_MAX_UPLOAD_BYTES", 10)
+    client = TestClient(create_app(), raise_server_exceptions=False)
+    buf = io.BytesIO(b"x" * 100)
+    response = client.post(
+        "/v1/jobs/optimize",
+        files={"layout": ("big.bin", buf, "application/octet-stream")},
+        data={"model": "dummy-identity"},
+    )
+    assert response.status_code == 413
+    assert app_mod._JOB_QUEUE_RESERVED == 0, "reservation leaked on 413"
+
+
+def test_get_job_artifact_returns_409_for_failed_job() -> None:
+
+    from openlithohub.server import app as app_mod
+
+    try:
+        with app_mod._JOB_LOCK:
+            app_mod._JOBS["test-failed"] = {
+                "status": "failed",
+                "error": "boom",
+                "summary": None,
+                "output_path": None,
+                "scratch_dir": "",
+                "created_utc": "now",
+                "job_id": "test-failed",
+            }
+        client = TestClient(create_app())
+        response = client.get("/v1/jobs/test-failed/artifact")
+        assert response.status_code == 409
+    finally:
+        with app_mod._JOB_LOCK:
+            app_mod._JOBS.clear()
+
+
+def test_job_delete_running_returns_409() -> None:
+
+    from openlithohub.server import app as app_mod
+
+    try:
+        with app_mod._JOB_LOCK:
+            app_mod._JOBS["test-running"] = {
+                "status": "running",
+                "error": None,
+                "summary": None,
+                "output_path": None,
+                "scratch_dir": "",
+                "created_utc": "now",
+                "job_id": "test-running",
+            }
+        client = TestClient(create_app())
+        response = client.delete("/v1/jobs/test-running")
+        assert response.status_code == 409
+    finally:
+        with app_mod._JOB_LOCK:
+            app_mod._JOBS.clear()

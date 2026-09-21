@@ -868,69 +868,72 @@ def create_app() -> FastAPI:
     ) -> JSONResponse:
         if not layout.filename:
             raise HTTPException(status_code=400, detail="layout upload missing filename")
-        # P1.4/P1.1: reserve the queue slot BEFORE copying the (possibly
-        # large) upload, via an exception-safe context manager — every
-        # failure path releases the reservation automatically.
-        try:
-            reserve_cm = reserve_job_slot()
-            reserve_cm.__enter__()
-        except JobQueueFullError:
-            raise HTTPException(
-                status_code=429,
-                detail="job queue is full",
-                headers={"Retry-After": "10"},
-            ) from None
-        suffix = Path(layout.filename).suffix or ".bin"
-        tmp_path = make_scratch_dir("olh_job_")
-        input_path = tmp_path / f"input{suffix}"
-        output_path = tmp_path / "optimized.oas"
-        bytes_read = 0
-        with input_path.open("wb") as out_f:
-            while True:
-                chunk = await layout.read(1024 * 1024)
-                if not chunk:
-                    break
-                bytes_read += len(chunk)
-                if bytes_read > _MAX_UPLOAD_BYTES:
-                    reserve_cm.__exit__(None, None, None)
-                    shutil.rmtree(tmp_path, ignore_errors=True)
-                    raise HTTPException(status_code=413, detail="layout upload too large")
-                out_f.write(chunk)
-        params: dict[str, Any] = dict(
-            input_path=input_path,
-            output_path=output_path,
-            model_name=model,
-            node=node,
-            pixel_nm=pixel_nm,
-            tile_size=tile_size,
-            writer=writer,
-            layer=layer,
-            pretrained=pretrained,
-            min_area_nm2=min_area_nm2,
-        )
-        job_id, queued = _put_job(
-            {
-                "status": "queued",
-                "created_utc": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
-                "scratch_dir": str(tmp_path),
-                "summary": None,
-                "error": None,
-                "output_path": None,
-            },
-            params,
-        )
-        _release_slot_reservation()  # the enqueued item now owns the slot
-        if not queued:
-            shutil.rmtree(tmp_path, ignore_errors=True)
+        # P1.4/P1.1: reserve the queue slot BEFORE ingesting the upload
+        # body, and release it on EVERY failure path via try/except.
+        if not _try_reserve_slot():
             raise HTTPException(
                 status_code=429,
                 detail="job queue is full",
                 headers={"Retry-After": "10"},
             )
-        return JSONResponse(
-            status_code=202,
-            content={"job_id": job_id, "status": "queued", "poll": f"/v1/jobs/{job_id}"},
-        )
+        try:
+            tmp_path = make_scratch_dir("olh_job_")
+            suffix = Path(layout.filename).suffix or ".bin"
+            input_path = tmp_path / f"input{suffix}"
+            output_path = tmp_path / "optimized.oas"
+            bytes_read = 0
+            with input_path.open("wb") as out_f:
+                while True:
+                    chunk = await layout.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    bytes_read += len(chunk)
+                    if bytes_read > _MAX_UPLOAD_BYTES:
+                        raise HTTPException(status_code=413, detail="layout upload too large")
+                    out_f.write(chunk)
+            params: dict[str, Any] = dict(
+                input_path=input_path,
+                output_path=output_path,
+                model_name=model,
+                node=node,
+                pixel_nm=pixel_nm,
+                tile_size=tile_size,
+                writer=writer,
+                layer=layer,
+                pretrained=pretrained,
+                min_area_nm2=min_area_nm2,
+            )
+            job_id, queued = _put_job(
+                {
+                    "status": "queued",
+                    "created_utc": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+                    "scratch_dir": str(tmp_path),
+                    "summary": None,
+                    "error": None,
+                    "output_path": None,
+                },
+                params,
+            )
+            if not queued:
+                shutil.rmtree(tmp_path, ignore_errors=True)
+                raise HTTPException(
+                    status_code=429,
+                    detail="job queue is full",
+                    headers={"Retry-After": "10"},
+                )
+            _release_slot_reservation()
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "job_id": job_id,
+                    "status": "queued",
+                    "poll": f"/v1/jobs/{job_id}",
+                },
+            )
+        except BaseException:
+            _release_slot_reservation()
+            shutil.rmtree(tmp_path, ignore_errors=True)
+            raise
 
     @app.get("/v1/jobs/{job_id}")
     def get_job(job_id: str) -> dict[str, Any]:
