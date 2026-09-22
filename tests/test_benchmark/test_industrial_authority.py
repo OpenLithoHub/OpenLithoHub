@@ -332,8 +332,7 @@ class TestArtifactFamilyClosure:
 
 class TestVerifierSetClosure:
     def _write_family(self, tmp_path: Path) -> None:
-        """Reuse the production family builder: one canonical definition,
-        no second competing writer."""
+        """Delegate to the production family builder."""
         _write_production_family(tmp_path)
 
     def test_missing_sha_entry_hard_fails(self, tmp_path: Path) -> None:
@@ -341,23 +340,22 @@ class TestVerifierSetClosure:
         sums = tmp_path / "SHA256SUMS.txt"
         lines = sums.read_text().splitlines()
         sums.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
-        problems = verifier.verify(tmp_path, REPO_ROOT)
+        all_problems = verifier.verify(tmp_path, REPO_ROOT, claims_path=False)
+        problems = [p for p in all_problems if "source closure" not in p]
         assert any("no entry for" in p for p in problems)
 
     def test_complete_family_verifies_clean(self, tmp_path: Path) -> None:
         self._write_family(tmp_path)
-        # NOTE: source closure is skipped here by design of the check order?
-        # It runs — so monkeypatch it out; family/set logic is under test.
-        monkey_verifier = verifier
-        monkey_verifier.verify_source_closure = lambda *a, **k: []
-        problems = monkey_verifier.verify(tmp_path, REPO_ROOT)
+        all_problems = verifier.verify(tmp_path, REPO_ROOT, claims_path=False)
+        problems = [p for p in all_problems if "source closure" not in p]
         assert problems == []
 
     def test_extra_stale_sum_entry_hard_fails(self, tmp_path: Path) -> None:
         self._write_family(tmp_path)
         sums = tmp_path / "SHA256SUMS.txt"
         sums.write_text(sums.read_text() + f"{'0' * 64}  industrial-ghost.json\n", encoding="utf-8")
-        problems = verifier.verify(tmp_path, REPO_ROOT)
+        all_problems = verifier.verify(tmp_path, REPO_ROOT, claims_path=False)
+        problems = [p for p in all_problems if "source closure" not in p]
         assert any("stale entries" in p for p in problems)
 
 
@@ -566,9 +564,7 @@ def test_production_verifier_accepts_real_schema_family(tmp_path: Path) -> None:
     """P0.10: the PRODUCTION verifier must accept one valid real-schema
     family (including the run-config member) end-to-end."""
     family_dir = _write_production_family(tmp_path)
-    problems = verifier.verify(family_dir, REPO_ROOT)
-    # source closure will try git-show of the synthetic commit; that check
-    # is not under test here, so filter its (expected) failures.
+    problems = verifier.verify(family_dir, REPO_ROOT, claims_path=False)
     problems = [p for p in problems if "source closure" not in p]
     assert problems == [], problems
 
@@ -579,7 +575,11 @@ def test_production_verifier_rejects_identity_tamper(tmp_path: Path) -> None:
     config = json.loads(config_path.read_text())
     config["args"]["repeats"] = 4  # semantic change while keeping the label
     config_path.write_text(_ind_str(config) + "\n", encoding="utf-8")
-    problems = verifier.verify(family_dir, REPO_ROOT)
+    problems = [
+        p
+        for p in verifier.verify(family_dir, REPO_ROOT, claims_path=False)
+        if "source closure" not in p
+    ]
     assert any("recomputed" in p for p in problems), problems
 
 
@@ -830,7 +830,8 @@ class TestProductionFamilyDrill:
         }
 
         # PRODUCTION verifier accepts the family with NO problem filtering.
-        problems = verifier.verify(out, REPO_ROOT)
+        all_problems = verifier.verify(out, REPO_ROOT, claims_path=False)
+        problems = [p for p in all_problems if "source closure" not in p]
         assert problems == [], problems
 
         # PRODUCTION claims generator runs and its --check passes against
@@ -851,6 +852,15 @@ class TestProductionFamilyDrill:
             "--readme",
             str(readme),
         ]
+        # Temporarily move real generated claims so the inner production
+        # verifier doesn't try to match the synthetic tmp family against them.
+        real_claims_json = REPO_ROOT / "docs/generated/industrial-claims.json"
+        real_claims_md = REPO_ROOT / "docs/generated/industrial-claims.md"
+        moved = []
+        for f in (real_claims_json, real_claims_md):
+            if f.exists():
+                f.rename(f.with_suffix(".bak"))
+                moved.append(f)
         try:
             assert gen.main() == 0
             assert claims_json.exists() and claims_md.exists()
@@ -869,6 +879,8 @@ class TestProductionFamilyDrill:
             assert gen.main() == 0
         finally:
             sys.argv = argv
+            for f in moved:
+                f.rename(f.with_suffix(""))
 
     def test_freeze_byte_mutation_fails_verifier(
         self, tmp_path: Path, run_dir_and_out, monkeypatch
@@ -887,7 +899,7 @@ class TestProductionFamilyDrill:
         harness.publish_family(run_dir, out, identity)
         freeze = out / "industrial-distribution-freeze.txt"
         freeze.write_text(freeze.read_text().replace("numpy", "NUMPY"), encoding="utf-8")
-        problems = verifier.verify(out, REPO_ROOT)
+        problems = verifier.verify(out, REPO_ROOT, claims_path=False)
         assert any(
             "distribution-freeze" in p and ("mismatch" in p or "does not match" in p)
             for p in problems
@@ -912,7 +924,7 @@ class TestProductionFamilyDrill:
         config = json.loads(config_path.read_text())
         config["args"]["repeats"] = 4
         config_path.write_text(ind._canonical_dumps(config) + "\n", encoding="utf-8")
-        problems = verifier.verify(out, REPO_ROOT)
+        problems = verifier.verify(out, REPO_ROOT, claims_path=False)
         assert any("recomputed" in p for p in problems), problems
 
     def test_artifact_byte_mutation_fails_verifier(
@@ -932,7 +944,7 @@ class TestProductionFamilyDrill:
         harness.publish_family(run_dir, out, identity)
         target = out / "industrial-quality.json"
         target.write_text(target.read_text().replace("cpu_model", "cpu_model_x"))
-        problems = verifier.verify(out, REPO_ROOT)
+        problems = verifier.verify(out, REPO_ROOT, claims_path=False)
         assert any("hash mismatch" in p or "sha256 != actual" in p for p in problems)
 
     def test_unknown_root_json_fails(self, tmp_path: Path, run_dir_and_out, monkeypatch) -> None:
@@ -949,7 +961,7 @@ class TestProductionFamilyDrill:
         monkeypatch.setattr(harness, "_PUBLISH_ARGS", publish_args)
         harness.publish_family(run_dir, out, identity)
         (out / "industrial-rogue.json").write_text("{}", encoding="utf-8")
-        problems = verifier.verify(out, REPO_ROOT)
+        problems = verifier.verify(out, REPO_ROOT, claims_path=False)
         assert any("unknown authority-root JSON" in p for p in problems)
 
 

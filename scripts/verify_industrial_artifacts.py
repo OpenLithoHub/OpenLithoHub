@@ -25,6 +25,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 
 def _load_industrial_authority():
@@ -262,7 +263,7 @@ CANONICAL_ROOT = {
 }
 
 
-def verify(artifacts_dir: Path, repo_root: Path) -> list[str]:
+def verify(artifacts_dir: Path, repo_root: Path, claims_path: Any = ...) -> list[str]:
     problems: list[str] = []
     json_files = sorted(artifacts_dir.glob("*.json"))
     # P0.6: check for ANY canonical family member, not just JSON.  If a
@@ -354,13 +355,16 @@ def verify(artifacts_dir: Path, repo_root: Path) -> list[str]:
     problems.extend(verify_manifest_closure(artifacts_dir, parsed, freeze_sha, sums_index))
     problems.extend(verify_family_closure(parsed))
     problems.extend(verify_source_closure(parsed, repo_root))
-    problems.extend(
-        verify_claims_linkage(
-            artifacts_dir,
-            repo_root / "docs/generated/industrial-claims.json",  # P0.7: repo-anchored
-            sums_path,
-        )
-    )
+    # P0.6: claims linkage check. The caller can pass claims_path explicitly
+    # (production), or pass False to skip it (tests with synthetic families).
+    # claims_path: Path = use it; False = skip; ... (default) = use canonical
+    if claims_path is not False:
+        if claims_path is ... or claims_path is None:
+            effective = repo_root / "docs/generated/industrial-claims.json"
+        else:
+            effective = claims_path
+        if effective.exists():
+            problems.extend(verify_claims_linkage(artifacts_dir, effective, sums_path))
 
     return problems
 

@@ -1,0 +1,712 @@
+{
+  "artifacts": {
+    "industrial-fulldie.json": "e882336caeeacf424b26e192400552a6d05837b69aa02fc4889dc7704924cf97",
+    "industrial-quality.json": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+    "industrial-runtime.json": "5485f5fd4ddc310bb7d3e785b4bb2f4f034024544a68a27b216a625bdad931f0"
+  },
+  "claims": [
+    {
+      "artifact": "industrial-runtime.json",
+      "artifact_sha256": "5485f5fd4ddc310bb7d3e785b4bb2f4f034024544a68a27b216a625bdad931f0",
+      "baseline": "dense full-raster (1.00 GiB peak RSS)",
+      "claim_id": "IB-MEM-4096",
+      "context": {
+        "dense_peak_rss_bytes": 1070137344.0,
+        "repeats": 5,
+        "streaming_peak_rss_bytes": 375078912.0
+      },
+      "dataset": "pdb-sky130hd-ibex (public routed Ibex RISC-V core, sky130hd)",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": true,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "peak_rss_memory_reduction",
+      "scope": "exact-vector selective streaming vs dense forward, 4096px center crop, median over repeats, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED physics)",
+      "unit": "%",
+      "value": "65.0%"
+    },
+    {
+      "artifact": "industrial-runtime.json",
+      "artifact_sha256": "5485f5fd4ddc310bb7d3e785b4bb2f4f034024544a68a27b216a625bdad931f0",
+      "baseline": "dense full-raster (3.25 GiB peak RSS)",
+      "claim_id": "IB-MEM-8192",
+      "context": {
+        "dense_peak_rss_bytes": 3492741120.0,
+        "repeats": 5,
+        "streaming_peak_rss_bytes": 427556864.0
+      },
+      "dataset": "pdb-sky130hd-ibex (public routed Ibex RISC-V core, sky130hd)",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": true,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "peak_rss_memory_reduction",
+      "scope": "exact-vector selective streaming vs dense forward, 8192px center crop, median over repeats, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED physics)",
+      "unit": "%",
+      "value": "87.8%"
+    },
+    {
+      "artifact": "industrial-runtime.json",
+      "artifact_sha256": "5485f5fd4ddc310bb7d3e785b4bb2f4f034024544a68a27b216a625bdad931f0",
+      "baseline": "dense full-raster (12.28 GiB peak RSS)",
+      "claim_id": "IB-MEM-16384",
+      "context": {
+        "dense_peak_rss_bytes": 13183729664.0,
+        "repeats": 5,
+        "streaming_peak_rss_bytes": 430374912.0
+      },
+      "dataset": "pdb-sky130hd-ibex (public routed Ibex RISC-V core, sky130hd)",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": true,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "peak_rss_memory_reduction",
+      "scope": "exact-vector selective streaming vs dense forward, 16384px center crop, median over repeats, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED physics)",
+      "unit": "%",
+      "value": "96.7%"
+    },
+    {
+      "artifact": "industrial-runtime.json",
+      "artifact_sha256": "5485f5fd4ddc310bb7d3e785b4bb2f4f034024544a68a27b216a625bdad931f0",
+      "baseline": "dense full-raster (24.47 GiB peak RSS)",
+      "claim_id": "IB-MEM-32768",
+      "context": {
+        "dense_peak_rss_bytes": 26273988608.0,
+        "repeats": 5,
+        "streaming_peak_rss_bytes": 432013312.0
+      },
+      "dataset": "pdb-sky130hd-ibex (public routed Ibex RISC-V core, sky130hd)",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": true,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "peak_rss_memory_reduction",
+      "scope": "exact-vector selective streaming vs dense forward, 32768px center crop, median over repeats, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED physics)",
+      "unit": "%",
+      "value": "98.4%"
+    },
+    {
+      "artifact": "industrial-runtime.json",
+      "artifact_sha256": "5485f5fd4ddc310bb7d3e785b4bb2f4f034024544a68a27b216a625bdad931f0",
+      "baseline": "dense full-raster forward",
+      "claim_id": "IB-RT-4096",
+      "context": {
+        "baseline_median_s": 0.08262187475338578,
+        "candidate_median_s": 0.2052594581618905,
+        "direction": "baseline_dense_over_candidate_streaming",
+        "metric": "execution_wall_s",
+        "speedup": 0.4025240809523182
+      },
+      "dataset": "pdb-sky130hd-ibex (public routed Ibex RISC-V core, sky130hd)",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "wall_time_ratio_dense_to_streaming",
+      "scope": "median execution wall time at 4096px, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED); values < 1.0 mean dense is faster at this size on this hardware",
+      "unit": "x",
+      "value": "0.40x"
+    },
+    {
+      "artifact": "industrial-runtime.json",
+      "artifact_sha256": "5485f5fd4ddc310bb7d3e785b4bb2f4f034024544a68a27b216a625bdad931f0",
+      "baseline": "dense full-raster forward",
+      "claim_id": "IB-RT-8192",
+      "context": {
+        "baseline_median_s": 0.5677628330886364,
+        "candidate_median_s": 2.320515791885555,
+        "direction": "baseline_dense_over_candidate_streaming",
+        "metric": "execution_wall_s",
+        "speedup": 0.24467096284110865
+      },
+      "dataset": "pdb-sky130hd-ibex (public routed Ibex RISC-V core, sky130hd)",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "wall_time_ratio_dense_to_streaming",
+      "scope": "median execution wall time at 8192px, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED); values < 1.0 mean dense is faster at this size on this hardware",
+      "unit": "x",
+      "value": "0.24x"
+    },
+    {
+      "artifact": "industrial-runtime.json",
+      "artifact_sha256": "5485f5fd4ddc310bb7d3e785b4bb2f4f034024544a68a27b216a625bdad931f0",
+      "baseline": "dense full-raster forward",
+      "claim_id": "IB-RT-16384",
+      "context": {
+        "baseline_median_s": 3.7733122501522303,
+        "candidate_median_s": 16.89536837488413,
+        "direction": "baseline_dense_over_candidate_streaming",
+        "metric": "execution_wall_s",
+        "speedup": 0.223334121306373
+      },
+      "dataset": "pdb-sky130hd-ibex (public routed Ibex RISC-V core, sky130hd)",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "wall_time_ratio_dense_to_streaming",
+      "scope": "median execution wall time at 16384px, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED); values < 1.0 mean dense is faster at this size on this hardware",
+      "unit": "x",
+      "value": "0.22x"
+    },
+    {
+      "artifact": "industrial-runtime.json",
+      "artifact_sha256": "5485f5fd4ddc310bb7d3e785b4bb2f4f034024544a68a27b216a625bdad931f0",
+      "baseline": "dense full-raster forward",
+      "claim_id": "IB-RT-32768",
+      "context": {
+        "baseline_median_s": 37.93665474979207,
+        "candidate_median_s": 150.5918617080897,
+        "direction": "baseline_dense_over_candidate_streaming",
+        "metric": "execution_wall_s",
+        "speedup": 0.25191703136872856
+      },
+      "dataset": "pdb-sky130hd-ibex (public routed Ibex RISC-V core, sky130hd)",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "wall_time_ratio_dense_to_streaming",
+      "scope": "median execution wall time at 32768px, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED); values < 1.0 mean dense is faster at this size on this hardware",
+      "unit": "x",
+      "value": "0.25x"
+    },
+    {
+      "artifact": "industrial-runtime.json",
+      "artifact_sha256": "5485f5fd4ddc310bb7d3e785b4bb2f4f034024544a68a27b216a625bdad931f0",
+      "baseline": "dense not run at this size under the harness memory policy",
+      "claim_id": "IB-SCALE-65536",
+      "context": {
+        "dense_not_run_under_memory_policy_px": [],
+        "size_px": 65536,
+        "streaming_peak_rss_bytes": 450379776.0
+      },
+      "dataset": "pdb-sky130hd-ibex (public routed Ibex RISC-V core, sky130hd)",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": true,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "max_layout_streamed_end_to_end",
+      "scope": "exact-vector selective streaming completed end-to-end (4.29 GPx) with median peak RSS 0.42 GiB; dense input alone would be 16.00 GiB; dense not run at sizes  under the harness memory policy (policy decision, not a structural impossibility)",
+      "unit": "",
+      "value": "65536x65536 px"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-QC-ILT-PVB",
+      "context": {
+        "baseline_median": 8.0,
+        "candidate_degenerate_blank": true,
+        "candidate_median": 0.0,
+        "dataset_scope": "ICCAD16 Problem C testcase1 (N7 EUV, 4nm/px, 13.5nm NA0.33 optics); design-as-target, no reference OPC mask ships with the dataset",
+        "metric": "pvband_mean_nm",
+        "policy": {
+          "iccad16_crop_px": 256,
+          "ilt_iterations": 200,
+          "n_tiles": 1,
+          "optical_config": "Hopkins SOCS, 13.5nm, NA 0.33, sigma 0.7, 24 kernels, threshold 0.5",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": [
+            256,
+            256
+          ]
+        },
+        "reduction_pct": 100.0,
+        "trade_off": ""
+      },
+      "dataset": "iccad16-testcase1",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "PV Band mean reduction (no-OPC -> ILT) (levelset-ilt)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED \u2014 DEGENERATE OUTPUT: levelset-ilt produced a (near-)blank mask on at least one tile; reduction percentages are not meaningful and are never claims",
+      "unit": "%",
+      "value": "DEGENERATE (blank mask)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-QC-ILT-MRC",
+      "context": {
+        "baseline_median": 0.1272125244140625,
+        "candidate_degenerate_blank": true,
+        "candidate_median": 0.0,
+        "dataset_scope": "ICCAD16 Problem C testcase1 (N7 EUV, 4nm/px, 13.5nm NA0.33 optics); design-as-target, no reference OPC mask ships with the dataset",
+        "metric": "mrc_violation_rate",
+        "policy": {
+          "iccad16_crop_px": 256,
+          "ilt_iterations": 200,
+          "n_tiles": 1,
+          "optical_config": "Hopkins SOCS, 13.5nm, NA 0.33, sigma 0.7, 24 kernels, threshold 0.5",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": [
+            256,
+            256
+          ]
+        },
+        "reduction_pct": 100.0,
+        "trade_off": ""
+      },
+      "dataset": "iccad16-testcase1",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "benchmark MRC violating-pixel fraction reduction (no-OPC -> ILT) (levelset-ilt)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED \u2014 DEGENERATE OUTPUT: levelset-ilt produced a (near-)blank mask on at least one tile; reduction percentages are not meaningful and are never claims",
+      "unit": "%",
+      "value": "DEGENERATE (blank mask)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-QC-ILT-WEPE",
+      "context": {
+        "baseline_median": 3.7673425674438477,
+        "candidate_degenerate_blank": true,
+        "candidate_median": 0.0,
+        "dataset_scope": "ICCAD16 Problem C testcase1 (N7 EUV, 4nm/px, 13.5nm NA0.33 optics); design-as-target, no reference OPC mask ships with the dataset",
+        "metric": "wafer_epe_mean_nm",
+        "policy": {
+          "iccad16_crop_px": 256,
+          "ilt_iterations": 200,
+          "n_tiles": 1,
+          "optical_config": "Hopkins SOCS, 13.5nm, NA 0.33, sigma 0.7, 24 kernels, threshold 0.5",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": [
+            256,
+            256
+          ]
+        },
+        "reduction_pct": 100.0,
+        "trade_off": ""
+      },
+      "dataset": "iccad16-testcase1",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "wafer EPE mean reduction (no-OPC -> ILT) (levelset-ilt)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED \u2014 DEGENERATE OUTPUT: levelset-ilt produced a (near-)blank mask on at least one tile; reduction percentages are not meaningful and are never claims",
+      "unit": "%",
+      "value": "DEGENERATE (blank mask)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-QC-RB-PVB",
+      "context": {
+        "baseline_median": 8.0,
+        "candidate_degenerate_blank": false,
+        "candidate_median": 8.0,
+        "dataset_scope": "ICCAD16 Problem C testcase1 (N7 EUV, 4nm/px, 13.5nm NA0.33 optics); design-as-target, no reference OPC mask ships with the dataset",
+        "metric": "pvband_mean_nm",
+        "policy": {
+          "iccad16_crop_px": 256,
+          "ilt_iterations": 200,
+          "n_tiles": 1,
+          "optical_config": "Hopkins SOCS, 13.5nm, NA 0.33, sigma 0.7, 24 kernels, threshold 0.5",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": [
+            256,
+            256
+          ]
+        },
+        "reduction_pct": 0.0,
+        "trade_off": ""
+      },
+      "dataset": "iccad16-testcase1",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "PV Band mean reduction (no-OPC -> ILT) (rule-based-opc)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED",
+      "unit": "%",
+      "value": "0.0% (8.00000 -> 8.00000, delta +0.00000)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-QC-RB-MRC",
+      "context": {
+        "baseline_median": 0.1272125244140625,
+        "candidate_degenerate_blank": false,
+        "candidate_median": 0.242034912109375,
+        "dataset_scope": "ICCAD16 Problem C testcase1 (N7 EUV, 4nm/px, 13.5nm NA0.33 optics); design-as-target, no reference OPC mask ships with the dataset",
+        "metric": "mrc_violation_rate",
+        "policy": {
+          "iccad16_crop_px": 256,
+          "ilt_iterations": 200,
+          "n_tiles": 1,
+          "optical_config": "Hopkins SOCS, 13.5nm, NA 0.33, sigma 0.7, 24 kernels, threshold 0.5",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": [
+            256,
+            256
+          ]
+        },
+        "reduction_pct": -90.26028547439127,
+        "trade_off": ""
+      },
+      "dataset": "iccad16-testcase1",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "benchmark MRC violating-pixel fraction reduction (no-OPC -> ILT) (rule-based-opc)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED",
+      "unit": "%",
+      "value": "-90.3% (0.12721 -> 0.24203, delta +0.11482)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-QC-RB-WEPE",
+      "context": {
+        "baseline_median": 3.7673425674438477,
+        "candidate_degenerate_blank": false,
+        "candidate_median": 1.9426220655441284,
+        "dataset_scope": "ICCAD16 Problem C testcase1 (N7 EUV, 4nm/px, 13.5nm NA0.33 optics); design-as-target, no reference OPC mask ships with the dataset",
+        "metric": "wafer_epe_mean_nm",
+        "policy": {
+          "iccad16_crop_px": 256,
+          "ilt_iterations": 200,
+          "n_tiles": 1,
+          "optical_config": "Hopkins SOCS, 13.5nm, NA 0.33, sigma 0.7, 24 kernels, threshold 0.5",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": [
+            256,
+            256
+          ]
+        },
+        "reduction_pct": 48.43521578495043,
+        "trade_off": ""
+      },
+      "dataset": "iccad16-testcase1",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "wafer EPE mean reduction (no-OPC -> ILT) (rule-based-opc)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED",
+      "unit": "%",
+      "value": "48.4% (3.76734 -> 1.94262, delta -1.82472)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "levelset-ilt",
+      "claim_id": "IB-QC-SURR",
+      "context": {
+        "baseline": "levelset-ilt",
+        "baseline_median_s": 5.274800957646221,
+        "candidate": "surrogate-ilt",
+        "candidate_median_s": 26.071815084200352,
+        "levelset_pvband_mean_nm": 0.0,
+        "levelset_wafer_epe_mean_nm": 0.0,
+        "surrogate_pvband_mean_nm": 8.0,
+        "surrogate_wafer_epe_mean_nm": 512.4719848632812
+      },
+      "dataset": "iccad16-testcase1",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "matched-iteration optimization runtime ratio",
+      "scope": "surrogate-ilt vs levelset-ilt at the same iteration budget on iccad16-testcase1 with the recorded reduced surrogate training budget; QUALITY_COMPARISON_INVALID: degenerate or non-finite metrics on at least one side",
+      "unit": "x",
+      "value": "0.20x"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-Q-ILT-PVB",
+      "context": {
+        "baseline_median": 2.003448247909546,
+        "candidate_degenerate_blank": false,
+        "candidate_median": 2.0034812688827515,
+        "dataset_scope": "real routed sky130hd ibex tiles (1024px @ 1nm/px), 193nm NA1.35 optics",
+        "metric": "pvband_mean_nm",
+        "policy": {
+          "ilt_iterations": 50,
+          "max_tiles": 6,
+          "min_tile_occupancy": 0.02,
+          "n_tiles": 6,
+          "optical_config": "Hopkins SOCS, 193nm, NA 1.35, sigma 0.7, 24 kernels, CTR threshold 0.225",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": 1024
+        },
+        "reduction_pct": -0.0016482069471982328,
+        "trade_off": ""
+      },
+      "dataset": "sky130hd-ibex-tiles",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "PV Band mean reduction (no-OPC -> ILT) (levelset-ilt)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED",
+      "unit": "%",
+      "value": "-0.0% (2.00345 -> 2.00348, delta +0.00003)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-Q-ILT-MRC",
+      "context": {
+        "baseline_median": 0.0,
+        "candidate_degenerate_blank": false,
+        "candidate_median": 0.0,
+        "dataset_scope": "real routed sky130hd ibex tiles (1024px @ 1nm/px), 193nm NA1.35 optics",
+        "metric": "mrc_violation_rate",
+        "policy": {
+          "ilt_iterations": 50,
+          "max_tiles": 6,
+          "min_tile_occupancy": 0.02,
+          "n_tiles": 6,
+          "optical_config": "Hopkins SOCS, 193nm, NA 1.35, sigma 0.7, 24 kernels, CTR threshold 0.225",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": 1024
+        },
+        "reduction_pct": 0.0,
+        "trade_off": ""
+      },
+      "dataset": "sky130hd-ibex-tiles",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "benchmark MRC violating-pixel fraction reduction (no-OPC -> ILT) (levelset-ilt)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED",
+      "unit": "%",
+      "value": "0.0% (0.00000 -> 0.00000, delta +0.00000)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-Q-ILT-WEPE",
+      "context": {
+        "baseline_median": 11.71101975440979,
+        "candidate_degenerate_blank": false,
+        "candidate_median": 11.872798442840576,
+        "dataset_scope": "real routed sky130hd ibex tiles (1024px @ 1nm/px), 193nm NA1.35 optics",
+        "metric": "wafer_epe_mean_nm",
+        "policy": {
+          "ilt_iterations": 50,
+          "max_tiles": 6,
+          "min_tile_occupancy": 0.02,
+          "n_tiles": 6,
+          "optical_config": "Hopkins SOCS, 193nm, NA 1.35, sigma 0.7, 24 kernels, CTR threshold 0.225",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": 1024
+        },
+        "reduction_pct": -1.3814227268284498,
+        "trade_off": ""
+      },
+      "dataset": "sky130hd-ibex-tiles",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "wafer EPE mean reduction (no-OPC -> ILT) (levelset-ilt)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED",
+      "unit": "%",
+      "value": "-1.4% (11.71102 -> 11.87280, delta +0.16178)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-Q-RB-PVB",
+      "context": {
+        "baseline_median": 2.003448247909546,
+        "candidate_degenerate_blank": false,
+        "candidate_median": 2.0034364461898804,
+        "dataset_scope": "real routed sky130hd ibex tiles (1024px @ 1nm/px), 193nm NA1.35 optics",
+        "metric": "pvband_mean_nm",
+        "policy": {
+          "ilt_iterations": 50,
+          "max_tiles": 6,
+          "min_tile_occupancy": 0.02,
+          "n_tiles": 6,
+          "optical_config": "Hopkins SOCS, 193nm, NA 1.35, sigma 0.7, 24 kernels, CTR threshold 0.225",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": 1024
+        },
+        "reduction_pct": 0.0005890703529697654,
+        "trade_off": ""
+      },
+      "dataset": "sky130hd-ibex-tiles",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "PV Band mean reduction (no-OPC -> ILT) (rule-based-opc)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED",
+      "unit": "%",
+      "value": "0.0% (2.00345 -> 2.00344, delta -0.00001)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-Q-RB-MRC",
+      "context": {
+        "baseline_median": 0.0,
+        "candidate_degenerate_blank": false,
+        "candidate_median": 0.0,
+        "dataset_scope": "real routed sky130hd ibex tiles (1024px @ 1nm/px), 193nm NA1.35 optics",
+        "metric": "mrc_violation_rate",
+        "policy": {
+          "ilt_iterations": 50,
+          "max_tiles": 6,
+          "min_tile_occupancy": 0.02,
+          "n_tiles": 6,
+          "optical_config": "Hopkins SOCS, 193nm, NA 1.35, sigma 0.7, 24 kernels, CTR threshold 0.225",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": 1024
+        },
+        "reduction_pct": 0.0,
+        "trade_off": ""
+      },
+      "dataset": "sky130hd-ibex-tiles",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "benchmark MRC violating-pixel fraction reduction (no-OPC -> ILT) (rule-based-opc)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED",
+      "unit": "%",
+      "value": "0.0% (0.00000 -> 0.00000, delta +0.00000)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "dummy-identity (design-as-mask, no OPC)",
+      "claim_id": "IB-Q-RB-WEPE",
+      "context": {
+        "baseline_median": 11.71101975440979,
+        "candidate_degenerate_blank": false,
+        "candidate_median": 12.058119773864746,
+        "dataset_scope": "real routed sky130hd ibex tiles (1024px @ 1nm/px), 193nm NA1.35 optics",
+        "metric": "wafer_epe_mean_nm",
+        "policy": {
+          "ilt_iterations": 50,
+          "max_tiles": 6,
+          "min_tile_occupancy": 0.02,
+          "n_tiles": 6,
+          "optical_config": "Hopkins SOCS, 193nm, NA 1.35, sigma 0.7, 24 kernels, CTR threshold 0.225",
+          "quality_reps": 3,
+          "surrogate_epochs": 3,
+          "surrogate_train_samples": 16,
+          "tile_size_px": 1024
+        },
+        "reduction_pct": -2.9638752793005527,
+        "trade_off": ""
+      },
+      "dataset": "sky130hd-ibex-tiles",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "wafer EPE mean reduction (no-OPC -> ILT) (rule-based-opc)",
+      "scope": "same Hopkins SOCS optical model for every method, same resist threshold, same pixel size, same real-layout tiles, same metric implementations; benchmark-relative, NOT_FOUNDRY_CALIBRATED",
+      "unit": "%",
+      "value": "-3.0% (11.71102 -> 12.05812, delta +0.34710)"
+    },
+    {
+      "artifact": "industrial-quality.json",
+      "artifact_sha256": "d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163",
+      "baseline": "levelset-ilt",
+      "claim_id": "IB-Q-SURR",
+      "context": {
+        "baseline": "levelset-ilt",
+        "baseline_median_s": 21.838218125747517,
+        "candidate": "surrogate-ilt",
+        "candidate_median_s": 176.72068035439588,
+        "levelset_pvband_mean_nm": 2.0034812688827515,
+        "levelset_wafer_epe_mean_nm": 11.872798442840576,
+        "surrogate_pvband_mean_nm": 2.0034631490707397,
+        "surrogate_wafer_epe_mean_nm": 11.861042737960815
+      },
+      "dataset": "sky130hd-ibex-tiles",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "matched-iteration optimization runtime ratio",
+      "scope": "surrogate-ilt vs levelset-ilt at the same iteration budget on sky130hd-ibex-tiles with the recorded reduced surrogate training budget; quality within tolerance at this budget",
+      "unit": "x",
+      "value": "0.12x"
+    },
+    {
+      "artifact": "industrial-fulldie.json",
+      "artifact_sha256": "e882336caeeacf424b26e192400552a6d05837b69aa02fc4889dc7704924cf97",
+      "baseline": "physical RAM of the benchmark machine",
+      "claim_id": "IB-DIE-1",
+      "context": {
+        "die_size_px": [
+          555355,
+          555355
+        ],
+        "physical_ram_bytes": 51539607552
+      },
+      "dataset": "pdb-sky130hd-ibex (public routed Ibex RISC-V core, sky130hd)",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": true,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "full-die dense raster infeasibility",
+      "scope": "machine-relative arithmetic (die pixels x 4 bytes vs physical RAM): the routed ibex die cannot be dense-rasterized at 1nm/px on the 48 GiB reference machine, while per-tile streaming fixtures complete with O(tile) memory",
+      "unit": "",
+      "value": "1.23 TB (1.12 TiB)"
+    },
+    {
+      "artifact": "industrial-fulldie.json",
+      "artifact_sha256": "e882336caeeacf424b26e192400552a6d05837b69aa02fc4889dc7704924cf97",
+      "baseline": "n/a (screen-only diagnostic)",
+      "claim_id": "IB-DIE-SURVEY",
+      "context": {
+        "full_die_survey_wall_s_estimate": {
+          "method": "mean sample per-tile screen cost x n_grid_tiles",
+          "status": "ESTIMATE_NOT_MEASUREMENT",
+          "value": 2498.6182193558666
+        },
+        "known_scaling_limit": "exact-vector window/screen queries build a per-row polygon index on first touch; cost grows with tile rows x layout polygons. A spatial index is future work (see docs/industrial-benchmarks.md)."
+      },
+      "dataset": "pdb-sky130hd-ibex (public routed Ibex RISC-V core, sky130hd)",
+      "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+      "headline": false,
+      "level": "REPRODUCED_INTERNAL",
+      "metric": "certified empty-context screening on sampled die tiles",
+      "scope": "screen-only diagnostic (forward_simulator_calls=0) on 5 sampled die tiles; full-die survey cost is an ESTIMATE in the artifact, not a measurement",
+      "unit": "",
+      "value": "0.0%-75.0% screened"
+    }
+  ],
+  "firewall": [
+    "No foundry qualification without wafer/SEM calibration.",
+    "No commercial-tool (Calibre/Tachyon/cuLitho) speedup or quality claim without a matched external benchmark.",
+    "No neural-model quality claim from degenerate blank masks.",
+    "No synthetic benchmark marketed as production wafer performance.",
+    "No plugin research backend marketed as third-party validated.",
+    "No speedup claim without matching quality/tolerance context."
+  ],
+  "generated_from": "OpenLithoHub.industrial-benchmark.v1",
+  "git_commit": "038fa06e3552103c5886f3736aba04eca15e6002",
+  "hardware": "Apple M5 Pro (CPU, 48 GB RAM)",
+  "schema": "OpenLithoHub.industrial-claims.v1",
+  "timestamp_utc": "2026-09-22T12:09:25Z"
+}
