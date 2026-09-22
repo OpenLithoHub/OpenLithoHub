@@ -252,7 +252,7 @@ def _git(repo_root: Path, argv: list[str]) -> str | None:
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return out.stdout.strip() or None
+    return out.stdout.strip()
 
 
 def validate_runtime_code_identity(
