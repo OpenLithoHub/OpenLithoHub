@@ -10,10 +10,10 @@ Reference hardware: Apple M5 Pro (CPU, 48 GB RAM). Claim level: `REPRODUCED_INTE
 
 | ID | Metric | Value | Baseline | Scope summary |
 |---|---|---|---|---|
-| `IB-MEM-4096` | peak_rss_memory_reduction | 65.0% | dense full-raster (1.00 GiB peak RSS) | exact-vector selective streaming vs dense forward, 4096px center crop, median over repeats, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED ph... |
+| `IB-MEM-4096` | peak_rss_memory_reduction | 64.9% | dense full-raster (1.00 GiB peak RSS) | exact-vector selective streaming vs dense forward, 4096px center crop, median over repeats, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED ph... |
 | `IB-MEM-8192` | peak_rss_memory_reduction | 87.8% | dense full-raster (3.25 GiB peak RSS) | exact-vector selective streaming vs dense forward, 8192px center crop, median over repeats, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED ph... |
 | `IB-MEM-16384` | peak_rss_memory_reduction | 96.7% | dense full-raster (12.28 GiB peak RSS) | exact-vector selective streaming vs dense forward, 16384px center crop, median over repeats, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED p... |
-| `IB-MEM-32768` | peak_rss_memory_reduction | 98.4% | dense full-raster (24.47 GiB peak RSS) | exact-vector selective streaming vs dense forward, 32768px center crop, median over repeats, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED p... |
+| `IB-MEM-32768` | peak_rss_memory_reduction | 98.1% | dense full-raster (21.18 GiB peak RSS) | exact-vector selective streaming vs dense forward, 32768px center crop, median over repeats, structural 9x9 benchmark forward model (NOT_FOUNDRY_CALIBRATED p... |
 | `IB-SCALE-65536` | max_layout_streamed_end_to_end | 65536x65536 px | dense not run at this size under the harness memory policy | exact-vector selective streaming completed end-to-end (4.29 GPx) with median peak RSS 0.42 GiB; dense input alone would be 16.00 GiB; dense not run at sizes ... |
 | `IB-DIE-1` | full-die dense raster infeasibility | 1.23 TB (1.12 TiB) | physical RAM of the benchmark machine | machine-relative arithmetic (die pixels x 4 bytes vs physical RAM): the routed ibex die cannot be dense-rasterized at 1nm/px on the 48 GiB reference machine,... |
 
@@ -21,12 +21,12 @@ Reference hardware: Apple M5 Pro (CPU, 48 GB RAM). Claim level: `REPRODUCED_INTE
 
 | ID | Metric | Value | Headline |
 |---|---|---|---|
-| `IB-MEM-4096` | peak_rss_memory_reduction | 65.0% | True |
+| `IB-MEM-4096` | peak_rss_memory_reduction | 64.9% | True |
 | `IB-MEM-8192` | peak_rss_memory_reduction | 87.8% | True |
 | `IB-MEM-16384` | peak_rss_memory_reduction | 96.7% | True |
-| `IB-MEM-32768` | peak_rss_memory_reduction | 98.4% | True |
-| `IB-RT-4096` | wall_time_ratio_dense_to_streaming | 0.40x | False |
-| `IB-RT-8192` | wall_time_ratio_dense_to_streaming | 0.24x | False |
+| `IB-MEM-32768` | peak_rss_memory_reduction | 98.1% | True |
+| `IB-RT-4096` | wall_time_ratio_dense_to_streaming | 0.38x | False |
+| `IB-RT-8192` | wall_time_ratio_dense_to_streaming | 0.26x | False |
 | `IB-RT-16384` | wall_time_ratio_dense_to_streaming | 0.22x | False |
 | `IB-RT-32768` | wall_time_ratio_dense_to_streaming | 0.25x | False |
 | `IB-SCALE-65536` | max_layout_streamed_end_to_end | 65536x65536 px | True |
@@ -36,14 +36,14 @@ Reference hardware: Apple M5 Pro (CPU, 48 GB RAM). Claim level: `REPRODUCED_INTE
 | `IB-QC-RB-PVB` | PV Band mean reduction (no-OPC -> ILT) (rule-based-opc) | 0.0% (8.00000 -> 8.00000, delta +0.00000) | False |
 | `IB-QC-RB-MRC` | benchmark MRC violating-pixel fraction reduction (no-OPC -> ILT) (rule-based-opc) | -90.3% (0.12721 -> 0.24203, delta +0.11482) | False |
 | `IB-QC-RB-WEPE` | wafer EPE mean reduction (no-OPC -> ILT) (rule-based-opc) | 48.4% (3.76734 -> 1.94262, delta -1.82472) | False |
-| `IB-QC-SURR` | matched-iteration optimization runtime ratio | 0.20x | False |
+| `IB-QC-SURR` | matched-iteration optimization runtime ratio | 0.24x | False |
 | `IB-Q-ILT-PVB` | PV Band mean reduction (no-OPC -> ILT) (levelset-ilt) | -0.0% (2.00345 -> 2.00348, delta +0.00003) | False |
 | `IB-Q-ILT-MRC` | benchmark MRC violating-pixel fraction reduction (no-OPC -> ILT) (levelset-ilt) | 0.0% (0.00000 -> 0.00000, delta +0.00000) | False |
 | `IB-Q-ILT-WEPE` | wafer EPE mean reduction (no-OPC -> ILT) (levelset-ilt) | -1.4% (11.71102 -> 11.87280, delta +0.16178) | False |
 | `IB-Q-RB-PVB` | PV Band mean reduction (no-OPC -> ILT) (rule-based-opc) | 0.0% (2.00345 -> 2.00344, delta -0.00001) | False |
 | `IB-Q-RB-MRC` | benchmark MRC violating-pixel fraction reduction (no-OPC -> ILT) (rule-based-opc) | 0.0% (0.00000 -> 0.00000, delta +0.00000) | False |
 | `IB-Q-RB-WEPE` | wafer EPE mean reduction (no-OPC -> ILT) (rule-based-opc) | -3.0% (11.71102 -> 12.05812, delta +0.34710) | False |
-| `IB-Q-SURR` | matched-iteration optimization runtime ratio | 0.12x | False |
+| `IB-Q-SURR` | matched-iteration optimization runtime ratio | 0.11x | False |
 | `IB-DIE-1` | full-die dense raster infeasibility | 1.23 TB (1.12 TiB) | True |
 | `IB-DIE-SURVEY` | certified empty-context screening on sampled die tiles | 0.0%-75.0% screened | False |
 
@@ -58,6 +58,6 @@ Reference hardware: Apple M5 Pro (CPU, 48 GB RAM). Claim level: `REPRODUCED_INTE
 
 ## Artifacts
 
-- `industrial-fulldie.json` sha256=`e882336caeeacf424b26e192400552a6d05837b69aa02fc4889dc7704924cf97`
-- `industrial-quality.json` sha256=`d03d1b28c035bd1a377521e37f9afa326bb6e5689df7150e093e7b6acdf90163`
-- `industrial-runtime.json` sha256=`5485f5fd4ddc310bb7d3e785b4bb2f4f034024544a68a27b216a625bdad931f0`
+- `industrial-fulldie.json` sha256=`9ee9983b8d2ac23d9497bba202ba327660dea2849002fab002beb398969aa489`
+- `industrial-quality.json` sha256=`a0d1161b4e5dc98e2dbc400b6d930eda324d7ef4fde5bbf87d45e243f726492f`
+- `industrial-runtime.json` sha256=`f5c41642a9076d8dd4209b3944e00f00f0fbdd3e6c0c5d441912952cfb2df190`

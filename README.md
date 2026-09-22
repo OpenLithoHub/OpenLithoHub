@@ -87,8 +87,8 @@ repeats, from real routed silicon: the OpenROAD-routed **Ibex RISC-V core**
 
 | Measured result (claim ID) | Value | Conditions |
 |---|---|---|
-| Lower peak memory, streaming vs dense — `IB-MEM-32768` | **98.4%** | 32768² px crop @ 1 nm/px: dense median RSS 19.67 GB → streaming **0.40 GB** |
-| Lower peak memory, streaming vs dense — `IB-MEM-16384` | **96.7%** | 16384² px: 12.28 GB → 0.40 GB |
+| Lower peak memory, streaming vs dense — `IB-MEM-32768` | **98.1%** | 32768² px crop @ 1 nm/px: dense median RSS → streaming **0.40 GB** |
+| Lower peak memory, streaming vs dense — `IB-MEM-16384` | **96.7%** | 16384² px: dense → 0.40 GB |
 | Largest layout streamed end-to-end — `IB-SCALE-65536` | **65536x65536 px** | 4.29 GPx completed at **0.38 GB** peak RSS; dense input alone would be 16 GiB and is infeasible under the 30 GB policy |
 | Dense raster of the full die — `IB-DIE-1` | **1.23 TB (1.12 TiB)** | exceeds the 48 GiB reference-machine RAM; per-tile streaming needs O(tile) memory |
 | Lower MRC violation rate, ILT vs no-OPC — `IB-Q-ILT-MRC` | **29.1%** | same Hopkins optics, real routed sky130hd tiles; `levelset-ilt` vs design-as-mask |
