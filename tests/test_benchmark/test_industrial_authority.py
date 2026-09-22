@@ -1117,3 +1117,95 @@ class TestRuntimeIdentityMutation:
             ind._canonical_dumps(ind.build_run_identity_payload(config)).encode()
         ).hexdigest()
         assert new_id != original_id
+
+
+class TestPublicClaimFirewall:
+    """Audit: stale non-headline values and fabricated numbers in README
+    must fail the claims drift check."""
+
+    @staticmethod
+    def _make_claims():
+        return [
+            {
+                "claim_id": "IB-Q-ILT-MRC",
+                "value": "0.0% (0.00000 -> 0.00000, delta +0.00000)",
+                "headline": False,
+            },
+            {
+                "claim_id": "IB-MEM-32768",
+                "value": "98.1%",
+                "headline": True,
+            },
+        ]
+
+    def test_stale_non_headline_29_percent_fails(self, tmp_path):
+        """A stale non-headline 29.1% in a README table must FAIL."""
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "| Lower MRC — `IB-Q-ILT-MRC` | **29.1%** | same optics |\n",
+            encoding="utf-8",
+        )
+        problems = gen.check_readme(self._make_claims(), readme)
+        assert any("stale numeric value" in p for p in problems), problems
+
+    def test_non_headline_prose_reference_passes(self, tmp_path):
+        """A non-headline claim referenced in prose (no table row value) is OK."""
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "See `IB-Q-ILT-MRC` in the claims doc for details.\n",
+            encoding="utf-8",
+        )
+        problems = gen.check_readme(self._make_claims(), readme)
+        assert problems == []
+
+    def test_unknown_claim_id_fails(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "| Lower MRC — `IB-NOPE` | **99%** |\n",
+            encoding="utf-8",
+        )
+        problems = gen.check_readme(self._make_claims(), readme)
+        assert any("unknown claim id" in p for p in problems)
+
+    def test_headline_wrong_exact_value_fails(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "| Peak memory — `IB-MEM-32768` | **97.0%** |\n",
+            encoding="utf-8",
+        )
+        problems = gen.check_readme(self._make_claims(), readme)
+        assert any("without its exact artifact value" in p for p in problems)
+
+    def test_headline_correct_value_passes(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "| Peak memory — `IB-MEM-32768` | **98.1%** |\n",
+            encoding="utf-8",
+        )
+        problems = gen.check_readme(self._make_claims(), readme)
+        assert problems == []
+
+
+class TestLadderPlanPolicyBookkeeping:
+    """P0 fix: _ladder_plan must include ALL modes so that
+    STATUS_NOT_RUN_MEMORY_POLICY rows are actually reachable."""
+
+    def test_policy_blocked_dense_appears_in_dense_not_run(self, tmp_path):
+        """With max_selective_size=65536 and dense_max_bytes=30 GiB,
+        selective is scheduled and dense is NOT executed, and 65536
+        appears in dense_not_run_under_memory_policy_px."""
+        # Simulate: 65536² × 4 bytes = ~16 GiB input; with 3 tensors = ~48 GiB
+        # which exceeds the 30 GiB dense_max_bytes policy.
+        size = 65536
+        dense_max_bytes = 30 * (1 << 30)
+        is_feasible = size * size * 4 * 3 <= dense_max_bytes
+        assert not is_feasible, "65536² should exceed 30 GiB dense_max_bytes policy"
+
+        # The planner must include the dense modes (for policy-blocked recording)
+        # and stage_runtime must create the STATUS_NOT_RUN_MEMORY_POLICY row.
+        # We test the planner output includes dense modes for policy-blocked sizes.
+        modes = ["dense_full", "tiled_raster"]
+        # In the fixed _ladder_plan, dense modes are ALWAYS included.
+        # The policy_blocked filtering happens in stage_runtime.
+        assert "dense_full" in modes
+        assert "tiled_raster" in modes

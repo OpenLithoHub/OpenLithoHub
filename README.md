@@ -89,16 +89,14 @@ repeats, from real routed silicon: the OpenROAD-routed **Ibex RISC-V core**
 |---|---|---|
 | Lower peak memory, streaming vs dense — `IB-MEM-32768` | **98.1%** | 32768² px crop @ 1 nm/px: dense median RSS → streaming **0.40 GB** |
 | Lower peak memory, streaming vs dense — `IB-MEM-16384` | **96.7%** | 16384² px: dense → 0.40 GB |
-| Largest layout streamed end-to-end — `IB-SCALE-65536` | **65536x65536 px** | 4.29 GPx completed at **0.38 GB** peak RSS; dense input alone would be 16 GiB and is infeasible under the 30 GB policy |
+| Largest layout streamed end-to-end — `IB-SCALE-65536` | **65536x65536 px** | 4.29 GPx completed at **0.42 GiB** peak RSS; dense input alone would be 16 GiB and is infeasible under the 30 GB policy |
 | Dense raster of the full die — `IB-DIE-1` | **1.23 TB (1.12 TiB)** | exceeds the 48 GiB reference-machine RAM; per-tile streaming needs O(tile) memory |
-| Lower MRC violation rate, ILT vs no-OPC — `IB-Q-ILT-MRC` | **29.1%** | same Hopkins optics, real routed sky130hd tiles; `levelset-ilt` vs design-as-mask |
 
-Streaming peak memory stays **flat from 4096² to 65536² (0.35 → 0.40 GB)**
+Streaming peak memory stays **flat from 4096² to 65536² (0.35 → 0.42 GiB)**
 while the layout grows 256× — memory scales with the tile, not the layout.
 
 Measured facts we report against ourselves: on CPU with the lightweight
-benchmark forward model, dense execution is **2.3–4.5× faster** than the
-current streaming implementation at sizes where both fit (see the claims doc);
+benchmark forward model, dense remains faster at every jointly measured size; see generated claims for the exact ratios;
 `levelset-ilt` with default hyperparameters degenerates to a blank mask on
 the print-critical ICCAD16 EUV crop (degenerate-output firewall blocks the
 trivial "100% MRC reduction" a blank mask would score); surrogate-ILT is

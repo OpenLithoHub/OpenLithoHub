@@ -563,7 +563,13 @@ def render_markdown(claims: list[dict[str, Any]], artifacts: dict[str, Any], hw:
 
 
 def check_readme(claims: list[dict[str, Any]], readme_path: Path) -> list[str]:
-    """Verify the README quotes only real claims with exact values."""
+    """Verify the README quotes only real claims with exact values.
+
+    A non-headline claim may be referenced in prose without its value, but
+    if the README contains a table-row-like `| ... | **NN%** |` pattern with
+    a non-headline claim ID and a DIFFERENT numeric value, that's a stale
+    fabricated number and must fail (audit: stale 29.1% IB-Q-ILT-MRC).
+    """
     problems: list[str] = []
     by_id = {c["claim_id"]: c for c in claims}
     text = readme_path.read_text(encoding="utf-8")
@@ -574,8 +580,22 @@ def check_readme(claims: list[dict[str, Any]], readme_path: Path) -> list[str]:
             problems.append(f"README quotes unknown claim id {claim_id}")
             continue
         if not claim["headline"]:
-            # Non-headline facts may be referenced in prose; only headline
-            # claims must quote the exact artifact value.
+            # Non-headline facts may be referenced in prose; but if the README
+            # contains a TABLE ROW with this claim ID and a numeric value that
+            # differs from the artifact value, that's a stale fabricated number.
+            artifact_val = str(claim.get("value", ""))
+            for line in text.splitlines():
+                if claim_id not in line:
+                    continue
+                # Look for a bold numeric value that differs from the artifact
+                bold_nums = re.findall(r"\*\*([0-9]+(?:\.[0-9]+)?)\s*%?\*\*", line)
+                is_degenerate = "DEGENERATE" in artifact_val
+                for bn in bold_nums:
+                    if bn not in artifact_val and not is_degenerate:
+                        problems.append(
+                            f"README table row for non-headline {claim_id} contains "
+                            f"stale numeric value **{bn}%**; artifact value is {artifact_val!r}"
+                        )
             continue
         for line in text.splitlines():
             if claim_id in line and claim["value"] in line:

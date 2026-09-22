@@ -458,9 +458,11 @@ def _ladder_plan(
     for size in sorted(set(sizes)):
         if prepared["crops"].get(str(size)) is None:
             continue
-        modes: list[str] = []
-        if dense_allowed(size, budget_bytes=args.dense_max_bytes):
-            modes += ["dense_full", "tiled_raster"]
+        # P0 (sixth-pass fix): include ALL 4 modes in the plan so that
+        # stage_runtime can record STATUS_NOT_RUN_MEMORY_POLICY rows for
+        # policy-blocked dense modes.  Without this, the planner silently
+        # drops dense modes and the bookkeeping branch becomes unreachable.
+        modes = ["dense_full", "tiled_raster"]
         if size <= args.max_vector_size:
             modes.append("b04_vector")
         modes.append("b04_selective")
