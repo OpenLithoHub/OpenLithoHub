@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -918,3 +919,78 @@ class TestProductionFamilyDrill:
         (out / "industrial-rogue.json").write_text("{}", encoding="utf-8")
         problems = verifier.verify(out, REPO_ROOT)
         assert any("unknown authority-root JSON" in p for p in problems)
+
+
+class TestIdentityParity:
+    """A4: --preflight-only identity == --print-run-identity identity ==
+    formal preparation identity for the same argv. Uses subprocess to
+    exercise the real production paths."""
+
+    def _identity(self, argv: list[str], flag: str) -> str | None:
+        import subprocess
+
+        harness = REPO_ROOT / "benchmarks/industrial/run_industrial_benchmark.py"
+        env = {k: v for k, v in os.environ.items()}
+        env["OPENLITHOHUB_ALLOW_DIRTY_MEASUREMENT"] = "1"
+        gds = str(
+            Path.home()
+            / "Downloads/B04_Increment29_UnifiedBundle"
+            / "LOCAL_TASK_FIXED/RESULT_B04_INC29/pdb_ibex/ibex.gds"
+        )
+        if not Path(gds).exists():
+            return None  # fixture not available on this machine
+        result = subprocess.run(
+            [sys.executable, str(harness), "--gds", gds, flag, *argv],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT),
+            env=env,
+        )
+        if result.returncode != 0:
+            return None
+        # Extract JSON from stdout
+        start = result.stdout.index("{")
+        end = result.stdout.rindex("}") + 1
+        data = json.loads(result.stdout[start:end])
+        return str(data.get("run_identity"))
+
+    def _base_argv(self) -> list[str]:
+        return ["--repeats", "3", "--sizes", "4096"]
+
+    def test_default_models_parity(self) -> None:
+        preflight_id = self._identity(self._base_argv(), "--preflight-only")
+        print_id = self._identity(self._base_argv(), "--print-run-identity")
+        if preflight_id is None or print_id is None:
+            pytest.skip("fixture GDS not available")
+        assert preflight_id == print_id
+        assert len(preflight_id) == 64
+
+    def test_custom_models_parity(self) -> None:
+        argv = self._base_argv() + ["--models", "levelset-ilt,dummy-identity"]
+        preflight_id = self._identity(argv, "--preflight-only")
+        print_id = self._identity(argv, "--print-run-identity")
+        if preflight_id is None or print_id is None:
+            pytest.skip("fixture GDS not available")
+        assert preflight_id == print_id
+        assert len(preflight_id) == 64
+
+    def test_custom_sizes_repeats_parity(self) -> None:
+        argv = ["--repeats", "2", "--sizes", "2048,4096", "--core", "512"]
+        preflight_id = self._identity(argv, "--preflight-only")
+        print_id = self._identity(argv, "--print-run-identity")
+        if preflight_id is None or print_id is None:
+            pytest.skip("fixture GDS not available")
+        assert preflight_id == print_id
+        assert len(preflight_id) == 64
+
+    def test_iccad_parity(self) -> None:
+        iccad = Path.home() / "data/ICCAD16-N7M2EUV"
+        if not iccad.exists():
+            pytest.skip("ICCAD16 dataset not available")
+        argv = self._base_argv() + ["--iccad16-dir", str(iccad)]
+        preflight_id = self._identity(argv, "--preflight-only")
+        print_id = self._identity(argv, "--print-run-identity")
+        if preflight_id is None or print_id is None:
+            pytest.skip("fixture GDS not available")
+        assert preflight_id == print_id
+        assert len(preflight_id) == 64

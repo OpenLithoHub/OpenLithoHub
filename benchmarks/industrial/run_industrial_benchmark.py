@@ -1169,6 +1169,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="compute the run identity/config for the given args and exit "
         "without measuring (used by the preflight gate)",
     )
+    ap.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="run the full formal preparation pipeline (clean tree, runtime "
+        "code identity, fixture hashes, environment lock, run identity) and "
+        "print the exact identity, then exit without measuring.  Must produce "
+        "the same identity as --print-run-identity and the formal run.",
+    )
     return ap
 
 
@@ -1377,6 +1385,8 @@ def main() -> int:
     if args.gds is None or not Path(args.gds).exists():
         raise SystemExit("--gds is required and must exist")
 
+    # --- Formal preparation path (shared by normal run, --preflight-only
+    # and --print-run-identity; audit convergence A1) ---
     repo_root = script_repo_root()
     source = rs.measurement_source(repo_root)
     args.measurement_source = source
@@ -1394,7 +1404,7 @@ def main() -> int:
     if source["working_tree_dirty"]:
         log("WARNING: dirty-tree run allowed by override; artifacts are provisional")
 
-    # P0.1: prove the actually-imported openlithohub comes from this repo.
+    # A2: prove the actually-imported openlithohub comes from this repo.
     runtime_id = rs.validate_runtime_code_identity(repo_root, commit=source["commit"])
     if not runtime_id["valid"]:
         raise SystemExit(
@@ -1404,8 +1414,7 @@ def main() -> int:
     args.runtime_code_identity = runtime_id
     log(f"runtime code identity: mode={runtime_id['mode']}")
 
-    # P0.6: --models is a real configuration knob — canonicalize, validate
-    # against the registry, and bind the result into the run identity.
+    # A1: canonicalize models and bind the result into the run identity.
     try:
         args.parsed_models = jobs.canonicalize_models(args.models)
     except ValueError as e:
@@ -1439,15 +1448,13 @@ def main() -> int:
     _PUBLISH_ARGS = args
     log(f"run identity {identity[:16]} workspace {run_dir}")
 
-    if args.print_run_identity:
-        print(
-            json.dumps(
-                {"run_identity": identity, "run_config": run_config},
-                indent=2,
-                sort_keys=True,
-                allow_nan=False,
-            )
-        )
+    if args.print_run_identity or args.preflight_only:
+        result = {"run_identity": identity, "run_config": run_config}
+        if args.preflight_only:
+            # A5: print the exact identity and the runtime-code identity
+            result["RUNTIME_CODE_MODE"] = runtime_id["mode"]
+            result["RUNTIME_CODE_MATCH"] = runtime_id["all_source_tree"]
+        print(json.dumps(result, indent=2, sort_keys=True, allow_nan=False))
         return 0
 
     stages = (
