@@ -856,11 +856,12 @@ class TestProductionFamilyDrill:
         # verifier doesn't try to match the synthetic tmp family against them.
         real_claims_json = REPO_ROOT / "docs/generated/industrial-claims.json"
         real_claims_md = REPO_ROOT / "docs/generated/industrial-claims.md"
-        moved = []
+        real_claims_dir = REPO_ROOT / "docs/generated"
+        saved_contents = {}
         for f in (real_claims_json, real_claims_md):
             if f.exists():
-                f.rename(f.with_suffix(".bak"))
-                moved.append(f)
+                saved_contents[f] = f.read_bytes()
+                f.unlink()
         try:
             assert gen.main() == 0
             assert claims_json.exists() and claims_md.exists()
@@ -879,8 +880,9 @@ class TestProductionFamilyDrill:
             assert gen.main() == 0
         finally:
             sys.argv = argv
-            for f in moved:
-                f.rename(f.with_suffix(""))
+            real_claims_json.parent.mkdir(parents=True, exist_ok=True)
+            for f_path, f_bytes in saved_contents.items():
+                f_path.write_bytes(f_bytes)
 
     def test_freeze_byte_mutation_fails_verifier(
         self, tmp_path: Path, run_dir_and_out, monkeypatch
