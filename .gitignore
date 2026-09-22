@@ -80,3 +80,4 @@ proof_artifacts/p054/external/
 benchmarks/results/industrial/fixtures/
 benchmarks/results/industrial/checkpoints/
 benchmarks/results/industrial/runs/
+coverage.xml
