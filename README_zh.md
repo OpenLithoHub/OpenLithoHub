@@ -78,8 +78,7 @@ Dose 响应**单调递减**（10→100 ph/nm² 下降 19.4×），符合已发�
 | 流式 vs dense 峰值内存降低 — `IB-MEM-32768` | **98.1%** | 32768² px 裁剪 @ 1 nm/px：dense median RSS → 流式 **0.40 GB** |
 | 流式 vs dense 峰值内存降低 — `IB-MEM-16384` | **96.7%** | 16384² px：dense → 0.40 GB |
 | 端到端流式处理的最大版图 — `IB-SCALE-65536` | **65536x65536 px** | 4.29 GPx 以 **0.42 GiB** 峰值 RSS 完成；dense 仅输入就需 16 GiB，在 30 GB 策略下不可行 |
-| 全 die dense 栅格化 — `IB-DIE-1` | **1.23 TB（1.12 TiB）** | 超过 48 GiB 内存；逐 tile 流式仅需 O(tile) 内存 |
-| ILT vs 无 OPC 的 MRC 违规率降低 — `IB-Q-ILT-MRC` | **29.1%** | 相同 Hopkins 光学、真实布线 sky130hd tile |
+| 全 die dense 栅格化 — `IB-DIE-1` | **1.23 TB (1.12 TiB)** | 超过 48 GiB 内存；逐 tile 流式仅需 O(tile) 内存 |
 
 流式峰值内存在 4096² 到 65536² 保持**平稳（0.35 → 0.42 GiB）**，而版图增长 256×——
 内存随 tile 增长，而非随版图增长。

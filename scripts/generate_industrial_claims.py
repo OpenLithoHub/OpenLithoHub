@@ -223,7 +223,7 @@ def derive_claims(
                 and int(r.get("size_px", [0, 0])[0]) == int(max_streamed)
             ]
             rss = sel_rows[0]["peak_rss_bytes"]["median"] if sel_rows else None
-            infeasible = runtime.get("memory", {}).get("dense_structural_infeasible_sizes_px", [])
+            infeasible = runtime.get("memory", {}).get("dense_not_run_under_memory_policy_px", [])
             claims.append(
                 _claim(
                     claim_id=f"IB-SCALE-{max_streamed}",
@@ -729,6 +729,9 @@ def main() -> int:
                 f"{args.out_md} drifted from the artifacts (regenerate without --check)"
             )
         problems.extend(check_readme(claims, args.readme))
+        readme_zh = args.readme.parent / "README_zh.md"
+        if readme_zh.exists():
+            problems.extend(check_readme(claims, readme_zh))
         for p in problems:
             print(f"CHECK FAIL: {p}", file=sys.stderr)
         return 1 if problems else 0

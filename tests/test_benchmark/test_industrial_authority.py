@@ -1187,25 +1187,72 @@ class TestPublicClaimFirewall:
 
 
 class TestLadderPlanPolicyBookkeeping:
-    """P0 fix: _ladder_plan must include ALL modes so that
-    STATUS_NOT_RUN_MEMORY_POLICY rows are actually reachable."""
+    """P0 fix: production _ladder_plan must include ALL modes so that
+    STATUS_NOT_RUN_MEMORY_POLICY rows are actually reachable in
+    stage_runtime's bookkeeping path."""
 
-    def test_policy_blocked_dense_appears_in_dense_not_run(self, tmp_path):
-        """With max_selective_size=65536 and dense_max_bytes=30 GiB,
-        selective is scheduled and dense is NOT executed, and 65536
-        appears in dense_not_run_under_memory_policy_px."""
-        # Simulate: 65536² × 4 bytes = ~16 GiB input; with 3 tensors = ~48 GiB
-        # which exceeds the 30 GiB dense_max_bytes policy.
-        size = 65536
-        dense_max_bytes = 30 * (1 << 30)
-        is_feasible = size * size * 4 * 3 <= dense_max_bytes
-        assert not is_feasible, "65536² should exceed 30 GiB dense_max_bytes policy"
+    def test_ladder_plan_includes_dense_for_policy_blocked_size(self):
+        """Production _ladder_plan must include dense_full/tiled_raster in
+        the plan even for a policy-blocked size so that stage_runtime can
+        create the STATUS_NOT_RUN_MEMORY_POLICY row."""
+        import importlib.util as _ilu
 
-        # The planner must include the dense modes (for policy-blocked recording)
-        # and stage_runtime must create the STATUS_NOT_RUN_MEMORY_POLICY row.
-        # We test the planner output includes dense modes for policy-blocked sizes.
-        modes = ["dense_full", "tiled_raster"]
-        # In the fixed _ladder_plan, dense modes are ALWAYS included.
-        # The policy_blocked filtering happens in stage_runtime.
+        spec = _ilu.spec_from_file_location(
+            "olh_harness_bp",
+            REPO_ROOT / "benchmarks/industrial/run_industrial_benchmark.py",
+        )
+        assert spec is not None and spec.loader is not None
+        harness = importlib.util.module_from_spec(spec)
+        sys.modules["olh_harness_bp"] = harness
+        spec.loader.exec_module(harness)
+
+        import argparse
+
+        # Simulate a 65536px size with a 30 GiB dense_max_bytes policy.
+        # 65536² × 4 bytes × 3 tensors ≈ 48 GiB > 30 GiB → policy-blocked.
+        args = argparse.Namespace(
+            sizes="65536",
+            max_selective_size=65536,
+            max_vector_size=65536,
+            dense_max_bytes=30 * (1 << 30),
+            repeats=1,
+            large_repeats=1,
+            core=1024,
+            die_tile_px=32768,
+            die_tiles_per_side=None,
+            die_core_px=4096,
+            tile_size=1024,
+            min_tile_occupancy=0.02,
+            max_tiles=1,
+            ilt_iterations=1,
+            ilt_iterations_iccad16=1,
+            quality_reps=1,
+            surrogate_train_samples=1,
+            surrogate_epochs=1,
+            iccad16_crop_px=256,
+            iccad16_dir=None,
+        )
+        prepared = {"crops": {"65536": {"gds": "/dev/null", "top_cell": "x"}}}
+        plan = harness._ladder_plan(args, prepared)
+        assert len(plan) == 1
+        size, modes, repeats = plan[0]
+        assert size == 65536
+        # ALL modes must be in the plan so policy-blocked rows are reachable
         assert "dense_full" in modes
         assert "tiled_raster" in modes
+        assert "b04_vector" in modes
+        assert "b04_selective" in modes
+
+    def test_dense_allowed_policy_block(self):
+        """Verify dense_allowed correctly blocks 65536² at 30 GiB policy."""
+
+        spec = importlib.util.spec_from_file_location(
+            "olh_harness_bp2",
+            REPO_ROOT / "benchmarks/industrial/run_industrial_benchmark.py",
+        )
+        assert spec is not None and spec.loader is not None
+        harness = importlib.util.module_from_spec(spec)
+        sys.modules["olh_harness_bp2"] = harness
+        spec.loader.exec_module(harness)
+        assert not harness.dense_allowed(65536, budget_bytes=30 * (1 << 30))
+        assert harness.dense_allowed(32768, budget_bytes=30 * (1 << 30))
