@@ -531,7 +531,9 @@ def build_run_identity_payload(config: dict[str, Any]) -> dict[str, Any]:
     """
     source = config.get("source") or {}
     fixtures = config.get("fixtures") or {}
-    rci = config.get("runtime_code_identity") or {}
+    rci = config.get("runtime_code_identity")
+    if not isinstance(rci, dict):
+        raise ValueError("config must include runtime_code_identity block")
     return {
         "schema": "OpenLithoHub.industrial-run-identity.v1",
         "source": {
@@ -547,9 +549,9 @@ def build_run_identity_payload(config: dict[str, Any]) -> dict[str, Any]:
             "iccad": fixtures.get("iccad") or {},
         },
         "runtime_code_identity": {
-            "mode": rci.get("mode") or "source-tree",
-            "measurement_commit": rci.get("measurement_commit") or source.get("commit") or "",
-            "source_tree_match": bool(rci.get("source_tree_match", True)),
+            "mode": rci.get("mode"),
+            "measurement_commit": rci.get("measurement_commit"),
+            "source_tree_match": rci.get("source_tree_match"),
         },
         "args": config.get("args") or {},
     }
@@ -584,8 +586,25 @@ def validate_run_config(config: dict[str, Any]) -> list[str]:
     problems.extend(validate_environment_lock(config.get("environment_lock") or {}))
     if not isinstance(config.get("args"), dict) or not config["args"]:
         problems.append("args must be a non-empty object of semantic arguments")
+    # P0-3: runtime_code_identity block must be present and valid
+    rci = config.get("runtime_code_identity")
+    if not isinstance(rci, dict):
+        problems.append("runtime_code_identity must be an object")
+        return problems
+    if rci.get("mode") != "source-tree":
+        problems.append(
+            f"runtime_code_identity.mode must be 'source-tree', got {rci.get('mode')!r}"
+        )
+    source_commit = str((config.get("source") or {}).get("commit") or "")
+    if rci.get("measurement_commit") != source_commit:
+        problems.append(
+            f"runtime_code_identity.measurement_commit must equal source.commit ({source_commit})"
+        )
+    if rci.get("source_tree_match") is not True:
+        problems.append("runtime_code_identity.source_tree_match must be true")
     # P0.3: the identity must be the content-addressed digest of exactly
-    # this configuration.
+    # this configuration.  recompute_run_identity raises ValueError if
+    # the runtime_code_identity block is missing — but we've checked above.
     recomputed = recompute_run_identity(config)
     if recomputed != str(config.get("run_identity")):
         problems.append(

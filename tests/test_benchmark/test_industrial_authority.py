@@ -26,6 +26,14 @@ import openlithohub.benchmark.industrial  # noqa: F401 - coverage anchor
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # --- load run_support (sibling of the harness) ------------------------------
+ind_spec_alias = importlib.util.spec_from_file_location(
+    "olh_ind_alias", REPO_ROOT / "src/openlithohub/benchmark/industrial.py"
+)
+ind = importlib.util.module_from_spec(ind_spec_alias)
+sys.modules["olh_ind_alias"] = ind
+ind_spec_alias.loader.exec_module(ind)
+
+
 _rs_spec = importlib.util.spec_from_file_location(
     "olh_run_support", REPO_ROOT / "benchmarks/industrial/run_support.py"
 )
@@ -89,13 +97,27 @@ def _identity(
     iccad: dict[str, str] | None = None,
     env: str = "5" * 64,
 ) -> str:
-    return rs.compute_run_identity(
-        source={**(source or SOURCE)},
-        environment_lock_sha256=env,
-        parent_gds_sha256=gds,
-        iccad_fixture_hashes=iccad,
-        args_payload={**ARGS, **(args or {})},
-    )
+    """Recompute identity using the CANONICAL build_run_identity_payload."""
+    src = {**(source or SOURCE)}
+    import hashlib as _hashlib
+
+    config = {
+        "schema": "OpenLithoHub.industrial-run-config.v1",
+        "source": src,
+        "runtime_code_identity": {
+            "mode": "source-tree",
+            "measurement_commit": src["commit"],
+            "source_tree_match": True,
+        },
+        "environment_lock": {"lock_sha256": env},
+        "fixtures": {
+            "parent_gds_sha256": gds,
+            "iccad": iccad or {},
+        },
+        "args": {**ARGS, **(args or {})},
+    }
+    payload = ind.build_run_identity_payload(config)
+    return _hashlib.sha256(ind._canonical_dumps(payload).encode()).hexdigest()
 
 
 class TestRunIdentityMutation:
@@ -270,6 +292,11 @@ def make_artifact(run_identity: str) -> dict[str, Any]:
         "fixture": {"sha256": "c" * 64, "bytes": 1},
         "run_identity": run_identity,
         "environment_lock": {"lock_sha256": "5" * 64},
+        "runtime_code_identity": {
+            "mode": "source-tree",
+            "measurement_commit": "a" * 40,
+            "source_tree_match": True,
+        },
     }
 
 
@@ -428,6 +455,11 @@ def _write_production_family(tmp_path: Path) -> Path:
     config = {
         "schema": "OpenLithoHub.industrial-run-config.v1",
         "source": source,
+        "runtime_code_identity": {
+            "mode": "source-tree",
+            "measurement_commit": source["commit"],
+            "source_tree_match": True,
+        },
         "environment_lock": lock,
         "fixtures": {"parent_gds_sha256": "e" * 64, "iccad": {}},
         "args": {"repeats": 5, "sizes": "4096", "layer": "66:44", "seed": 0},
@@ -994,3 +1026,81 @@ class TestIdentityParity:
             pytest.skip("fixture GDS not available")
         assert preflight_id == print_id
         assert len(preflight_id) == 64
+
+
+class TestRuntimeIdentityMutation:
+    """P0-6: runtime_code_identity block must be content-addressed —
+    flipping any field must change the recomputed run identity and
+    validate_run_config must fail."""
+
+    @staticmethod
+    def _base_config() -> dict[str, Any]:
+        import hashlib
+
+        commit = "a" * 40
+        lock = {"python": "3.12", "distribution_freeze_sha256": "d" * 64}
+        lock["lock_sha256"] = hashlib.sha256(ind._canonical_dumps(lock).encode()).hexdigest()
+        return {
+            "schema": "OpenLithoHub.industrial-run-config.v1",
+            "source": {
+                "commit": commit,
+                "harness_sha256": "1" * 64,
+                "industrial_core_sha256": "2" * 64,
+                "claim_generator_sha256": "3" * 64,
+                "run_support_sha256": "4" * 64,
+            },
+            "runtime_code_identity": {
+                "mode": "source-tree",
+                "measurement_commit": commit,
+                "source_tree_match": True,
+            },
+            "environment_lock": lock,
+            "fixtures": {"parent_gds_sha256": "e" * 64, "iccad": {}},
+            "args": {"repeats": 5},
+        }
+
+    def _with_identity(self, config: dict[str, Any]) -> dict[str, Any]:
+        import hashlib
+
+        payload = ind.build_run_identity_payload(config)
+        config["run_identity"] = hashlib.sha256(ind._canonical_dumps(payload).encode()).hexdigest()
+        return config
+
+    def test_source_tree_match_flip_fails(self) -> None:
+        config = self._with_identity(self._base_config())
+        assert ind.validate_run_config(config) == []
+        config["runtime_code_identity"]["source_tree_match"] = False
+        problems = ind.validate_run_config(config)
+        assert any("source_tree_match" in p for p in problems)
+
+    def test_measurement_commit_flip_fails(self) -> None:
+        config = self._with_identity(self._base_config())
+        assert ind.validate_run_config(config) == []
+        config["runtime_code_identity"]["measurement_commit"] = "f" * 40
+        problems = ind.validate_run_config(config)
+        assert any("measurement_commit" in p for p in problems)
+
+    def test_mode_flip_fails(self) -> None:
+        config = self._with_identity(self._base_config())
+        config["runtime_code_identity"]["mode"] = "installed-wheel"
+        problems = ind.validate_run_config(config)
+        assert any("source-tree" in p for p in problems)
+
+    def test_missing_block_fails(self) -> None:
+
+        config = self._with_identity(self._base_config())
+        del config["runtime_code_identity"]
+        # validate_run_config catches the ValueError and reports it
+        problems = ind.validate_run_config(config)
+        assert any("runtime_code_identity" in p for p in problems)
+
+    def test_identity_changes_on_mutation(self) -> None:
+        import hashlib
+
+        config = self._with_identity(self._base_config())
+        original_id = config["run_identity"]
+        config["runtime_code_identity"]["source_tree_match"] = False
+        new_id = hashlib.sha256(
+            ind._canonical_dumps(ind.build_run_identity_payload(config)).encode()
+        ).hexdigest()
+        assert new_id != original_id

@@ -1045,7 +1045,13 @@ def compute_run_identity_from_args(
     This is the SINGLE source of the identity — ``--print-run-identity``
     and the preflight script both use it, so a preflight identity is by
     construction the formal run identity (audit B0.3).
+
+    P0-1 (final audit): uses ONE canonical identity implementation —
+    ``build_run_identity_payload(config)`` + SHA-256 — so the harness and
+    the verifier cannot drift into different algorithms.
     """
+    import openlithohub.benchmark.industrial as industrial_mod
+
     # P0.6: canonicalize/validate the model list HERE so every identity
     # consumer (formal run, preflight, verifier recompute) shares exactly
     # one model-list contract.
@@ -1078,18 +1084,19 @@ def compute_run_identity_from_args(
         "pixel_size_nm": 1.0,
         "seed": SEED,
     }
-    identity = rs.compute_run_identity(
-        source=source,
-        environment_lock_sha256=env_lock["lock_sha256"],
-        parent_gds_sha256=args.parent_gds_sha256,
-        iccad_fixture_hashes=iccad_hashes,
-        args_payload=args_payload,
-    )
-    config = {
+
+    # P0-2: canonical runtime_code_identity block (no absolute paths)
+    rci_raw = getattr(args, "runtime_code_identity", None) or {}
+    runtime_code_identity = {
+        "mode": rci_raw.get("mode") or "source-tree",
+        "measurement_commit": rci_raw.get("measurement_commit") or source.get("commit", ""),
+        "source_tree_match": bool(rci_raw.get("source_tree_match", True)),
+    }
+
+    config: dict[str, Any] = {
         "schema": "OpenLithoHub.industrial-run-config.v1",
-        "run_identity": identity,
         "source": source,
-        "runtime_code_identity": getattr(args, "runtime_code_identity", None),
+        "runtime_code_identity": runtime_code_identity,
         "environment_lock": env_lock,
         "fixtures": {
             "parent_gds_sha256": args.parent_gds_sha256,
@@ -1097,6 +1104,12 @@ def compute_run_identity_from_args(
         },
         "args": args_payload,
     }
+
+    # P0-1: SINGLE canonical identity implementation — build the payload
+    # from the config and hash it.  The verifier uses the exact same
+    # function, so the two can never drift.
+    identity = industrial_mod.recompute_run_identity(config)
+    config["run_identity"] = identity
     return identity, config, freeze_text
 
 
