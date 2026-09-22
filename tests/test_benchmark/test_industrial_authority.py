@@ -856,7 +856,6 @@ class TestProductionFamilyDrill:
         # verifier doesn't try to match the synthetic tmp family against them.
         real_claims_json = REPO_ROOT / "docs/generated/industrial-claims.json"
         real_claims_md = REPO_ROOT / "docs/generated/industrial-claims.md"
-        real_claims_dir = REPO_ROOT / "docs/generated"
         saved_contents = {}
         for f in (real_claims_json, real_claims_md):
             if f.exists():
