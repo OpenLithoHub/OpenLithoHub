@@ -6,7 +6,7 @@
 
 > ⭐ **If you find this project helpful, please drop us a star!** It helps us get discovered by the community and is by far the most useful thing you can do for an early-stage open-source project.
 
-**Open-source computational lithography benchmarking and workflow toolkit for advanced EUV/curvilinear mask processes.**
+**OpenLithoHub is a vendor-neutral computational lithography platform for OPC/ILT benchmarking, scalable layout processing, manufacturability analysis, model deployment, and proof-carrying verification.**
 
 [![PyPI](https://img.shields.io/pypi/v/openlithohub?include_prereleases&label=PyPI)](https://pypi.org/project/openlithohub/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -23,7 +23,18 @@
 
 ## What is OpenLithoHub?
 
-OpenLithoHub is an open-source computational lithography benchmarking and workflow toolkit — ILT, OPC, mask optimization, and EUV stochastic defect prediction with honest self-measurement.
+OpenLithoHub is an open-source, vendor-neutral computational lithography platform: bring a layout (GDS/OASIS) and a model, and get scored manufacturability results, mask optimization, full-chip streaming processing, and reproducible benchmarks — with honest self-measurement and proof-carrying verification.
+
+### What it does
+
+- **Layout & Data** — GDSII/OASIS/DEF parsing, unified dataset access (LithoBench, LithoSim, GAN-OPC, ICCAD'16, ASAP7, FreePDK45, ORFS-routed RISC-V layouts), hermetic dummy generators
+- **Simulation** — Hopkins/SOCS partial-coherence imaging, Gaussian PSF, thick-mask 3D proxy, optional rigorous EM plugins (DiffNano RCWA/FDTD/FDFD), diffusion resist model
+- **OPC / ILT Optimization** — LevelSet-ILT, rule-based OPC, OpenILT, surrogate-accelerated ILT, warm-start and posterior-sampling front ends, model-agnostic registry
+- **Manufacturability** — EPE, PV Band, L2, shot count, stochastic robustness, MRC/DRC hard-fail gates, hotspot detection, process-window OPC
+- **Full-chip Streaming** — core/halo tiling with out-of-core sources/sinks, certified empty-context screening, exact-vector (non-rasterized) window reads; layout growth adds tiles, not memory (RFC 0008)
+- **Deployment** — Python API facade (`Mask`/`LitheEngine`), Typer CLI, FastAPI micro-service with `/v1/health` `/v1/version` `/v1/capabilities`, Docker images, Slurm/LSF-friendly
+- **Benchmarking** — Industrial Benchmark v1 (real routed GDS, apples-to-apples, artifact-backed claims) plus the public model-quality leaderboards
+- **Proof-carrying Verification** — theorem-facing `PASS`/`FAIL`/`INCONCLUSIVE` certificates with certified-halo brackets and the frozen P-054 replay chain (RFC 0007 / B04 / P-054); rigorous certification capability is profile/backend-specific
 
 ### Validated results at a glance
 
@@ -44,7 +55,7 @@ Dose-response is **monotonically decreasing** (19.4× from 10→100 ph/nm²), ma
 - **Standardized metrics** — EPE, L2, PV Band, shot count, stochastic robustness, imec defect rates, hotspot detection
 - **Bayesian stochastic model** — per-pixel failure probability, LER, LWR heatmaps via Poisson-MC or MC-Dropout
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gates
-- **OASIS / GDSII workflow** — end-to-end tensor→fab-ready mask (manhattan & curvilinear)
+- **OASIS / GDSII workflow** — end-to-end tensor→mask-writer-oriented export (manhattan & curvilinear); NOT a foundry sign-off
 - **Model-agnostic evaluation** — plug any OPC/ILT model via minimal interface
 - **Streaming full-chip pipeline** — core/halo tiling with out-of-core sources/sinks; layout growth adds tiles, not memory (RFC 0008)
 - **Proof-carrying verification** — theorem-facing `PASS`/`FAIL`/`INCONCLUSIVE` certificates with certified-halo brackets, coverage contract, and the source-native verification contract and replay infrastructure; rigorous certification capability is profile/backend-specific (RFC 0007 / B04 / P-054)
@@ -65,6 +76,48 @@ Dose-response is **monotonically decreasing** (19.4× from 10→100 ph/nm²), ma
 │ Dummy gen.  │  Shot Count  │ B-spline Fit │           │ hackathon/export│
 └─────────────┴──────────────┴──────────────┴───────────┴─────────────────┘
 ```
+
+---
+
+## Industrial benchmark results (measured)
+
+Reference hardware (CPU): Apple M5 Pro, 48 GiB RAM, torch 2.14 — medians over
+repeats, from real routed silicon: the OpenROAD-routed **Ibex RISC-V core**
+(sky130hd, 15,515 cells). Dataset: PDB Physical Design Database @ `9e1e3399`.
+
+| Measured result (claim ID) | Value | Conditions |
+|---|---|---|
+| Lower peak memory, streaming vs dense — `IB-MEM-32768` | **98.1%** | 32768² px crop @ 1 nm/px: dense median RSS → streaming **0.40 GB** |
+| Lower peak memory, streaming vs dense — `IB-MEM-16384` | **96.7%** | 16384² px: dense → 0.40 GB |
+| Largest layout streamed end-to-end — `IB-SCALE-65536` | **65536x65536 px** | 4.29 GPx completed at **0.42 GiB** peak RSS; dense input alone would be 16 GiB and is infeasible under the 30 GB policy |
+| Dense raster of the full die — `IB-DIE-1` | **1.23 TB (1.12 TiB)** | exceeds the 48 GiB reference-machine RAM; per-tile streaming needs O(tile) memory |
+
+Streaming peak memory stays **flat from 4096² to 65536² (0.35 → 0.42 GiB)**
+while the layout grows 256× — memory scales with the tile, not the layout.
+
+Measured facts we report against ourselves: on CPU with the lightweight
+benchmark forward model, dense remains faster at every jointly measured size; see generated claims for the exact ratios;
+`levelset-ilt` with default hyperparameters degenerates to a blank mask on
+the print-critical ICCAD16 EUV crop (degenerate-output firewall blocks the
+trivial "100% MRC reduction" a blank mask would score); surrogate-ILT is
+not faster end-to-end at the matched iteration budget on CPU.
+
+Every headline number above is generated from checked-in benchmark
+artifacts (`benchmarks/results/industrial/`) by
+`scripts/generate_industrial_claims.py`; the claim IDs resolve to full
+provenance (dataset, hardware, scope, artifact hash) in
+[`docs/generated/industrial-claims.md`](docs/generated/industrial-claims.md),
+with methodology in [`docs/industrial-benchmarks.md`](docs/industrial-benchmarks.md).
+CI fails if a quoted number drifts from its artifact.
+
+**What is deliberately NOT claimed:** no foundry qualification (no wafer/SEM
+calibration); no commercial-tool comparisons (Calibre/Tachyon/cuLitho are
+adapter-only); no GPU performance numbers (the reference hardware is CPU —
+see the provenance notice in
+[`docs/self_hosted_deployment.md`](docs/self_hosted_deployment.md)); no
+quality claims from degenerate model outputs; no estimate or policy decision
+promoted to a measured claim. Runtime speedups are reported together with
+quality so trade-offs stay visible.
 
 ---
 
@@ -225,9 +278,21 @@ curl -X POST http://localhost:8000/v1/optimize \
 ```
 
 Models stay resident in-process; repeat requests skip weight loading.
-Open `http://localhost:8000/docs` in a browser for the auto-generated
-Swagger UI: every endpoint is documented with its JSON schema and can
-be exercised interactively (file upload included), no client code needed.
+Machine-readable service discovery: `GET /v1/health` (liveness),
+`GET /v1/ready` (readiness: models registered, scratch writable),
+`GET /v1/version` (package/git/torch versions) and `GET /v1/capabilities`
+(available models, simulator backends, GPU availability, schema versions)
+return JSON without leaking host details. Operations:
+`OPENLITHOHUB_MAX_CONCURRENT_OPTIMIZE` bounds concurrent optimizations
+(excess requests get `429` + `Retry-After`); `OPENLITHOHUB_API_KEY`
+requires an `X-API-Key` header on all endpoints except `/v1/health`;
+every response carries `X-Request-ID` for tracing. Long-running jobs:
+`POST /v1/jobs/optimize` -> `GET /v1/jobs/{id}` -> `GET /v1/jobs/{id}/artifact`
+-> `DELETE /v1/jobs/{id}`, so minute-scale OPC/ILT never holds an HTTP
+connection open. Open `http://localhost:8000/docs` in a
+browser for the auto-generated Swagger UI: every endpoint is documented
+with its JSON schema and can be exercised interactively (file upload
+included), no client code needed.
 
 ### Use as a Python library
 
@@ -410,8 +475,19 @@ pip install --pre 'openlithohub[plugins]'   # installs both
 
 ## Performance & Benchmarks
 
-> All numbers are obtained by running bundled benchmark scripts on real
-> hardware. No data has been estimated, extrapolated, or "reasonably assumed."
+Two complementary benchmark layers:
+
+- **Industrial Benchmark v1** (`benchmarks/industrial/`) — real routed
+  GDS (OpenROAD-routed Ibex/sky130hd), dense-vs-streaming runtime and
+  peak memory with median/p10/p90 over repeats, same-optical-model
+  quality comparisons, artifact-backed claims. See
+  [Industrial benchmark results](#industrial-benchmark-results-measured)
+  and [`docs/industrial-benchmarks.md`](docs/industrial-benchmarks.md).
+- **Model-quality benchmarks** (below) — bundled scripts on synthetic-8
+  and ICCAD16 layouts, maintained for method comparison continuity.
+
+> Headline measurements are measured, not estimated or extrapolated; values
+> marked STRUCTURAL or ESTIMATE are never promoted to measured claims.
 > See [`docs/benchmarks.md`](docs/benchmarks.md) for methodology, forward
 > model configuration, and per-pattern breakdowns.
 
@@ -526,6 +602,10 @@ median and P99 reported. CPU only (no GPU).
 **Software:** CPython 3.10.12, PyTorch 2.12.0+cpu, OpenLithoHub `4c3a699` (main)
 
 ```bash
+# Industrial Benchmark v1 (real routed GDS, one command):
+python3 benchmarks/industrial/run_industrial_benchmark.py \
+  --gds /path/to/ibex.gds --out benchmarks/results/industrial
+
 # Model quality (synthetic-8):
 python3 scripts/generate_baselines.py --synthetic --limit 8 --output baselines/
 
@@ -566,6 +646,11 @@ for readability in both light and dark GitHub themes.
 ---
 
 ## Optical forward models
+
+> Stability note: `openlithohub._utils.*` is an INTERNAL namespace
+> (see [docs/api-stability.md](docs/api-stability.md)); the examples below
+> are illustrative. Prefer the public façade (`Mask` / `LitheEngine`) or
+> the registered models/simulators for long-lived code.
 
 OpenLithoHub ships two differentiable forward models, both written in pure
 PyTorch so the entire ILT loop is end-to-end auto-differentiable:
@@ -909,7 +994,7 @@ results = multiproc_predict(model, tiles, n_workers=2)
 
 ## Competitive Positioning
 
-**What it is:** An open-source computational lithography benchmarking and workflow toolkit — ILT, OPC, mask optimization, and process window analysis with honest self-measurement.
+**What it is:** A vendor-neutral computational lithography platform — OPC/ILT benchmarking, scalable layout processing, manufacturability analysis, model deployment, and proof-carrying verification with honest self-measurement.
 
 **Where it leads:**
 - **Open ILT benchmark with honest baselines:** The only open-source project providing standardized ILT benchmarks with SARIF export, morphological MRC, tile-consistency metrics, and stochastic-aware loss. Commercial tools (Calibre MML, cuLitho) are closed-source with no public benchmarks.

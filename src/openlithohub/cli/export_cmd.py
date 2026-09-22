@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
+from typing import Any
 
 import torch
 import typer
@@ -102,7 +103,7 @@ def run(
         importlib.import_module(mod)
     from openlithohub.models.registry import registry
 
-    kwargs: dict[str, object] = {}
+    kwargs: dict[str, Any] = {}
     if pretrained:
         kwargs["pretrained"] = True
 

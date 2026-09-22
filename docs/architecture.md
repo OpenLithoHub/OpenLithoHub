@@ -111,7 +111,7 @@ The module-level `registry` singleton provides decorator-based registration and 
 
 ## Workflow Layer
 
-The workflow layer converts tensor masks to fab-ready OASIS files:
+The workflow layer converts tensor masks to fab-oriented OASIS files (this is a writer-format conversion, not a foundry sign-off):
 
 1. **Layout parsing** (`parse_layout`) — read `.oas` / `.gds` into tensors
 2. **Tiling** (`tile_layout`, `stitch_tiles`) — split large layouts into

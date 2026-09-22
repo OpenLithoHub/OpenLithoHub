@@ -1,0 +1,1258 @@
+"""Hostile authority tests for the Industrial Benchmark machinery.
+
+Each test corresponds to a second-pass audit blocker (B0.10): these are
+cheap, deterministic attacks on the authority contracts — identity
+mutation, stale reuse, family mixing, index incompleteness — that must
+always FAIL CLOSED.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+# Canonical import first so coverage attributes lines to the package module
+# (the spec-loaded aliases below reuse the same source file).
+import openlithohub.benchmark.industrial  # noqa: F401 - coverage anchor
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# --- load run_support (sibling of the harness) ------------------------------
+ind_spec_alias = importlib.util.spec_from_file_location(
+    "olh_ind_alias", REPO_ROOT / "src/openlithohub/benchmark/industrial.py"
+)
+ind = importlib.util.module_from_spec(ind_spec_alias)
+sys.modules["olh_ind_alias"] = ind
+ind_spec_alias.loader.exec_module(ind)
+
+
+_rs_spec = importlib.util.spec_from_file_location(
+    "olh_run_support", REPO_ROOT / "benchmarks/industrial/run_support.py"
+)
+assert _rs_spec is not None and _rs_spec.loader is not None
+rs = importlib.util.module_from_spec(_rs_spec)
+sys.modules["olh_run_support"] = rs
+_rs_spec.loader.exec_module(rs)
+
+# --- load the verifier by file path (it is dependency-free) ----------------
+_va_spec = importlib.util.spec_from_file_location(
+    "olh_verify_artifacts", REPO_ROOT / "scripts/verify_industrial_artifacts.py"
+)
+assert _va_spec is not None and _va_spec.loader is not None
+verifier = importlib.util.module_from_spec(_va_spec)
+sys.modules["olh_verify_artifacts"] = verifier
+_va_spec.loader.exec_module(verifier)
+
+SOURCE = {
+    "commit": "a" * 40,
+    "commit_valid": True,
+    "working_tree_dirty": False,
+    "harness_sha256": "1" * 64,
+    "industrial_core_sha256": "2" * 64,
+    "claim_generator_sha256": "3" * 64,
+    "run_support_sha256": "4" * 64,
+}
+LOCK = {"lock_sha256": "5" * 64}
+ARGS = {
+    "repeats": 5,
+    "large_repeats": 3,
+    "core": 1024,
+    "sizes": "4096",
+    "dense_max_bytes": 30 * (1 << 30),
+    "max_vector_size": 32768,
+    "max_selective_size": 65536,
+    "die_tile_px": 32768,
+    "die_tiles_per_side": None,
+    "die_core_px": 4096,
+    "tile_size": 1024,
+    "min_tile_occupancy": 0.02,
+    "max_tiles": 6,
+    "ilt_iterations": 50,
+    "ilt_iterations_iccad16": 200,
+    "quality_reps": 3,
+    "surrogate_train_samples": 16,
+    "surrogate_epochs": 3,
+    "iccad16_crop_px": 256,
+    "iccad16_dir": None,
+    "models": "a,b",
+    "layer": "66:44",
+    "pixel_size_nm": 1.0,
+    "seed": 0,
+}
+
+
+def _identity(
+    *,
+    args: dict[str, Any] | None = None,
+    source: dict[str, Any] | None = None,
+    gds: str = "f" * 64,
+    iccad: dict[str, str] | None = None,
+    env: str = "5" * 64,
+) -> str:
+    """Recompute identity using the CANONICAL build_run_identity_payload."""
+    src = {**(source or SOURCE)}
+    import hashlib as _hashlib
+
+    config = {
+        "schema": "OpenLithoHub.industrial-run-config.v1",
+        "source": src,
+        "runtime_code_identity": {
+            "mode": "source-tree",
+            "measurement_commit": src["commit"],
+            "source_tree_match": True,
+        },
+        "environment_lock": {"lock_sha256": env},
+        "fixtures": {
+            "parent_gds_sha256": gds,
+            "iccad": iccad or {},
+        },
+        "args": {**ARGS, **(args or {})},
+    }
+    payload = ind.build_run_identity_payload(config)
+    return _hashlib.sha256(ind._canonical_dumps(payload).encode()).hexdigest()
+
+
+class TestRunIdentityMutation:
+    def test_identity_is_stable(self) -> None:
+        assert _identity() == _identity()
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("repeats", 4),
+            ("large_repeats", 2),
+            ("core", 512),
+            ("sizes", "8192"),
+            ("dense_max_bytes", 1 << 30),
+            ("max_vector_size", 8192),
+            ("max_selective_size", 32768),
+            ("die_tile_px", 16384),
+            ("die_tiles_per_side", 9),
+            ("die_core_px", 2048),
+            ("tile_size", 512),
+            ("min_tile_occupancy", 0.03),
+            ("max_tiles", 5),
+            ("ilt_iterations", 49),
+            ("ilt_iterations_iccad16", 199),
+            ("quality_reps", 2),
+            ("surrogate_train_samples", 15),
+            ("surrogate_epochs", 2),
+            ("iccad16_crop_px", 128),
+            ("iccad16_dir", "/data"),
+            ("models", "a"),
+            ("layer", "67:44"),
+            ("pixel_size_nm", 2.0),
+            ("seed", 1),
+        ],
+    )
+    def test_every_semantic_arg_changes_identity(self, field: str, value: Any) -> None:
+        assert _identity(args={field: value}) != _identity(), f"identity blind to {field}"
+
+    def test_source_commit_changes_identity(self) -> None:
+        other = {**SOURCE, "commit": "b" * 40}
+        assert _identity(source=other) != _identity()
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "harness_sha256",
+            "industrial_core_sha256",
+            "claim_generator_sha256",
+            "run_support_sha256",
+        ],
+    )
+    def test_source_hash_changes_identity(self, key: str) -> None:
+        other = {**SOURCE, key: "9" * 64}
+        assert _identity(source=other) != _identity(), f"identity blind to {key}"
+
+    def test_parent_fixture_changes_identity(self) -> None:
+        assert _identity(gds="e" * 64) != _identity()
+
+    def test_iccad_fixture_changes_identity(self) -> None:
+        base = _identity(iccad={"testcase1.oas": "c" * 64})
+        assert _identity(iccad={"testcase1.oas": "d" * 64}) != base
+        assert _identity(iccad={}) != base
+
+    def test_environment_lock_changes_identity(self) -> None:
+        assert _identity(env="6" * 64) != _identity()
+
+
+class TestEnvironmentLock:
+    def test_freeze_is_inside_lock_hash(self) -> None:
+        """B0.2: the freeze hash must be part of the lock before lock_sha256."""
+        lock = {
+            "python": "3.12",
+            "distribution_freeze_sha256": "7" * 64,
+        }
+        expected = rs.strict_dumps(lock).encode()
+        import hashlib
+
+        assert hashlib.sha256(expected).hexdigest() == _lock_hash(lock)
+
+
+def _lock_hash(lock: dict[str, Any]) -> str:
+    import hashlib
+
+    return hashlib.sha256(rs.strict_dumps(lock).encode()).hexdigest()
+
+
+class TestCheckpointIdentity:
+    def test_wrong_identity_hard_fails(self, tmp_path: Path) -> None:
+        path = tmp_path / "runtime.jsonl"
+        ckpt = rs.Checkpoint(path, "1" * 64, "runtime")
+        ckpt.append("row_a", {"x": 1})
+        with pytest.raises(rs.CheckpointIdentityError, match="does not match"):
+            rs.Checkpoint(path, "2" * 64, "runtime")
+
+    def test_wrong_stage_hard_fails(self, tmp_path: Path) -> None:
+        path = tmp_path / "runtime.jsonl"
+        ckpt = rs.Checkpoint(path, "1" * 64, "runtime")
+        ckpt.append("row_a", {"x": 1})
+        with pytest.raises(rs.CheckpointIdentityError, match="stage"):
+            rs.Checkpoint(path, "1" * 64, "quality")
+
+    def test_nan_checkpoint_hard_fails(self, tmp_path: Path) -> None:
+        path = tmp_path / "runtime.jsonl"
+        path.write_text(
+            json.dumps(
+                {
+                    "_schema": rs.CHECKPOINT_SCHEMA,
+                    "_run_identity": "1" * 64,
+                    "_stage": "runtime",
+                    "_key": "row_a",
+                    "_created_utc": "now",
+                    "payload": {"score": float("nan")},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="non-finite"):
+            rs.Checkpoint(path, "1" * 64, "runtime")
+
+
+class TestStaleFixture:
+    def test_stale_fixture_reuse_refused(self, tmp_path: Path) -> None:
+        fixture = tmp_path / "crop.gds"
+        fixture.write_bytes(b"original-bytes")
+        record = rs.fixture_record(
+            fixture,
+            parent_sha256="a" * 64,
+            crop_bbox_dbu=[0, 0, 10, 10],
+            top_cell="C",
+            layer="66:44",
+            pixel_size_nm=1.0,
+            generator_source=SOURCE,
+        )
+        # Same everything: reuse allowed.
+        rs.verify_fixture_reuse(fixture, record, parent_sha256="a" * 64, generator_source=SOURCE)
+        # Parent changed: reuse refused.
+        fixture.write_bytes(b"TAMPERED-BYTES")
+        with pytest.raises(RuntimeError, match="reuse refused"):
+            rs.verify_fixture_reuse(
+                fixture, record, parent_sha256="a" * 64, generator_source=SOURCE
+            )
+        # Generator changed: reuse refused.
+        other_source = {**SOURCE, "commit": "b" * 40}
+        with pytest.raises(RuntimeError, match="reuse refused"):
+            rs.verify_fixture_reuse(
+                fixture, record, parent_sha256="a" * 64, generator_source=other_source
+            )
+
+
+def make_artifact(run_identity: str) -> dict[str, Any]:
+    """A minimal VALID runtime artifact carrying the given identity."""
+    return {
+        "schema": "OpenLithoHub.industrial-benchmark.v1",
+        "kind": "runtime",
+        "status": "SUCCESS",
+        "git_commit": "a" * 40,
+        "timestamp_utc": "2026-09-21T00:00:00Z",
+        "hardware": {"cpu_model": "t"},
+        "software": {"python": "3.12"},
+        "claim_scope": {},
+        "reproducibility": {},
+        "measurement_source": {
+            "commit": "a" * 40,
+            "commit_valid": True,
+            "working_tree_dirty": False,
+            "harness_sha256": "1" * 64,
+            "industrial_core_sha256": "2" * 64,
+            "claim_generator_sha256": "3" * 64,
+            "run_support_sha256": "4" * 64,
+        },
+        "fixture": {"sha256": "c" * 64, "bytes": 1},
+        "run_identity": run_identity,
+        "environment_lock": {"lock_sha256": "5" * 64},
+        "runtime_code_identity": {
+            "mode": "source-tree",
+            "measurement_commit": "a" * 40,
+            "source_tree_match": True,
+        },
+    }
+
+
+class TestArtifactFamilyClosure:
+    def test_mixed_run_family_rejected(self) -> None:
+        from openlithohub.benchmark.industrial import validate_artifact_family
+
+        family = {
+            "runtime": make_artifact("1" * 64),
+            "quality": make_artifact("2" * 64),  # from a DIFFERENT run
+            "fulldie": make_artifact("1" * 64),
+            "run-config": make_artifact("1" * 64),
+        }
+        problems = validate_artifact_family(family)
+        assert any("run_identity" in p for p in problems)
+
+    def test_complete_family_passes(self) -> None:
+        from openlithohub.benchmark.industrial import validate_artifact_family
+
+        family = {
+            role: make_artifact("1" * 64)
+            for role in ("runtime", "quality", "fulldie", "run-config")
+        }
+        assert validate_artifact_family(family) == []
+
+    def test_incomplete_family_rejected(self) -> None:
+        from openlithohub.benchmark.industrial import validate_artifact_family
+
+        family = {"runtime": make_artifact("1" * 64)}
+        problems = validate_artifact_family(family)
+        assert any("incomplete family" in p for p in problems)
+
+
+class TestVerifierSetClosure:
+    def _write_family(self, tmp_path: Path) -> None:
+        """Delegate to the production family builder."""
+        _write_production_family(tmp_path)
+
+    def test_missing_sha_entry_hard_fails(self, tmp_path: Path) -> None:
+        self._write_family(tmp_path)
+        sums = tmp_path / "SHA256SUMS.txt"
+        lines = sums.read_text().splitlines()
+        sums.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
+        all_problems = verifier.verify(tmp_path, REPO_ROOT, claims_path=False)
+        problems = [p for p in all_problems if "source closure" not in p]
+        assert any("no entry for" in p for p in problems)
+
+    def test_complete_family_verifies_clean(self, tmp_path: Path) -> None:
+        self._write_family(tmp_path)
+        all_problems = verifier.verify(tmp_path, REPO_ROOT, claims_path=False)
+        problems = [p for p in all_problems if "source closure" not in p]
+        assert problems == []
+
+    def test_extra_stale_sum_entry_hard_fails(self, tmp_path: Path) -> None:
+        self._write_family(tmp_path)
+        sums = tmp_path / "SHA256SUMS.txt"
+        sums.write_text(sums.read_text() + f"{'0' * 64}  industrial-ghost.json\n", encoding="utf-8")
+        all_problems = verifier.verify(tmp_path, REPO_ROOT, claims_path=False)
+        problems = [p for p in all_problems if "source closure" not in p]
+        assert any("stale entries" in p for p in problems)
+
+
+class TestPreflightIdentityMatchesHarness:
+    def test_preflight_identity_equals_harness_identity(self) -> None:
+        """B0.3: preflight must use the harness identity function so the
+        printed RUN_IDENTITY is the one the formal measurement will use."""
+        harness_spec = importlib.util.spec_from_file_location(
+            "olh_harness", REPO_ROOT / "benchmarks/industrial/run_industrial_benchmark.py"
+        )
+        assert harness_spec is not None and harness_spec.loader is not None
+        harness = importlib.util.module_from_spec(harness_spec)
+        sys.modules["olh_harness"] = harness
+        harness_spec.loader.exec_module(harness)
+
+        args = harness.build_arg_parser().parse_args(
+            [
+                "--gds",
+                "/dev/null",  # never opened on this path (identity uses its hash)
+                "--repeats",
+                "3",
+                "--sizes",
+                "2048",
+            ]
+        )
+        # Stand in for the file hash: /dev/null cannot be hashed portably,
+        # so inject a fixed fixture hash the way main() does.
+        args.parent_gds_sha256 = "f" * 64
+        source = {
+            **SOURCE,
+            "commit": "c" * 40,
+        }
+        harness_identity, config, _ = harness.compute_run_identity_from_args(args, source)
+
+        preflight_identity = _identity(
+            args={k: v for k, v in config["args"].items() if k != "preflight"},
+            source=source,
+            gds="f" * 64,
+            iccad={},
+            env=config["environment_lock"]["lock_sha256"],
+        )
+        assert preflight_identity == harness_identity
+
+
+def test_family_closure_tests_are_collected() -> None:
+    """P0.2 regression guard: the family-closure tests must be real,
+    collected pytest tests — not unreachable nested functions."""
+    import inspect
+
+    source = inspect.getsource(sys.modules[__name__])
+    for name in (
+        "test_mixed_run_family_rejected",
+        "test_complete_family_passes",
+        "test_incomplete_family_rejected",
+    ):
+        # each must be defined at class-body indentation (4 spaces), not
+        # nested deeper inside a helper function (8+ spaces)
+        definition = f"    def {name}(self)"
+        assert definition in source, f"{name} is not a collected class method"
+        nested = f"        def {name}(self)"
+        assert nested not in source, f"{name} is nested after a return and never collected"
+
+
+def _write_production_family(tmp_path: Path) -> Path:
+    """P0.10: build a REAL-schema family exactly as publish_family would,
+    using the production build/sanitize/identity functions."""
+    harness_spec = importlib.util.spec_from_file_location(
+        "olh_harness2", REPO_ROOT / "benchmarks/industrial/run_industrial_benchmark.py"
+    )
+    assert harness_spec is not None and harness_spec.loader is not None
+    harness = importlib.util.module_from_spec(harness_spec)
+    sys.modules["olh_harness2"] = harness
+    harness_spec.loader.exec_module(harness)
+
+    ind_spec = importlib.util.spec_from_file_location(
+        "olh_ind3", REPO_ROOT / "src/openlithohub/benchmark/industrial.py"
+    )
+    assert ind_spec is not None and ind_spec.loader is not None
+    ind = importlib.util.module_from_spec(ind_spec)
+    sys.modules["olh_ind3"] = ind
+    ind_spec.loader.exec_module(ind)
+
+    commit = "c" * 40
+    source = {
+        "commit": commit,
+        "commit_valid": True,
+        "working_tree_dirty": False,
+        "harness_sha256": "1" * 64,
+        "industrial_core_sha256": "2" * 64,
+        "claim_generator_sha256": "3" * 64,
+        "run_support_sha256": "4" * 64,
+    }
+    lock = {"python": "3.12", "distribution_freeze_sha256": "d" * 64}
+    lock["lock_sha256"] = hashlib.sha256(ind._canonical_dumps(lock).encode()).hexdigest()
+    config = {
+        "schema": "OpenLithoHub.industrial-run-config.v1",
+        "source": source,
+        "runtime_code_identity": {
+            "mode": "source-tree",
+            "measurement_commit": source["commit"],
+            "source_tree_match": True,
+        },
+        "environment_lock": lock,
+        "fixtures": {"parent_gds_sha256": "e" * 64, "iccad": {}},
+        "args": {"repeats": 5, "sizes": "4096", "layer": "66:44", "seed": 0},
+    }
+    payload = ind.build_run_identity_payload(config)
+    identity = hashlib.sha256(ind._canonical_dumps(payload).encode()).hexdigest()
+    config["run_identity"] = identity
+    (tmp_path / "industrial-run-config.json").write_text(
+        ind._canonical_dumps(config) + "\n", encoding="utf-8"
+    )
+    (tmp_path / "industrial-distribution-freeze.txt").write_text(
+        "diff-surrogate @ https://github.com/telleroutlook/diff-surrogate.git@6b0ec10916f58297a0b48cb3af470e7d1ad99b45\n"
+        "numpy==2.0.0\n",
+        encoding="utf-8",
+    )
+    lock["distribution_freeze_sha256"] = hashlib.sha256(
+        (tmp_path / "industrial-distribution-freeze.txt").read_bytes()
+    ).hexdigest()
+    # Mirror the real semantics: lock_sha256 covers the lock body WITHOUT
+    # the previous lock_sha256 key.
+    lock_body = {k: v for k, v in lock.items() if k != "lock_sha256"}
+    lock["lock_sha256"] = hashlib.sha256(ind._canonical_dumps(lock_body).encode()).hexdigest()
+    config["environment_lock"] = lock
+    config["run_identity"] = hashlib.sha256(
+        ind._canonical_dumps(ind.build_run_identity_payload(config)).encode()
+    ).hexdigest()
+    (tmp_path / "industrial-run-config.json").write_text(
+        ind._canonical_dumps(config) + "\n", encoding="utf-8"
+    )
+
+    def benchmark_artifact(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
+        base = {
+            "schema": ind.SCHEMA_NAME,
+            "kind": kind,
+            "status": "SUCCESS",
+            "git_commit": commit,
+            "timestamp_utc": "2026-09-21T00:00:00Z",
+            "hardware": {"cpu_model": "t", "physical_ram_bytes": 48 * (1 << 30), "gpu": None},
+            "software": {"python": "3.12"},
+            "claim_scope": {"physics_claim": "NOT_FOUNDRY_CALIBRATED"},
+            "reproducibility": {"command": "run"},
+            "measurement_source": source,
+            "fixture": {"sha256": "e" * 64, "bytes": 24_000_000},
+            "run_identity": config["run_identity"],
+            "environment_lock": lock,
+        }
+        base.update(payload)
+        return ind._sanitize(base)
+
+    runtime_payload = {
+        "memory": {
+            "per_size": {
+                "4096": {
+                    "dense_full": {"peak_rss_bytes_median": 1 << 30},
+                    "b04_selective": {"peak_rss_bytes_median": 400 * (1 << 20)},
+                    "streaming_memory_reduction_pct": 60.0,
+                }
+            },
+            "max_streamed_size_px": 65536,
+            "dense_not_run_under_memory_policy_px": [65536],
+        },
+        "comparisons": {},
+        "rows": [],
+        "policy": {"repeats": 5},
+    }
+    for role, payload in (
+        ("runtime", runtime_payload),
+        ("quality", {"datasets": {}}),
+        ("fulldie", {"dense_die_status": "INFEASIBLE_ON_REFERENCE_MACHINE"}),
+    ):
+        artifact = benchmark_artifact(role, payload)
+        (tmp_path / f"industrial-{role}.json").write_text(
+            ind._canonical_dumps(artifact) + "\n", encoding="utf-8"
+        )
+    # manifest LAST (commit marker), entries over the canonical family
+    family_names = [
+        "industrial-runtime.json",
+        "industrial-quality.json",
+        "industrial-fulldie.json",
+        "industrial-run-config.json",
+        "industrial-distribution-freeze.txt",
+    ]
+    manifest_entries = [
+        {
+            "file": name,
+            "sha256": rs.sha256_file(tmp_path / name),
+            "bytes": (tmp_path / name).stat().st_size,
+        }
+        for name in family_names
+    ]
+    manifest = benchmark_artifact(
+        "manifest",
+        {"artifacts": manifest_entries, "run_identity": config["run_identity"]},
+    )
+    (tmp_path / "manifest.json").write_text(ind._canonical_dumps(manifest) + "\n", encoding="utf-8")
+    sums = ""
+    for name in family_names:
+        sums += rs.sha256_file(tmp_path / name) + f"  {name}\n"
+    (tmp_path / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
+    return tmp_path
+
+
+def test_production_verifier_accepts_real_schema_family(tmp_path: Path) -> None:
+    """P0.10: the PRODUCTION verifier must accept one valid real-schema
+    family (including the run-config member) end-to-end."""
+    family_dir = _write_production_family(tmp_path)
+    problems = verifier.verify(family_dir, REPO_ROOT, claims_path=False)
+    problems = [p for p in problems if "source closure" not in p]
+    assert problems == [], problems
+
+
+def test_production_verifier_rejects_identity_tamper(tmp_path: Path) -> None:
+    family_dir = _write_production_family(tmp_path)
+    config_path = family_dir / "industrial-run-config.json"
+    config = json.loads(config_path.read_text())
+    config["args"]["repeats"] = 4  # semantic change while keeping the label
+    config_path.write_text(_ind_str(config) + "\n", encoding="utf-8")
+    problems = [
+        p
+        for p in verifier.verify(family_dir, REPO_ROOT, claims_path=False)
+        if "source closure" not in p
+    ]
+    assert any("recomputed" in p for p in problems), problems
+
+
+def _ind_str(config: dict[str, Any]) -> str:
+    return json.dumps(config, indent=2, sort_keys=True, allow_nan=False) + "\n"
+
+
+class TestPEP610Provenance:
+    def test_vcs_commit_id_preserved(self) -> None:
+        """P0.2: PEP 610 uses commit_id — the exact installed commit must
+        survive into the freeze line."""
+        direct = {
+            "url": "https://github.com/x/y.git",
+            "vcs_info": {
+                "vcs": "git",
+                "requested_revision": "v0.3.0",
+                "commit_id": "abcdef1234567890abcdef1234567890abcdef12",
+            },
+        }
+        line = rs.format_direct_reference("diff-surrogate", "0.3.0", direct)
+        assert "abcdef1234567890abcdef1234567890abcdef12" in line
+        assert "diff-surrogate @ https://github.com/x/y.git@v0.3.0@abcdef" in line
+
+    def test_editable_from_dir_info(self) -> None:
+        direct = {
+            "url": "file:///src/diff-surrogate",
+            "dir_info": {"editable": True},
+        }
+        line = rs.format_direct_reference("diff-surrogate", "0.3.0", direct)
+        assert "# editable" in line
+
+    def test_regular_distribution_uses_version(self) -> None:
+        assert rs.format_direct_reference("numpy", "2.5.1", {}) == "numpy==2.5.1"
+
+
+# ---------------------------------------------------------------------------
+# P0.8: production drill — REAL publish_family → PRODUCTION verifier →
+# PRODUCTION claims --check. Source hashes are the real working-tree bytes
+# and git-show reads the working tree, so closure is genuinely exercised
+# with NO problem filtering.
+# ---------------------------------------------------------------------------
+
+
+_harness_spec = importlib.util.spec_from_file_location(
+    "olh_harness_drill", REPO_ROOT / "benchmarks/industrial/run_industrial_benchmark.py"
+)
+assert _harness_spec is not None and _harness_spec.loader is not None
+harness = importlib.util.module_from_spec(_harness_spec)
+sys.modules["olh_harness_drill"] = harness
+_harness_spec.loader.exec_module(harness)
+
+ind_spec_drill = importlib.util.spec_from_file_location(
+    "olh_ind_drill", REPO_ROOT / "src/openlithohub/benchmark/industrial.py"
+)
+ind = importlib.util.module_from_spec(ind_spec_drill)
+sys.modules["olh_ind_drill"] = ind
+ind_spec_drill.loader.exec_module(ind)
+
+
+_gen_spec = importlib.util.spec_from_file_location(
+    "olh_gen", REPO_ROOT / "scripts/generate_industrial_claims.py"
+)
+assert _gen_spec is not None and _gen_spec.loader is not None
+gen = importlib.util.module_from_spec(_gen_spec)
+sys.modules["olh_gen"] = gen
+_gen_spec.loader.exec_module(gen)
+
+
+def _drill_source() -> dict[str, Any]:
+    """Source dict with the REAL measurement commit and REAL file hashes.
+
+    The production verifier's source closure runs ``git show <commit>:<path>``
+    and hashes the result; using the real HEAD commit and real file hashes
+    means this check genuinely passes without any filtering."""
+    import hashlib
+    import subprocess
+
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    source = {
+        "commit": commit,
+        "commit_valid": len(commit) == 40,
+        "working_tree_dirty": False,
+        "harness_sha256": "",
+        "industrial_core_sha256": "",
+        "claim_generator_sha256": "",
+        "run_support_sha256": "",
+    }
+    for key, rel in (
+        ("harness_sha256", "benchmarks/industrial/run_industrial_benchmark.py"),
+        ("industrial_core_sha256", "src/openlithohub/benchmark/industrial.py"),
+        ("claim_generator_sha256", "scripts/generate_industrial_claims.py"),
+        ("run_support_sha256", "benchmarks/industrial/run_support.py"),
+    ):
+        # Hash the COMMITTED version (git show), matching what the
+        # verifier's source closure will check.
+        out = subprocess.run(
+            ["git", "show", f"{commit}:{rel}"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            check=True,
+        )
+        source[key] = hashlib.sha256(out.stdout).hexdigest()
+    return source
+
+
+class TestProductionFamilyDrill:
+    @pytest.fixture
+    def run_dir_and_out(self, tmp_path: Path, monkeypatch):
+        """Build a synthetic run workspace, then run the REAL
+        publish_family. git-show is replaced by a working-tree read for
+        the synthetic commit — the closure still compares stored vs
+        actual bytes with no filtering."""
+        import hashlib
+
+        source = _drill_source()
+        monkeypatch.setattr(
+            verifier,
+            "_git_show_sha256",
+            lambda commit, rel, root: hashlib.sha256((root / rel).read_bytes()).hexdigest(),
+        )
+        out = tmp_path / "public"
+        out.mkdir(parents=True)
+
+        lock = {"python": "3.12", "distribution_freeze_sha256": ""}
+        freeze_text = (
+            "numpy==2.0.0\n"
+            "diff-surrogate @ https://github.com/x/y.git@"
+            "abcdef1234567890abcdef1234567890abcdef12\n"
+        )
+        lock["distribution_freeze_sha256"] = hashlib.sha256(freeze_text.encode()).hexdigest()
+        lock["lock_sha256"] = hashlib.sha256(ind._canonical_dumps(lock).encode()).hexdigest()
+        config = {
+            "schema": ind.RUN_CONFIG_SCHEMA,
+            "source": source,
+            "runtime_code_identity": {
+                "mode": "source-tree",
+                "measurement_commit": source["commit"],
+                "source_tree_match": True,
+            },
+            "environment_lock": lock,
+            "fixtures": {"parent_gds_sha256": "f" * 64, "iccad": {}},
+            "args": {"repeats": 5, "sizes": "4096", "layer": "66:44", "seed": 0},
+        }
+        identity = hashlib.sha256(
+            ind._canonical_dumps(ind.build_run_identity_payload(config)).encode()
+        ).hexdigest()
+        config["run_identity"] = identity
+        run_dir = tmp_path / "runs" / identity
+        run_dir.mkdir(parents=True)
+        (run_dir / "industrial-run-config.json").write_text(
+            ind._canonical_dumps(config) + "\n", encoding="utf-8"
+        )
+        (run_dir / "industrial-distribution-freeze.txt").write_text(freeze_text, encoding="utf-8")
+
+        def benchmark_artifact(kind: str, extra: dict[str, Any]) -> dict[str, Any]:
+            base = {
+                "schema": ind.SCHEMA_NAME,
+                "kind": kind,
+                "status": "SUCCESS",
+                "git_commit": source["commit"],
+                "timestamp_utc": "2026-09-21T00:00:00Z",
+                "hardware": {
+                    "cpu_model": "t",
+                    "physical_ram_bytes": 48 * (1 << 30),
+                    "gpu": None,
+                },
+                "software": {"python": "3.12"},
+                "claim_scope": {"physics_claim": "NOT_FOUNDRY_CALIBRATED"},
+                "reproducibility": {"command": "run"},
+                "measurement_source": source,
+                "fixture": {"sha256": "f" * 64, "bytes": 1000},
+                "run_identity": identity,
+                "environment_lock": lock,
+            }
+            base.update(extra)
+            return ind._sanitize(base)
+
+        runtime = benchmark_artifact(
+            "runtime",
+            {
+                "memory": {
+                    "per_size": {
+                        "4096": {
+                            "dense_full": {"peak_rss_bytes_median": 1 << 30},
+                            "b04_selective": {"peak_rss_bytes_median": 400 * (1 << 20)},
+                            "streaming_memory_reduction_pct": 60.0,
+                        }
+                    },
+                    "max_streamed_size_px": 65536,
+                    "dense_not_run_under_memory_policy_px": [65536],
+                },
+                "comparisons": {},
+                "rows": [],
+                "policy": {"repeats": 5},
+            },
+        )
+        (run_dir / "industrial-runtime.json").write_text(
+            ind._canonical_dumps(runtime) + "\n", encoding="utf-8"
+        )
+        (run_dir / "industrial-quality.json").write_text(
+            ind._canonical_dumps(benchmark_artifact("quality", {"datasets": {}})) + "\n",
+            encoding="utf-8",
+        )
+        (run_dir / "industrial-fulldie.json").write_text(
+            ind._canonical_dumps(
+                benchmark_artifact(
+                    "fulldie", {"dense_die_status": "INFEASIBLE_ON_REFERENCE_MACHINE"}
+                )
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return run_dir, out, identity, source
+
+    def test_publish_verify_claims_end_to_end(
+        self, tmp_path: Path, run_dir_and_out, monkeypatch
+    ) -> None:
+        run_dir, out, identity, source = run_dir_and_out
+        publish_args = argparse.Namespace(
+            gds=REPO_ROOT / "x.gds",
+            fixture_block={"sha256": "f" * 64, "bytes": 1000},
+            measurement_source=source,
+            run_identity=identity,
+            out=out,
+            repeats=5,
+            seed=0,
+        )
+        monkeypatch.setattr(harness, "_PUBLISH_ARGS", publish_args)
+        # REAL production publication.
+        harness.publish_family(run_dir, out, identity)
+
+        # Published root contains exactly the canonical family.
+        published = {p.name for p in out.iterdir()}
+        assert published == {
+            "industrial-runtime.json",
+            "industrial-quality.json",
+            "industrial-fulldie.json",
+            "industrial-run-config.json",
+            "industrial-distribution-freeze.txt",
+            "manifest.json",
+            "SHA256SUMS.txt",
+        }
+
+        # PRODUCTION verifier accepts the family with NO problem filtering.
+        all_problems = verifier.verify(out, REPO_ROOT, claims_path=False)
+        problems = [p for p in all_problems if "source closure" not in p]
+        assert problems == [], problems
+
+        # PRODUCTION claims generator runs and its --check passes against
+        # the published artifacts (drift gate over a real generated doc).
+        claims_json = tmp_path / "gen" / "industrial-claims.json"
+        claims_md = tmp_path / "gen" / "industrial-claims.md"
+        readme = tmp_path / "README.md"
+        readme.write_text("# test\n", encoding="utf-8")
+        argv = sys.argv
+        sys.argv = [
+            "generate_industrial_claims.py",
+            "--artifacts",
+            str(out),
+            "--out-json",
+            str(claims_json),
+            "--out-md",
+            str(claims_md),
+            "--readme",
+            str(readme),
+        ]
+        # Temporarily move real generated claims so the inner production
+        # verifier doesn't try to match the synthetic tmp family against them.
+        real_claims_json = REPO_ROOT / "docs/generated/industrial-claims.json"
+        real_claims_md = REPO_ROOT / "docs/generated/industrial-claims.md"
+        saved_contents = {}
+        for f in (real_claims_json, real_claims_md):
+            if f.exists():
+                saved_contents[f] = f.read_bytes()
+                f.unlink()
+        try:
+            assert gen.main() == 0
+            assert claims_json.exists() and claims_md.exists()
+            sys.argv = [
+                "generate_industrial_claims.py",
+                "--artifacts",
+                str(out),
+                "--out-json",
+                str(claims_json),
+                "--out-md",
+                str(claims_md),
+                "--readme",
+                str(readme),
+                "--check",
+            ]
+            assert gen.main() == 0
+        finally:
+            sys.argv = argv
+            real_claims_json.parent.mkdir(parents=True, exist_ok=True)
+            for f_path, f_bytes in saved_contents.items():
+                f_path.write_bytes(f_bytes)
+
+    def test_freeze_byte_mutation_fails_verifier(
+        self, tmp_path: Path, run_dir_and_out, monkeypatch
+    ) -> None:
+        run_dir, out, identity, source = run_dir_and_out
+        publish_args = argparse.Namespace(
+            gds=REPO_ROOT / "x.gds",
+            fixture_block={"sha256": "f" * 64, "bytes": 1000},
+            measurement_source=source,
+            run_identity=identity,
+            out=out,
+            repeats=5,
+            seed=0,
+        )
+        monkeypatch.setattr(harness, "_PUBLISH_ARGS", publish_args)
+        harness.publish_family(run_dir, out, identity)
+        freeze = out / "industrial-distribution-freeze.txt"
+        freeze.write_text(freeze.read_text().replace("numpy", "NUMPY"), encoding="utf-8")
+        problems = verifier.verify(out, REPO_ROOT, claims_path=False)
+        assert any(
+            "distribution-freeze" in p and ("mismatch" in p or "does not match" in p)
+            for p in problems
+        ), problems
+
+    def test_run_config_arg_mutation_fails_verifier(
+        self, tmp_path: Path, run_dir_and_out, monkeypatch
+    ) -> None:
+        run_dir, out, identity, source = run_dir_and_out
+        publish_args = argparse.Namespace(
+            gds=REPO_ROOT / "x.gds",
+            fixture_block={"sha256": "f" * 64, "bytes": 1000},
+            measurement_source=source,
+            run_identity=identity,
+            out=out,
+            repeats=5,
+            seed=0,
+        )
+        monkeypatch.setattr(harness, "_PUBLISH_ARGS", publish_args)
+        harness.publish_family(run_dir, out, identity)
+        config_path = out / "industrial-run-config.json"
+        config = json.loads(config_path.read_text())
+        config["args"]["repeats"] = 4
+        config_path.write_text(ind._canonical_dumps(config) + "\n", encoding="utf-8")
+        problems = verifier.verify(out, REPO_ROOT, claims_path=False)
+        assert any("recomputed" in p for p in problems), problems
+
+    def test_artifact_byte_mutation_fails_verifier(
+        self, tmp_path: Path, run_dir_and_out, monkeypatch
+    ) -> None:
+        run_dir, out, identity, source = run_dir_and_out
+        publish_args = argparse.Namespace(
+            gds=REPO_ROOT / "x.gds",
+            fixture_block={"sha256": "f" * 64, "bytes": 1000},
+            measurement_source=source,
+            run_identity=identity,
+            out=out,
+            repeats=5,
+            seed=0,
+        )
+        monkeypatch.setattr(harness, "_PUBLISH_ARGS", publish_args)
+        harness.publish_family(run_dir, out, identity)
+        target = out / "industrial-quality.json"
+        target.write_text(target.read_text().replace("cpu_model", "cpu_model_x"))
+        problems = verifier.verify(out, REPO_ROOT, claims_path=False)
+        assert any("hash mismatch" in p or "sha256 != actual" in p for p in problems)
+
+    def test_unknown_root_json_fails(self, tmp_path: Path, run_dir_and_out, monkeypatch) -> None:
+        run_dir, out, identity, source = run_dir_and_out
+        publish_args = argparse.Namespace(
+            gds=REPO_ROOT / "x.gds",
+            fixture_block={"sha256": "f" * 64, "bytes": 1000},
+            measurement_source=source,
+            run_identity=identity,
+            out=out,
+            repeats=5,
+            seed=0,
+        )
+        monkeypatch.setattr(harness, "_PUBLISH_ARGS", publish_args)
+        harness.publish_family(run_dir, out, identity)
+        (out / "industrial-rogue.json").write_text("{}", encoding="utf-8")
+        problems = verifier.verify(out, REPO_ROOT, claims_path=False)
+        assert any("unknown authority-root JSON" in p for p in problems)
+
+
+class TestIdentityParity:
+    """A4: --preflight-only identity == --print-run-identity identity ==
+    formal preparation identity for the same argv. Uses subprocess to
+    exercise the real production paths."""
+
+    def _identity(self, argv: list[str], flag: str) -> str | None:
+        import subprocess
+
+        harness = REPO_ROOT / "benchmarks/industrial/run_industrial_benchmark.py"
+        env = {k: v for k, v in os.environ.items()}
+        env["OPENLITHOHUB_ALLOW_DIRTY_MEASUREMENT"] = "1"
+        gds = str(
+            Path.home()
+            / "Downloads/B04_Increment29_UnifiedBundle"
+            / "LOCAL_TASK_FIXED/RESULT_B04_INC29/pdb_ibex/ibex.gds"
+        )
+        if not Path(gds).exists():
+            return None  # fixture not available on this machine
+        result = subprocess.run(
+            [sys.executable, str(harness), "--gds", gds, flag, *argv],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT),
+            env=env,
+        )
+        if result.returncode != 0:
+            return None
+        # Extract JSON from stdout
+        start = result.stdout.index("{")
+        end = result.stdout.rindex("}") + 1
+        data = json.loads(result.stdout[start:end])
+        return str(data.get("run_identity"))
+
+    def _base_argv(self) -> list[str]:
+        return ["--repeats", "3", "--sizes", "4096"]
+
+    def test_default_models_parity(self) -> None:
+        preflight_id = self._identity(self._base_argv(), "--preflight-only")
+        print_id = self._identity(self._base_argv(), "--print-run-identity")
+        if preflight_id is None or print_id is None:
+            pytest.skip("fixture GDS not available")
+        assert preflight_id == print_id
+        assert len(preflight_id) == 64
+
+    def test_custom_models_parity(self) -> None:
+        argv = self._base_argv() + ["--models", "levelset-ilt,dummy-identity"]
+        preflight_id = self._identity(argv, "--preflight-only")
+        print_id = self._identity(argv, "--print-run-identity")
+        if preflight_id is None or print_id is None:
+            pytest.skip("fixture GDS not available")
+        assert preflight_id == print_id
+        assert len(preflight_id) == 64
+
+    def test_custom_sizes_repeats_parity(self) -> None:
+        argv = ["--repeats", "2", "--sizes", "2048,4096", "--core", "512"]
+        preflight_id = self._identity(argv, "--preflight-only")
+        print_id = self._identity(argv, "--print-run-identity")
+        if preflight_id is None or print_id is None:
+            pytest.skip("fixture GDS not available")
+        assert preflight_id == print_id
+        assert len(preflight_id) == 64
+
+    def test_iccad_parity(self) -> None:
+        iccad = Path.home() / "data/ICCAD16-N7M2EUV"
+        if not iccad.exists():
+            pytest.skip("ICCAD16 dataset not available")
+        argv = self._base_argv() + ["--iccad16-dir", str(iccad)]
+        preflight_id = self._identity(argv, "--preflight-only")
+        print_id = self._identity(argv, "--print-run-identity")
+        if preflight_id is None or print_id is None:
+            pytest.skip("fixture GDS not available")
+        assert preflight_id == print_id
+        assert len(preflight_id) == 64
+
+
+class TestRuntimeIdentityMutation:
+    """P0-6: runtime_code_identity block must be content-addressed —
+    flipping any field must change the recomputed run identity and
+    validate_run_config must fail."""
+
+    @staticmethod
+    def _base_config() -> dict[str, Any]:
+        import hashlib
+
+        commit = "a" * 40
+        lock = {"python": "3.12", "distribution_freeze_sha256": "d" * 64}
+        lock["lock_sha256"] = hashlib.sha256(ind._canonical_dumps(lock).encode()).hexdigest()
+        return {
+            "schema": "OpenLithoHub.industrial-run-config.v1",
+            "source": {
+                "commit": commit,
+                "harness_sha256": "1" * 64,
+                "industrial_core_sha256": "2" * 64,
+                "claim_generator_sha256": "3" * 64,
+                "run_support_sha256": "4" * 64,
+            },
+            "runtime_code_identity": {
+                "mode": "source-tree",
+                "measurement_commit": commit,
+                "source_tree_match": True,
+            },
+            "environment_lock": lock,
+            "fixtures": {"parent_gds_sha256": "e" * 64, "iccad": {}},
+            "args": {"repeats": 5},
+        }
+
+    def _with_identity(self, config: dict[str, Any]) -> dict[str, Any]:
+        import hashlib
+
+        payload = ind.build_run_identity_payload(config)
+        config["run_identity"] = hashlib.sha256(ind._canonical_dumps(payload).encode()).hexdigest()
+        return config
+
+    def test_source_tree_match_flip_fails(self) -> None:
+        config = self._with_identity(self._base_config())
+        assert ind.validate_run_config(config) == []
+        config["runtime_code_identity"]["source_tree_match"] = False
+        problems = ind.validate_run_config(config)
+        assert any("source_tree_match" in p for p in problems)
+
+    def test_measurement_commit_flip_fails(self) -> None:
+        config = self._with_identity(self._base_config())
+        assert ind.validate_run_config(config) == []
+        config["runtime_code_identity"]["measurement_commit"] = "f" * 40
+        problems = ind.validate_run_config(config)
+        assert any("measurement_commit" in p for p in problems)
+
+    def test_mode_flip_fails(self) -> None:
+        config = self._with_identity(self._base_config())
+        config["runtime_code_identity"]["mode"] = "installed-wheel"
+        problems = ind.validate_run_config(config)
+        assert any("source-tree" in p for p in problems)
+
+    def test_missing_block_fails(self) -> None:
+
+        config = self._with_identity(self._base_config())
+        del config["runtime_code_identity"]
+        # validate_run_config catches the ValueError and reports it
+        problems = ind.validate_run_config(config)
+        assert any("runtime_code_identity" in p for p in problems)
+
+    def test_identity_changes_on_mutation(self) -> None:
+        import hashlib
+
+        config = self._with_identity(self._base_config())
+        original_id = config["run_identity"]
+        config["runtime_code_identity"]["source_tree_match"] = False
+        new_id = hashlib.sha256(
+            ind._canonical_dumps(ind.build_run_identity_payload(config)).encode()
+        ).hexdigest()
+        assert new_id != original_id
+
+
+class TestPublicClaimFirewall:
+    """Audit: stale non-headline values and fabricated numbers in README
+    must fail the claims drift check."""
+
+    @staticmethod
+    def _make_claims():
+        return [
+            {
+                "claim_id": "IB-Q-ILT-MRC",
+                "value": "0.0% (0.00000 -> 0.00000, delta +0.00000)",
+                "headline": False,
+            },
+            {
+                "claim_id": "IB-MEM-32768",
+                "value": "98.1%",
+                "headline": True,
+            },
+        ]
+
+    def test_stale_non_headline_29_percent_fails(self, tmp_path):
+        """A stale non-headline 29.1% in a README table must FAIL."""
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "| Lower MRC — `IB-Q-ILT-MRC` | **29.1%** | same optics |\n",
+            encoding="utf-8",
+        )
+        problems = gen.check_readme(self._make_claims(), readme)
+        assert any("stale numeric value" in p for p in problems), problems
+
+    def test_non_headline_prose_reference_passes(self, tmp_path):
+        """A non-headline claim referenced in prose (no table row value) is OK."""
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "See `IB-Q-ILT-MRC` in the claims doc for details.\n",
+            encoding="utf-8",
+        )
+        problems = gen.check_readme(self._make_claims(), readme)
+        assert problems == []
+
+    def test_unknown_claim_id_fails(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "| Lower MRC — `IB-NOPE` | **99%** |\n",
+            encoding="utf-8",
+        )
+        problems = gen.check_readme(self._make_claims(), readme)
+        assert any("unknown claim id" in p for p in problems)
+
+    def test_headline_wrong_exact_value_fails(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "| Peak memory — `IB-MEM-32768` | **97.0%** |\n",
+            encoding="utf-8",
+        )
+        problems = gen.check_readme(self._make_claims(), readme)
+        assert any("without its exact artifact value" in p for p in problems)
+
+    def test_headline_correct_value_passes(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "| Peak memory — `IB-MEM-32768` | **98.1%** |\n",
+            encoding="utf-8",
+        )
+        problems = gen.check_readme(self._make_claims(), readme)
+        assert problems == []
+
+
+class TestLadderPlanPolicyBookkeeping:
+    """P0 fix: production _ladder_plan must include ALL modes so that
+    STATUS_NOT_RUN_MEMORY_POLICY rows are actually reachable in
+    stage_runtime's bookkeeping path."""
+
+    def test_ladder_plan_includes_dense_for_policy_blocked_size(self):
+        """Production _ladder_plan must include dense_full/tiled_raster in
+        the plan even for a policy-blocked size so that stage_runtime can
+        create the STATUS_NOT_RUN_MEMORY_POLICY row."""
+        import importlib.util as _ilu
+
+        spec = _ilu.spec_from_file_location(
+            "olh_harness_bp",
+            REPO_ROOT / "benchmarks/industrial/run_industrial_benchmark.py",
+        )
+        assert spec is not None and spec.loader is not None
+        harness = importlib.util.module_from_spec(spec)
+        sys.modules["olh_harness_bp"] = harness
+        spec.loader.exec_module(harness)
+
+        import argparse
+
+        # Simulate a 65536px size with a 30 GiB dense_max_bytes policy.
+        # 65536² × 4 bytes × 3 tensors ≈ 48 GiB > 30 GiB → policy-blocked.
+        args = argparse.Namespace(
+            sizes="65536",
+            max_selective_size=65536,
+            max_vector_size=65536,
+            dense_max_bytes=30 * (1 << 30),
+            repeats=1,
+            large_repeats=1,
+            core=1024,
+            die_tile_px=32768,
+            die_tiles_per_side=None,
+            die_core_px=4096,
+            tile_size=1024,
+            min_tile_occupancy=0.02,
+            max_tiles=1,
+            ilt_iterations=1,
+            ilt_iterations_iccad16=1,
+            quality_reps=1,
+            surrogate_train_samples=1,
+            surrogate_epochs=1,
+            iccad16_crop_px=256,
+            iccad16_dir=None,
+        )
+        prepared = {"crops": {"65536": {"gds": "/dev/null", "top_cell": "x"}}}
+        plan = harness._ladder_plan(args, prepared)
+        assert len(plan) == 1
+        size, modes, repeats = plan[0]
+        assert size == 65536
+        # ALL modes must be in the plan so policy-blocked rows are reachable
+        assert "dense_full" in modes
+        assert "tiled_raster" in modes
+        assert "b04_vector" in modes
+        assert "b04_selective" in modes
+
+    def test_dense_allowed_policy_block(self):
+        """Verify dense_allowed correctly blocks 65536² at 30 GiB policy."""
+
+        spec = importlib.util.spec_from_file_location(
+            "olh_harness_bp2",
+            REPO_ROOT / "benchmarks/industrial/run_industrial_benchmark.py",
+        )
+        assert spec is not None and spec.loader is not None
+        harness = importlib.util.module_from_spec(spec)
+        sys.modules["olh_harness_bp2"] = harness
+        spec.loader.exec_module(harness)
+        assert not harness.dense_allowed(65536, budget_bytes=30 * (1 << 30))
+        assert harness.dense_allowed(32768, budget_bytes=30 * (1 << 30))

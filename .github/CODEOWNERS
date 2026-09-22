@@ -7,3 +7,10 @@
 /scripts/check_verification_status.py @OpenLithoHub/b04-verification
 /scripts/fetch_proof_artifacts.py @OpenLithoHub/b04-verification
 /.github/workflows/p054-proof-replay.yml @OpenLithoHub/b04-verification
+
+# Governance layer protection (audit: CI is now a trust boundary — the
+# industrial authority gates and release preflights live here).
+/.github/CODEOWNERS @OpenLithoHub/b04-verification
+/.github/workflows/ci.yml @OpenLithoHub/b04-verification
+/.github/workflows/publish.yml @OpenLithoHub/b04-verification
+/.github/workflows/docker.yml @OpenLithoHub/b04-verification

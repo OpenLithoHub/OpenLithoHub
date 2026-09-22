@@ -4,6 +4,15 @@ OpenLithoHub and DiffCFD are designed to run entirely on-premises with no
 cloud dependencies. This guide covers setting up multi-GPU inference on a
 single machine and tuning for throughput.
 
+> **Provenance notice (2026-09-20):** the GPU timing/throughput/memory
+> tables below are **historical measurements** from an earlier development
+> machine, recorded before Industrial Benchmark v1 existed. They are not
+> regenerable by any checked-in harness and are **not** artifact-backed.
+> Treat them as illustrative until re-measured through
+> `benchmarks/industrial/run_industrial_benchmark.py` on your hardware
+> (see [Industrial Benchmarks](industrial-benchmarks.md)). Do not quote
+> them as product performance claims.
+
 ## Quick Start
 
 ```bash

@@ -6,7 +6,7 @@
 
 > ⭐ **如果这个项目对你有帮助，请点一个 Star！** 这是早期开源项目最容易被社区发现的方式，也是你能为我们做的最有价值的事。
 
-**面向先进 EUV / 曲线掩膜工艺的开源计算光刻评测与工作流工具包。**
+**OpenLithoHub 是一个厂商中立的计算光刻平台，覆盖 OPC/ILT 基准评测、可扩展版图处理、可制造性分析、模型部署与证明携带式验证。**
 
 [![PyPI](https://img.shields.io/pypi/v/openlithohub?include_prereleases&label=PyPI)](https://pypi.org/project/openlithohub/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -25,7 +25,7 @@
 
 ## 项目简介
 
-OpenLithoHub 是开源计算光刻评测与工作流工具集——ILT、OPC、掩膜优化与 EUV 随机缺陷预测，内建诚实自评。
+OpenLithoHub 是一个开源、厂商中立的计算光刻平台：输入版图（GDS/OASIS）与模型，即可获得可评分的可制造性结果、掩膜优化、全芯片流式处理与可复现基准——全部附带诚实自评与证明携带式验证。
 
 ### 验证结果一览
 
@@ -40,19 +40,18 @@ OpenLithoHub 是开源计算光刻评测与工作流工具集——ILT、OPC、�
 
 Dose 响应**单调递减**（10→100 ph/nm² 下降 19.4×），符合已发表的 √(1/dose) EUV shot-noise 标度律。完整数据与方法论：[BENCHMARKS.md](BENCHMARKS.md)。
 
-### 核心能力
+### 产品能力（8 层）
 
-- **统一数据接入** — LithoBench、LithoSim、GAN-OPC、ICCAD'16、ASAP7、FreePDK45、ORFS 布线 RISC-V 版图
-- **标准化指标** — EPE、L2、PV Band、Shot Count、随机鲁棒性、imec 缺陷率、Hotspot 检测
-- **贝叶斯随机模型** — 逐像素失效概率、LER、LWR 热图（Poisson-MC 或 MC-Dropout）
-- **制造合规检查** — MRC/DRC 规则检查作为一票否决门槛
-- **OASIS / GDSII 工作流** — 端到端 Tensor→fab-ready 掩膜（Manhattan 与 Curvilinear）
-- **模型无关评测** — 任何 OPC/ILT 模型只需实现最小接口
-- **流式全芯片流水线** — Core/Halo 分块 + 外存 Source/Sink；版图增长只增加 tile 数量，不增加单次内存规模（RFC 0008）
-- **证明携带式验证** — 面向定理的 `PASS`/`FAIL`/`INCONCLUSIVE` 证书，含认证 halo 括号、覆盖契约与可选 source-native 后端（RFC 0007 / B04）
-- **可选物理插件** — DiffNano（EM 求解器）和 DiffCFD（光刻+旋涂）作为 opt-in 扩展
+- **版图与数据** — GDSII/OASIS/DEF 解析；统一数据接入（LithoBench、LithoSim、GAN-OPC、ICCAD'16、ASAP7、FreePDK45、ORFS 布线 RISC-V 版图）；封闭式 dummy 版图生成
+- **仿真** — Hopkins/SOCS 部分相干成像、Gaussian PSF、厚掩膜 3D 代理；可选严格 EM 插件（DiffNano RCWA/FDTD/FDFD）、扩散 resist 模型
+- **OPC / ILT 优化** — LevelSet-ILT、规则 OPC、OpenILT、surrogate 加速 ILT、warm-start 与后验采样前端、模型无关注册表
+- **可制造性** — EPE、PV Band、L2、Shot Count、随机鲁棒性、MRC/DRC 一票否决门槛、Hotspot 检测、工艺窗口 OPC
+- **全芯片流式** — Core/Halo 分块 + 外存 Source/Sink、认证空上下文筛查、精确矢量（免栅格化）窗口读取；版图增长只增加 tile 数量，不增加单次内存规模（RFC 0008）
+- **部署** — Python API 门面（`Mask`/`LitheEngine`）、Typer CLI、FastAPI 微服务（`/v1/health` `/v1/version` `/v1/capabilities`）、Docker 镜像、Slurm/LSF 友好
+- **基准评测** — 工业基准 v1（真实布线 GDS、同口径对比、artifact 支撑的 claim），以及公开模型质量排行榜
+- **证明携带式验证** — 面向定理的 `PASS`/`FAIL`/`INCONCLUSIVE` 证书，含认证 halo 括号与冻结的 P-054 重放链（RFC 0007 / B04 / P-054）
 
-**诚实边界：** 所有基准使用合成 64×64 版图，无产线验证，无生产 tapeout。CPU 计时。详见 [BENCHMARKS.md](BENCHMARKS.md)。
+**诚实边界：** 旧版模型质量基准使用合成 64×64 版图（历史保留，见 [BENCHMARKS.md](BENCHMARKS.md)）；工业基准 v1 使用真实布线 GDS（见[工业基准测试结果](#工业基准测试结果实测)）。两者均无产线验证、无生产 tapeout。CPU 计时。
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -65,6 +64,39 @@ Dose 响应**单调递减**（10→100 ph/nm² 下降 19.4×），符合已发�
 │ Dummy gen.  │  Shot Count  │ B-spline Fit │           │ hackathon/export│
 └─────────────┴──────────────┴──────────────┴───────────┴─────────────────┘
 ```
+
+---
+
+## 工业基准测试结果（实测）
+
+参考硬件（CPU）：Apple M5 Pro、48 GiB 内存、torch 2.14 —— 多次重复取 median，
+数据为真实布线硅版图：OpenROAD 布线的 **Ibex RISC-V 核**（sky130hd，15,515 个单元）。
+数据集：PDB Physical Design Database @ `9e1e3399`。
+
+| 实测结果（claim ID） | 数值 | 条件 |
+|---|---|---|
+| 流式 vs dense 峰值内存降低 — `IB-MEM-32768` | **98.1%** | 32768² px 裁剪 @ 1 nm/px：dense median RSS → 流式 **0.40 GB** |
+| 流式 vs dense 峰值内存降低 — `IB-MEM-16384` | **96.7%** | 16384² px：dense → 0.40 GB |
+| 端到端流式处理的最大版图 — `IB-SCALE-65536` | **65536x65536 px** | 4.29 GPx 以 **0.42 GiB** 峰值 RSS 完成；dense 仅输入就需 16 GiB，在 30 GB 策略下不可行 |
+| 全 die dense 栅格化 — `IB-DIE-1` | **1.23 TB (1.12 TiB)** | 超过 48 GiB 内存；逐 tile 流式仅需 O(tile) 内存 |
+
+流式峰值内存在 4096² 到 65536² 保持**平稳（0.35 → 0.42 GiB）**，而版图增长 256×——
+内存随 tile 增长，而非随版图增长。
+
+我们对自己不利的事实也如实报告：在 CPU + 轻量基准前向模型下，dense 在所有联合测量尺寸上仍然更快；`levelset-ilt` 默认超参数在 print-critical 的 ICCAD16 EUV 裁剪上
+退化为空白掩膜（退化输出防火墙阻止了空白掩膜会得到的"100% MRC 降低"）；相同迭代预算下
+surrogate-ILT 在 CPU 上端到端并不更快。
+
+上方每个头条数字均由 `scripts/generate_industrial_claims.py` 从入库的 benchmark artifact
+（`benchmarks/results/industrial/`）自动生成；claim ID 对应的完整溯源见
+[`docs/generated/industrial-claims.md`](docs/generated/industrial-claims.md)，
+方法论见 [`docs/industrial-benchmarks.md`](docs/industrial-benchmarks.md)。
+若 README 引用的数字与 artifact 漂移，CI 会直接失败。
+
+**我们刻意不做的主张：** 不宣称 foundry 认证（无 wafer/SEM 校准）；不与商业工具对比
+（Calibre/Tachyon/cuLitho 仅为适配器）；不提供 GPU 性能数字（参考硬件为 CPU，见
+[`docs/self_hosted_deployment.md`](docs/self_hosted_deployment.md) 的溯源声明）；
+不从退化模型输出中提取质量主张；估算或策略决定永不冒充实测主张。
 
 ---
 
@@ -146,8 +178,6 @@ wf = CoDesignWorkflow(
 
 ### 评测模型
 
-### 评测模型
-
 ```bash
 openlithohub eval run \
   --model dummy-identity \
@@ -224,6 +254,12 @@ curl -X POST http://localhost:8000/v1/optimize \
 ```
 
 模型常驻进程内存，重复请求不会重新加载权重。
+服务发现端点：`GET /v1/health`（存活探测）、`GET /v1/ready`（就绪探测：模型注册、scratch 可写）、
+`GET /v1/version`（包/git/torch 版本）、`GET /v1/capabilities`（可用模型、仿真后端、GPU 可用性、schema 版本），
+均以 JSON 返回且不泄露主机敏感信息。运维项：`OPENLITHOHUB_MAX_CONCURRENT_OPTIMIZE` 限制并发优化数
+（超额请求返回 `429` + `Retry-After`）；`OPENLITHOHUB_API_KEY` 要求除 `/v1/health` 外全部端点携带 `X-API-Key`；
+每个响应带 `X-Request-ID` 便于追踪。长任务：`POST /v1/jobs/optimize` → `GET /v1/jobs/{id}` →
+`GET /v1/jobs/{id}/artifact` → `DELETE /v1/jobs/{id}`，分钟级 OPC/ILT 不再长时间占用 HTTP 连接。
 浏览器打开 `http://localhost:8000/docs` 即可看到自动生成的 Swagger UI：
 每个端点都有 JSON Schema 文档，并支持直接上传文件交互调试，
 无需先写客户端代码。
@@ -397,7 +433,12 @@ pip install --pre 'openlithohub[plugins]'   # 安装两者
 
 ## 性能与基准测试
 
-> 所有数据均由内置基准测试脚本在真实硬件上运行获得。没有任何数据是通过估算、外推或"合理假设"得出的。
+两个互补的基准层：
+
+- **工业基准 v1**（`benchmarks/industrial/`）— 真实布线 GDS（OpenROAD 布线的 Ibex/sky130hd），dense vs streaming 的运行时间与峰值内存（多次重复的 median/p10/p90）、同光学模型质量对比、artifact 支撑的 claim。见[工业基准测试结果](#工业基准测试结果实测)与 [`docs/industrial-benchmarks.md`](docs/industrial-benchmarks.md)。
+- **模型质量基准**（下文）— 内置脚本在 synthetic-8 与 ICCAD16 版图上的结果，保持方法对比的连续性。
+
+> 头条指标均为实测，而非估算或外推；标注为 STRUCTURAL 或 ESTIMATE 的数值永不作为实测主张。
 > 方法学、前向模型配置和逐模式细分见 [`docs/benchmarks.md`](docs/benchmarks.md)。
 
 ### 模型质量 — synthetic-8（表 1）
@@ -520,6 +561,10 @@ python3 scripts/plot_benchmarks.py \
 
 ## 光学前向模型
 
+> 稳定性说明：`openlithohub._utils.*` 属于内部命名空间（见
+> [docs/api-stability.md](docs/api-stability.md)），以下示例仅作说明用途。
+> 长期代码请使用公共门面（`Mask` / `LitheEngine`）或注册表中的模型/仿真器。
+
 OpenLithoHub 提供两个可微分的前向模型，全部用纯 PyTorch 实现，所以整个 ILT
 循环端到端可自动求导：
 
@@ -589,7 +634,7 @@ ruff format src/ tests/
 
 ## 竞争定位
 
-**定位：** 开源计算光刻评测与工作流工具集——ILT、OPC、掩膜优化与工艺窗口分析，内建诚实自评。
+**定位：** 厂商中立的计算光刻平台——OPC/ILT 基准评测、可扩展版图处理、可制造性分析、模型部署与证明携带式验证，内建诚实自评。
 
 **领先之处：**
 - **开放 ILT 评测与诚实基线：** 唯一提供标准化 ILT 基准（SARIF 导出、形态学 MRC、切片一致性指标、随机感知损失）的开源项目。商业工具（Calibre MML、cuLitho）闭源且无公开基准。

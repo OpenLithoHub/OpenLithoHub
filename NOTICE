@@ -19,6 +19,9 @@ This project depends on the following third-party components.
 
 | Component | License | URL |
 |-----------|---------|-----|
+| diff-surrogate | Apache-2.0 (CORE dependency, pinned commit 6b0ec10916f58297a0b48cb3af470e7d1ad99b45) | https://github.com/telleroutlook/diff-surrogate |
+| PyYAML | MIT (https://pypi.org/project/PyYAML/) | https://github.com/yaml/pyyaml |
+| tomli (Python < 3.11) | MIT | https://github.com/hukkin/tomli |
 | NumPy | BSD-3-Clause | https://github.com/numpy/numpy |
 | PyTorch | BSD-3-Clause | https://github.com/pytorch/pytorch |
 | Typer | MIT | https://github.com/tiangolo/typer |
@@ -37,7 +40,7 @@ This project depends on the following third-party components.
 
 | Component | License | URL |
 |-----------|---------|-----|
-| KLayout (Python bindings) | GPL-3.0 (used as external tool / optional import) | https://www.klayout.de/ |
+| KLayout (Python bindings) | GPL-3.0 (optional import; **installed inside the published Docker image** — see note below) | https://www.klayout.de/ |
 | SciPy | BSD-3-Clause | https://github.com/scipy/scipy |
 
 ## Optional: models extras
@@ -74,12 +77,15 @@ This project depends on the following third-party components.
 ---
 
 KLayout note: the KLayout Python bindings are licensed under GPL-3.0.
-OpenLithoHub treats KLayout as an optional external tool — it is loaded
-dynamically only when the `workflow` extra is installed and is not
-statically linked or redistributed. Users who install the `workflow`
-extra are responsible for compliance with KLayout's license in their
-deployment context.
-
+OpenLithoHub source treats KLayout as an optional import, BUT the
+published Docker image installs the `klayout` PyPI wheel (via the
+`[workflow]` extra) together with its Qt runtime libraries — the image
+therefore redistributes a GPL-3.0 component. The OpenLithoHub code
+itself remains Apache-2.0; users of the published image must comply with
+GPL-3.0 for the KLayout component (source:
+https://github.com/KLayout/klayout). Historically this notice claimed
+KLayout was "not redistributed" — that was inaccurate while the image
+installed it, and this paragraph is the corrected record (audit P1.13).
 ---
 
 This NOTICE file is provided in compliance with Apache License 2.0,

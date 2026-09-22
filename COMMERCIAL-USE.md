@@ -80,6 +80,11 @@ You must retain copyright notices and the NOTICE file.
 A: Yes, under the open-source license. For SLA-backed support and
 indemnification, contact us about a commercial license.
 
+> **License permission is not technical qualification.** The license permits such use.
+> This is not a representation of foundry qualification, fitness for production,
+> process calibration, or sign-off equivalence.
+
+
 **Q: When would I need a commercial license?**
 A: Only if you want to remove the attribution requirement, need
 indemnification, require SLA-backed support, or need access to proprietary

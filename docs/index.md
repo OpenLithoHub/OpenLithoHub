@@ -1,6 +1,6 @@
 # OpenLithoHub
 
-**Open-source computational lithography benchmarking and workflow toolkit for advanced EUV/curvilinear mask processes.**
+**Vendor-neutral computational lithography platform for OPC/ILT benchmarking, scalable layout processing, manufacturability analysis, model deployment, and proof-carrying verification.**
 
 > Looking for the project home, the live leaderboard, or the hackathon
 > sign-up? Those live on [openlithohub.com](https://openlithohub.com).
@@ -33,7 +33,7 @@ OpenLithoHub provides a unified evaluation and workflow framework for computatio
 - **Hermetic dummy layouts** — `generate_dummy_layout` for CI / Colab without network or KLayout
 - **Standardized metrics** — EPE, PV Band, shot count, EUV stochastic robustness, hotspot detection (recall / precision / F1)
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gating
-- **OASIS workflow** — end-to-end pipeline from tensor to fab-ready mask (manhattan & curvilinear)
+- **OASIS workflow** — end-to-end pipeline from tensor to mask-writer-oriented export (manhattan & curvilinear)
 - **EDA bridge** — minimal Calibre nmDRC / IC Validator templates emitted alongside OASIS exports
 - **Paper-ready visualization** — IEEE / SPIE column-width contour figures via `openlithohub.vis`
 - **Model-agnostic evaluation** — plug any OPC/ILT model into the benchmark via a minimal interface

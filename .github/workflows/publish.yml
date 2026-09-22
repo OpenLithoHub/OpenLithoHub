@@ -4,25 +4,70 @@ on:
   push:
     tags: ["v*"]
 
+# E2: default least privilege; the publish job grants id-token: write
+# for OIDC Trusted Publishing and nothing else does.
 permissions:
-  id-token: write
   contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
+      - name: Release preflight — tag commit must be on protected main (E1)
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "tag commit $GITHUB_SHA is NOT reachable from origin/main — refusing to publish"; exit 1; }
       - name: Install build tools
-        run: pip install build
+        run: pip install build twine cyclonedx-bom
+      - name: Bake build identity into the wheel (P2.2/P0.9)
+        run: |
+          python scripts/write_build_info.py \
+            --commit "$GITHUB_SHA" \
+            --version "${GITHUB_REF_NAME#v}"
+      - name: Verify generated build module compiles
+        run: python -m py_compile src/openlithohub/_build.py
       - name: Build wheel and sdist
         run: python -m build
-      - uses: actions/upload-artifact@v7
+      - name: Wheel smoke on the release bytes (audit P1.4/E1)
+        run: |
+          python -m venv /tmp/relvenv
+          /tmp/relvenv/bin/pip install --no-cache-dir dist/*.whl
+          /tmp/relvenv/bin/python -c "import openlithohub; print('release import ok')"
+          /tmp/relvenv/bin/python -c "import os, openlithohub._build as b; assert b.BUILD_COMMIT == os.environ['GITHUB_SHA'], b.BUILD_COMMIT; print('build identity ok')"
+      - name: Tag/version consistency (audit P1.7)
+        run: |
+          expected="v${SETUPTOOLS_SCM_PRETEND_VERSION:-}"
+          tag="${GITHUB_REF_NAME}"
+          version_file="$(ls dist/*.whl | head -n1 | sed 's/.*openlithohub-\([^-]*\)-.*/\1/')"
+          echo "tag=$tag wheel_version=$version_file"
+          [ "$tag" = "v$version_file" ] || {
+            echo "tag $tag does not match wheel version $version_file"; exit 1; }
+      - name: Twine check (audit P1.7)
+        run: twine check dist/*
+      - name: Generate runtime CycloneDX SBOM from the release wheel (audit P1.8/E3, P2.1)
+        run: |
+          # E3 + P2.1: SBOM of the RUNTIME environment only. The runtime
+          # venv holds exactly the release wheel + resolved deps; the
+          # cyclonedx generator runs OUTSIDE it against a freeze of that
+          # venv, so the generator never appears in its own SBOM.
+          python -m venv /tmp/runtimevenv
+          /tmp/runtimevenv/bin/pip install --no-cache-dir dist/*.whl
+          /tmp/runtimevenv/bin/pip freeze --all > runtime-requirements.txt
+          pip install cyclonedx-bom
+          cyclonedx-py requirements --output-format json \
+            --output-file sbom.cdx.json -i runtime-requirements.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom
+          path: sbom.cdx.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist
           path: dist/
@@ -34,8 +79,8 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: dist
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

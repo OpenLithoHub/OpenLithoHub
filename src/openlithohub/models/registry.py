@@ -54,21 +54,35 @@ class ModelRegistry:
         self._models[name] = model_cls
         return model_cls
 
-    def get(self, name: str, **kwargs: Any) -> LithographyModel:
+    def get(self, name: str, *, ignore_unsupported: bool = True, **kwargs: Any) -> LithographyModel:
         """Instantiate a registered model by name.
 
-        Kwargs that the target model's ``__init__`` does not accept are
-        silently dropped, so optional CLI flags like ``--pretrained`` work
-        across the whole registry without each call site needing to know
-        which models support which options. Real bugs in the model's
-        ``__init__`` (mistyped args, missing required positionals) still
-        propagate as ``TypeError``.
+        By default (``ignore_unsupported=True``) kwargs the target model's
+        ``__init__`` does not accept are silently dropped, so optional CLI
+        flags like ``--pretrained`` work across the whole registry without
+        each call site knowing which models support which options.
+
+        Programmatic/server callers that need configuration typos to fail
+        loudly should pass ``ignore_unsupported=False``: an unknown kwarg
+        then raises ``ValueError`` naming the offending keys instead of
+        silently producing a differently-configured model (audit P1.19).
+        Real bugs in the model's ``__init__`` (missing required
+        positionals) still propagate as ``TypeError``.
         """
         if name not in self._models:
             available = ", ".join(sorted(self._models.keys()))
             raise KeyError(f"Model '{name}' not found. Available: [{available}]")
         cls = self._models[name]
-        return cls(**_filter_supported_kwargs(cls, kwargs))
+        if ignore_unsupported:
+            return cls(**_filter_supported_kwargs(cls, kwargs))
+        accepted = _accepted_kwargs(cls)
+        if accepted is not None:
+            unknown = sorted(set(kwargs) - accepted)
+            if unknown:
+                raise ValueError(
+                    f"Model '{name}' does not accept kwargs: {unknown} (strict configuration mode)"
+                )
+        return cls(**kwargs)
 
     def supports_kwargs(self, name: str, kwargs: dict[str, Any]) -> dict[str, bool]:
         """Return a per-key flag indicating whether the named model accepts each kwarg."""

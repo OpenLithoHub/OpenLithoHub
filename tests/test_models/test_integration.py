@@ -46,3 +46,18 @@ class TestLevelSetILTPipeline:
         mrc = check_mrc(result.mask, min_width_nm=2.0, min_spacing_nm=2.0, pixel_size_nm=1.0)
         assert hasattr(mrc, "passed")
         assert hasattr(mrc, "violation_count")
+
+
+def test_registry_get_strict_mode_rejects_unknown_kwargs() -> None:
+    """P1.19: strict configuration mode must fail loudly on typos."""
+    import pytest
+
+    from openlithohub.models.registry import register_builtin_models, registry
+
+    register_builtin_models()
+    # Lenient (default): unknown kwargs are dropped, as CLI flags rely on.
+    model = registry.get("dummy-identity", totally_unknown_flag=1)
+    assert model is not None
+    # Strict: the same typo raises instead of silently misconfiguring.
+    with pytest.raises(ValueError, match="totally_unknown_flag"):
+        registry.get("dummy-identity", ignore_unsupported=False, totally_unknown_flag=1)

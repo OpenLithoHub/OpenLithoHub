@@ -43,6 +43,8 @@ nav:
   - Architecture: architecture.md
   - For AI Engineers: lithography-for-ai-engineers.md
   - Benchmarks: benchmarks.md
+  - Industrial Benchmarks: industrial-benchmarks.md
+  - API Stability: api-stability.md
   - ORFS Integration: orfs-integration.md
   - Capability Matrix: capability_matrix.md
   - Resist Capability Matrix: resist_capability_matrix.md
