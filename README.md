@@ -148,21 +148,25 @@ Docker: `docker run --rm ghcr.io/openlithohub/openlithohub:latest eval run ...`
 git clone https://github.com/OpenLithoHub/OpenLithoHub.git
 cd OpenLithoHub
 pip install -e ".[dev]"
+# Optional: the unpublished diff-surrogate co-design integration is a
+# developer-only VCS dependency — it is never installed by any extra.
+pip install -r requirements-dev-vcs.txt
 ```
 
-**Docker (zero-config, GPU-ready):**
+**Docker (zero-config CPU container):**
 
-Pre-built images are published to GitHub Container Registry on every release:
+Pre-built images are published to GitHub Container Registry on every release.
+The published images are **CPU images** — they are not built from or tested
+with a CUDA PyTorch stack, so the `--gpus` flag is not a supported GPU
+configuration for them:
 
 ```bash
-# CPU
 docker run --rm -v "$PWD":/data ghcr.io/openlithohub/openlithohub:latest \
   eval run --model dummy-identity --dataset lithobench --data-root /data/lithobench
-
-# GPU (requires nvidia-container-toolkit on the host)
-docker run --rm --gpus all -v "$PWD":/data ghcr.io/openlithohub/openlithohub:latest \
-  optimize run --input /data/design.oas --model neural-ilt --output /data/optimized.oas
 ```
+
+For GPU workloads, install from source with a CUDA PyTorch wheel instead
+(see [docs/self_hosted_deployment.md](docs/self_hosted_deployment.md)).
 
 Tagged versions are also available (e.g. `ghcr.io/openlithohub/openlithohub:0.1`).
 

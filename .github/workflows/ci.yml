@@ -56,8 +56,8 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install package with dev deps
-        run: pip install -e ".[dev]"
+      - name: Install package with dev deps (+ developer-only VCS integration)
+        run: pip install -e ".[dev]" -r requirements-dev-vcs.txt
       - name: Mypy (strict, per pyproject)
         run: mypy src
 
@@ -116,8 +116,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install package with dev deps
-        run: pip install -e ".[dev]"
+      - name: Install package with dev deps (+ developer-only VCS integration)
+        run: pip install -e ".[dev]" -r requirements-dev-vcs.txt
       - name: Install export extras for CLI shard
         # The test_cli shard exercises ONNX export + onnxruntime round-trip,
         # so install onnx / onnxscript / onnxruntime here. Without this,
@@ -155,7 +155,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install package with dev + workflow + export extras
-        run: pip install -e ".[dev,workflow,export,server]"
+        run: pip install -e ".[dev,workflow,export,server]" -r requirements-dev-vcs.txt
       - name: Full-suite coverage gate (>= 78%)
         run: pytest -q --cov=openlithohub --cov-report=xml --cov-report=term --cov-fail-under=78
 
@@ -192,12 +192,10 @@ jobs:
       - name: Assert baked build identity (P0.11)
         run: |
           /tmp/smokevenv/bin/python -c "import openlithohub._build as b; assert b.BUILD_COMMIT != '', b.BUILD_COMMIT; print('build identity present')"
-      - name: Wheel METADATA direct-reference check (P0.9/P0.10)
+      - name: Wheel METADATA direct-reference check (PR-B P0.6 — hard gate)
         run: |
-          # P0.9: KNOWN LIMITATION — diff-surrogate is a VCS dep until it is
-          # published to PyPI. This check REPORTS (not blocks) the direct
-          # references so they are visible; it will be upgraded to a hard
-          # FAIL once diff-surrogate is on PyPI.
+          # PR-B: core metadata carries no VCS dependency anymore, so a
+          # direct reference in the wheel METADATA is now a hard failure.
           python3 -c "
           import glob, sys, zipfile
           whls = glob.glob('dist/*.whl')
@@ -210,12 +208,78 @@ jobs:
                  if l.startswith('Requires-Dist:')
                  and ('@ git+' in l or '@ https://' in l or '@ file:' in l)]
           if bad:
-              print('WARNING: direct references in wheel METADATA (known limitation):')
+              print('FATAL: direct references in wheel METADATA:')
               for b in bad: print(' ', b)
-          else:
-              print('no direct references in wheel METADATA ✓')
+              sys.exit(1)
+          print('no direct references in wheel METADATA ✓')
           "
-          echo "METADATA check done (informational — upgrade to hard FAIL after diff-surrogate PyPI release)"
+
+  package-hermetic:
+    # PR-B (repair-plan §16 / P0.6): the release wheel must install and run
+    # with NO git executable and NO diff-surrogate present — production
+    # installs are hermetic (PyPI-only, no VCS fetch, no source checkout).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: pip install build
+      - name: Bake build identity
+        run: |
+          python scripts/write_build_info.py \
+            --commit "$GITHUB_SHA" \
+            --version "0.0.0.dev0"
+      - name: Build wheel
+        run: |
+          SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0 python -m build --wheel
+      - name: Build a PATH without any git executable
+        run: |
+          mkdir -p /tmp/nogit
+          for d in /usr/local/bin /usr/bin /bin; do
+            for f in "$d"/*; do
+              base="$(basename "$f")"
+              case "$base" in git|git-*) continue ;; esac
+              [ -e "/tmp/nogit/$base" ] || ln -s "$f" "/tmp/nogit/$base"
+            done
+          done
+      - name: Install wheel + server extra with no git on PATH
+        run: |
+          python -m venv /tmp/hermetic
+          export PATH="/tmp/hermetic/bin:/tmp/nogit"
+          command -v git && { echo "git leaked onto PATH"; exit 1; }
+          whl="$(ls dist/openlithohub-*.whl)"
+          /tmp/hermetic/bin/pip install --no-cache-dir "${whl}[server]"
+      - name: Core + server import smoke without diff-surrogate
+        run: |
+          export PATH="/tmp/hermetic/bin:/tmp/nogit"
+          /tmp/hermetic/bin/python -c "
+          import importlib.util as util
+          assert util.find_spec('diff_surrogate') is None, 'diff-surrogate leaked into hermetic venv'
+          import openlithohub
+          import openlithohub._utils
+          import openlithohub.server.app
+          print('core + server import hermetic ✓')
+          "
+          /tmp/hermetic/bin/openlithohub --version
+          /tmp/hermetic/bin/openlithohub --help > /dev/null
+
+  docs-command-smoke:
+    # PR-B (repair-plan §16): documented commands/extras cannot silently
+    # drift — README/docs references are validated against pyproject and
+    # the real CLI help output.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - name: Install package (console script + help probes)
+        run: |
+          SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0 pip install -e .
+      - name: Docs command smoke
+        run: python scripts/docs_command_smoke.py
 
   perf-sentinel:
     # P2.8: a 1-2 minute sentinel that only catches CATASTROPHIC

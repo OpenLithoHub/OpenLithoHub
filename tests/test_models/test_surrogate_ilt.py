@@ -1,6 +1,11 @@
 """Tests for openlithohub.models.surrogate_ilt."""
 
+import pytest
 import torch
+
+# P0.6: diff-surrogate is an optional developer-only integration — these
+# tests only run when it is installed (requirements-dev-vcs.txt).
+pytest.importorskip("diff_surrogate")
 
 from openlithohub._utils.hopkins import HopkinsParams, clear_kernel_cache
 from openlithohub.models.base import PredictionResult

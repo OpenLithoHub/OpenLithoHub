@@ -507,10 +507,13 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
             from importlib import import_module
 
             build_mod = import_module("openlithohub._build")
+            # Repair-plan §10 (PR-B): only the DETERMINISTIC fields the
+            # build module actually carries are reported. BUILD_TIMESTAMP /
+            # BUILD_RUN_ID were read here but never written by
+            # scripts/write_build_info.py — nondeterministic provenance
+            # belongs in OCI labels / attestations, not this response.
             build_info = {
                 "build_commit": getattr(build_mod, "BUILD_COMMIT", ""),
-                "build_timestamp": getattr(build_mod, "BUILD_TIMESTAMP", ""),
-                "build_run_id": getattr(build_mod, "BUILD_RUN_ID", ""),
                 "build_version": getattr(build_mod, "BUILD_VERSION", ""),
             }
         except ModuleNotFoundError:

@@ -1,0 +1,11 @@
+# Developer-only VCS dependency (P0.6, repair-plan PR-B).
+#
+# diff-surrogate is NOT published to PyPI, and direct git references are
+# banned from every published extra (core/server/dev) so wheel METADATA
+# stays free of them. This file is the only place the source-commit pin
+# exists; install it explicitly when developing against the surrogate
+# integration:
+#
+#   pip install -r requirements-dev-vcs.txt
+#
+diff-surrogate @ git+https://github.com/telleroutlook/diff-surrogate.git@6b0ec10916f58297a0b48cb3af470e7d1ad99b45
