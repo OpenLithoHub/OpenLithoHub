@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from collections.abc import Iterator
 
 import numpy as np
 import pytest
@@ -12,11 +13,15 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from openlithohub.server import create_app  # noqa: E402
+from openlithohub.server.config import ServerConfig  # noqa: E402
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return TestClient(create_app())
+def client() -> Iterator[TestClient]:
+    # The lifespan owns the runtime: entering the client starts the job
+    # worker, exiting it stops the worker (PR-A lifecycle authority).
+    with TestClient(create_app(ServerConfig())) as c:
+        yield c
 
 
 def test_health(client: TestClient) -> None:
@@ -329,36 +334,34 @@ def test_sidecar_state_bounded_under_churn(monkeypatch) -> None:
 
 def test_job_optimize_lifecycle() -> None:
     """POST /v1/jobs/optimize → poll → download artifact (P1.15)."""
-    import io
     import time as time_mod
 
-    import numpy as np
-
-    client = TestClient(create_app())
-    layout = np.zeros((64, 64), dtype=np.float32)
-    layout[16:48, 16:48] = 1.0
-    buf = io.BytesIO()
-    np.save(buf, layout)
-    buf.seek(0)
-    created = client.post(
-        "/v1/jobs/optimize",
-        files={"layout": ("in.npy", buf, "application/octet-stream")},
-        data={"model": "dummy-identity", "node": "45nm"},
-    )
-    assert created.status_code == 202, created.text
-    job_id = created.json()["job_id"]
-    for _ in range(100):
-        status = client.get(f"/v1/jobs/{job_id}").json()
-        if status["status"] in ("succeeded", "failed"):
-            break
-        time_mod.sleep(0.1)
-    assert status["status"] == "succeeded", status
-    artifact = client.get(f"/v1/jobs/{job_id}/artifact")
-    assert artifact.status_code == 200
-    assert len(artifact.content) > 0
-    deleted = client.delete(f"/v1/jobs/{job_id}")
-    assert deleted.status_code == 200
-    assert client.get(f"/v1/jobs/{job_id}").status_code == 404
+    client_cm = TestClient(create_app(ServerConfig()))
+    with client_cm as client:
+        layout = np.zeros((64, 64), dtype=np.float32)
+        layout[16:48, 16:48] = 1.0
+        buf = io.BytesIO()
+        np.save(buf, layout)
+        buf.seek(0)
+        created = client.post(
+            "/v1/jobs/optimize",
+            files={"layout": ("in.npy", buf, "application/octet-stream")},
+            data={"model": "dummy-identity", "node": "45nm"},
+        )
+        assert created.status_code == 202, created.text
+        job_id = created.json()["job_id"]
+        for _ in range(100):
+            status = client.get(f"/v1/jobs/{job_id}").json()
+            if status["status"] in ("succeeded", "failed"):
+                break
+            time_mod.sleep(0.1)
+        assert status["status"] == "succeeded", status
+        artifact = client.get(f"/v1/jobs/{job_id}/artifact")
+        assert artifact.status_code == 200
+        assert len(artifact.content) > 0
+        deleted = client.delete(f"/v1/jobs/{job_id}")
+        assert deleted.status_code == 200
+        assert client.get(f"/v1/jobs/{job_id}").status_code == 404
 
 
 def test_ready_endpoint(client: TestClient) -> None:
@@ -370,8 +373,9 @@ def test_ready_endpoint(client: TestClient) -> None:
 
 
 def test_admission_returns_429_when_exhausted(monkeypatch) -> None:
-    """When the admission semaphore is exhausted, /v1/optimize answers 429."""
-    from openlithohub.server import app as app_mod
+    """When the runtime's admission capacity is exhausted, /v1/optimize
+    answers 429. The semaphore is swapped on the lifespan-owned runtime —
+    no module-global admission state exists anymore (PR-A)."""
 
     class _LockedSemaphore:
         def acquire(self, blocking: bool = True, timeout: float | None = None) -> bool:
@@ -380,88 +384,55 @@ def test_admission_returns_429_when_exhausted(monkeypatch) -> None:
         def release(self) -> None:
             pass
 
-    monkeypatch.setattr(app_mod, "_ADMIT", _LockedSemaphore())
-    import io
-
-    import numpy as np
-
-    client = TestClient(create_app())
-    buf = io.BytesIO()
-    np.save(buf, np.zeros((32, 32), dtype=np.float32))
-    buf.seek(0)
-    response = client.post(
-        "/v1/optimize",
-        files={"layout": ("in.npy", buf, "application/octet-stream")},
-        data={"model": "dummy-identity", "node": "45nm"},
-    )
-    assert response.status_code == 429
-    assert response.headers.get("Retry-After") == "5"
-
-
-def test_api_key_rejects_without_header(monkeypatch) -> None:
-    from openlithohub.server import app as app_mod
-
-    monkeypatch.setattr(app_mod, "API_KEY", "sekrit")
-    fresh = TestClient(create_app())
-    assert fresh.get("/v1/models").status_code == 401
-    assert fresh.get("/v1/health").status_code == 200  # liveness stays open
-    ok = TestClient(create_app(), headers={"X-API-Key": "sekrit"})
-    assert ok.get("/v1/models").status_code == 200
-
-
-def test_worker_start_is_idempotent() -> None:
-    """P1.1: repeated create_app() must not spawn additional workers."""
-    import threading
-
-    before = threading.active_count()
-    apps = [create_app() for _ in range(5)]
-    assert all(apps)
-    # bounded slack: other tests may hold transient threads, but the
-    # worker pool itself must not grow by create_app() count.
-    after = threading.active_count()
-    assert after - before <= 1
-
-
-def test_job_queue_full_before_upload_returns_429_without_copy(monkeypatch) -> None:
-    """P1.4: the queue slot is reserved BEFORE the upload is ingested."""
-    from openlithohub.server import app as app_mod
-
-    monkeypatch.setattr(app_mod, "_JOB_QUEUE_DEPTH", 1)
-    monkeypatch.setattr(app_mod, "_JOB_QUEUE", __import__("queue").Queue(maxsize=1))
-    import io
-
-    import numpy as np
-
-    client = TestClient(create_app())
-    buf = io.BytesIO()
-    np.save(buf, np.zeros((32, 32), dtype=np.float32))
-    buf.seek(0)
-    # fill the queue with a real queued record so the reservation fails
-    with JobReserveGuard(app_mod):
+    app = create_app(ServerConfig())
+    with TestClient(app) as client:
+        runtime = app.state.runtime
+        assert runtime is not None
+        monkeypatch.setattr(runtime, "_admission", _LockedSemaphore())
+        buf = io.BytesIO()
+        np.save(buf, np.zeros((32, 32), dtype=np.float32))
+        buf.seek(0)
         response = client.post(
-            "/v1/jobs/optimize",
+            "/v1/optimize",
             files={"layout": ("in.npy", buf, "application/octet-stream")},
             data={"model": "dummy-identity", "node": "45nm"},
         )
-    assert response.status_code == 429
-    assert response.headers.get("Retry-After") == "10"
+        assert response.status_code == 429
+        assert response.headers.get("Retry-After") == "5"
 
 
-class JobReserveGuard:
-    """Fill the job queue for the duration of the request."""
+def test_api_key_rejects_without_header() -> None:
+    with TestClient(create_app(ServerConfig(api_key="sekrit"))) as fresh:
+        assert fresh.get("/v1/models").status_code == 401
+        assert fresh.get("/v1/health").status_code == 200  # liveness stays open
+    keyed = TestClient(create_app(ServerConfig(api_key="sekrit")), headers={"X-API-Key": "sekrit"})
+    with keyed as ok:
+        assert ok.get("/v1/models").status_code == 200
 
-    def __init__(self, app_mod) -> None:
-        self.app_mod = app_mod
 
-    def __enter__(self):
-        self.app_mod._JOB_QUEUE.put(("sentinel", {}))
-        return self
-
-    def __exit__(self, *exc):
-        import contextlib
-
-        with contextlib.suppress(Exception):
-            self.app_mod._JOB_QUEUE.get_nowait()
+def test_job_queue_full_before_upload_returns_429_without_copy() -> None:
+    """P1.4: the queue slot is reserved BEFORE the upload is ingested.
+    One occupied slot (depth 1, held via the public reservation protocol)
+    must 429 the next submission without consuming its upload."""
+    app = create_app(ServerConfig(job_queue_depth=1))
+    with TestClient(app) as client:
+        runtime = app.state.runtime
+        res = runtime.try_reserve_job_slot()  # consume the only slot
+        try:
+            buf = io.BytesIO()
+            np.save(buf, np.zeros((32, 32), dtype=np.float32))
+            buf.seek(0)
+            response = client.post(
+                "/v1/jobs/optimize",
+                files={"layout": ("in.npy", buf, "application/octet-stream")},
+                data={"model": "dummy-identity", "node": "45nm"},
+            )
+            assert response.status_code == 429
+            assert response.headers.get("Retry-After") == "10"
+            assert runtime.snapshot()["jobs_tracked"] == 0
+        finally:
+            res.release()
+        assert runtime.snapshot()["job_queue_reserved"] == 0
 
 
 def test_job_reservation_releases_on_scratch_error(monkeypatch) -> None:
@@ -469,83 +440,76 @@ def test_job_reservation_releases_on_scratch_error(monkeypatch) -> None:
     must be released — the queue must not permanently show full."""
     from openlithohub.server import app as app_mod
 
-    monkeypatch.setattr(
-        app_mod,
-        "make_scratch_dir",
-        lambda prefix: (_ for _ in ()).throw(OSError("disk full")),
-    )
-    client = TestClient(create_app(), raise_server_exceptions=False)
-    buf = io.BytesIO()
-    np.save(buf, np.zeros((32, 32), dtype=np.float32))
-    buf.seek(0)
-    response = client.post(
-        "/v1/jobs/optimize",
-        files={"layout": ("in.npy", buf, "application/octet-stream")},
-        data={"model": "dummy-identity", "node": "45nm"},
-    )
-    # 500 from unhandled OSError, but the reservation was released by the
-    # try/except BaseException in the endpoint.
-    assert response.status_code == 500
-    assert app_mod._JOB_QUEUE_RESERVED == 0, "reservation leaked"
+    app = create_app(ServerConfig())
+    with TestClient(app, raise_server_exceptions=False) as client:
+        runtime = app.state.runtime
+        monkeypatch.setattr(
+            app_mod,
+            "scratch_root",
+            lambda: (_ for _ in ()).throw(OSError("disk full")),
+        )
+        buf = io.BytesIO()
+        np.save(buf, np.zeros((32, 32), dtype=np.float32))
+        buf.seek(0)
+        response = client.post(
+            "/v1/jobs/optimize",
+            files={"layout": ("in.npy", buf, "application/octet-stream")},
+            data={"model": "dummy-identity", "node": "45nm"},
+        )
+        # 500 from unhandled OSError, but the reservation was released by
+        # the transactional reservation context manager.
+        assert response.status_code == 500
+        assert runtime.snapshot()["job_queue_reserved"] == 0, "reservation leaked"
 
 
-def test_job_upload_too_large_releases_reservation(monkeypatch) -> None:
-    """P1.1: 413 path must release the reservation."""
-    from openlithohub.server import app as app_mod
-
-    monkeypatch.setattr(app_mod, "_MAX_UPLOAD_BYTES", 10)
-    initial = app_mod._JOB_QUEUE_RESERVED
-    client = TestClient(create_app(), raise_server_exceptions=False)
-    buf = io.BytesIO(b"x" * 100)
-    response = client.post(
-        "/v1/jobs/optimize",
-        files={"layout": ("big.bin", buf, "application/octet-stream")},
-        data={"model": "dummy-identity"},
-    )
-    assert response.status_code == 413
-    assert initial == app_mod._JOB_QUEUE_RESERVED, "reservation leaked on 413"
+def test_job_upload_too_large_releases_reservation() -> None:
+    """P1.1: 413 path must release the reservation (config-bounded)."""
+    app = create_app(ServerConfig(max_upload_bytes=10))
+    with TestClient(app, raise_server_exceptions=False) as client:
+        runtime = app.state.runtime
+        response = client.post(
+            "/v1/jobs/optimize",
+            files={"layout": ("big.bin", io.BytesIO(b"x" * 100), "application/octet-stream")},
+            data={"model": "dummy-identity"},
+        )
+        assert response.status_code == 413
+        assert runtime.snapshot()["job_queue_reserved"] == 0, "reservation leaked on 413"
 
 
-def test_get_job_artifact_returns_409_for_failed_job() -> None:
+def _seed_job(runtime, job_id: str, status: str) -> None:
+    import time as time_mod
 
-    from openlithohub.server import app as app_mod
-
-    client = TestClient(create_app())
-    with app_mod._JOB_LOCK:
-        app_mod._JOBS["test-failed"] = {
-            "status": "failed",
-            "error": "boom",
+    with runtime._job_lock:
+        runtime._jobs[job_id] = {
+            "status": status,
+            "error": None,
             "summary": None,
             "output_path": None,
             "scratch_dir": "",
             "created_utc": "now",
-            "job_id": "test-failed",
-            "_created_monotonic": __import__("time").monotonic(),
+            "job_id": job_id,
+            "_created_monotonic": time_mod.monotonic(),
         }
-    response = client.get("/v1/jobs/test-failed/artifact")
-    assert response.status_code == 409
-    with app_mod._JOB_LOCK:
-        app_mod._JOBS.clear()
+
+
+def test_get_job_artifact_returns_409_for_failed_job() -> None:
+    app = create_app(ServerConfig())
+    with TestClient(app) as client:
+        runtime = app.state.runtime
+        _seed_job(runtime, "test-failed", "failed")
+        runtime._jobs["test-failed"]["error"] = "boom"
+        response = client.get("/v1/jobs/test-failed/artifact")
+        assert response.status_code == 409
+        with runtime._job_lock:
+            runtime._jobs.clear()
 
 
 def test_job_delete_running_returns_409() -> None:
-
-    from openlithohub.server import app as app_mod
-
-    try:
-        with app_mod._JOB_LOCK:
-            app_mod._JOBS["test-running"] = {
-                "status": "running",
-                "error": None,
-                "summary": None,
-                "output_path": None,
-                "scratch_dir": "",
-                "created_utc": "now",
-                "job_id": "test-running",
-            }
-        client = TestClient(create_app())
+    app = create_app(ServerConfig())
+    with TestClient(app) as client:
+        runtime = app.state.runtime
+        _seed_job(runtime, "test-running", "running")
         response = client.delete("/v1/jobs/test-running")
         assert response.status_code == 409
-    finally:
-        with app_mod._JOB_LOCK:
-            app_mod._JOBS.clear()
+        with runtime._job_lock:
+            runtime._jobs.clear()

@@ -356,7 +356,7 @@ openlithohub serve [OPTIONS]
 |--------|------|-------------|---------|
 | `--host` | TEXT | Bind address. | `127.0.0.1` |
 | `--port`, `-p` | INT | TCP port. | `8000` |
-| `--workers`, `-w` | INT | Uvicorn worker count. | `1` |
+| `--workers`, `-w` | INT | Uvicorn worker count. Must stay `1` while the async job backend is process-local (`in-memory`): multi-worker startup is rejected because jobs created in one worker are invisible to the others. | `1` |
 | `--log-level` | TEXT | uvicorn log level. | `info` |
 | `--reload` | FLAG | Auto-reload on code changes (dev only). | off |
 
