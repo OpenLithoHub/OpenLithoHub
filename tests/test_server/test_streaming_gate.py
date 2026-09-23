@@ -60,6 +60,7 @@ def test_sync_endpoint_defaults_to_dense_and_reports_decision(client: TestClient
     assert response.headers["X-OLH-Execution-Reason"] == "DENSE_SMALL_LAYOUT"
 
 
+@pytest.mark.skipif(not _KLAYOUT, reason="streaming Manhattan output needs klayout.db")
 def test_sync_endpoint_explicit_streaming_succeeds(client: TestClient, tmp_path: Path) -> None:
     response = _post_optimize(client, {"writer": "vsb", "execution_mode": "streaming"})
     assert response.status_code == 200, response.text
