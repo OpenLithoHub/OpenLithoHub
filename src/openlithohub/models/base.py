@@ -78,6 +78,18 @@ class LithographyModel(ABC):
     NAME: ClassVar[str]
     SUPPORTS_CURVILINEAR: ClassVar[bool] = False
     SUPPORTS_STREAMING: ClassVar[bool] = True
+    SUPPORTED_DEVICES: ClassVar[tuple[str, ...]] = ("cpu",)
+    """Devices this model is verified to run on (PR-G §9).
+
+    Importing Torch does NOT make a model GPU-safe. Declare ``("cpu",
+    "cuda")`` only when windowed prediction is verified on CUDA. The
+    execution-device authority fails closed when the selected device is
+    not declared here.
+    """
+    SUPPORTS_BATCHED_PREDICT: ClassVar[bool] = False
+    """Whether ``predict`` is semantically correct for ``B x C x H x W``
+    inputs (PR-G §10). Default False; batching stays disabled until a
+    model opts in."""
     """Whether ``predict()`` honours the windowed-tile contract.
 
     The streaming execution path feeds ``predict()`` a core+halo window of
@@ -112,6 +124,16 @@ class LithographyModel(ABC):
     def streaming_supported(self) -> bool:
         """Per-instance accessor for ``SUPPORTS_STREAMING``."""
         return type(self).SUPPORTS_STREAMING
+
+    @property
+    def supported_devices(self) -> tuple[str, ...]:
+        """Per-instance accessor for ``SUPPORTED_DEVICES``."""
+        return type(self).SUPPORTED_DEVICES
+
+    @property
+    def supports_batched_predict(self) -> bool:
+        """Per-instance accessor for ``SUPPORTS_BATCHED_PREDICT``."""
+        return type(self).SUPPORTS_BATCHED_PREDICT
 
     @property
     def receptive_field_px(self) -> int:

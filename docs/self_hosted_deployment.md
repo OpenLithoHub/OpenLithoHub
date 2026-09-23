@@ -117,7 +117,9 @@ from openlithohub.inference import multiproc_predict
 
 n_gpus = torch.cuda.device_count()
 
-# Each worker targets a different GPU via round-robin
+# Each worker targets a different GPU via round-robin — but ONLY when at
+# least --num-gpus CUDA devices are visible; with fewer devices, every
+# worker falls back to CPU dispatch (workers never share one GPU here).
 results = multiproc_predict(
     model_fn=lambda: model,
     inputs=batch,

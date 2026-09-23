@@ -242,6 +242,9 @@ per-process memory copies:
 - **`SharedStateDictServer`** — loads an `nn.Module` state dict into
   `multiprocessing.shared_memory.SharedMemory` blocks. Workers call
   `state_dict_for_worker()` to reconstruct the dict from shared memory.
+  This shares **host RAM** (POSIX shared memory), not VRAM: each worker
+  still materializes and loads its own tensors, so this is host-side
+  distribution infrastructure, not zero-copy shared GPU allocation.
 - **`CompiledCache`** — disk-backed cache for `torch.compile` artifacts keyed
   by model content hash. Avoids the 30-120 s recompilation penalty on
   subsequent runs.

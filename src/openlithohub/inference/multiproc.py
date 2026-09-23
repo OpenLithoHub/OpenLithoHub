@@ -257,7 +257,11 @@ def multiproc_predict(
     n_workers : int
         Number of worker processes.
     device : str
-        Torch device string (``"cpu"`` or ``"cuda:N"``).
+        Base torch device string (``"cpu"`` or ``"cuda:N"``). Shared
+        weights here are HOST RAM (POSIX shared memory) — workers
+        reconstruct their own tensors; this is not shared VRAM. See
+        :mod:`openlithohub.workflow.parallel` for the CLI path that pins
+        one worker per CUDA device when enough devices are visible.
 
     Returns
     -------
