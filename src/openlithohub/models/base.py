@@ -77,6 +77,16 @@ class LithographyModel(ABC):
 
     NAME: ClassVar[str]
     SUPPORTS_CURVILINEAR: ClassVar[bool] = False
+    SUPPORTS_STREAMING: ClassVar[bool] = True
+    """Whether ``predict()`` honours the windowed-tile contract.
+
+    The streaming execution path feeds ``predict()`` a core+halo window of
+    the real layout and trusts only the interior core.  Models that
+    consume their input under that contract (the default) are streaming-
+    capable; a model that secretly requires the whole chip must declare
+    ``SUPPORTS_STREAMING = False`` so the execution planner refuses the
+    streaming combination instead of silently producing wrong edges.
+    """
     RECEPTIVE_FIELD_PX: ClassVar[int] = 0
     """Half-width of the model's receptive field in pixels.
 
@@ -97,6 +107,11 @@ class LithographyModel(ABC):
     def supports_curvilinear(self) -> bool:
         """Whether this model produces curvilinear (non-Manhattan) output."""
         return type(self).SUPPORTS_CURVILINEAR
+
+    @property
+    def streaming_supported(self) -> bool:
+        """Per-instance accessor for ``SUPPORTS_STREAMING``."""
+        return type(self).SUPPORTS_STREAMING
 
     @property
     def receptive_field_px(self) -> int:

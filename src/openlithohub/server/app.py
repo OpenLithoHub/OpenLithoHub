@@ -243,83 +243,83 @@ def _run_optimize(
     layer: str | None,
     pretrained: bool,
     min_area_nm2: float = 0.0,
+    execution_mode: str = "auto",
 ) -> dict[str, Any]:
-    """Synchronous optimization core. Mirrors the CLI optimize flow but
-    with no Rich I/O — returns a small JSON-friendly summary."""
-    from openlithohub.data.io import load_layout
-    from openlithohub.workflow.export import export_oasis
-    from openlithohub.workflow.halo import compute_halo_px
+    """Synchronous optimization core. Both the sync endpoint and the job
+    worker execute through this one function, which dispatches into the
+    shared product execution spine (``workflow.execution.optimize_layout``)
+    — dense under the memory policy, streaming for supported large jobs,
+    fail-closed otherwise. Returns a small JSON-friendly summary."""
+    from openlithohub.workflow.execution import (
+        OptimizeRequest,
+        coerce_execution_mode,
+        optimize_layout,
+    )
     from openlithohub.workflow.process_node import get_node
-    from openlithohub.workflow.tiling import stitch_tiles, tile_layout
 
+    mode = coerce_execution_mode(execution_mode)
     node_config = get_node(node)
     if pixel_nm is None:
         pixel_nm = node_config.pixel_size_nm
-    if writer not in ("mbmw", "vsb"):
-        raise ValueError(f"unknown writer {writer!r}; expected 'mbmw' or 'vsb'")
 
     model_kwargs: dict[str, Any] = {"pretrained": True} if pretrained else {}
     model, model_lock, model_key = _get_or_load_model(model_name, model_kwargs)
 
     try:
-        layout_tensor = load_layout(input_path, pixel_nm, layer=layer)
-        halo_px = compute_halo_px(
-            node=node_config,
+        request = OptimizeRequest(
             model=model,
-            pixel_nm=pixel_nm,
+            pixel_size_nm=pixel_nm,
+            input_path=input_path,
+            output_path=output_path,
+            output_kind="oasis",
+            writer=writer,
+            layer=layer,
+            node=node_config,
             tile_size=tile_size,
+            threshold=0.5,
+            min_area_nm2=min_area_nm2,
+            execution_mode=mode,
         )
-
-        tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=halo_px)
-        tile_results = []
-        # Hold the per-model lock across all tiles for one request so a
-        # concurrent request cannot interleave its predict() calls with ours
-        # and corrupt the model's per-tile state (caches, RNG cursors, etc.).
+        # Hold the per-model lock across the whole run (dense tile loop or
+        # streaming tile schedule) so a concurrent request cannot interleave
+        # its predict() calls with ours and corrupt the model's per-tile
+        # state (caches, RNG cursors, etc.). PR-A ownership preserved: the
+        # runtime owns admission, the lock owns predict serialization, the
+        # streaming executor owns tile scheduling.
         with model_lock:
-            for tile in tiles:
-                result = model.predict(tile.tensor)
-                tile_results.append((tile, result.mask))
-
-        h, w = layout_tensor.shape
-        optimized = stitch_tiles(tile_results, (h, w))
-        optimized = (optimized > 0.5).float()
-
-        export_mode = "curvilinear" if writer == "mbmw" else "manhattan"
-        try:
-            export_oasis(
-                optimized,
-                output_path,
-                mode=export_mode,
-                pixel_size_nm=pixel_nm,
-                min_area_nm2=min_area_nm2,
-            )
-            export_format = "oasis"
-        except ImportError:
-            fallback = output_path.with_suffix(".pt")
-            torch.save(optimized, str(fallback))
-            output_path = fallback
-            export_format = "torch"
+            result = optimize_layout(request)
+        summary = result_to_summary(result, writer=writer)
     finally:
         # Release the refcount before dropping request-local tensors so a
         # concurrent eviction is free to teardown this model once we are
         # no longer using it.
         _release_model(model_key)
 
-    n_tiles = len(tiles)
     # Drop request-local tensors and flush the CUDA caching allocator so
     # per-request activations from this optimize() don't accumulate as
     # reserved (but unused) VRAM across many requests on the same worker.
-    del layout_tensor, tiles, tile_results, optimized
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+    return summary
 
+
+def result_to_summary(result: Any, *, writer: str) -> dict[str, Any]:
+    """JSON-friendly execution summary shared by the sync endpoint, the
+    job worker and (indirectly) the CLI."""
+    plan = result.plan
     return {
-        "shape": [int(h), int(w)],
-        "tiles": n_tiles,
-        "halo_px": int(halo_px),
+        "shape": [int(result.shape[0]), int(result.shape[1])],
+        "tiles": int(result.n_tiles),
+        "halo_px": int(result.halo_px),
         "writer": writer,
-        "export_format": export_format,
-        "output_path": str(output_path),
+        "export_format": result.output_format,
+        "output_path": str(result.output_path),
+        "execution_mode": plan.mode,
+        "execution_reason": plan.reason,
+        "input_backend": plan.input_backend,
+        "output_backend": plan.output_backend,
+        "estimated_dense_bytes": int(plan.estimated_dense_bytes),
+        "max_dense_bytes": int(plan.max_dense_bytes),
     }
 
 
@@ -534,6 +534,7 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     def capabilities() -> dict[str, Any]:
         from openlithohub.models.registry import register_builtin_models, registry
         from openlithohub.simulators.registry import list_simulators
+        from openlithohub.workflow.execution import streaming_capability_matrix
 
         register_builtin_models()
         gpu: dict[str, Any] = {"available": bool(torch.cuda.is_available())}
@@ -546,7 +547,10 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
             "models": sorted(registry.list_models()),
             "simulator_backends": sorted(list_simulators()),
             "gpu": gpu,
+            # Legacy coarse flag, kept for v1 clients; superseded by the
+            # structured "streaming" matrix below (PR-C §11).
             "streaming_pipeline": True,
+            "streaming": streaming_capability_matrix(),
             "input_formats": ["npy", "pt", "oas", "gds"],
             "export_formats": ["oasis", "gds", "pt"],
             # Truthful single-process job contract (repair-plan §4 Phase 1):
@@ -605,6 +609,15 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                 "sign-off or complete manufacturing-rule compliance."
             ),
         ),
+        execution_mode: str = Form(
+            "auto",
+            description=(
+                "Execution topology: 'auto' picks dense under the dense memory "
+                "policy (OPENLITHOHUB_MAX_DENSE_BYTES) and streaming for supported "
+                "large jobs; unsupported large jobs fail closed (400) instead of "
+                "silently materializing a full-chip raster."
+            ),
+        ),
     ) -> Response | JSONResponse:
         runtime = _require_runtime(request)
         if not runtime.accepting_jobs:
@@ -660,6 +673,7 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                     layer=layer,
                     pretrained=pretrained,
                     min_area_nm2=min_area_nm2,
+                    execution_mode=execution_mode,
                 )
             except AdmissionDeniedError:
                 raise HTTPException(
@@ -706,6 +720,8 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                     "X-OLH-Halo-Px": str(summary["halo_px"]),
                     "X-OLH-Export-Format": summary["export_format"],
                     "X-OLH-Shape": "x".join(str(d) for d in summary["shape"]),
+                    "X-OLH-Execution-Mode": summary["execution_mode"],
+                    "X-OLH-Execution-Reason": summary["execution_reason"],
                 },
                 background=BackgroundTask(shutil.rmtree, tmp_path, True),
             )
@@ -731,6 +747,13 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
         layer: str | None = Form(None, description="OASIS/GDSII layer 'LAYER:DTYPE'."),
         pretrained: bool = Form(False, description="Load pretrained weights."),
         min_area_nm2: float = Form(0.0, description="Drop shapes below this area (nm^2)."),
+        execution_mode: str = Form(
+            "auto",
+            description=(
+                "Execution topology: 'auto' (planner), 'dense' or 'streaming'. "
+                "Unsupported large jobs fail closed instead of falling back to dense."
+            ),
+        ),
     ) -> JSONResponse:
         runtime = _require_runtime(request)
         if not runtime.accepting_jobs:
@@ -770,6 +793,7 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                     layer=layer,
                     pretrained=pretrained,
                     min_area_nm2=min_area_nm2,
+                    execution_mode=execution_mode,
                 )
                 job_id = reservation.commit(
                     {

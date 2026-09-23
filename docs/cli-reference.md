@@ -91,6 +91,7 @@ openlithohub optimize run [OPTIONS]
 | `--threshold` | FLOAT | Final mask binarisation threshold. `0.225` matches the LithoBench/Yang2023 calibration; pass `0.5` for the legacy mid-grey cut. | `0.225` |
 | `--export-min-area` | FLOAT | Drop curvilinear shapes below this polygon area (nm²) at export. `0.0` keeps every shape (academic / Hackathon scoring stays bit-exact); `>0` for fab-oriented exports where MRC would reject the smallest SRAFs. Export quality is not foundry sign-off. | `0.0` |
 | `--deterministic / --no-deterministic` | FLAG | Force bit-reproducible torch backends (`cudnn.deterministic=True`, `cudnn.benchmark=False`, `allow_tf32=False` on cudnn+matmul). Slower, required when two runs must produce identical masks. | `--no-deterministic` |
+| `--execution-mode` | TEXT | Execution topology: `auto` picks dense under the dense memory policy (`OPENLITHOHUB_MAX_DENSE_BYTES`, default 8 GiB per fp32 raster, `0` = unlimited) and streaming for supported large jobs; unsupported large jobs fail closed instead of silently allocating a full-chip raster. `dense` forces the legacy blend path. `streaming` forces the exact-core streaming path (`.npy` output writes a memmap-backed raster artifact; `.oas`/`.gds` with `--writer vsb` writes streaming Manhattan OASIS). See [Streaming Execution](streaming-execution.md). | `auto` |
 
 **Example:**
 
@@ -106,7 +107,8 @@ openlithohub optimize run \
 
 **Multi-GPU tile inference:**
 
-`--num-gpus N` (`N>1`) shards tiles round-robin across `N` worker processes
+`--num-gpus N` (`N>1`) keeps the legacy dense parallel path (dense only;
+streaming requires `--num-gpus 1`) and shards tiles round-robin across `N` worker processes
 spawned via `torch.multiprocessing` (spawn context, not fork — required for
 CUDA safety). Each worker pins itself to one CUDA device (`cuda:rank`) when
 enough GPUs are visible, and falls back to CPU dispatch otherwise so the
@@ -370,9 +372,13 @@ openlithohub serve [OPTIONS]
 
 `POST /v1/optimize` form fields: `layout` (file), `model`, `node`,
 `pixel_nm`, `tile_size`, `writer` (`mbmw` or `vsb`), `layer`
-(`LAYER:DTYPE`, required for multi-layer files), `pretrained`. The
+(`LAYER:DTYPE`, required for multi-layer files), `pretrained`,
+`execution_mode` (`auto` / `dense` / `streaming`; see
+[Streaming Execution](streaming-execution.md) — unsupported large jobs
+fail closed with HTTP 400 instead of falling back to dense). The
 response carries `X-OLH-Tiles`, `X-OLH-Halo-Px`, `X-OLH-Export-Format`,
-and `X-OLH-Shape` headers describing the run.
+`X-OLH-Shape`, and the execution decision (`X-OLH-Execution-Mode`,
+`X-OLH-Execution-Reason`) headers describing the run.
 
 ##### Example
 

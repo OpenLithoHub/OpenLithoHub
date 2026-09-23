@@ -1,13 +1,14 @@
-"""`LitheEngine` — thin wrapper over registry + tile/halo/stitch pipeline.
+"""`LitheEngine` — object-oriented driver over the shared execution spine.
 
-Mirrors the body of ``server.app._run_optimize`` minus filesystem I/O so
-callers can drive the engine in-process without touching the HTTP server
-or the CLI helpers.
+``optimize`` dispatches through the product execution planner
+(:mod:`openlithohub.workflow.execution`), the same authority as the CLI
+``optimize run`` and the HTTP server ``_run_optimize``; ``evaluate``
+computes the canonical metric battery in-process.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import torch
 
@@ -25,7 +26,6 @@ from openlithohub.simulators.base import BaseSimulator, SimulatorConfig
 from openlithohub.simulators.hopkins_sim import HopkinsSimulator
 from openlithohub.workflow.halo import compute_halo_px
 from openlithohub.workflow.process_node import ProcessNodeConfig, get_node
-from openlithohub.workflow.tiling import stitch_tiles, tile_layout
 
 
 class LitheEngine:
@@ -151,32 +151,56 @@ class LitheEngine:
             return Mask.from_tensor(design, pixel_size_nm=pixel_nm)
         raise TypeError(f"expected Mask or torch.Tensor, got {type(design).__name__}")
 
-    def optimize(self, design: Mask | torch.Tensor) -> Mask:
+    def optimize(
+        self,
+        design: Mask | torch.Tensor,
+        *,
+        execution_mode: Literal["auto", "dense", "streaming"] = "auto",
+    ) -> Mask:
         """Run the model over ``design`` with tiling + halo + stitching.
 
         Returns a binarised ``Mask`` matching the input shape and pixel pitch.
+
+        ``execution_mode`` selects the execution topology through the shared
+        product planner (:mod:`openlithohub.workflow.execution`):
+
+        * ``"auto"`` (default) — dense under the dense memory policy
+          (``OPENLITHOHUB_MAX_DENSE_BYTES``); above it, fail closed rather
+          than silently allocating a full-chip raster, because an in-memory
+          tensor request cannot stream its input or return an out-of-core
+          output. Path-based large jobs should use the CLI or HTTP API,
+          which stream via ``run_streaming``.
+        * ``"dense"`` — the historical overlapping-tile + blend path.
+        * ``"streaming"`` — the exact-core streaming scheduler
+          (``run_streaming``) over the in-memory tensor. Honest caveat: the
+          caller has already materialised the input and the return value is
+          a dense mask, so end-to-end resident memory stays O(layout); this
+          mode exists for exact-core semantics and dense/streaming
+          equivalence testing, not for memory scaling.
         """
         in_mask = self._coerce_to_mask(design)
         pixel_nm = self._resolve_pixel_size(in_mask.pixel_size_nm)
         tensor = in_mask.tensor
 
-        halo_px = compute_halo_px(
-            node=self._node_config,
-            model=self._model,
-            pixel_nm=pixel_nm,
-            tile_size=self._tile_size,
+        from openlithohub.workflow.execution import (
+            OptimizeRequest,
+            optimize_layout,
         )
 
-        tiles = tile_layout(tensor, tile_size=self._tile_size, overlap=halo_px)
-        tile_results: list[tuple[Any, torch.Tensor]] = []
-        for tile in tiles:
-            result = self._model.predict(tile.tensor)
-            tile_results.append((tile, result.mask))
-
-        h, w = tensor.shape
-        stitched = stitch_tiles(tile_results, (int(h), int(w)))
-        binarised = (stitched > 0.5).float()
-
+        request = OptimizeRequest(
+            model=self._model,
+            pixel_size_nm=pixel_nm,
+            input_tensor=tensor,
+            output_kind="tensor-mask",
+            node=self._node_config,
+            tile_size=self._tile_size,
+            threshold=0.5,
+            execution_mode=execution_mode,
+        )
+        result = optimize_layout(request)
+        binarised = result.mask
+        if binarised is None:  # the tensor-mask contract guarantees a mask
+            raise RuntimeError("dense execution did not return a mask tensor")
         return Mask(tensor=binarised, pixel_size_nm=pixel_nm, layer=in_mask.layer)
 
     def evaluate(
