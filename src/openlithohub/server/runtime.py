@@ -14,12 +14,28 @@ Authority model established by PR-A:
   manager releases any reservation left ACTIVE by an exception or a
   forgotten commit. There is no second, manual reserve/release
   protocol.
-* Shutdown is a state machine (NEW -> RUNNING -> DRAINING -> STOPPED):
-  new submissions are rejected while draining, queued jobs are
-  cancelled per documented policy, and the in-flight worker is joined
-  up to the configured grace period. Python threads cannot be
-  force-killed, so a worker that outlives the grace period is reported
-  honestly (``stop_forced``) instead of pretending ownership ended.
+* Shutdown is a state machine (NEW -> RUNNING -> DRAINING -> STOPPED)
+  with a strong terminal invariant:
+
+      STOPPED  ==>  no owned worker thread is alive AND no admitted
+                    execution is still in flight under this runtime.
+
+  New submissions are rejected while draining, queued jobs are
+  cancelled per documented policy, and owned work (the worker plus any
+  admitted synchronous run) is awaited up to the configured grace
+  period. Python threads cannot be force-killed, so work that outlives
+  the grace period keeps ownership truthful: the runtime stays
+  DRAINING with ``stop_forced`` set and retains its worker reference —
+  it does NOT claim STOPPED. A reaper handshake (``_worker_exited``)
+  completes DRAINING -> STOPPED once the last owned execution exits.
+* New-work gates live at the runtime authority boundary, atomically
+  ordered against the RUNNING -> DRAINING transition through
+  ``_lifecycle_lock`` (lock ordering: lifecycle_lock -> job_lock /
+  admission_meta_lock; never the reverse): reservation creation,
+  ``QueueReservation.commit`` enqueue, and ``run_admitted`` admission
+  all validate state and acquire/enqueue in one critical section, so a
+  commit either lands before shutdown (and is drained/cancelled by it)
+  or is rejected — never enqueued into a stopped runtime.
 * State introspection goes through :meth:`ServerRuntime.snapshot` —
   public counters only; no private semaphore internals in API code.
 """
@@ -76,6 +92,11 @@ class JobStillRunningError(RuntimeError):
 
 class AdmissionDeniedError(RuntimeError):
     """Raised when the global optimize admission capacity is exhausted."""
+
+
+class RuntimeNotAcceptingWorkError(RuntimeError):
+    """Raised when the runtime is no longer accepting new work (draining
+    or stopped). HTTP layer maps this to 503 — never 400/429."""
 
 
 def cleanup_scratch_dirs(doomed: list[str]) -> None:
@@ -198,6 +219,12 @@ class ServerRuntime:
         self._shutdown = threading.Event()
         self._worker_thread: threading.Thread | None = None
         self._stop_forced = False
+        # Worker-exit handshake: the worker loop signals this in its
+        # finally block; a reaper armed by a forced stop completes
+        # DRAINING -> STOPPED only after it is set and no admitted run
+        # is still in flight.
+        self._worker_exited = threading.Event()
+        self._reaper_thread: threading.Thread | None = None
 
     # ---- lifecycle ----------------------------------------------------
 
@@ -209,8 +236,22 @@ class ServerRuntime:
     def accepting_jobs(self) -> bool:
         """True only while RUNNING with a live worker. DRAINING/STOPPED
         runtimes reject new submissions (repair-plan P1.2)."""
-        worker = self._worker_thread
-        return self._state is RuntimeState.RUNNING and worker is not None and worker.is_alive()
+        return self._state is RuntimeState.RUNNING and self.worker_alive
+
+    @property
+    def worker_alive(self) -> bool:
+        """True while the owned job worker thread is still alive. A
+        forced stop retains the worker reference, so this stays truthful
+        after ``stop()`` returns."""
+        thread = self._worker_thread
+        return thread is not None and thread.is_alive()
+
+    @property
+    def executing(self) -> bool:
+        """True while an admitted optimize (worker job or synchronous
+        run) is still in flight under this runtime's admission authority."""
+        with self._admission_meta_lock:
+            return self._admission_in_use > 0
 
     def start(self) -> None:
         """Start the single job worker. Illegal from any state but NEW."""
@@ -240,25 +281,93 @@ class ServerRuntime:
     def stop(self, timeout: float | None = None) -> None:
         """Graceful shutdown state machine (repair-plan P1.2).
 
-        1. DRAINING — readiness goes false, new submissions are rejected.
+        1. DRAINING — readiness goes false; the runtime gates (reservation
+           creation, commit enqueue, sync admission) reject new work
+           atomically against this transition.
         2. Stop dequeueing; queued jobs are cancelled (documented policy)
            and their scratch removed.
-        3. Join the in-flight worker up to the grace period. A worker that
-           outlives the grace cannot be force-killed (Python threads);
-           ``stop_forced`` records that honestly.
-        4. STOPPED only after the join attempt completes.
+        3. Await owned work — the worker thread plus any admitted
+           in-flight run — up to the grace period.
+        4. STOPPED only when no owned worker is alive and nothing is
+           still executing. If the grace period expires with work still
+           running, ownership is RETAINED: state stays DRAINING,
+           ``stop_forced`` records it, the worker reference is kept, and
+           a reaper completes the STOPPED transition when the last owned
+           execution exits. Calling ``stop()`` again while draining
+           awaits the worker for its own grace budget instead of raising
+           (lifespan teardown must not fail).
         """
         grace = self.config.shutdown_grace_seconds if timeout is None else timeout
+        reentry = False
         with self._lifecycle_lock:
             if self._state is RuntimeState.STOPPED:
                 return
             if self._state is RuntimeState.DRAINING:
-                raise RuntimeError("stop already in progress")
-            self._state = RuntimeState.DRAINING
+                reentry = True
+            else:
+                self._state = RuntimeState.DRAINING
+        # Past this transition, no gate can admit new work: enqueue and
+        # admission validate state under _lifecycle_lock, so any commit
+        # that saw RUNNING finished enqueueing strictly before the drain
+        # below — it will be seen and cancelled, never stranded.
         self._shutdown.set()
 
-        # Cancel queued jobs: the worker must never execute work that was
-        # accepted before shutdown but never started.
+        if not reentry:
+            self._drain_queued_jobs()
+
+        deadline = time.monotonic() + grace
+        thread = self._worker_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=grace)
+        # In-flight admitted work gets the remaining grace budget.
+        while self.executing and time.monotonic() < deadline:
+            time.sleep(0.02)
+
+        if self._owns_no_execution():
+            with self._lifecycle_lock:
+                self._state = RuntimeState.STOPPED
+            logger.info("server runtime stopped (forced=%s)", self._stop_forced)
+            return
+
+        self._stop_forced = True
+        logger.error(
+            "runtime stop: owned execution still alive after %.1fs grace "
+            "(worker_alive=%s, admitted_in_flight=%s); retaining ownership "
+            "in DRAINING until it exits — STOPPED is not claimed",
+            grace,
+            self.worker_alive,
+            self.snapshot()["admission_in_use"],
+        )
+        self._arm_stop_reaper()
+
+    def _owns_no_execution(self) -> bool:
+        """True when this runtime holds no live execution authority."""
+        return not self.worker_alive and not self.executing
+
+    def _arm_stop_reaper(self) -> None:
+        """Arm the once-only reaper that finishes a forced stop."""
+        with self._lifecycle_lock:
+            if self._reaper_thread is not None:
+                return
+            self._reaper_thread = threading.Thread(
+                target=self._reap_until_stopped, name="olh-worker-reaper", daemon=True
+            )
+            self._reaper_thread.start()
+
+    def _reap_until_stopped(self) -> None:
+        """Complete DRAINING -> STOPPED after the last owned execution
+        exits (worker-exit handshake + in-flight admission drain)."""
+        self._worker_exited.wait()
+        while self.executing:
+            time.sleep(0.05)
+        with self._lifecycle_lock:
+            if self._state is RuntimeState.DRAINING and self._owns_no_execution():
+                self._state = RuntimeState.STOPPED
+        logger.info("forced stop: last owned execution exited; runtime now STOPPED")
+
+    def _drain_queued_jobs(self) -> None:
+        """Cancel queued jobs: the worker must never execute work that
+        was accepted before shutdown but never started."""
         while True:
             try:
                 job_id, _params = self._job_queue.get_nowait()
@@ -273,21 +382,6 @@ class ServerRuntime:
                     doomed = str(record.get("scratch_dir") or "")
             cleanup_scratch_dirs([doomed])
             self._job_queue.task_done()
-
-        thread = self._worker_thread
-        self._worker_thread = None
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=grace)
-            if thread.is_alive():
-                self._stop_forced = True
-                logger.error(
-                    "job worker did not terminate within %.1fs grace; "
-                    "it keeps running detached (threads cannot be killed)",
-                    grace,
-                )
-        with self._lifecycle_lock:
-            self._state = RuntimeState.STOPPED
-        logger.info("server runtime stopped (forced=%s)", self._stop_forced)
 
     # ---- public introspection (repair-plan P1.4) -----------------------
 
@@ -304,6 +398,7 @@ class ServerRuntime:
         return {
             "state": self._state.value,
             "accepting_requests": self.accepting_jobs,
+            "worker_alive": self.worker_alive,
             "admission_capacity": self.config.max_concurrent_optimize,
             "admission_in_use": admission_in_use,
             "job_queue_capacity": self.config.job_queue_depth,
@@ -343,9 +438,22 @@ class ServerRuntime:
         return False
 
     def run_admitted(self, **params: Any) -> dict[str, Any]:
-        """Run one optimize under the admission semaphore."""
-        if not self.try_acquire_admission():
-            raise AdmissionDeniedError("server at maximum concurrent optimizations")
+        """Run one optimize under the admission semaphore.
+
+        Authority gate (PR-A red-team blocker B): the RUNNING check and
+        the admission acquisition happen atomically under
+        ``_lifecycle_lock``, totally ordered against the RUNNING ->
+        DRAINING transition. Winning before shutdown makes this
+        legitimate in-flight work that ``stop()`` grace-controls; losing
+        means the runtime is draining/stopped and this raises
+        :class:`RuntimeNotAcceptingWorkError` (HTTP 503)."""
+        with self._lifecycle_lock:
+            if self._state is not RuntimeState.RUNNING:
+                raise RuntimeNotAcceptingWorkError(
+                    f"runtime is {self._state.value}; not accepting new work"
+                )
+            if not self.try_acquire_admission():
+                raise AdmissionDeniedError("server at maximum concurrent optimizations")
         try:
             return self._optimize_runner(**params)
         finally:
@@ -365,13 +473,24 @@ class ServerRuntime:
             reservation._release_if_active()
 
     def try_reserve_job_slot(self) -> QueueReservation:
-        """Reserve a slot or raise :class:`JobQueueFullError`. The
-        capacity check and the counter increment are atomic (one lock),
-        so concurrent reservers can never oversubscribe capacity."""
-        with self._job_lock:
-            if self._job_queue.qsize() + self._slots_reserved >= self.config.job_queue_depth:
-                raise JobQueueFullError(f"job queue is full ({self.config.job_queue_depth} slots)")
-            self._slots_reserved += 1
+        """Reserve a slot or raise :class:`JobQueueFullError`; fail closed
+        with :class:`RuntimeNotAcceptingWorkError` unless RUNNING. The
+        state check and the capacity check/counter increment are atomic
+        (lifecycle lock ordering over the job lock), so concurrent
+        reservers can never oversubscribe capacity. This early gate does
+        NOT replace the commit-time recheck — a reservation may span a
+        long upload across a shutdown."""
+        with self._lifecycle_lock:
+            if self._state is not RuntimeState.RUNNING:
+                raise RuntimeNotAcceptingWorkError(
+                    f"runtime is {self._state.value}; not accepting new jobs"
+                )
+            with self._job_lock:
+                if self._job_queue.qsize() + self._slots_reserved >= self.config.job_queue_depth:
+                    raise JobQueueFullError(
+                        f"job queue is full ({self.config.job_queue_depth} slots)"
+                    )
+                self._slots_reserved += 1
         return QueueReservation(self)
 
     def _release_reserved_slot(self) -> None:
@@ -382,31 +501,43 @@ class ServerRuntime:
 
     def _enqueue_reserved(self, record: dict[str, Any], params: dict[str, Any]) -> str:
         """Enqueue on behalf of an ACTIVE reservation. Called at most once
-        per reservation (QueueReservation.commit guards the transition),
-        under the job lock, so ``put_nowait`` cannot observe a full queue:
-        the reservation itself already holds the capacity."""
-        with self._job_lock:
-            if self._slots_reserved <= 0:  # defensive: broken protocol
-                raise RuntimeError(
-                    "job queue capacity invariant violated: enqueue without reservation"
+        per reservation (QueueReservation.commit guards the transition).
+
+        Authority gate (PR-A red-team blocker B): the RUNNING check and
+        the enqueue happen under ``_lifecycle_lock`` — the same lock under
+        which ``stop()`` performs RUNNING -> DRAINING — so the two are
+        totally ordered. A commit either lands before the transition (the
+        shutdown drain then sees and cancels the job) or is rejected once
+        draining has begun; a job can never be enqueued into a stopped
+        runtime. Lock ordering is lifecycle_lock -> job_lock everywhere;
+        no path takes them in reverse."""
+        with self._lifecycle_lock:
+            if self._state is not RuntimeState.RUNNING:
+                raise RuntimeNotAcceptingWorkError(
+                    f"runtime is {self._state.value}; not accepting new jobs"
                 )
-            job_id = f"job-{next(self._job_counter)}-{uuid.uuid4().hex[:8]}"
-            try:
-                self._job_queue.put_nowait((job_id, params))
-            except queue.Full as exc:
-                # Only reachable if capacity was stolen outside the
-                # reservation protocol. Consume nothing; the caller's
-                # reservation stays ACTIVE and releases on exit.
-                raise RuntimeError(
-                    "job queue capacity invariant violated: a reserved slot failed to enqueue"
-                ) from exc
-            record["job_id"] = job_id
-            record["_created_monotonic"] = time.monotonic()
-            self._jobs[job_id] = record
-            doomed = self._evict_terminal_locked(time.monotonic())
-            # The reservation is consumed: real queue capacity now owns
-            # the slot. Exactly one decrement per committed reservation.
-            self._slots_reserved -= 1
+            with self._job_lock:
+                if self._slots_reserved <= 0:  # defensive: broken protocol
+                    raise RuntimeError(
+                        "job queue capacity invariant violated: enqueue without reservation"
+                    )
+                job_id = f"job-{next(self._job_counter)}-{uuid.uuid4().hex[:8]}"
+                try:
+                    self._job_queue.put_nowait((job_id, params))
+                except queue.Full as exc:
+                    # Only reachable if capacity was stolen outside the
+                    # reservation protocol. Consume nothing; the caller's
+                    # reservation stays ACTIVE and releases on exit.
+                    raise RuntimeError(
+                        "job queue capacity invariant violated: a reserved slot failed to enqueue"
+                    ) from exc
+                record["job_id"] = job_id
+                record["_created_monotonic"] = time.monotonic()
+                self._jobs[job_id] = record
+                doomed = self._evict_terminal_locked(time.monotonic())
+                # The reservation is consumed: real queue capacity now owns
+                # the slot. Exactly one decrement per committed reservation.
+                self._slots_reserved -= 1
         cleanup_scratch_dirs(doomed)
         return job_id
 
@@ -545,3 +676,6 @@ class ServerRuntime:
             finally:
                 self.release_admission()
                 self._job_queue.task_done()
+        # Worker-exit handshake (PR-A red-team blocker A): the reaper of a
+        # forced stop waits for this before completing DRAINING -> STOPPED.
+        self._worker_exited.set()

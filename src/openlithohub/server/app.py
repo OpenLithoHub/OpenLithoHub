@@ -61,6 +61,7 @@ from openlithohub.server.runtime import (
     JobArtifactUnavailableError,
     JobQueueFullError,
     JobStillRunningError,
+    RuntimeNotAcceptingWorkError,
     ServerRuntime,
     UnknownJobError,
 )
@@ -362,6 +363,19 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> Any:
+        # Ownership exclusion (PR-A red-team blocker A): a forced stop
+        # leaves the previous runtime's worker (or an admitted run) alive
+        # in this process. Starting a second runtime then would create a
+        # second execution authority — e.g. two concurrent optimizes
+        # under max_concurrent_optimize=1. Fail closed until the previous
+        # runtime truly owns nothing.
+        previous = getattr(app.state, "runtime", None)
+        if previous is not None and (previous.worker_alive or previous.executing):
+            raise RuntimeError(
+                "refusing to start a second execution authority: the previous "
+                "runtime still owns a live worker/in-flight run after a forced "
+                "stop; wait for it to exit before restarting"
+            )
         runtime = ServerRuntime(config, optimize_runner=_run_optimize)
         app.state.runtime = runtime
         runtime.start()
@@ -369,9 +383,14 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
             yield
         finally:
             runtime.stop()
-            # Detach so post-shutdown requests observe a clean 503
-            # instead of a stopped runtime.
-            app.state.runtime = None
+            if runtime.worker_alive or runtime.executing:
+                # Forced stop: RETAIN the reference so a future lifespan
+                # cannot overlap the detached execution (exclusion above).
+                app.state.runtime = runtime
+            else:
+                # Clean stop: detach so post-shutdown requests observe a
+                # clean 503 instead of a stopped runtime.
+                app.state.runtime = None
 
     app = FastAPI(
         title="OpenLithoHub Engine",
@@ -645,6 +664,13 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                     detail="server at maximum concurrent optimizations",
                     headers={"Retry-After": "5"},
                 ) from None
+            except RuntimeNotAcceptingWorkError:
+                # Lifecycle authority rejection (draining/stopped) — 503,
+                # never 400/429 (PR-A red-team blocker B).
+                raise HTTPException(
+                    status_code=503,
+                    detail="server is draining; not accepting new work",
+                ) from None
             except KeyError as e:
                 # Both unknown model names and unknown node names raise KeyError;
                 # disambiguate by message so the client gets the right status.
@@ -758,6 +784,15 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                 status_code=429,
                 detail="job queue is full",
                 headers={"Retry-After": "10"},
+            ) from None
+        except RuntimeNotAcceptingWorkError:
+            # Commit-time lifecycle gate: shutdown won the race against
+            # this reservation's upload/commit — 503, no job enqueued
+            # (PR-A red-team blocker B). The context manager already
+            # released the reservation.
+            raise HTTPException(
+                status_code=503,
+                detail="server is not accepting new jobs",
             ) from None
         except BaseException:
             # The scratch dir is request-local garbage on every failure
