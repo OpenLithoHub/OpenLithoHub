@@ -156,9 +156,17 @@ def dense_memory_budget(env: dict[str, str] | None = None) -> int:
 
 
 def klayout_available() -> bool:
-    import importlib.util
+    """Whether the real KLayout Python bindings import.
 
-    return importlib.util.find_spec("klayout") is not None
+    Probes ``klayout.db`` specifically: a bare ``klayout`` namespace (e.g.
+    the repository's own ``klayout/`` tooling directory shadowing a missing
+    PyPI install) is not sufficient for Manhattan output.
+    """
+    try:
+        import klayout.db  # noqa: F401,PLC0415 — optional dependency probe
+    except Exception:  # noqa: BLE001 — any import failure means unavailable
+        return False
+    return True
 
 
 # ---- planner types --------------------------------------------------------

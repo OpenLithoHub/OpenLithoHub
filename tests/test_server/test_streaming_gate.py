@@ -26,6 +26,8 @@ from openlithohub.workflow.execution import (  # noqa: E402
     streaming_capability_matrix,
 )
 
+_KLAYOUT = klayout_available()
+
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
@@ -123,6 +125,7 @@ def test_capabilities_reports_truthful_streaming_matrix(client: TestClient) -> N
     assert body["streaming_pipeline"] is True
 
 
+@pytest.mark.skipif(not _KLAYOUT, reason="streaming Manhattan output needs klayout.db")
 def test_job_api_reports_execution_decision_in_summary(client: TestClient) -> None:
     with io.BytesIO(_npy_bytes()) as fh:
         created = client.post(

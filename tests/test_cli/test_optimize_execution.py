@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tempfile
 from pathlib import Path
 
@@ -11,6 +12,12 @@ from typer.testing import CliRunner
 from openlithohub.cli.app import app
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 
 def test_optimize_run_streaming_raster_artifact() -> None:
@@ -143,15 +150,13 @@ def test_optimize_run_invalid_execution_mode_rejected() -> None:
             ],
         )
         assert result.exit_code != 0
-        assert "execution-mode" in result.output
+        assert "execution-mode" in _strip_ansi(result.output)
 
 
 def test_optimize_run_help_lists_execution_mode() -> None:
     result = runner.invoke(app, ["optimize", "run", "--help"])
     assert result.exit_code == 0
-    import re
-
-    flat = re.sub(r"\s+", " ", result.output)
+    flat = re.sub(r"\s+", " ", _strip_ansi(result.output))
     assert "--execution-mode" in flat
     # Rich truncates long help in the boxed layout; the env-var prefix and
     # the policy wording still identify the option honestly.
