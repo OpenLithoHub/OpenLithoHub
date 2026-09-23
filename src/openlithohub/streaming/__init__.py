@@ -42,7 +42,13 @@ from .screening import (
     TileScreenDecision,
     TileScreeningPolicy,
 )
-from .sinks import MemmapTileSink, MetricOnlyTileSink, TensorTileSink, TileSink
+from .sinks import (
+    MemmapTileSink,
+    MetricOnlyTileSink,
+    StreamingManhattanTileSink,
+    TensorTileSink,
+    TileSink,
+)
 from .sources import (
     MemmapTensorTileSource,
     SpatialLayoutIndex,
@@ -85,6 +91,7 @@ __all__ = [
     "PhysicalInteractionHaloPolicy",
     "RefinementRequest",
     "SpatialLayoutIndex",
+    "StreamingManhattanTileSink",
     "StreamingRunReport",
     "StreamingVerificationReducer",
     "TensorTileSink",

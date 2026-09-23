@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+import numpy as np
 import torch
 import typer
 from rich.console import Console
@@ -102,7 +103,8 @@ def run(
             "Number of worker processes for tile inference. 1 (default) keeps "
             "the sequential single-device path. >1 spawns one worker per GPU "
             "and shards tiles round-robin; falls back to CPU dispatch when "
-            "fewer GPUs are visible than requested."
+            "fewer GPUs are visible than requested. Multi-GPU runs are dense "
+            "only (legacy parallel path)."
         ),
     ),
     export_min_area: float = typer.Option(
@@ -124,12 +126,30 @@ def run(
             "when two identical optimize runs must produce identical masks."
         ),
     ),
+    execution_mode: str = typer.Option(
+        "auto",
+        "--execution-mode",
+        help=(
+            "Execution topology. 'auto' (default): dense under the dense "
+            "memory policy (OPENLITHOHUB_MAX_DENSE_BYTES bytes per fp32 "
+            "raster; 0 = unlimited), streaming via run_streaming for "
+            "supported large jobs, and FAIL CLOSED for unsupported large "
+            "jobs instead of silently materializing a full-chip raster. "
+            "'dense' forces the legacy blend path. 'streaming' forces the "
+            "exact-core streaming path (input .npy/.gds/.oas; output "
+            "streaming-capable — see --output)."
+        ),
+    ),
 ) -> None:
     """Run end-to-end mask optimization on a layout file.
 
     Example:
         openlithohub optimize --input chip.oas --model diffusion-ilt
         --writer mbmw --node 3nm-euv --drc-check --output optimized.oas
+
+    Output artifact: an .oas/.gds path writes a mask-writer layout;
+    an .npy path writes the binarised raster artifact (memmap-backed,
+    never fully materialised in RAM, when the planner picks streaming).
     """
     console = Console()
 
@@ -140,6 +160,10 @@ def run(
 
     if num_gpus < 1:
         raise typer.BadParameter("--num-gpus must be >= 1")
+    if execution_mode not in ("auto", "dense", "streaming"):
+        raise typer.BadParameter(
+            f"--execution-mode must be 'auto', 'dense' or 'streaming'; got {execution_mode!r}"
+        )
 
     from openlithohub.models.registry import register_builtin_models, registry
 
@@ -196,6 +220,189 @@ def run(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(2) from None
 
+    perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
+
+    if num_gpus > 1:
+        if execution_mode == "streaming":
+            console.print(
+                "[red]Error:[/red] --num-gpus > 1 uses the legacy dense parallel "
+                "path; streaming execution is single-device. Use --num-gpus 1."
+            )
+            raise typer.Exit(2) from None
+        _run_dense_parallel_legacy(
+            input=input,
+            output=output,
+            model=model,
+            model_kwargs=requested_kwargs,
+            num_gpus=num_gpus,
+            pixel_nm=pixel_nm,
+            layer=layer,
+            tile_size=tile_size,
+            overlap=effective_overlap,
+            threshold=threshold,
+            export_min_area=export_min_area,
+            writer=writer,
+            drc_check=drc_check,
+            perf_kwargs=perf_kwargs,
+            console=console,
+        )
+        return
+
+    # ---- single-device: the shared product execution spine ---------------
+    from openlithohub.workflow.execution import (
+        OptimizeRequest,
+        coerce_execution_mode,
+        optimize_layout,
+        plan_request,
+    )
+
+    # An .npy output path selects the raster artifact (memmap-backed on the
+    # streaming branch); anything else is a mask-writer layout file.
+    output_kind: Literal["oasis", "raster-npy"] = (
+        "raster-npy" if output.suffix.lower() == ".npy" else "oasis"
+    )
+    request = OptimizeRequest(
+        model=litho_model,
+        pixel_size_nm=pixel_nm,
+        input_path=input,
+        output_path=output,
+        output_kind=output_kind,
+        writer=writer,
+        layer=layer,
+        node=node_config,
+        tile_size=tile_size,
+        halo_px=effective_overlap,
+        threshold=threshold,
+        min_area_nm2=export_min_area,
+        execution_mode=coerce_execution_mode(execution_mode),
+        forward_kwargs=perf_kwargs,
+    )
+
+    step = _StepCounter()
+    console.print(f"[bold]Step {step.next()}:[/bold] Planning execution...")
+    try:
+        probe, plan = plan_request(request)
+    except (ImportError, FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+    console.print(f"  Layout size: {probe.shape[0]}x{probe.shape[1]} pixels ({probe.kind})")
+    console.print(
+        f"  Plan: {plan.mode.upper()} [{plan.reason}]"
+        + (f" — {plan.detail}" if plan.detail else "")
+    )
+    console.print(
+        f"  Memory policy: estimated dense raster {plan.estimated_dense_bytes} B / "
+        f"budget {plan.max_dense_bytes} B" + (" (OVER)" if plan.over_memory_policy else "")
+    )
+    console.print(f"  Backends: input={plan.input_backend} output={plan.output_backend}")
+
+    console.print(f"[bold]Step {step.next()}:[/bold] Running optimization...")
+    litho_model.setup()
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Optimizing tiles", total=None)
+
+            def on_progress(done: int, total: int) -> None:
+                progress.update(task, total=total, completed=done)
+
+            result = optimize_layout(request, progress=on_progress, prepared=(probe, plan))
+    except (ImportError, FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+    finally:
+        litho_model.teardown()
+
+    if result.plan.mode == "streaming":
+        accounting = result.work_accounting or {}
+        console.print(
+            "  Streaming: "
+            f"{result.n_tiles} trusted cores, "
+            f"{int(accounting.get('forward_simulator_input_pixels', 0))} forwarded px, "
+            f"{int(accounting.get('screened_out_pixels', 0))} screened px"
+        )
+
+    raster: torch.Tensor | None = result.mask
+    if drc_check:
+        console.print(f"[bold]Step {step.next()}:[/bold] Running compliance checks...")
+        if raster is None and result.output_format == "npy" and result.output_path:
+            console.print("  Loading raster artifact into RAM for compliance checks...")
+            raster = torch.from_numpy(np.load(str(result.output_path), mmap_mode="r")[:]).float()
+        if raster is None:
+            console.print(
+                "  [yellow]Skipping:[/yellow] streaming Manhattan export retains no "
+                "raster; rerun with an .npy output (or --execution-mode dense) to "
+                "run DRC/MRC."
+            )
+        else:
+            from openlithohub.benchmark.compliance.drc import check_drc
+            from openlithohub.benchmark.compliance.mrc import check_mrc
+
+            mrc_result = check_mrc(raster, pixel_size_nm=pixel_nm)
+            drc_result = check_drc(raster, pixel_size_nm=pixel_nm)
+
+            if mrc_result.passed and drc_result.passed:
+                console.print("  [green]All checks passed[/green]")
+            else:
+                if not mrc_result.passed:
+                    console.print(
+                        f"  [yellow]MRC:[/yellow] {mrc_result.violation_count} violations "
+                        f"(rate={mrc_result.violation_rate:.4f})"
+                    )
+                if not drc_result.passed:
+                    console.print(
+                        f"  [yellow]DRC:[/yellow] {drc_result.violation_count} violations"
+                    )
+
+    console.print(f"[bold]Step {step.next()}:[/bold] Exporting...")
+    if result.output_path is not None:
+        console.print(
+            f"  [{result.output_format}] Output written to {result.output_path}"
+            + (
+                f"  ({result.streaming_report.n_rectangles} Manhattan rectangles)"
+                if result.output_format == "oasis"
+                and result.plan.mode == "streaming"
+                and result.streaming_report is not None
+                else ""
+            )
+        )
+    else:  # pragma: no cover — every CLI output kind writes a file
+        console.print("  No output artifact produced")
+
+    console.print()
+    console.print("[bold green]Optimization complete.[/bold green]")
+
+
+def _run_dense_parallel_legacy(
+    *,
+    input: Path,
+    output: Path,
+    model: str,
+    model_kwargs: dict[str, Any],
+    num_gpus: int,
+    pixel_nm: float,
+    layer: str | None,
+    tile_size: int,
+    overlap: int,
+    threshold: float,
+    export_min_area: float,
+    writer: str,
+    drc_check: bool,
+    perf_kwargs: dict[str, Any],
+    console: Console,
+) -> None:
+    """Legacy multi-GPU dense path (parallel tile inference across GPUs).
+
+    Kept out of the shared spine deliberately: it shards tiles across
+    worker processes, which the sequential planners/executors do not own.
+    Dense-only by contract (enforced by the caller).
+    """
     step = _StepCounter()
 
     console.print(f"[bold]Step {step.next()}:[/bold] Parsing layout...")
@@ -210,12 +417,11 @@ def run(
     console.print(f"[bold]Step {step.next()}:[/bold] Tiling layout...")
     from openlithohub.workflow.tiling import Tile, stitch_tiles, tile_layout
 
-    tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=effective_overlap)
-    console.print(f"  Generated {len(tiles)} tiles ({tile_size}px, overlap={effective_overlap})")
+    tiles = tile_layout(layout_tensor, tile_size=tile_size, overlap=overlap)
+    console.print(f"  Generated {len(tiles)} tiles ({tile_size}px, overlap={overlap})")
 
     console.print(f"[bold]Step {step.next()}:[/bold] Running optimization...")
     tile_results: list[tuple[Tile, torch.Tensor]] = []
-    perf_kwargs = _build_perf_kwargs(device, dtype, compile_forward)
 
     with Progress(
         SpinnerColumn(),
@@ -225,26 +431,16 @@ def run(
         console=console,
     ) as progress:
         task = progress.add_task("Optimizing tiles", total=len(tiles))
-        if num_gpus == 1:
-            litho_model.setup()
-            try:
-                for tile in tiles:
-                    result = litho_model.predict(tile.tensor, **perf_kwargs)
-                    tile_results.append((tile, result.mask))
-                    progress.advance(task)
-            finally:
-                litho_model.teardown()
-        else:
-            from openlithohub.workflow.parallel import parallel_tile_inference
+        from openlithohub.workflow.parallel import parallel_tile_inference
 
-            tile_results = parallel_tile_inference(
-                model_name=model,
-                model_kwargs=requested_kwargs,
-                tiles=tiles,
-                num_gpus=num_gpus,
-                base_perf_kwargs=perf_kwargs,
-                progress_cb=lambda: progress.advance(task),
-            )
+        tile_results = parallel_tile_inference(
+            model_name=model,
+            model_kwargs=model_kwargs,
+            tiles=tiles,
+            num_gpus=num_gpus,
+            base_perf_kwargs=perf_kwargs,
+            progress_cb=lambda: progress.advance(task),
+        )
 
     console.print(f"[bold]Step {step.next()}:[/bold] Stitching tiles...")
     h, w = layout_tensor.shape
