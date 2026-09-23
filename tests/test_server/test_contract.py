@@ -10,7 +10,6 @@ from __future__ import annotations
 import io
 import json
 import logging
-import time
 from collections.abc import Iterator
 
 import numpy as np
@@ -136,20 +135,12 @@ def test_artifact_unavailable_is_409_job_artifact_unavailable() -> None:
     with TestClient(app) as client:
         runtime = app.state.runtime
         assert runtime is not None
-        with runtime._job_lock:
-            runtime._jobs["j1"] = {
-                "status": JobStatus.FAILED.value,
-                "error": "boom",
-                "summary": None,
-                "output_path": None,
-                "scratch_dir": "",
-                "created_utc": "now",
-                "job_id": "j1",
-                "_created_monotonic": time.monotonic(),
-            }
+        from openlithohub.server.job_store import JobRecord
+
+        runtime._store.create_queued(JobRecord(job_id="j1", status=JobStatus.QUEUED))
+        runtime._store.transition("j1", JobStatus.RUNNING)
+        runtime._store.transition("j1", JobStatus.FAILED, error="boom")
         response = client.get("/v1/jobs/j1/artifact")
-        with runtime._job_lock:
-            runtime._jobs.clear()
     assert response.status_code == 409
     assert _error_code(response.json()) == ErrorCode.JOB_ARTIFACT_UNAVAILABLE.value
 
@@ -159,20 +150,11 @@ def test_delete_running_job_is_409_job_running() -> None:
     with TestClient(app) as client:
         runtime = app.state.runtime
         assert runtime is not None
-        with runtime._job_lock:
-            runtime._jobs["j2"] = {
-                "status": JobStatus.RUNNING.value,
-                "error": None,
-                "summary": None,
-                "output_path": None,
-                "scratch_dir": "",
-                "created_utc": "now",
-                "job_id": "j2",
-                "_created_monotonic": time.monotonic(),
-            }
+        from openlithohub.server.job_store import JobRecord
+
+        runtime._store.create_queued(JobRecord(job_id="j2", status=JobStatus.QUEUED))
+        runtime._store.transition("j2", JobStatus.RUNNING)
         response = client.delete("/v1/jobs/j2")
-        with runtime._job_lock:
-            runtime._jobs.clear()
     assert response.status_code == 409
     assert _error_code(response.json()) == ErrorCode.JOB_RUNNING.value
 
@@ -190,37 +172,14 @@ def test_upload_too_large_is_413_upload_too_large() -> None:
 
 
 def test_queue_full_is_429_queue_full(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Deterministic: the worker's dequeue is frozen so the single slot
-    stays occupied and the second creation must hit the capacity gate."""
-    import queue as queue_mod
-
-    class _FrozenQueue:
-        def __init__(self, depth: int) -> None:
-            self._depth = depth
-            self._items: list[object] = []
-
-        def get(self, timeout: float | None = None, block: bool = True) -> object:
-            raise queue_mod.Empty
-
-        def get_nowait(self) -> object:
-            raise queue_mod.Empty
-
-        def put_nowait(self, item: object) -> None:
-            if len(self._items) >= self._depth:
-                raise queue_mod.Full
-            self._items.append(item)
-
-        def qsize(self) -> int:
-            return len(self._items)
-
-        def task_done(self) -> None:
-            pass
-
+    """Deterministic: the worker's claim path is frozen so the single
+    durable QUEUED row stays queued and the second creation must hit the
+    capacity gate (durable rows count toward depth, PR-E E4)."""
     app = create_app(ServerConfig(job_queue_depth=1))
     with TestClient(app) as client:
         runtime = app.state.runtime
         assert runtime is not None
-        monkeypatch.setattr(runtime, "_job_queue", _FrozenQueue(1))
+        monkeypatch.setattr(runtime._store, "peek_next_queued", lambda: None)
         first = client.post(
             "/v1/jobs/optimize",
             files={"layout": ("in.npy", _npy(), "application/octet-stream")},
@@ -416,39 +375,34 @@ def test_public_job_snapshot_has_no_private_fields() -> None:
     with TestClient(app) as client:
         runtime = app.state.runtime
         assert runtime is not None
-        with runtime._job_lock:
-            runtime._jobs["j3"] = {
-                "status": JobStatus.SUCCEEDED.value,
-                "error": None,
-                "summary": {
-                    "shape": [8, 8],
-                    "tiles": 1,
-                    "halo_px": 0,
-                    "writer": "vsb",
-                    "export_format": "oasis",
-                    "execution_mode": "dense",
-                    "execution_reason": "DENSE_SMALL_LAYOUT",
-                    "input_backend": "dense-raster",
-                    "output_backend": "dense-oasis",
-                    "threshold": 0.5,
-                    "output_path": "/private/scratch/hidden.oas",
-                    "scratch_dir": "/private/scratch",
-                },
+        from openlithohub.server.job_store import JobRecord
+
+        runtime._store.create_queued(JobRecord(job_id="j3", status=JobStatus.QUEUED))
+        runtime._store.transition("j3", JobStatus.RUNNING)
+        runtime._store.transition(
+            "j3",
+            JobStatus.SUCCEEDED,
+            summary={
+                "shape": [8, 8],
+                "tiles": 1,
+                "halo_px": 0,
+                "writer": "vsb",
+                "export_format": "oasis",
+                "execution_mode": "dense",
+                "execution_reason": "DENSE_SMALL_LAYOUT",
+                "input_backend": "dense-raster",
+                "output_backend": "dense-oasis",
+                "threshold": 0.5,
                 "output_path": "/private/scratch/hidden.oas",
                 "scratch_dir": "/private/scratch",
-                "created_utc": "now",
-                "started_utc": "now+1",
-                "completed_utc": "now+2",
-                "job_id": "j3",
-                "_created_monotonic": time.monotonic(),
-            }
+            },
+            output_path="/private/scratch/hidden.oas",
+        )
         body = client.get("/v1/jobs/j3").json()
-        with runtime._job_lock:
-            runtime._jobs.clear()
     text = json.dumps(body)
     assert "hidden" not in text and "scratch" not in text
     assert body["status"] == "succeeded"
-    assert body["started_utc"] == "now+1" and body["completed_utc"] == "now+2"
+    assert body["started_utc"] is not None and body["completed_utc"] is not None
     assert body["summary"]["execution_reason"] == "DENSE_SMALL_LAYOUT"
     assert body["summary"]["threshold"] == 0.5
     assert "output_path" not in (body["summary"] or {})

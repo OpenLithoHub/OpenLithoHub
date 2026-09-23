@@ -46,7 +46,7 @@ Dose 响应**单调递减**（10→100 ph/nm² 下降 19.4×），符合已发�
 - **仿真** — Hopkins/SOCS 部分相干成像、Gaussian PSF、厚掩膜 3D 代理；可选严格 EM 插件（DiffNano RCWA/FDTD/FDFD）、扩散 resist 模型
 - **OPC / ILT 优化** — LevelSet-ILT、规则 OPC、OpenILT、surrogate 加速 ILT、warm-start 与后验采样前端、模型无关注册表
 - **可制造性** — EPE、PV Band、L2、Shot Count、随机鲁棒性、MRC/DRC 一票否决门槛、Hotspot 检测、工艺窗口 OPC
-- **全芯片流式** — Core/Halo 分块 + 外存 Source/Sink、认证空上下文筛查、精确矢量（免栅格化）窗口读取；版图增长只增加 tile 数量，不增加单次内存规模（RFC 0008）
+- **全芯片流式** — Core/Halo 分块 + 外存 Source/Sink、认证空上下文筛查、精确矢量（免栅格化）窗口读取；更大的受支持版图只增加 tile 数量，无需按比例分配整版栅格内存（RFC 0008）
 - **部署** — Python API 门面（`Mask`/`LitheEngine`）、Typer CLI、FastAPI 微服务（`/v1/health` `/v1/version` `/v1/capabilities`）、Docker 镜像、Slurm/LSF 友好
 - **基准评测** — 工业基准 v1（真实布线 GDS、同口径对比、artifact 支撑的 claim），以及公开模型质量排行榜
 - **证明携带式验证** — 面向定理的 `PASS`/`FAIL`/`INCONCLUSIVE` 证书，含认证 halo 括号与冻结的 P-054 重放链（RFC 0007 / B04 / P-054）
@@ -80,8 +80,26 @@ Dose 响应**单调递减**（10→100 ph/nm² 下降 19.4×），符合已发�
 | 端到端流式处理的最大版图 — `IB-SCALE-65536` | **65536x65536 px** | 4.29 GPx 以 **0.42 GiB** 峰值 RSS 完成；dense 仅输入就需 16 GiB，在 30 GB 策略下不可行 |
 | 全 die dense 栅格化 — `IB-DIE-1` | **1.23 TB (1.12 TiB)** | 超过 48 GiB 内存；逐 tile 流式仅需 O(tile) 内存 |
 
-流式峰值内存在 4096² 到 65536² 保持**平稳（0.35 → 0.42 GiB）**，而版图增长 256×——
-内存随 tile 增长，而非随版图增长。
+**意义**：OpenLithoHub 受支持的流式执行路径只处理有界的 core/halo 窗口，
+因此随着版图面积增长，无需按比例分配更大的整版栅格。在 Industrial
+Benchmark v1.1 中，版图面积从 `4096²` 到 `65536²` 增长 **256×**，而实测流式
+峰值 RSS 保持在约 **0.35–0.42 GiB**。这是对所声明流式配置的冻结基准测量，
+并非适用于所有模型、输入表示或输出后端的普适内存保证。
+
+## 为什么选择 OpenLithoHub
+
+- 全芯片流式处理，无需强制整版栅格物化
+- 以 artifact 为支撑、可自审计的工业基准
+- 证明携带式 `PASS` / `FAIL` / `INCONCLUSIVE` 验证
+- 厂商中立的模型 / 仿真器 / 工作流集成
+- 可部署的 CLI / Python / HTTP 执行面
+
+**学术脉络**：[P-054](proof_artifacts/p054/README.md)（*Certified Stratified
+Phase Diagrams for Finite Hopkins Lithography*，DOI
+`10.5281/zenodo.22843141`）为 OpenLithoHub 的证明携带式验证层提供了部分数学
+基础。该冻结有限模型结果并不意味着代工认证、晶圆精度或对每个后端的认证。
+一般软件使用请引用 OpenLithoHub；使用冻结相图或认证结果时请同时引用
+OpenLithoHub **与** P-054。
 
 我们对自己不利的事实也如实报告：在 CPU + 轻量基准前向模型下，dense 在所有联合测量尺寸上仍然更快；`levelset-ilt` 默认超参数在 print-critical 的 ICCAD16 EUV 裁剪上
 退化为空白掩膜（退化输出防火墙阻止了空白掩膜会得到的"100% MRC 降低"）；相同迭代预算下

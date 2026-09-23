@@ -17,10 +17,13 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-# The only job backend that exists today. Its state is process-local, so
-# the service must run with a single Uvicorn worker process (repair-plan
-# P0.3): a job created in one worker is invisible to the others.
-SUPPORTED_JOB_BACKENDS: tuple[str, ...] = ("in-memory",)
+# PR-E: "in-memory" keeps the historical lightweight mode (durable=False,
+# restart loses jobs); "sqlite" persists committed jobs + artifacts under
+# OPENLITHOHUB_STATE_DIR (durable=True). BOTH remain single-process: a job
+# created in one Uvicorn worker is invisible to the others, and the SQLite
+# store takes an exclusive per-directory ownership lock, so the service
+# must still run with exactly one worker process (repair-plan P0.3).
+SUPPORTED_JOB_BACKENDS: tuple[str, ...] = ("in-memory", "sqlite")
 
 _DEFAULT_MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
@@ -62,6 +65,9 @@ class ServerConfig:
     shutdown_grace_seconds: float = 5.0
     api_key: str = ""
     job_backend: str = "in-memory"
+    state_dir: str | None = None
+    """Durable async-job state root (OPENLITHOHUB_STATE_DIR); required for
+    the sqlite backend and ignored by in-memory."""
 
     def __post_init__(self) -> None:
         if self.max_concurrent_optimize < 1:
@@ -81,6 +87,17 @@ class ServerConfig:
             raise ValueError(
                 f"unsupported job backend {self.job_backend!r}; supported: {supported}"
             )
+        if self.job_backend == "sqlite" and not self.state_dir:
+            raise ValueError(
+                "OPENLITHOHUB_JOB_BACKEND=sqlite requires OPENLITHOHUB_STATE_DIR "
+                "to point at a persistent directory; durability without "
+                "persistent storage is not claimed"
+            )
+        if self.job_backend == "in-memory" and self.state_dir is not None:
+            raise ValueError(
+                "state_dir only applies to the sqlite job backend; the "
+                "in-memory backend is honest about being non-durable"
+            )
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> ServerConfig:
@@ -98,4 +115,5 @@ class ServerConfig:
             shutdown_grace_seconds=_float_from_env(env, "OPENLITHOHUB_SHUTDOWN_GRACE_SECONDS", 5.0),
             api_key=env.get("OPENLITHOHUB_API_KEY") or "",
             job_backend=env.get("OPENLITHOHUB_JOB_BACKEND") or "in-memory",
+            state_dir=env.get("OPENLITHOHUB_STATE_DIR") or None,
         )

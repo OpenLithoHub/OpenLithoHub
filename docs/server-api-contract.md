@@ -16,15 +16,23 @@ surface (`/v1/*`). It froze at **PR-D**; the machine-level authorities are:
 The v1 contract describes a **process-local, non-durable, single-worker**
 service:
 
-* jobs live in memory; **restarting the process loses them**;
+* default backend `in-memory`: jobs live in memory; **restarting the
+  process loses them**;
+* optional backend `sqlite` (`OPENLITHOHUB_JOB_BACKEND=sqlite` +
+  `OPENLITHOHUB_STATE_DIR`): committed jobs, durable inputs/artifacts and
+  the queued workload survive restarts; a job that was RUNNING during a
+  crash fails closed (outcome unknown, never retried automatically);
 * job state is not shared across worker processes — run **one** uvicorn
-  worker process;
+  worker process (the SQLite store additionally takes an exclusive
+  per-directory ownership lock, so a second live process fails fast);
 * `/v1/metrics` is process-local and non-durable by definition;
-* artifacts live in scratch space under a TTL and history cap.
+* artifacts live under retention policy (TTL + history cap); actively
+  downloading artifacts are protected by a process-local lease.
 
-Durable job stores, restart recovery and multi-worker shared state are
-future work (PR-E+) and will arrive as additive changes, not silent
-reinterpretations.
+Multi-worker shared state remains future work and will arrive as additive
+changes, not silent reinterpretations. The `jobs` block of
+`/v1/capabilities` reports the backend truthfully
+(`durable` / `restart_loses_jobs`).
 
 ## Response envelope
 
