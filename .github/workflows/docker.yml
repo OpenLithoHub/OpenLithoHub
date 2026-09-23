@@ -93,6 +93,29 @@ jobs:
             VERSION=${{ steps.buildid.outputs.version }}
             BUILD_COMMIT=${{ steps.buildid.outputs.commit }}
 
+      - name: Extract server-cpu image metadata
+        id: meta_servercpu
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}},suffix=-server-cpu
+            type=sha,suffix=-server-cpu
+
+      - name: Build minimal server-cpu image (and push on tag)
+        id: build_servercpu
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: .
+          target: server-cpu
+          load: ${{ github.event_name != 'push' }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta_servercpu.outputs.tags }}
+          labels: ${{ steps.meta_servercpu.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.buildid.outputs.version }}
+            BUILD_COMMIT=${{ steps.buildid.outputs.commit }}
+
       - name: Resolve smoke-test image tag
         id: smoketag
         run: |
@@ -114,6 +137,28 @@ jobs:
           echo "openlithohub --version -> $actual (expected $expected_version)"
           docker run --rm --entrypoint python "${{ steps.smoketag.outputs.tag }}" \
             -c "import openlithohub._build as b; assert b.BUILD_COMMIT == '${{ steps.buildid.outputs.commit }}', b.BUILD_COMMIT; print('build identity ok')"
+
+      - name: Smoke test — server-cpu image health + OCI revision == /v1/version commit
+        run: |
+          tag="$(echo "${{ steps.meta_servercpu.outputs.tags }}" | head -n1)"
+          docker run -d --rm --name olh-servercpu-smoke -p 8001:8000 "$tag"
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8001/v1/health > /dev/null; then break; fi
+            sleep 2
+          done
+          body="$(curl -sf http://127.0.0.1:8001/v1/version)"
+          echo "$body"
+          commit="$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.load(sys.stdin)["git_commit"])')"
+          if [ "$commit" != "${{ steps.buildid.outputs.commit }}" ]; then
+            echo "FATAL: /v1/version commit ($commit) != OCI revision (${{ steps.buildid.outputs.commit }})"
+            docker logs olh-servercpu-smoke | tail -20
+            docker rm -f olh-servercpu-smoke > /dev/null || true
+            exit 1
+          fi
+          # server-cpu truthfulness: no jupyter in the minimal image
+          docker exec olh-servercpu-smoke python -c "import importlib.util as u; assert u.find_spec('jupyter') is None" \
+            || { echo 'FATAL: jupyter present in server-cpu'; docker rm -f olh-servercpu-smoke > /dev/null || true; exit 1; }
+          docker rm -f olh-servercpu-smoke > /dev/null
 
       - name: Smoke test — server image starts and answers /v1/health
         run: |

@@ -75,3 +75,53 @@ def test_core_cli_imports_without_server_extras() -> None:
     )
     assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
     assert "HYGIENE-OK" in proc.stdout
+
+
+_NO_DIFF_SURROGATE_SCRIPT = """
+import importlib.abc
+import sys
+
+
+class _NoDiffSurrogate(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "diff_surrogate" or fullname.startswith("diff_surrogate."):
+            raise ImportError(f"blocked for test: {fullname}")
+        return None
+
+
+sys.meta_path.insert(0, _NoDiffSurrogate())
+
+# Core package + convergence fallback must survive with no diff-surrogate
+# (P0.6: it is no longer a core dependency, so production installs never
+# have it).
+import openlithohub  # noqa: E402
+from openlithohub import _utils  # noqa: E402
+
+assert _utils.ConvergenceMonitor is None, "fallback broken: ConvergenceMonitor"
+assert _utils.hybrid_z_score is None, "fallback broken: hybrid_z_score"
+
+# Model registry registration must work with the lazy integration absent.
+from openlithohub.models.registry import register_builtin_models  # noqa: E402
+
+register_builtin_models()
+
+# And the server module surface stays importable too.
+import openlithohub.server.config  # noqa: E402, F401
+
+print("NODS-OK")
+"""
+
+
+def test_core_imports_without_diff_surrogate() -> None:
+    """P0.6: with diff-surrogate absent (a production install), core
+    package imports, the _utils convergence fallback, and model registry
+    registration must all still work."""
+    proc = subprocess.run(  # noqa: S603 - fixed argv, test-only blocker script
+        [sys.executable, "-c", _NO_DIFF_SURROGATE_SCRIPT],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+    assert "NODS-OK" in proc.stdout

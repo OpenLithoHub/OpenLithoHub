@@ -128,21 +128,20 @@ Docker：`docker run --rm ghcr.io/openlithohub/openlithohub:latest eval run ...`
 git clone https://github.com/OpenLithoHub/OpenLithoHub.git
 cd OpenLithoHub
 pip install -e ".[dev]"
+# 可选：未发布的 diff-surrogate 协同设计集成为开发者专用 VCS 依赖——任何 extra 都不会安装它
+pip install -r requirements-dev-vcs.txt
 ```
 
-**Docker（开箱即用，支持 GPU）：**
+**Docker（开箱即用 CPU 容器）：**
 
-每次发版都会向 GitHub Container Registry 推送预构建镜像：
+每次发版都会向 GitHub Container Registry 推送预构建镜像。发布镜像均为 **CPU 镜像**——未基于 CUDA PyTorch 栈构建或测试，`--gpus` 参数对它们不属于受支持的 GPU 配置：
 
 ```bash
-# CPU
 docker run --rm -v "$PWD":/data ghcr.io/openlithohub/openlithohub:latest \
   eval run --model dummy-identity --dataset lithobench --data-root /data/lithobench
-
-# GPU（需要主机已安装 nvidia-container-toolkit）
-docker run --rm --gpus all -v "$PWD":/data ghcr.io/openlithohub/openlithohub:latest \
-  optimize run --input /data/design.oas --model neural-ilt --output /data/optimized.oas
 ```
+
+GPU 工作负载请从源码安装并搭配 CUDA PyTorch wheel（参见 `docs/self_hosted_deployment.md`）。
 
 也提供按版本号打的标签（例如 `ghcr.io/openlithohub/openlithohub:0.1`）。
 

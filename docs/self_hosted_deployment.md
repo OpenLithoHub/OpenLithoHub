@@ -1,38 +1,51 @@
-# Self-Hosted Multi-Card Deployment
+# Self-Hosted Deployment
 
 OpenLithoHub and DiffCFD are designed to run entirely on-premises with no
 cloud dependencies. This guide covers setting up multi-GPU inference on a
 single machine and tuning for throughput.
 
-> **Provenance notice (2026-09-20):** the GPU timing/throughput/memory
-> tables below are **historical measurements** from an earlier development
-> machine, recorded before Industrial Benchmark v1 existed. They are not
-> regenerable by any checked-in harness and are **not** artifact-backed.
-> Treat them as illustrative until re-measured through
-> `benchmarks/industrial/run_industrial_benchmark.py` on your hardware
-> (see [Industrial Benchmarks](industrial-benchmarks.md)). Do not quote
-> them as product performance claims.
+## Supported Deployment Modes
 
-## Quick Start
+| Mode | Supported | Job persistence | Workers | GPU | Streaming execution |
+|------|-----------|-----------------|---------|-----|---------------------|
+| In-process Python (`LitheEngine`) | yes | n/a | n/a | environment-dependent | after execution gate |
+| HTTP dev server (`openlithohub serve`, workers=1) | yes | in-memory, restart loses jobs | 1 | environment-dependent | after execution gate |
+| CPU container (`ghcr.io/openlithohub/openlithohub`) | yes | in-memory, restart loses jobs | 1 (enforced) | no | after execution gate |
+| Minimal CPU server container (`*-server-cpu`) | yes | in-memory, restart loses jobs | 1 (enforced) | no | after execution gate |
+| Durable single-node (shared job store) | target | SQLite/filesystem | gated | optional | target |
+| Multi-worker server (`--workers > 1`) | **blocked** until a shared job backend exists | shared backend required | >1 | optional | target |
+| GPU container image | **not published** — build from source with a CUDA PyTorch wheel | backend-dependent | 1 | yes | target |
+
+Notes:
+
+* The async job API runs on a process-local, in-memory backend. Restarting
+  the process loses all job records, and `--workers > 1` is **rejected at
+  startup** (jobs created in one worker process would be invisible to the
+  others). See the `serve` reference in [cli-reference](cli-reference.md).
+* The published container images are CPU images. They are not built from or
+  tested with a CUDA PyTorch stack; GPU workloads should install from source
+  with a CUDA wheel (below). Do not quote untested combinations as supported.
+
+## Quick Start (CPU)
 
 ```bash
-# Install OpenLithoHub with GPU support
-pip install openlithohub[torch]
+# Install OpenLithoHub (PyTorch is a core dependency — there is no [torch] extra)
+pip install openlithohub
 
-# Verify GPU visibility
-python -c "import torch; print(f'GPUs: {torch.cuda.device_count()}')"
-
-# Run a single optimization on GPU 0
-openlithohub optimize run --input design.png --model neural-ilt --device cuda:0
+# Run a single optimization
+openlithohub optimize run --input design.png --model neural-ilt --device cpu
 
 # Run multi-process inference with shared weights
 python -c "
 from openlithohub.inference import multiproc_predict
-results = multiproc_predict(model_fn, inputs, n_workers=4, device='cuda:0')
+results = multiproc_predict(model_fn, inputs, n_workers=4, device='cpu')
 "
 ```
 
-## Multi-GPU Setup
+## GPU Setup (optional, from source)
+
+The PyPI core dependency is a CUDA-capable PyTorch build on Linux, but the
+configurations below are what we validate; the container images are CPU-only.
 
 ### Hardware Requirements
 
@@ -49,8 +62,14 @@ results = multiproc_predict(model_fn, inputs, n_workers=4, device='cuda:0')
 # Check driver version (must support CUDA 11.8+)
 nvidia-smi
 
-# Install PyTorch with CUDA support
+# Install PyTorch with CUDA support (system-level, ahead of openlithohub)
 pip install torch --index-url https://download.pytorch.org/whl/cu121
+
+# Verify GPU visibility
+python -c "import torch; print(f'GPUs: {torch.cuda.device_count()}')"
+
+# Run a single optimization on GPU 0
+openlithohub optimize run --input design.png --model neural-ilt --device cuda:0
 ```
 
 ### Running on Multiple GPUs
@@ -76,86 +95,9 @@ For tiling workloads (large layouts split into tiles), use the RFC-0004
 multi-GPU tile pipeline:
 
 ```bash
-olh optimize --model neural-ilt --input large_design.gds \
+openlithohub optimize run --model neural-ilt --input large_design.gds \
     --tile-size 512 --halo 64 --num-gpus all
 ```
-
-## Performance Characteristics
-
-### Latency vs. Batch Size
-
-Based on Neural-ILT on NVIDIA RTX 4090 (24 GB):
-
-| Batch Size | Tile Size | Latency (ms) | Throughput (tiles/s) | GPU Memory |
-|-----------|-----------|-------------|---------------------|------------|
-| 1 | 256x256 | 12 | 83 | 1.2 GB |
-| 4 | 256x256 | 18 | 222 | 2.8 GB |
-| 8 | 256x256 | 28 | 286 | 5.1 GB |
-| 16 | 256x256 | 48 | 333 | 9.4 GB |
-| 32 | 256x256 | 85 | 376 | 18.2 GB |
-| 1 | 512x512 | 38 | 26 | 4.1 GB |
-| 4 | 512x512 | 62 | 65 | 12.8 GB |
-| 8 | 512x512 | 110 | 73 | 22.6 GB |
-
-### Multi-Worker Throughput
-
-Using `multiproc_predict` with shared weights on 4 GPUs:
-
-| Workers | Throughput Gain vs Serial | Memory Overhead |
-|---------|--------------------------|-----------------|
-| 1 | 1.0x | baseline |
-| 2 | 1.9x | +5% |
-| 4 | 3.6x | +12% |
-| 8 | 6.8x | +25% |
-
-Memory overhead stays low because workers share model weights via POSIX
-shared memory rather than copying.
-
-## DiffCFD: Rust Forward + PyTorch Backward
-
-DiffCFD uses a hybrid architecture that runs without cloud services:
-
-- **Forward pass**: Rust + rayon for geometry/SDF operations (CPU-parallel)
-- **Backward pass**: PyTorch autograd for gradient computation
-- **Implicit differentiation**: GMRES-based adjoint (no unrolled autograd)
-- **No network required**: All computation is local
-
-### Typical DiffCFD Resource Usage
-
-| Problem | Grid Size | Forward Time | Backward Time | Peak Memory |
-|---------|-----------|-------------|---------------|-------------|
-| Cylinder wake | 64x128 | 0.8 s | 1.2 s | 0.5 GB |
-| Channel flow | 128x256 | 2.1 s | 3.5 s | 1.8 GB |
-| Airfoil (NACA) | 128x256 | 3.0 s | 4.2 s | 2.1 GB |
-| Heat exchanger | 64x64 | 0.3 s | 0.5 s | 0.2 GB |
-
-### Thread Affinity
-
-DiffCFD provides a `single_torch_thread` context manager for Rust/PyTorch
-interop. Profiling shows contention is typically under 5%, so thread
-affinity is not needed for most workloads. See the DiffCFD thread affinity
-profiling documentation for details.
-
-## Memory Requirements by Problem Size
-
-### Lithography Models
-
-| Model | Input Size | Parameter Memory | Inference Memory | Total |
-|-------|-----------|-----------------|-----------------|-------|
-| Neural-ILT | 256x256 | 45 MB | 180 MB | 225 MB |
-| Neural-ILT | 512x512 | 45 MB | 640 MB | 685 MB |
-| Neural-ILT | 1024x1024 | 45 MB | 2.4 GB | 2.4 GB |
-| GAN-OPC | 256x256 | 120 MB | 200 MB | 320 MB |
-| Surrogate-ILT | 256x256 | 8 MB | 150 MB | 158 MB |
-
-### DiffCFD Simulations
-
-| Grid | Degrees of Freedom | Memory |
-|------|-------------------|--------|
-| 32x32 | ~3,000 | 50 MB |
-| 64x64 | ~12,000 | 200 MB |
-| 128x128 | ~50,000 | 800 MB |
-| 256x256 | ~200,000 | 3.2 GB |
 
 ## Monitoring
 
@@ -204,3 +146,89 @@ computation may be the bottleneck. Ensure rayon has enough cores:
 ```bash
 export RAYON_NUM_THREADS=8  # leave some cores for PyTorch
 ```
+
+---
+
+## Appendix: Historical Measurements (illustrative — NOT artifact-backed)
+
+> **Provenance notice (2026-09-20):** every table in this appendix is a
+> **historical measurement** from an earlier development machine, recorded
+> before Industrial Benchmark v1 existed. They are not regenerable by any
+> checked-in harness and are **not** artifact-backed. Treat them as
+> illustrative only; re-measure through
+> `benchmarks/industrial/run_industrial_benchmark.py` on your hardware
+> (see [Industrial Benchmarks](industrial-benchmarks.md)). Do **not** quote
+> them as product performance claims.
+
+### Latency vs. Batch Size (historical)
+
+Neural-ILT on NVIDIA RTX 4090 (24 GB), as measured in 2025:
+
+| Batch Size | Tile Size | Latency (ms) | Throughput (tiles/s) | GPU Memory |
+|-----------|-----------|-------------|---------------------|------------|
+| 1 | 256x256 | 12 | 83 | 1.2 GB |
+| 4 | 256x256 | 18 | 222 | 2.8 GB |
+| 8 | 256x256 | 28 | 286 | 5.1 GB |
+| 16 | 256x256 | 48 | 333 | 9.4 GB |
+| 32 | 256x256 | 85 | 376 | 18.2 GB |
+| 1 | 512x512 | 38 | 26 | 4.1 GB |
+| 4 | 512x512 | 62 | 65 | 12.8 GB |
+| 8 | 512x512 | 110 | 73 | 22.6 GB |
+
+### Multi-Worker Throughput (historical)
+
+Using `multiproc_predict` with shared weights on 4 GPUs:
+
+| Workers | Throughput Gain vs Serial | Memory Overhead |
+|---------|--------------------------|-----------------|
+| 1 | 1.0x | baseline |
+| 2 | 1.9x | +5% |
+| 4 | 3.6x | +12% |
+| 8 | 6.8x | +25% |
+
+Memory overhead stays low because workers share model weights via POSIX
+shared memory rather than copying.
+
+### DiffCFD: Rust Forward + PyTorch Backward
+
+DiffCFD uses a hybrid architecture that runs without cloud services:
+
+- **Forward pass**: Rust + rayon for geometry/SDF operations (CPU-parallel)
+- **Backward pass**: PyTorch autograd for gradient computation
+- **Implicit differentiation**: GMRES-based adjoint (no unrolled autograd)
+- **No network required**: All computation is local
+
+Typical DiffCFD resource usage (historical):
+
+| Problem | Grid Size | Forward Time | Backward Time | Peak Memory |
+|---------|-----------|-------------|---------------|-------------|
+| Cylinder wake | 64x128 | 0.8 s | 1.2 s | 0.5 GB |
+| Channel flow | 128x256 | 2.1 s | 3.5 s | 1.8 GB |
+| Airfoil (NACA) | 128x256 | 3.0 s | 4.2 s | 2.1 GB |
+| Heat exchanger | 64x64 | 0.3 s | 0.5 s | 0.2 GB |
+
+DiffCFD provides a `single_torch_thread` context manager for Rust/PyTorch
+interop. Profiling shows contention is typically under 5%, so thread
+affinity is not needed for most workloads. See the DiffCFD thread affinity
+profiling documentation for details.
+
+### Memory Requirements by Problem Size (historical)
+
+Lithography models:
+
+| Model | Input Size | Parameter Memory | Inference Memory | Total |
+|-------|-----------|-----------------|-----------------|-------|
+| Neural-ILT | 256x256 | 45 MB | 180 MB | 225 MB |
+| Neural-ILT | 512x512 | 45 MB | 640 MB | 685 MB |
+| Neural-ILT | 1024x1024 | 45 MB | 2.4 GB | 2.4 GB |
+| GAN-OPC | 256x256 | 120 MB | 200 MB | 320 MB |
+| Surrogate-ILT | 256x256 | 8 MB | 150 MB | 158 MB |
+
+DiffCFD simulations:
+
+| Grid | Degrees of Freedom | Memory |
+|------|-------------------|--------|
+| 32x32 | ~3,000 | 50 MB |
+| 64x64 | ~12,000 | 200 MB |
+| 128x128 | ~50,000 | 800 MB |
+| 256x256 | ~200,000 | 3.2 GB |
