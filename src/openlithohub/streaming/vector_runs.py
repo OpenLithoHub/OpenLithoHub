@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
@@ -288,6 +289,25 @@ class ExactVectorRunSource:
         self._pixel_nm = float(pixel_size_nm)
         self._layout_hash = _hash_layout(shape, cells, top)
         self._flat = tuple(self._flatten())
+        # PR-G G1: immutable band index over vector-geometry bboxes.  The
+        # index is candidate filtering ONLY — it may say "possibly
+        # relevant"; the exact rational scanline machinery below still
+        # decides occupancy, run ids, and contributor identity.  Memory is
+        # proportional to geometry (each polygon appears once per 256-row
+        # band it spans), never to raster area.
+        index_start = time.perf_counter()
+        self._band_height = 256
+        bands: dict[int, list[PolygonWithHoles]] = {}
+        for poly in self._flat:
+            _bx0, by0, _bx1, by1 = poly.bbox
+            if by1 <= by0:
+                continue
+            for band in range(by0 // self._band_height, ((by1 - 1) // self._band_height) + 1):
+                bands.setdefault(band, []).append(poly)
+        self._bands: dict[int, tuple[PolygonWithHoles, ...]] = {
+            band: tuple(polys) for band, polys in sorted(bands.items())
+        }
+        self._index_build_wall = time.perf_counter() - index_start
         self._row_index: dict[int, tuple[PolygonWithHoles, ...]] = {}
         self._last_bbox: BoundingBox | None = None
         self._last_owned: tuple[OwnedRunSlice, ...] = ()
@@ -329,7 +349,62 @@ class ExactVectorRunSource:
                     )
                 )
 
+    def candidates_for_row(self, y: int) -> tuple[PolygonWithHoles, ...]:
+        """Indexed first-touch candidate lookup for one raster row.
+
+        Cost scales with the geometry intersecting the row's 256-row band,
+        not with the total flattened polygon count.  Candidates are
+        exact-filtered by bbox; the exact scanline machinery decides
+        occupancy downstream.
+        """
+        cached = self._row_index.get(y)
+        if cached is not None:
+            return cached
+        selected = []
+        for poly in self._bands.get(y // self._band_height, ()):
+            _x0, y0, _x1, y1 = poly.bbox
+            if y0 <= y < y1:
+                selected.append(poly)
+        out = tuple(selected)
+        self._row_index[y] = out
+        return out
+
+    def query_bbox(self, x0: int, y0: int, x1: int, y1: int) -> list[PolygonWithHoles]:
+        """Possibly-relevant polygons for a half-open window (PR-G §5).
+
+        Candidate filtering only: deduplicated polygons whose bbox
+        overlaps the window.  Exact geometry still decides everything.
+        """
+        if x1 <= x0 or y1 <= y0:
+            return []
+        seen: set[int] = set()
+        out: list[PolygonWithHoles] = []
+        for band in range(y0 // self._band_height, ((y1 - 1) // self._band_height) + 1):
+            for poly in self._bands.get(band, ()):
+                marker = id(poly)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                bx0, by0, bx1, by1 = poly.bbox
+                if bx0 < x1 and bx1 > x0 and by0 < y1 and by1 > y0:
+                    out.append(poly)
+        return out
+
+    def index_stats(self) -> dict[str, float | int]:
+        """Geometry-bounded index footprint (PR-G §7 diagnostics)."""
+        return {
+            "bands": len(self._bands),
+            "entries": sum(len(polys) for polys in self._bands.values()),
+            "polygons": len(self._flat),
+            "band_height": self._band_height,
+            "index_build_wall": self._index_build_wall,
+        }
+
     def _polygons_for_row(self, y: int) -> tuple[PolygonWithHoles, ...]:
+        return self.candidates_for_row(y)
+
+    def _polygons_for_row_reference(self, y: int) -> tuple[PolygonWithHoles, ...]:
+        """Unindexed oracle path (G1 parity tests): full flatten scan."""
         cached = self._row_index.get(y)
         if cached is not None:
             return cached
