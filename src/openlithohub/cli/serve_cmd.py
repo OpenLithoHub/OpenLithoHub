@@ -1,11 +1,16 @@
-"""The `openlithohub serve` subcommand — boots the FastAPI engine."""
+"""The `openlithohub serve` subcommand — boots the FastAPI engine.
+
+Import hygiene (PR-A tail B): this module must stay importable on a
+CORE install (no ``[server]`` extra) so ``openlithohub --help``,
+``--version`` and every non-serve command work without FastAPI. The
+server package is imported lazily inside :func:`run`, after the
+optional-dependency check.
+"""
 
 from __future__ import annotations
 
 import typer
 from rich.console import Console
-
-from openlithohub.server.config import ServerConfig
 
 serve_app = typer.Typer(no_args_is_help=False)
 
@@ -30,12 +35,23 @@ def run(
              -o optimized.oas
     """
     console = Console()
+    # Core-install contract: everything above the [server]-extra checks
+    # must load without FastAPI/uvicorn; the server surface is required
+    # only when `serve` actually runs.
     try:
         import uvicorn
     except ImportError:
         console.print(
             "[red]Error:[/red] FastAPI server extras are not installed. "
             "Install with: [bold]pip install openlithohub[server][/bold]"
+        )
+        raise typer.Exit(1) from None
+    try:
+        from openlithohub.server.config import ServerConfig
+    except ImportError:
+        console.print(
+            "[red]Error:[/red] OpenLithoHub server components are missing or "
+            "broken. Install with: [bold]pip install openlithohub[server][/bold]"
         )
         raise typer.Exit(1) from None
 

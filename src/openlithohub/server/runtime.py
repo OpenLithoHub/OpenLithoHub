@@ -428,14 +428,24 @@ class ServerRuntime:
         self._admission.release()
 
     def wait_for_admission(self, poll_seconds: float = _WORKER_POLL_SECONDS) -> bool:
-        """Wait (in bounded sleeps) for admission capacity. Returns False
-        once shutdown has been requested — queued jobs are patient with
-        transient contention but never outlive shutdown."""
-        while not self._shutdown.is_set():
-            if self.try_acquire_admission():
-                return True
+        """Wait (in bounded sleeps) for admission capacity.
+
+        Authority gate (PR-A tail A): the RUNNING check and the
+        acquisition happen atomically under ``_lifecycle_lock`` — the
+        same authority as :meth:`run_admitted` — so a worker admission
+        either wins before the RUNNING -> DRAINING transition (making it
+        legitimate in-flight work that ``stop()`` grace-controls) or is
+        refused once draining has begun. The ``_shutdown`` event remains
+        only a wake/exit signal for the worker loop; the lifecycle state
+        under the lock is the sole admission authority.
+        """
+        while True:
+            with self._lifecycle_lock:
+                if self._state is not RuntimeState.RUNNING:
+                    return False
+                if self.try_acquire_admission():
+                    return True
             time.sleep(poll_seconds)
-        return False
 
     def run_admitted(self, **params: Any) -> dict[str, Any]:
         """Run one optimize under the admission semaphore.

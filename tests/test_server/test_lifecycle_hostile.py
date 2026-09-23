@@ -298,8 +298,10 @@ def test_snapshot_is_public_and_never_goes_negative() -> None:
 
 def test_wait_for_admission_bails_out_on_shutdown() -> None:
     runtime = _bare_runtime(max_concurrent_optimize=1)
+    runtime.start()
     assert runtime.try_acquire_admission() is True  # exhaust the one slot
-    runtime.stop()  # NEW -> STOPPED, sets the shutdown event
+    runtime.release_admission()
+    runtime.stop()  # clean stop: no owned execution left
     assert runtime.wait_for_admission(poll_seconds=0.01) is False
 
 
@@ -774,3 +776,95 @@ def test_sync_admission_race_with_shutdown_never_leaks() -> None:
     assert runtime.state is RuntimeState.STOPPED
     assert runtime.snapshot()["admission_in_use"] == 0
     assert len(rejected) >= 1, "post-shutdown attempts must be rejected"
+
+
+# ---- tail A: worker admission vs shutdown ordering -----------------------
+
+
+def test_worker_admission_never_starts_after_draining_wins() -> None:
+    """Deterministic gate: a dequeued job parked in wait_for_admission
+    must be cancelled — never executed — once DRAINING has won, even
+    though it began waiting while the shutdown event was still clear.
+    The lifecycle state under the lock is the sole admission authority."""
+    runner_calls: list[int] = []
+
+    def counting_runner(**params: object) -> dict[str, object]:
+        runner_calls.append(1)
+        return {"output_path": ""}
+
+    runtime = ServerRuntime(
+        ServerConfig(max_concurrent_optimize=1, shutdown_grace_seconds=5.0),
+        optimize_runner=counting_runner,
+    )
+    runtime.start()
+    # Execution A occupies the single admission slot (not via the runner).
+    assert runtime.try_acquire_admission() is True
+    # Job B: committed, dequeued by the worker, then parked waiting for
+    # admission (status flips to "running" before the wait).
+    with runtime.reserve_job_slot() as res:
+        job_b = res.commit(_job_record(), {})
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if runtime.get_job_snapshot(job_b)["status"] == "running":
+            break
+        time.sleep(0.02)
+    assert runtime.get_job_snapshot(job_b)["status"] == "running", (
+        "worker never parked job B in the admission wait"
+    )
+
+    # Shutdown wins while B is waiting for admission.
+    runtime.stop(timeout=0.3)  # slot A still held -> forced, ownership retained
+
+    # B must have been cancelled by the admission gate, never executed.
+    assert runner_calls == []
+    assert runtime.get_job_snapshot(job_b)["status"] == "cancelled"
+    assert "shutdown" in str(runtime.get_job_snapshot(job_b)["error"])
+
+    # Releasing A lets the reaper finish; nothing leaks.
+    runtime.release_admission()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if runtime.state is RuntimeState.STOPPED:
+            break
+        time.sleep(0.02)
+    assert runtime.state is RuntimeState.STOPPED
+    assert runtime.snapshot()["admission_in_use"] == 0
+    assert runner_calls == []
+
+
+def test_worker_admission_gate_hammer_vs_shutdown() -> None:
+    """Race hammer: admission waiters racing a shutdown may only win
+    before DRAINING; after stop() returns, every waiter is refused and
+    admission never leaks."""
+    runtime = ServerRuntime(
+        ServerConfig(max_concurrent_optimize=2, shutdown_grace_seconds=5.0),
+        optimize_runner=lambda **params: {"output_path": ""},
+    )
+    runtime.start()
+    stop_now = threading.Event()
+    admitted_count = 0
+    count_lock = threading.Lock()
+
+    def hammer() -> None:
+        nonlocal admitted_count
+        while not stop_now.is_set():
+            if runtime.wait_for_admission(poll_seconds=0.001):
+                with count_lock:
+                    admitted_count += 1
+                runtime.release_admission()
+
+    threads = [threading.Thread(target=hammer) for _ in range(4)]
+    for t in threads:
+        t.start()
+    time.sleep(0.2)
+    runtime.stop()  # clean: hammer admissions drain once DRAINING blocks new ones
+    stop_now.set()
+    for t in threads:
+        t.join(timeout=5)
+        assert not t.is_alive()
+
+    assert runtime.state is RuntimeState.STOPPED
+    assert runtime.snapshot()["admission_in_use"] == 0
+    assert admitted_count > 0, "hammer never exercised the admission path"
+    # The admission authority stays closed for good.
+    assert runtime.wait_for_admission(poll_seconds=0.001) is False
