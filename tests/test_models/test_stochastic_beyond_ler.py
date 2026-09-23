@@ -12,7 +12,10 @@ from __future__ import annotations
 import pytest
 import torch
 
-from openlithohub.models.anamorphic_smo import (
+# P0.6: the resist_stochastic_3d integration requires diff-surrogate.
+pytest.importorskip("diff_surrogate")
+
+from openlithohub.models.anamorphic_smo import (  # noqa: E402
     AnamorphicImaging,
     AnamorphicParams,
     PolarizationState,

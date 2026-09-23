@@ -17,6 +17,7 @@ Exit code 0 means docs and packaging agree; anything else fails the
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess  # noqa: S404 - fixed argv probes
@@ -79,25 +80,39 @@ def main() -> int:
         if resolve_script(name) is None:
             failures.append(f"console script {name!r} is not installed/resolvable on PATH")
 
-    # 3. documented flags must exist on the real CLI
-    for argv, expected in EXPECTED_FLAGS.items():
-        cmd = [name for name, value in scripts.items() if value.endswith(".cli.app:app")]
-        entry = cmd[0] if cmd else "openlithohub"
-        entry_path = resolve_script(entry)
-        if entry_path is None:
-            failures.append(f"cannot probe CLI: {entry!r} not resolvable")
-            continue
-        proc = subprocess.run(  # noqa: S603 - fixed argv
-            [entry_path, *argv, "--help"],
+    # 3. documented flags must exist on the real CLI. The probe runs
+    # through the SAME interpreter (never a PATH/console-script lookup)
+    # and hardens the child env: rich's help renderer wraps option cells
+    # at narrow detected widths, so force a wide plain-text rendering and
+    # strip ANSI before matching.
+    ansi_re = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+    probe_env = {
+        **os.environ,
+        "COLUMNS": "200",
+        "NO_COLOR": "1",
+        "TERM": "dumb",
+    }
+
+    def probe_help(argv: tuple[str, ...]) -> str:
+        code = "from openlithohub.cli.app import app; app()"
+        proc = subprocess.run(  # noqa: S603 - fixed argv probe
+            [sys.executable, "-c", code, *argv, "--help"],
             capture_output=True,
             text=True,
             timeout=120,
             check=False,
+            env=probe_env,
         )
-        help_text = proc.stdout + proc.stderr
+        return ansi_re.sub("", proc.stdout + proc.stderr)
+
+    for argv, expected in EXPECTED_FLAGS.items():
+        help_text = re.sub(r"\s+", " ", probe_help(argv))
         for flag in sorted(expected):
             if flag not in help_text:
-                failures.append(f"documented flag {flag} missing from `{' '.join(argv)} --help`")
+                failures.append(
+                    f"documented flag {flag} missing from `{' '.join(argv)} --help`; "
+                    f"captured output head: {help_text[:200]!r}"
+                )
 
     if failures:
         print("docs-command-smoke FAILED:")
