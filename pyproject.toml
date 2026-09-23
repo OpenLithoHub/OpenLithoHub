@@ -68,7 +68,7 @@ dev = [
     "pytest-benchmark>=4.0",
     "mypy>=1.5",
     "ruff>=0.1",
-    "pre-commit>=3.4",
+    "pre-commit>=4.6.2",
     "Pillow>=10.0",
     "types-PyYAML",
     "fastapi>=0.110",
