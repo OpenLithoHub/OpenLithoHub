@@ -1,4 +1,11 @@
-"""The `openlithohub serve` subcommand — boots the FastAPI engine."""
+"""The `openlithohub serve` subcommand — boots the FastAPI engine.
+
+Import hygiene (PR-A tail B): this module must stay importable on a
+CORE install (no ``[server]`` extra) so ``openlithohub --help``,
+``--version`` and every non-serve command work without FastAPI. The
+server package is imported lazily inside :func:`run`, after the
+optional-dependency check.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +35,9 @@ def run(
              -o optimized.oas
     """
     console = Console()
+    # Core-install contract: everything above the [server]-extra checks
+    # must load without FastAPI/uvicorn; the server surface is required
+    # only when `serve` actually runs.
     try:
         import uvicorn
     except ImportError:
@@ -36,8 +46,41 @@ def run(
             "Install with: [bold]pip install openlithohub[server][/bold]"
         )
         raise typer.Exit(1) from None
+    try:
+        from openlithohub.server.config import ServerConfig
+    except ImportError:
+        console.print(
+            "[red]Error:[/red] OpenLithoHub server components are missing or "
+            "broken. Install with: [bold]pip install openlithohub[server][/bold]"
+        )
+        raise typer.Exit(1) from None
+
+    # Fail fast on configuration errors before any process is spawned.
+    try:
+        config = ServerConfig.from_env()
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] invalid server configuration: {exc}")
+        raise typer.Exit(1) from None
+
+    # P0.3 (repair plan): the in-memory job backend is process-local —
+    # a job created in one Uvicorn worker is invisible to the others, so
+    # a multi-worker topology silently breaks the async job API. Refuse
+    # to run it instead of serving an invalid service.
+    if workers > 1 and config.job_backend == "in-memory":
+        console.print(
+            "[red]Error:[/red] --workers > 1 is not supported while the async job "
+            f"backend is {config.job_backend!r}: job state is process-local, so jobs "
+            "created in one worker are invisible to the others (polls return 404). "
+            "Use [bold]--workers 1[/bold], or set OPENLITHOHUB_JOB_BACKEND to a shared "
+            "backend once one exists."
+        )
+        raise typer.Exit(1) from None
 
     console.print(f"[bold]OpenLithoHub HTTP engine[/bold] starting on http://{host}:{port}")
+    console.print(
+        f"job backend: {config.job_backend} "
+        "(in-memory, process-local; restart loses jobs; single worker process only)"
+    )
     uvicorn.run(
         "openlithohub.server.app:create_app",
         host=host,

@@ -2,9 +2,20 @@
 
 Endpoints:
   - GET  /v1/health   — liveness probe.
+  - GET  /v1/ready    — readiness probe (registry + scratch + runtime).
   - GET  /v1/models   — list registered model names.
   - POST /v1/optimize — multipart upload of a layout file + model name,
     returns the optimized layout binary.
+  - POST /v1/jobs/optimize + GET /v1/jobs/{id}[/artifact], DELETE —
+    long-task job API for minute-scale optimizations.
+
+Lifecycle authority (repair-plan P0.1): app construction starts NO
+threads and owns NO mutable lifecycle state. The FastAPI lifespan is the
+single owner — it creates one :class:`~openlithohub.server.runtime.ServerRuntime`
+per app instance on entry (``app.state.runtime``), starts its single job
+worker, and terminates it on exit. Constructing an app with
+``create_app()`` is side-effect free; entering the lifespan is what makes
+the service able to accept work.
 
 Models are loaded lazily on first request and cached in-process; repeat
 requests against the same model skip weight loading entirely. The cache
@@ -13,38 +24,47 @@ variant does not collide with the bare model.
 
 Concurrency
 -----------
-The endpoint is ``async def`` but the underlying optimization is pure
-CPU/GPU work, so we dispatch it to a worker thread via
+The optimize endpoint is ``async def`` but the underlying optimization
+is pure CPU/GPU work, so we dispatch it to a worker thread via
 ``asyncio.to_thread`` to keep the event loop responsive (issue #36).
-The model cache is guarded by ``_CACHE_LOCK`` so two concurrent
-load-on-miss requests for the same key cannot both build the model and
-race to evict each other (issue #37). Per-model ``predict()`` is
-serialised behind a per-instance ``threading.Lock`` so two requests
+Admission to that work is bounded by the runtime's semaphore
+(``ServerConfig.max_concurrent_optimize``); excess requests get
+429 + Retry-After instead of degrading the host. Per-model ``predict()``
+is serialised behind a per-instance ``threading.Lock`` so two requests
 hitting the same cached model cannot stomp on its mutable state.
 """
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import itertools
 import json
 import logging
 import os
-import queue
 import shutil
 import tempfile as _tempfile
 import threading
 import time as _time
 import uuid
 from collections import OrderedDict
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 import torch
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.background import BackgroundTask  # type: ignore[import-not-found]
+
+from openlithohub.server.config import ServerConfig
+from openlithohub.server.runtime import (
+    AdmissionDeniedError,
+    JobArtifactUnavailableError,
+    JobQueueFullError,
+    JobStillRunningError,
+    RuntimeNotAcceptingWorkError,
+    ServerRuntime,
+    UnknownJobError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +73,10 @@ logger = logging.getLogger(__name__)
 # Bounded so a long-running worker that sees many distinct kwarg
 # combinations does not leak GPU memory; the least-recently-used entry is
 # torn down when the cap is hit.
+#
+# This cache is request-scoped state shared across app instances in a
+# process, not lifecycle-owned state; it stays module-level until the
+# model-cache ownership refactor (repair-plan P1.1 follow-up).
 _MODEL_CACHE_CAP = 8
 _MODEL_CACHE: OrderedDict[tuple[str, frozenset[tuple[str, Any]]], Any] = OrderedDict()
 # Guards _MODEL_CACHE itself (lookup / insert / eviction). Held only across
@@ -71,161 +95,6 @@ _MODEL_LOCKS: dict[tuple[str, frozenset[tuple[str, Any]]], threading.Lock] = {}
 # last holder releases it.
 _MODEL_REFCOUNTS: dict[tuple[str, frozenset[tuple[str, Any]]], int] = {}
 _PENDING_TEARDOWN: OrderedDict[tuple[str, frozenset[tuple[str, Any]]], Any] = OrderedDict()
-
-# Resource admission control (P1.14): concurrent optimize jobs can each
-# allocate significant CPU/RAM; without a global bound, different model
-# keys running in parallel exhaust the host.  One bounded semaphore
-# admits at most MAX_CONCURRENT_OPTIMIZE jobs; excess requests get
-# 429 + Retry-After instead of degrading the host.
-MAX_CONCURRENT_OPTIMIZE = max(1, int(os.environ.get("OPENLITHOHUB_MAX_CONCURRENT_OPTIMIZE", "2")))
-_ADMIT = threading.BoundedSemaphore(MAX_CONCURRENT_OPTIMIZE)
-
-# Optional API key boundary (P1.17): when set, every /v1 request must
-# present it in the X-API-Key header.  The server is an on-prem/private
-# service; full IAM belongs to a reverse proxy / service mesh.
-API_KEY = os.environ.get("OPENLITHOHUB_API_KEY") or ""
-
-# In-memory job store for long-running optimizations (P1.15).  Jobs are
-# process-local (restart clears them) and bounded: the oldest terminal
-# jobs are evicted beyond _JOB_HISTORY_CAP.
-_JOBS: OrderedDict[str, dict[str, Any]] = OrderedDict()
-_JOB_LOCK = threading.Lock()
-_JOB_HISTORY_CAP = 100
-_JOB_QUEUE_DEPTH = int(os.environ.get("OPENLITHOHUB_JOB_QUEUE_DEPTH", "8"))
-if _JOB_QUEUE_DEPTH < 1:
-    raise RuntimeError("OPENLITHOHUB_JOB_QUEUE_DEPTH must be >= 1")
-_JOB_QUEUE: queue.Queue[tuple[str, dict[str, Any]]] = queue.Queue(maxsize=_JOB_QUEUE_DEPTH)
-_JOB_TTL_SECONDS = float(os.environ.get("OPENLITHOHUB_JOB_TTL_SECONDS", "3600"))
-_JOB_COUNTER = itertools.count(1)
-
-
-def _evict_terminal_locked(now: float) -> list[str]:
-    """Evict terminal jobs beyond the history cap or TTL. CALLER HOLDS
-    _JOB_LOCK — only bookkeeping happens here.  Returns the scratch dirs
-    to remove; the CALLER runs ``shutil.rmtree`` AFTER releasing the lock
-    (audit P1.3: slow directory deletion must not block job state)."""
-    doomed: list[str] = []
-    for job_id in list(_JOBS.keys()):
-        record = _JOBS[job_id]
-        if record["status"] not in ("succeeded", "failed", "cancelled"):
-            continue
-        # P0.20: TTL begins at completion (or last access for succeeded)
-        reference = max(
-            record.get("_completed_monotonic", 0),
-            record.get("_last_access_monotonic", 0),
-            record.get("_created_monotonic", 0),
-        )
-        age = now - reference
-        if len(_JOBS) > _JOB_HISTORY_CAP or age > _JOB_TTL_SECONDS:
-            _JOBS.pop(job_id, None)
-            doomed.append(str(record.get("scratch_dir") or ""))
-    return doomed
-
-
-def _cleanup_scratch_dirs(doomed: list[str]) -> None:
-    for d in doomed:
-        if d:
-            shutil.rmtree(d, ignore_errors=True)
-
-
-_JOB_WORKER_STARTED = threading.Event()
-_JOB_WORKER_SHUTDOWN = threading.Event()
-_JOB_WORKER_THREAD: threading.Thread | None = None
-
-
-def _admit_blocking_with_shutdown(timeout: float = 1.0) -> bool:
-    """Wait (in bounded sleeps) for admission capacity. Queued jobs are
-    patient: transient contention with synchronous /v1/optimize must not
-    permanently fail a legitimately queued job (audit P1.3)."""
-    while True:
-        if _JOB_WORKER_SHUTDOWN.is_set():
-            return False
-        if _ADMIT.acquire(blocking=False):
-            return True
-        _time.sleep(timeout)
-
-
-def _start_job_worker(app: Any) -> None:
-    """Single fixed worker draining the bounded job queue (audit C3):
-    a real queue with locked state transitions and scratch cleanup, not
-    one daemon thread per request.  Idempotent (audit P1.1): repeated
-    create_app() calls reuse the one process-global worker."""
-    if _JOB_WORKER_STARTED.is_set():
-        return
-    _JOB_WORKER_STARTED.set()
-
-    def _worker() -> None:
-        while not _JOB_WORKER_SHUTDOWN.is_set():
-            try:
-                job_id, params = _JOB_QUEUE.get(timeout=1.0)
-            except queue.Empty:
-                continue
-            doomed_scratch: list[str] = []
-            skip = False
-            with _JOB_LOCK:
-                record = _JOBS.get(job_id)
-                if record is None or record["status"] in ("cancelled", "uploading"):
-                    doomed_scratch.append(record.get("scratch_dir", "") if record else "")
-                    _JOB_QUEUE.task_done()
-                    skip = True
-                else:
-                    record["status"] = "running"
-            # P0.16: rmtree AFTER releasing the lock
-            _cleanup_scratch_dirs(doomed_scratch)
-            if skip:
-                continue
-            admitted = _admit_blocking_with_shutdown()
-            if not admitted:
-                # P0.17: shutdown while waiting admission — mark terminal
-                with _JOB_LOCK:
-                    record = _JOBS.get(job_id)
-                    if record is not None:
-                        record["status"] = "cancelled"
-                        record["error"] = "server shutdown while waiting for admission"
-                _JOB_QUEUE.task_done()
-                continue
-            try:
-                # The worker HOLDS the admission slot for the whole run:
-                # queued jobs wait patiently for capacity (P1.3) instead of
-                # racing the synchronous endpoint for a slot.
-                summary = _run_optimize(**params)
-                with _JOB_LOCK:
-                    record = _JOBS.get(job_id)
-                    if record is not None:
-                        record["status"] = "succeeded"
-                        record["summary"] = summary
-                        record["output_path"] = str(summary["output_path"])
-                        record["_completed_monotonic"] = _time.monotonic()
-                        record["_last_access_monotonic"] = _time.monotonic()
-                        doomed = _evict_terminal_locked(_time.monotonic())
-                _cleanup_scratch_dirs(doomed)
-            except Exception as e:  # noqa: BLE001 - surfaced via job status
-                failed_scratch = ""
-                with _JOB_LOCK:
-                    record = _JOBS.get(job_id)
-                    if record is not None:
-                        record["status"] = "failed"
-                        record["error"] = str(e)
-                        record["_completed_monotonic"] = _time.monotonic()
-                        failed_scratch = record.get("scratch_dir") or ""
-                if failed_scratch:
-                    shutil.rmtree(failed_scratch, ignore_errors=True)
-            finally:
-                _release_admit()
-                _JOB_QUEUE.task_done()
-
-    global _JOB_WORKER_THREAD
-    _JOB_WORKER_THREAD = threading.Thread(target=_worker, name="olh-job-worker", daemon=True)
-    _JOB_WORKER_THREAD.start()
-
-
-# Hard cap on multipart upload size for /v1/optimize. Mirrors the 2 GB ceiling
-# enforced by ``ModelHub._download_url`` for incoming weights — uniform
-# attacker-controlled-bytes contract across the surface. The body is streamed
-# to disk in 1 MB chunks below; the cap aborts the stream once cumulative
-# bytes-read crosses the threshold so a multi-GB POST cannot fill the worker's
-# tmpfs (or, on systems where /tmp is a memory-backed mount, OOM the worker).
-_MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
 
 def _teardown_model(key: tuple[str, frozenset[tuple[str, Any]]], model: Any) -> None:
@@ -362,20 +231,6 @@ def _release_model(key: tuple[str, frozenset[tuple[str, Any]]]) -> None:
         _teardown_model(key, model)
 
 
-class AdmissionDeniedError(RuntimeError):
-    """Raised when the global optimize admission semaphore is exhausted."""
-
-
-def _run_optimize_admitted(**kwargs: Any) -> dict[str, Any]:
-    """Run one optimize under the global admission semaphore (P1.14)."""
-    if not _admit_sync():
-        raise AdmissionDeniedError()
-    try:
-        return _run_optimize(**kwargs)
-    finally:
-        _release_admit()
-
-
 def _run_optimize(
     *,
     input_path: Path,
@@ -482,87 +337,61 @@ def make_scratch_dir(prefix: str) -> Path:
     return Path(_tempfile.mkdtemp(prefix=prefix, dir=str(scratch_root())))
 
 
-def _admit_sync() -> bool:
-    """Non-blocking admission probe for worker threads (P1.14)."""
-    return _ADMIT.acquire(blocking=False)
+def _require_runtime(request: Request) -> ServerRuntime:
+    """Fetch the lifespan-owned runtime or 503. Requests that need the
+    runtime (anything admitting work or touching jobs) cannot be served
+    before the lifespan starts it — construction deliberately does not."""
+    runtime: ServerRuntime | None = getattr(request.app.state, "runtime", None)
+    if runtime is None:
+        raise HTTPException(
+            status_code=503,
+            detail="server runtime not started (app lifespan has not been entered)",
+        )
+    return runtime
 
 
-def _release_admit() -> None:
-    _ADMIT.release()
-
-
-_JOB_QUEUE_RESERVED = 0
-
-
-def _try_reserve_slot() -> bool:
-    """Reserve a queue slot BEFORE ingesting a large upload (audit P1.4).
-
-    The reservation counter is checked+incremented with the queue size
-    under one lock, so capacity can never be oversubscribed between the
-    reservation and the actual enqueue.  Prefer :func:`reserve_job_slot`.
-    """
-    global _JOB_QUEUE_RESERVED
-    with _JOB_LOCK:
-        if _JOB_QUEUE.qsize() + _JOB_QUEUE_RESERVED >= _JOB_QUEUE_DEPTH:
-            return False
-        _JOB_QUEUE_RESERVED += 1
-        return True
-
-
-def _release_slot_reservation() -> None:
-    global _JOB_QUEUE_RESERVED
-    with _JOB_LOCK:
-        if _JOB_QUEUE_RESERVED <= 0:
-            raise RuntimeError("reservation underflow: double-release detected")
-        _JOB_QUEUE_RESERVED -= 1
-
-
-@contextlib.contextmanager
-def reserve_job_slot() -> Any:
-    """Exception-safe slot reservation (audit P1.1): the reservation is
-    released on EVERY exit path unless explicitly committed by the
-    enqueue (which releases it itself)."""
-    if not _try_reserve_slot():
-        raise JobQueueFullError()
-    committed = False
-    try:
-        yield
-        committed = True
-    finally:
-        if not committed:
-            _release_slot_reservation()
-
-
-class JobQueueFullError(RuntimeError):
-    """Raised when the bounded job queue has no free slot."""
-
-
-def _put_job(record: dict[str, Any], params: dict[str, Any]) -> tuple[str, bool]:
-    """Register a queued job and enqueue it WITHOUT blocking (audit P1.2):
-    put_nowait + rollback of the registration on Full. Returns
-    (job_id, enqueued)."""
-    with _JOB_LOCK:
-        job_id = f"job-{next(_JOB_COUNTER)}-{uuid.uuid4().hex[:8]}"
-        try:
-            _JOB_QUEUE.put_nowait((job_id, params))
-        except queue.Full:
-            return "", False
-        record["job_id"] = job_id
-        record["_created_monotonic"] = _time.monotonic()
-        _JOBS[job_id] = record
-        doomed = _evict_terminal_locked(_time.monotonic())
-    _cleanup_scratch_dirs(doomed)
-    return job_id, True
-
-
-def create_app() -> FastAPI:
+def create_app(config: ServerConfig | None = None) -> FastAPI:
     """Build the FastAPI app. Factored so tests can spin up a fresh
     instance with TestClient without depending on import-time globals.
 
-    P1.4: the job worker is owned by the app LIFESPAN — started once
-    (idempotently across repeated create_app calls) and shut down with a
-    bounded drain when the app exits.
+    P0.1 (server lifecycle authority): this factory is side-effect free —
+    no worker thread, no runtime. The lifespan below owns exactly one
+    :class:`ServerRuntime`; entering it starts the worker, exiting it
+    drains and stops the runtime.
     """
+    config = config if config is not None else ServerConfig.from_env()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> Any:
+        # Ownership exclusion (PR-A red-team blocker A): a forced stop
+        # leaves the previous runtime's worker (or an admitted run) alive
+        # in this process. Starting a second runtime then would create a
+        # second execution authority — e.g. two concurrent optimizes
+        # under max_concurrent_optimize=1. Fail closed until the previous
+        # runtime truly owns nothing.
+        previous = getattr(app.state, "runtime", None)
+        if previous is not None and (previous.worker_alive or previous.executing):
+            raise RuntimeError(
+                "refusing to start a second execution authority: the previous "
+                "runtime still owns a live worker/in-flight run after a forced "
+                "stop; wait for it to exit before restarting"
+            )
+        runtime = ServerRuntime(config, optimize_runner=_run_optimize)
+        app.state.runtime = runtime
+        runtime.start()
+        try:
+            yield
+        finally:
+            runtime.stop()
+            if runtime.worker_alive or runtime.executing:
+                # Forced stop: RETAIN the reference so a future lifespan
+                # cannot overlap the detached execution (exclusion above).
+                app.state.runtime = runtime
+            else:
+                # Clean stop: detach so post-shutdown requests observe a
+                # clean 503 instead of a stopped runtime.
+                app.state.runtime = None
+
     app = FastAPI(
         title="OpenLithoHub Engine",
         description=(
@@ -571,20 +400,8 @@ def create_app() -> FastAPI:
             "C++/Perl pipelines drive it via multipart POST."
         ),
         version="1",
+        lifespan=lifespan,
     )
-
-    @app.on_event("startup")
-    def _start_worker_lifespan() -> None:
-        _JOB_WORKER_SHUTDOWN.clear()
-        _start_job_worker(app)
-
-    @app.on_event("shutdown")
-    def _stop_worker_lifespan() -> None:
-        _JOB_WORKER_SHUTDOWN.set()
-        thread = _JOB_WORKER_THREAD
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=5.0)
-        _JOB_WORKER_STARTED.clear()
 
     @app.middleware("http")
     async def _request_observability(request: Any, call_next: Any) -> Any:
@@ -594,9 +411,9 @@ def create_app() -> FastAPI:
 
         request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
         if (
-            API_KEY
+            config.api_key
             and request.url.path != "/v1/health"
-            and request.headers.get("X-API-Key") != API_KEY
+            and request.headers.get("X-API-Key") != config.api_key
         ):
             from fastapi.responses import JSONResponse as _JSONResponse
 
@@ -622,24 +439,15 @@ def create_app() -> FastAPI:
         )
         return response
 
-    def _require_api_key(request: Any) -> None:
-        if API_KEY and request.headers.get("X-API-Key") != API_KEY:
-            from fastapi import HTTPException
-
-            raise HTTPException(status_code=401, detail="invalid or missing X-API-Key")
-
-    # P0.13: _start_job_worker is idempotent (Event guard). The lifespan
-    # shutdown handler below is what actually drains the worker on exit.
-    _start_job_worker(app)
-
     @app.get("/v1/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/v1/ready")
-    def ready() -> dict[str, Any]:
+    def ready(request: Request) -> dict[str, Any]:
         # P1.16: readiness — can this instance accept work RIGHT NOW?
-
+        # Runtime counters come from the public snapshot; no private
+        # semaphore internals (repair-plan P1.4).
         from openlithohub.models.registry import register_builtin_models, registry
 
         registry_ok = True
@@ -656,24 +464,30 @@ def create_app() -> FastAPI:
             probe.parent.rmdir()
         except OSError:
             writable = False
-        ready_now = registry_ok and writable
+        runtime = getattr(request.app.state, "runtime", None)
+        snap = runtime.snapshot() if runtime is not None else None
+        accepting = bool(snap and snap["accepting_requests"])
+        ready_now = registry_ok and writable and accepting
         body: dict[str, Any] = {
             "ready": ready_now,
             "checks": {
                 "models_registered": registry_ok,
                 "scratch_writable": writable,
-                "admission_slots_free": _ADMIT._value,  # noqa: SLF001 - introspection
+                "accepting_requests": accepting,
             },
-            "metrics": {
-                "job_queue_depth": _JOB_QUEUE_DEPTH,
-                "job_queue_size": _JOB_QUEUE.qsize(),
-                "job_queue_reserved": _JOB_QUEUE_RESERVED,
-                "jobs_tracked": len(_JOBS),
-            },
+            "metrics": (
+                {
+                    "job_queue_depth": snap["job_queue_capacity"],
+                    "job_queue_size": snap["job_queue_size"],
+                    "job_queue_reserved": snap["job_queue_reserved"],
+                    "jobs_tracked": snap["jobs_tracked"],
+                }
+                if snap
+                else {}
+            ),
+            "runtime": snap,
         }
         if not ready_now:
-            from fastapi import HTTPException
-
             raise HTTPException(status_code=503, detail=body)
         return body
 
@@ -732,6 +546,14 @@ def create_app() -> FastAPI:
             "streaming_pipeline": True,
             "input_formats": ["npy", "pt", "oas", "gds"],
             "export_formats": ["oasis", "gds", "pt"],
+            # Truthful single-process job contract (repair-plan §4 Phase 1):
+            # in-memory store, no persistence, single worker process only.
+            "jobs": {
+                "backend": config.job_backend,
+                "durable": False,
+                "restart_loses_jobs": True,
+                "single_process_only": True,
+            },
             "proof_verification": {
                 # P4.3: report what THIS installed artifact can actually do,
                 # separate from repository governance provenance.
@@ -754,6 +576,7 @@ def create_app() -> FastAPI:
 
     @app.post("/v1/optimize", response_model=None)
     async def optimize(
+        request: Request,
         layout: UploadFile = File(..., description="Layout file (.oas, .gds, .pt, .npy)"),
         model: str = Form(..., description="Registered model name."),
         node: str = Form("3nm-euv", description="Process node."),
@@ -780,6 +603,9 @@ def create_app() -> FastAPI:
             ),
         ),
     ) -> Response | JSONResponse:
+        runtime = _require_runtime(request)
+        if not runtime.accepting_jobs:
+            raise HTTPException(status_code=503, detail="server is draining; not accepting work")
         if not layout.filename:
             raise HTTPException(status_code=400, detail="layout upload missing filename")
 
@@ -805,10 +631,10 @@ def create_app() -> FastAPI:
                     if not chunk:
                         break
                     bytes_read += len(chunk)
-                    if bytes_read > _MAX_UPLOAD_BYTES:
+                    if bytes_read > config.max_upload_bytes:
                         raise HTTPException(
                             status_code=413,
-                            detail=(f"layout upload exceeds {_MAX_UPLOAD_BYTES} bytes"),
+                            detail=(f"layout upload exceeds {config.max_upload_bytes} bytes"),
                         )
                     out_f.write(chunk)
 
@@ -820,7 +646,7 @@ def create_app() -> FastAPI:
                 # would otherwise stall every other in-flight request for
                 # seconds-to-minutes per optimization.
                 summary = await asyncio.to_thread(
-                    _run_optimize_admitted,
+                    runtime.run_admitted,
                     input_path=input_path,
                     output_path=output_path,
                     model_name=model,
@@ -837,6 +663,13 @@ def create_app() -> FastAPI:
                     status_code=429,
                     detail="server at maximum concurrent optimizations",
                     headers={"Retry-After": "5"},
+                ) from None
+            except RuntimeNotAcceptingWorkError:
+                # Lifecycle authority rejection (draining/stopped) — 503,
+                # never 400/429 (PR-A red-team blocker B).
+                raise HTTPException(
+                    status_code=503,
+                    detail="server is draining; not accepting new work",
                 ) from None
             except KeyError as e:
                 # Both unknown model names and unknown node names raise KeyError;
@@ -878,12 +711,14 @@ def create_app() -> FastAPI:
             raise
 
     # ---- Long-task job API (P1.15): minute-scale OPC/ILT should not hold
-    # an HTTP connection open. Same core as /v1/optimize, executed in a
-    # worker thread under the same admission semaphore; jobs live in the
-    # process (restart clears them) and are bounded by _JOB_HISTORY_CAP.
+    # an HTTP connection open. Same core as /v1/optimize, executed in the
+    # runtime's single worker thread under the same admission semaphore;
+    # jobs live in the runtime (process-local, restart clears them) and
+    # are bounded by ServerConfig.job_history_cap.
 
     @app.post("/v1/jobs/optimize", response_model=None)
     async def create_optimize_job(
+        request: Request,
         layout: UploadFile = File(..., description="Layout file (.oas, .gds, .pt, .npy)"),
         model: str = Form(..., description="Registered model name."),
         node: str = Form("3nm-euv", description="Process node."),
@@ -894,116 +729,105 @@ def create_app() -> FastAPI:
         pretrained: bool = Form(False, description="Load pretrained weights."),
         min_area_nm2: float = Form(0.0, description="Drop shapes below this area (nm^2)."),
     ) -> JSONResponse:
+        runtime = _require_runtime(request)
+        if not runtime.accepting_jobs:
+            raise HTTPException(status_code=503, detail="server is not accepting new jobs")
         if not layout.filename:
             raise HTTPException(status_code=400, detail="layout upload missing filename")
-        # P1.4/P1.1: reserve the queue slot BEFORE ingesting the upload
-        # body, and release it on EVERY failure path via try/except.
-        if not _try_reserve_slot():
+
+        # P0.2: ONE transactional reservation protocol. The slot is
+        # reserved BEFORE the upload body is ingested; the reservation is
+        # consumed exactly once by commit() and released on EVERY other
+        # exit path by the context manager.
+        tmp_path: Path | None = None
+        try:
+            with runtime.reserve_job_slot() as reservation:
+                tmp_path = make_scratch_dir("olh_job_")
+                suffix = Path(layout.filename).suffix or ".bin"
+                input_path = tmp_path / f"input{suffix}"
+                output_path = tmp_path / "optimized.oas"
+                bytes_read = 0
+                with input_path.open("wb") as out_f:
+                    while True:
+                        chunk = await layout.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        bytes_read += len(chunk)
+                        if bytes_read > config.max_upload_bytes:
+                            raise HTTPException(status_code=413, detail="layout upload too large")
+                        out_f.write(chunk)
+                params: dict[str, Any] = dict(
+                    input_path=input_path,
+                    output_path=output_path,
+                    model_name=model,
+                    node=node,
+                    pixel_nm=pixel_nm,
+                    tile_size=tile_size,
+                    writer=writer,
+                    layer=layer,
+                    pretrained=pretrained,
+                    min_area_nm2=min_area_nm2,
+                )
+                job_id = reservation.commit(
+                    {
+                        "status": "queued",
+                        "created_utc": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+                        "scratch_dir": str(tmp_path),
+                        "summary": None,
+                        "error": None,
+                        "output_path": None,
+                    },
+                    params,
+                )
+        except JobQueueFullError:
             raise HTTPException(
                 status_code=429,
                 detail="job queue is full",
                 headers={"Retry-After": "10"},
-            )
-        _reserved = True
-        try:
-            tmp_path = make_scratch_dir("olh_job_")
-            suffix = Path(layout.filename).suffix or ".bin"
-            input_path = tmp_path / f"input{suffix}"
-            output_path = tmp_path / "optimized.oas"
-            bytes_read = 0
-            with input_path.open("wb") as out_f:
-                while True:
-                    chunk = await layout.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    bytes_read += len(chunk)
-                    if bytes_read > _MAX_UPLOAD_BYTES:
-                        raise HTTPException(status_code=413, detail="layout upload too large")
-                    out_f.write(chunk)
-            params: dict[str, Any] = dict(
-                input_path=input_path,
-                output_path=output_path,
-                model_name=model,
-                node=node,
-                pixel_nm=pixel_nm,
-                tile_size=tile_size,
-                writer=writer,
-                layer=layer,
-                pretrained=pretrained,
-                min_area_nm2=min_area_nm2,
-            )
-            job_id, queued = _put_job(
-                {
-                    "status": "queued",
-                    "created_utc": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
-                    "scratch_dir": str(tmp_path),
-                    "summary": None,
-                    "error": None,
-                    "output_path": None,
-                },
-                params,
-            )
-            if not queued:
-                shutil.rmtree(tmp_path, ignore_errors=True)
-                raise HTTPException(
-                    status_code=429,
-                    detail="job queue is full",
-                    headers={"Retry-After": "10"},
-                )
-            _release_slot_reservation()
-            _reserved = False
-            return JSONResponse(
-                status_code=202,
-                content={
-                    "job_id": job_id,
-                    "status": "queued",
-                    "poll": f"/v1/jobs/{job_id}",
-                },
-            )
+            ) from None
+        except RuntimeNotAcceptingWorkError:
+            # Commit-time lifecycle gate: shutdown won the race against
+            # this reservation's upload/commit — 503, no job enqueued
+            # (PR-A red-team blocker B). The context manager already
+            # released the reservation.
+            raise HTTPException(
+                status_code=503,
+                detail="server is not accepting new jobs",
+            ) from None
         except BaseException:
-            if _reserved:
-                _release_slot_reservation()
-            shutil.rmtree(tmp_path, ignore_errors=True)
+            # The scratch dir is request-local garbage on every failure
+            # path (on success it belongs to the committed job record).
+            if tmp_path is not None:
+                shutil.rmtree(tmp_path, ignore_errors=True)
             raise
+        return JSONResponse(
+            status_code=202,
+            content={
+                "job_id": job_id,
+                "status": "queued",
+                "poll": f"/v1/jobs/{job_id}",
+            },
+        )
 
     @app.get("/v1/jobs/{job_id}")
-    def get_job(job_id: str) -> dict[str, Any]:
-        # P1.5: reads also drive time-based eviction of terminal jobs.
-        doomed: list[str] = []
-        with _JOB_LOCK:
-            doomed = _evict_terminal_locked(_time.monotonic())
-            job = _JOBS.get(job_id)
-            if job is None:
-                raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
-            # P1.6: snapshot copy under the lock — worker threads mutate
-            # the live record concurrently.
-            snapshot = {
-                "api_schema_version": "1",
-                "job_id": job_id,
-                "status": job["status"],
-                "created_utc": job["created_utc"],
-                "summary": job["summary"],
-                "error": job["error"],
-            }
-        _cleanup_scratch_dirs(doomed)
-        return snapshot
+    def get_job(request: Request, job_id: str) -> dict[str, Any]:
+        runtime = _require_runtime(request)
+        try:
+            return runtime.get_job_snapshot(job_id)
+        except UnknownJobError:
+            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}") from None
 
     @app.get("/v1/jobs/{job_id}/artifact", response_model=None)
-    def get_job_artifact(job_id: str) -> FileResponse:
-        # P1.2: snapshot status/output path UNDER the lock, same contract
-        # as get_job; a successful GET also refreshes the job TTL so the
-        # janitor cannot delete the artifact mid-download.
-        doomed: list[str] = []
-        with _JOB_LOCK:
-            doomed = _evict_terminal_locked(_time.monotonic())
-            job = _JOBS.get(job_id)
-            if job is None:
-                raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
-            if job["status"] != "succeeded" or not job.get("output_path"):
-                raise HTTPException(status_code=409, detail=f"job {job_id} has no artifact yet")
-            output_path = str(job["output_path"])
-            job["_last_access_monotonic"] = _time.monotonic()
-        _cleanup_scratch_dirs(doomed)
+    def get_job_artifact(request: Request, job_id: str) -> FileResponse:
+        runtime = _require_runtime(request)
+        try:
+            output_path = runtime.get_job_artifact_path(job_id)
+        except UnknownJobError:
+            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}") from None
+        except JobArtifactUnavailableError:
+            raise HTTPException(
+                status_code=409, detail=f"job {job_id} has no artifact yet"
+            ) from None
         return FileResponse(
             output_path,
             media_type="application/octet-stream",
@@ -1013,19 +837,14 @@ def create_app() -> FastAPI:
         )
 
     @app.delete("/v1/jobs/{job_id}")
-    def delete_job(job_id: str) -> dict[str, str]:
-        with _JOB_LOCK:
-            job = _JOBS.get(job_id)
-            if job is None:
-                raise HTTPException(status_code=404, detail=f"unknown job: {job_id}")
-            if job["status"] == "running":
-                raise HTTPException(status_code=409, detail="running job cannot be deleted")
-            if job["status"] == "queued":
-                # The worker drops cancelled jobs (and their scratch) when
-                # dequeued; mark cancelled so it is never executed.
-                job["status"] = "cancelled"
-            _JOBS.pop(job_id, None)
-            scratch = job.get("scratch_dir")
+    def delete_job(request: Request, job_id: str) -> dict[str, str]:
+        runtime = _require_runtime(request)
+        try:
+            scratch = runtime.delete_job(job_id)
+        except UnknownJobError:
+            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}") from None
+        except JobStillRunningError:
+            raise HTTPException(status_code=409, detail="running job cannot be deleted") from None
         if scratch:
             shutil.rmtree(scratch, ignore_errors=True)
         return {"deleted": job_id}
