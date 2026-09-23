@@ -1,0 +1,1131 @@
+{
+  "components": {
+    "schemas": {
+      "Body_create_optimize_job_v1_jobs_optimize_post": {
+        "properties": {
+          "execution_mode": {
+            "default": "auto",
+            "description": "Execution topology: 'auto' (planner), 'dense' or 'streaming'. Unsupported large jobs fail closed instead of falling back to dense.",
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "OASIS/GDSII layer 'LAYER:DTYPE'.",
+            "title": "Layer"
+          },
+          "layout": {
+            "contentMediaType": "application/octet-stream",
+            "description": "Layout file (.oas, .gds, .pt, .npy)",
+            "title": "Layout",
+            "type": "string"
+          },
+          "min_area_nm2": {
+            "default": 0.0,
+            "description": "Drop shapes below this area (nm^2).",
+            "title": "Min Area Nm2",
+            "type": "number"
+          },
+          "model": {
+            "description": "Registered model name.",
+            "title": "Model",
+            "type": "string"
+          },
+          "node": {
+            "default": "3nm-euv",
+            "description": "Process node.",
+            "title": "Node",
+            "type": "string"
+          },
+          "pixel_nm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pixel size in nanometers.",
+            "title": "Pixel Nm"
+          },
+          "pretrained": {
+            "default": false,
+            "description": "Load pretrained weights.",
+            "title": "Pretrained",
+            "type": "boolean"
+          },
+          "tile_size": {
+            "default": 2048,
+            "description": "Tile size in pixels.",
+            "title": "Tile Size",
+            "type": "integer"
+          },
+          "writer": {
+            "default": "mbmw",
+            "description": "Target writer: mbmw or vsb.",
+            "title": "Writer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "layout",
+          "model"
+        ],
+        "title": "Body_create_optimize_job_v1_jobs_optimize_post",
+        "type": "object"
+      },
+      "Body_optimize_v1_optimize_post": {
+        "properties": {
+          "execution_mode": {
+            "default": "auto",
+            "description": "Execution topology: 'auto' picks dense under the dense memory policy (OPENLITHOHUB_MAX_DENSE_BYTES) and streaming for supported large jobs; unsupported large jobs fail closed (400) instead of silently materializing a full-chip raster.",
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "OASIS/GDSII layer 'LAYER:DTYPE'; required for multi-layer files.",
+            "title": "Layer"
+          },
+          "layout": {
+            "contentMediaType": "application/octet-stream",
+            "description": "Layout file (.oas, .gds, .pt, .npy)",
+            "title": "Layout",
+            "type": "string"
+          },
+          "min_area_nm2": {
+            "default": 0.0,
+            "description": "Drop curvilinear shapes below this polygon area (nm^2) at export. Default 0.0 keeps every shape (Hackathon-safe); set >0 for fab-oriented export quality. This export does NOT establish foundry sign-off or complete manufacturing-rule compliance.",
+            "title": "Min Area Nm2",
+            "type": "number"
+          },
+          "model": {
+            "description": "Registered model name.",
+            "title": "Model",
+            "type": "string"
+          },
+          "node": {
+            "default": "3nm-euv",
+            "description": "Process node.",
+            "title": "Node",
+            "type": "string"
+          },
+          "pixel_nm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pixel size in nanometers. If unset, falls back to the node's native pitch (1.0 nm/px is treated as a real value, not a sentinel).",
+            "title": "Pixel Nm"
+          },
+          "pretrained": {
+            "default": false,
+            "description": "Load pretrained weights when supported.",
+            "title": "Pretrained",
+            "type": "boolean"
+          },
+          "tile_size": {
+            "default": 2048,
+            "description": "Tile size in pixels.",
+            "title": "Tile Size",
+            "type": "integer"
+          },
+          "writer": {
+            "default": "mbmw",
+            "description": "Target writer: mbmw or vsb.",
+            "title": "Writer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "layout",
+          "model"
+        ],
+        "title": "Body_optimize_v1_optimize_post",
+        "type": "object"
+      },
+      "CapabilitiesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "api_schema_version": {
+            "title": "Api Schema Version",
+            "type": "string"
+          },
+          "build_provenance": {
+            "additionalProperties": true,
+            "title": "Build Provenance",
+            "type": "object"
+          },
+          "capability_schema_version": {
+            "title": "Capability Schema Version",
+            "type": "string"
+          },
+          "export_formats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Export Formats",
+            "type": "array"
+          },
+          "gpu": {
+            "additionalProperties": true,
+            "title": "Gpu",
+            "type": "object"
+          },
+          "input_formats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Formats",
+            "type": "array"
+          },
+          "jobs": {
+            "$ref": "#/components/schemas/JobsCapability"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "proof_verification": {
+            "additionalProperties": true,
+            "title": "Proof Verification",
+            "type": "object"
+          },
+          "simulator_backends": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Simulator Backends",
+            "type": "array"
+          },
+          "streaming": {
+            "$ref": "#/components/schemas/StreamingMatrixContract"
+          },
+          "streaming_pipeline": {
+            "title": "Streaming Pipeline",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "api_schema_version",
+          "capability_schema_version",
+          "models",
+          "simulator_backends",
+          "gpu",
+          "streaming_pipeline",
+          "streaming",
+          "input_formats",
+          "export_formats",
+          "jobs",
+          "proof_verification",
+          "build_provenance"
+        ],
+        "title": "CapabilitiesResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "JobCreateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "api_schema_version": {
+            "default": "1",
+            "title": "Api Schema Version",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "poll": {
+            "title": "Poll",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "poll"
+        ],
+        "title": "JobCreateResponse",
+        "type": "object"
+      },
+      "JobDeleteResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "JobDeleteResponse",
+        "type": "object"
+      },
+      "JobStatus": {
+        "description": "Public job-state vocabulary (PR-D §5).\n\nValues are the wire format. ``RUNNING -> CANCELLED`` is deliberately\nabsent: the PR-A runtime drains already-admitted work and does not own\ncancellation of an executing model, so the contract must not claim it.",
+        "enum": [
+          "queued",
+          "running",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ],
+        "title": "JobStatus",
+        "type": "string"
+      },
+      "JobStatusResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "api_schema_version": {
+            "default": "1",
+            "title": "Api Schema Version",
+            "type": "string"
+          },
+          "completed_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed Utc"
+          },
+          "created_utc": {
+            "title": "Created Utc",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "started_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started Utc"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OptimizeMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "created_utc"
+        ],
+        "title": "JobStatusResponse",
+        "type": "object"
+      },
+      "JobsCapability": {
+        "additionalProperties": false,
+        "properties": {
+          "backend": {
+            "title": "Backend",
+            "type": "string"
+          },
+          "durable": {
+            "title": "Durable",
+            "type": "boolean"
+          },
+          "restart_loses_jobs": {
+            "title": "Restart Loses Jobs",
+            "type": "boolean"
+          },
+          "single_process_only": {
+            "title": "Single Process Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "backend",
+          "durable",
+          "restart_loses_jobs",
+          "single_process_only"
+        ],
+        "title": "JobsCapability",
+        "type": "object"
+      },
+      "MemoryPolicyContract": {
+        "additionalProperties": false,
+        "properties": {
+          "default_bytes": {
+            "title": "Default Bytes",
+            "type": "integer"
+          },
+          "env": {
+            "title": "Env",
+            "type": "string"
+          },
+          "fail_closed": {
+            "title": "Fail Closed",
+            "type": "boolean"
+          },
+          "unlimited_marker": {
+            "title": "Unlimited Marker",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "env",
+          "default_bytes",
+          "unlimited_marker",
+          "fail_closed"
+        ],
+        "title": "MemoryPolicyContract",
+        "type": "object"
+      },
+      "MetricsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "api_schema_version": {
+            "default": "1",
+            "title": "Api Schema Version",
+            "type": "string"
+          },
+          "jobs": {
+            "additionalProperties": true,
+            "title": "Jobs",
+            "type": "object"
+          },
+          "optimize": {
+            "additionalProperties": true,
+            "title": "Optimize",
+            "type": "object"
+          },
+          "requests": {
+            "additionalProperties": true,
+            "title": "Requests",
+            "type": "object"
+          },
+          "runtime": {
+            "additionalProperties": true,
+            "title": "Runtime",
+            "type": "object"
+          },
+          "scope": {
+            "const": "process",
+            "default": "process",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "title": "MetricsResponse",
+        "type": "object"
+      },
+      "OptimizeMetadata": {
+        "additionalProperties": false,
+        "description": "Typed public projection of one optimize run (PR-C vocabulary).",
+        "properties": {
+          "estimated_dense_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Dense Bytes"
+          },
+          "execution_mode": {
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "execution_reason": {
+            "title": "Execution Reason",
+            "type": "string"
+          },
+          "export_format": {
+            "title": "Export Format",
+            "type": "string"
+          },
+          "halo_px": {
+            "title": "Halo Px",
+            "type": "integer"
+          },
+          "input_backend": {
+            "title": "Input Backend",
+            "type": "string"
+          },
+          "max_dense_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Dense Bytes"
+          },
+          "output_backend": {
+            "title": "Output Backend",
+            "type": "string"
+          },
+          "shape": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Shape",
+            "type": "array"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          },
+          "tiles": {
+            "title": "Tiles",
+            "type": "integer"
+          },
+          "work": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkCounters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "writer": {
+            "title": "Writer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shape",
+          "tiles",
+          "halo_px",
+          "writer",
+          "export_format",
+          "execution_mode",
+          "execution_reason",
+          "input_backend",
+          "output_backend",
+          "threshold"
+        ],
+        "title": "OptimizeMetadata",
+        "type": "object"
+      },
+      "ReadyChecks": {
+        "additionalProperties": false,
+        "properties": {
+          "accepting_requests": {
+            "title": "Accepting Requests",
+            "type": "boolean"
+          },
+          "models_registered": {
+            "title": "Models Registered",
+            "type": "boolean"
+          },
+          "scratch_writable": {
+            "title": "Scratch Writable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "models_registered",
+          "scratch_writable",
+          "accepting_requests"
+        ],
+        "title": "ReadyChecks",
+        "type": "object"
+      },
+      "ReadyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "checks": {
+            "$ref": "#/components/schemas/ReadyChecks"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "title": "Metrics",
+            "type": "object"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "runtime": {
+            "additionalProperties": true,
+            "title": "Runtime",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ready",
+          "checks"
+        ],
+        "title": "ReadyResponse",
+        "type": "object"
+      },
+      "StreamingMatrixContract": {
+        "additionalProperties": false,
+        "properties": {
+          "conditions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Conditions",
+            "type": "object"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "boolean"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Inputs",
+            "type": "object"
+          },
+          "memory_policy": {
+            "$ref": "#/components/schemas/MemoryPolicyContract"
+          },
+          "outputs": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Outputs",
+            "type": "object"
+          },
+          "product_execution": {
+            "title": "Product Execution",
+            "type": "boolean"
+          },
+          "scheduling_authority": {
+            "title": "Scheduling Authority",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine",
+          "product_execution",
+          "inputs",
+          "outputs",
+          "scheduling_authority",
+          "memory_policy",
+          "conditions"
+        ],
+        "title": "StreamingMatrixContract",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VersionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "api": {
+            "title": "Api",
+            "type": "string"
+          },
+          "build": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Build",
+            "type": "object"
+          },
+          "git_commit": {
+            "title": "Git Commit",
+            "type": "string"
+          },
+          "package": {
+            "title": "Package",
+            "type": "string"
+          },
+          "torch": {
+            "title": "Torch",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api",
+          "package",
+          "version",
+          "git_commit",
+          "build",
+          "torch"
+        ],
+        "title": "VersionResponse",
+        "type": "object"
+      },
+      "WorkCounters": {
+        "additionalProperties": false,
+        "description": "Stable, bounded subset of the streaming work-accounting ledger.\n\nThese are the only counters the public contract commits to; the full\ninternal ledger may grow freely.",
+        "properties": {
+          "forward_pixels": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forward Pixels"
+          },
+          "read_pixels": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read Pixels"
+          },
+          "screened_pixels": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screened Pixels"
+          }
+        },
+        "title": "WorkCounters",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "HTTP micro-service for computational lithography mask optimization. The Python engine stays resident; fab-side C++/Perl pipelines drive it via multipart POST.",
+    "title": "OpenLithoHub Engine",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/capabilities": {
+      "get": {
+        "operationId": "capabilities_v1_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Capabilities"
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "operationId": "health_v1_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/v1/jobs/optimize": {
+      "post": {
+        "operationId": "create_optimize_job_v1_jobs_optimize_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_optimize_job_v1_jobs_optimize_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Optimize Job"
+      }
+    },
+    "/v1/jobs/{job_id}": {
+      "delete": {
+        "operationId": "delete_job_v1_jobs__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDeleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Job"
+      },
+      "get": {
+        "operationId": "get_job_v1_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Job"
+      }
+    },
+    "/v1/jobs/{job_id}/artifact": {
+      "get": {
+        "operationId": "get_job_artifact_v1_jobs__job_id__artifact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Job Artifact"
+      }
+    },
+    "/v1/metrics": {
+      "get": {
+        "operationId": "metrics_v1_metrics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Metrics"
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "operationId": "list_models_v1_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response List Models V1 Models Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Models"
+      }
+    },
+    "/v1/optimize": {
+      "post": {
+        "operationId": "optimize_v1_optimize_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_optimize_v1_optimize_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Optimize"
+      }
+    },
+    "/v1/ready": {
+      "get": {
+        "operationId": "ready_v1_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ready"
+      }
+    },
+    "/v1/version": {
+      "get": {
+        "operationId": "version_v1_version_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Version"
+      }
+    }
+  }
+}

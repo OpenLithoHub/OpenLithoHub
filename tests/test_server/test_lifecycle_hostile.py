@@ -785,7 +785,11 @@ def test_worker_admission_never_starts_after_draining_wins() -> None:
     """Deterministic gate: a dequeued job parked in wait_for_admission
     must be cancelled — never executed — once DRAINING has won, even
     though it began waiting while the shutdown event was still clear.
-    The lifecycle state under the lock is the sole admission authority."""
+    The lifecycle state under the lock is the sole admission authority.
+
+    PR-D job-state semantics: a dequeued-but-never-admitted job stays
+    QUEUED (RUNNING begins only at admitted execution), so shutdown
+    cancels it via the legal QUEUED -> CANCELLED edge."""
     runner_calls: list[int] = []
 
     def counting_runner(**params: object) -> dict[str, object]:
@@ -800,16 +804,17 @@ def test_worker_admission_never_starts_after_draining_wins() -> None:
     # Execution A occupies the single admission slot (not via the runner).
     assert runtime.try_acquire_admission() is True
     # Job B: committed, dequeued by the worker, then parked waiting for
-    # admission (status flips to "running" before the wait).
+    # admission (PR-D: it stays QUEUED until admission is won).
     with runtime.reserve_job_slot() as res:
         job_b = res.commit(_job_record(), {})
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
-        if runtime.get_job_snapshot(job_b)["status"] == "running":
+        snap = runtime.get_job_snapshot(job_b)
+        if snap["status"] == "queued" and snap["started_utc"] is None:
             break
         time.sleep(0.02)
-    assert runtime.get_job_snapshot(job_b)["status"] == "running", (
-        "worker never parked job B in the admission wait"
+    assert runtime.get_job_snapshot(job_b)["status"] == "queued", (
+        "worker transitioned job B out of QUEUED before winning admission"
     )
 
     # Shutdown wins while B is waiting for admission.
