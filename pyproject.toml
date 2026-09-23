@@ -48,7 +48,7 @@ data = [
 ]
 workflow = [
     "klayout>=0.28",
-    "scipy>=1.10",
+    "scipy>=1.15.3",
 ]
 freepdk45-sram = [
     # OpenRAM ships FreePDK45 SRAM-cell GDS files inside the wheel; the
