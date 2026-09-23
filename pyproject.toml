@@ -88,6 +88,12 @@ jupyter = [
     "ipython>=8.0",
     "matplotlib>=3.7",
 ]
+client = [
+    # PR-F: the Python client SDK (openlithohub.client). The contract
+    # types come from openlithohub.server.schemas (pydantic is a core
+    # dependency); only the HTTP transport is extra.
+    "httpx>=0.27",
+]
 server = [
     # P0.6: the production server extra carries NO VCS dependency — it
     # installs hermetically from PyPI (no git executable, no GitHub).
