@@ -98,7 +98,7 @@ server = [
     # P0.6: the production server extra carries NO VCS dependency — it
     # installs hermetically from PyPI (no git executable, no GitHub).
     "fastapi>=0.110",
-    "uvicorn[standard]>=0.27",
+    "uvicorn[standard]>=0.53.0",
     "python-multipart>=0.0.9",
 ]
 export = [
