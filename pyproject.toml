@@ -106,7 +106,7 @@ export = [
     # onnxscript powers the dynamo-based exporter (torch.export.export
     # → ONNX), the default on PyTorch 2.9+. Without it, export_cmd
     # silently falls back to the deprecated TorchScript path.
-    "onnxscript>=0.1",
+    "onnxscript>=0.7.2",
     # onnxruntime lets the CI smoke test the exported graph end-to-end
     # (load + InferenceSession.run) so a regression in the dynamo
     # exporter cannot ship green just because torch.onnx.export() returned.
