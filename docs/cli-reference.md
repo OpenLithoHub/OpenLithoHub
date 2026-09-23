@@ -87,7 +87,7 @@ openlithohub optimize run [OPTIONS]
 | `--halo` | TEXT | Tile halo: `auto` (default) computes `max(OIR_px, model_RF_px)` from `--node` and `--model`, or pass an integer. Mutually exclusive with `--overlap`. See [Halo and Tiling](halo-and-tiling.md). | `auto` |
 | `--overlap` | INT | **Legacy.** Tile overlap in pixels. Kept for back-compat with pre-RFC-0005 scripts. Prefer `--halo`. | none |
 | `--pixel-nm` | FLOAT | Pixel size in nanometers. | `1.0` |
-| `--num-gpus` | INT | Worker processes for tile inference. `1` = sequential (default). `>1` spawns one worker per GPU and shards tiles round-robin. | `1` |
+| `--num-gpus` | INT | Worker processes for tile inference. `1` = sequential (default). `>1` pins worker *i* to `cuda:i` and shards tiles round-robin — **only when at least `--num-gpus` CUDA devices are visible**; otherwise every worker falls back to CPU dispatch (workers do not share one GPU). | `1` |
 | `--threshold` | FLOAT | Final mask binarisation threshold. `0.225` matches the LithoBench/Yang2023 calibration; pass `0.5` for the legacy mid-grey cut. | `0.225` |
 | `--export-min-area` | FLOAT | Drop curvilinear shapes below this polygon area (nm²) at export. `0.0` keeps every shape (academic / Hackathon scoring stays bit-exact); `>0` for fab-oriented exports where MRC would reject the smallest SRAFs. Export quality is not foundry sign-off. | `0.0` |
 | `--deterministic / --no-deterministic` | FLAG | Force bit-reproducible torch backends (`cudnn.deterministic=True`, `cudnn.benchmark=False`, `allow_tf32=False` on cudnn+matmul). Slower, required when two runs must produce identical masks. | `--no-deterministic` |
