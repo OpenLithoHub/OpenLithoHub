@@ -1,12 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 cff-version: 1.2.0
-title: "OpenLithoHub: Computational Lithography Benchmarking and Workflow Toolkit"
+title: "OpenLithoHub: A Vendor-Neutral Computational Lithography Platform"
 message: "If you use this software, please cite it as below."
 type: software
 authors:
   - name: "OpenLithoHub Contributors"
 license: Apache-2.0
 repository-code: "https://github.com/OpenLithoHub/OpenLithoHub"
+related-identifiers:
+  - identifier: "10.5281/zenodo.22843141"
+    type: doi
+    relation-type: is-supplement-to
+    description: "P-054: Certified Stratified Phase Diagrams for Finite Hopkins Lithography (frozen proof basis; a separate citable object)"
 url: "https://openlithohub.com"
 keywords:
   - computational-lithography
@@ -19,10 +24,14 @@ keywords:
   - semiconductor
   - eda
 abstract: >-
-  OpenLithoHub provides a unified evaluation and workflow framework for
-  computational lithography research. It bridges academic tensor-based
-  optimization and industrial mask manufacturing through standardized
-  metrics (EPE, PV Band, shot count, EUV stochastic robustness),
+  OpenLithoHub is a vendor-neutral computational lithography platform:
+  full-chip streaming execution (bounded core/halo windows without
+  mandatory full-layout raster materialization), artifact-backed and
+  self-auditing industrial benchmarking, proof-carrying PASS/FAIL/
+  INCONCLUSIVE verification, and deployable CLI / Python / HTTP surfaces.
+  It bridges academic tensor-based optimization and industrial mask
+  manufacturing through standardized metrics (EPE, PV Band, shot count,
+  EUV stochastic robustness),
   MRC/DRC compliance gating, and an end-to-end OASIS workflow that
   supports both Manhattan and curvilinear masks, with a model-agnostic
   evaluation interface for OPC/ILT models.

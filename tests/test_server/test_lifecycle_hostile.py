@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from openlithohub.server import create_app  # noqa: E402
 from openlithohub.server.config import ServerConfig  # noqa: E402
+from openlithohub.server.job_store import JobRecord
 from openlithohub.server.runtime import (  # noqa: E402
     AdmissionDeniedError,
     JobQueueFullError,
@@ -67,15 +68,37 @@ def _post_sync(client: TestClient) -> Any:
     )
 
 
-def _job_record(scratch_dir: str = "") -> dict[str, object]:
-    return {
-        "status": "queued",
-        "created_utc": "now",
-        "scratch_dir": scratch_dir,
-        "summary": None,
-        "error": None,
-        "output_path": None,
-    }
+def _store_records(runtime: ServerRuntime) -> list[JobRecord]:
+    """Best-effort record dump while the store is still open."""
+    from openlithohub.server.job_store import SQLiteJobStore
+
+    if isinstance(runtime._store, SQLiteJobStore):
+        return [
+            row
+            for row in (
+                runtime._store.get(job_id)
+                for job_id in (
+                    r[0] for r in runtime._store._conn.execute("SELECT job_id FROM jobs").fetchall()
+                )
+            )
+            if row is not None
+        ]
+    return list(runtime._store._jobs.values())
+
+
+def _job_record() -> JobRecord:
+    """A minimal valid durable record (PR-E storage authority)."""
+    import uuid as uuid_mod
+
+    from openlithohub.server.job_store import JobRecord, serialize_params
+    from openlithohub.server.schemas import JobStatus
+
+    return JobRecord(
+        job_id=f"job-test-{uuid_mod.uuid4().hex[:8]}",
+        status=JobStatus.QUEUED,
+        created_utc="now",
+        params_json=serialize_params({"output_path": ""}),
+    )
 
 
 def _bare_runtime(**overrides: object) -> ServerRuntime:
@@ -314,7 +337,7 @@ class TestQueueReservationContract:
         runtime.start()
         with runtime.reserve_job_slot() as res:
             assert runtime.snapshot()["job_queue_reserved"] == 1
-            job_id = res.commit(_job_record(), {"x": 1})
+            job_id = res.commit(_job_record())
             assert job_id
             # Consumed: the queued item now owns real capacity. The live
             # worker may drain it instantly, so assert the store, not the
@@ -323,7 +346,7 @@ class TestQueueReservationContract:
             assert runtime.snapshot()["jobs_tracked"] == 1
         # Double commit / release after commit both raise.
         with pytest.raises(RuntimeError, match="already committed"):
-            res.commit(_job_record(), {})
+            res.commit(_job_record())
         with pytest.raises(RuntimeError, match="committed"):
             res.release()
         runtime.stop()
@@ -342,7 +365,7 @@ class TestQueueReservationContract:
         # The slot is reusable afterwards (the live worker may drain the
         # committed job instantly — assert the store, not queue depth).
         with runtime.reserve_job_slot() as res2:
-            res2.commit(_job_record(), {})
+            res2.commit(_job_record())
         assert runtime.snapshot()["jobs_tracked"] == 1
         runtime.stop()
 
@@ -373,7 +396,7 @@ class TestQueueReservationContract:
         runtime = _bare_runtime(job_queue_depth=2)
         runtime.start()
         with runtime.reserve_job_slot() as res:
-            res.commit(_job_record(), {})
+            res.commit(_job_record())
         with pytest.raises(RuntimeError, match="committed"):
             res.release()
         runtime.stop()
@@ -420,12 +443,12 @@ class TestQueueReservationContract:
                 except JobQueueFullError:
                     continue
                 with runtime._job_lock:
-                    q, r = runtime._job_queue.qsize(), runtime._slots_reserved
+                    q, r = runtime._store.count_queued(), runtime._slots_reserved
                 if q + r > depth:
                     violations.append((q, r))
                 # Half the threads commit, half release — deterministic.
                 if threading.get_ident() % 2 == 0:
-                    res.commit(_job_record(), {})
+                    res.commit(_job_record())
                 else:
                     res.release()
 
@@ -442,10 +465,11 @@ class TestQueueReservationContract:
         assert snap["job_queue_size"] <= depth
         runtime.stop()
 
-    def test_commit_after_external_capacity_theft_fails_cleanly(self) -> None:
-        """Even if the invariant is violated from outside the protocol,
-        commit must fail without leaking the reservation. The worker is
-        occupied first so it cannot drain the hostile puts."""
+    def test_hostile_direct_rows_consume_real_capacity(self) -> None:
+        """PR-E: rows written directly to the store (bypassing the
+        reservation protocol) are REAL durable capacity — the next reserve
+        must see them and refuse to overbook, while an already-reserved
+        commit still lands and every counter stays balanced."""
         started = threading.Event()
         release = threading.Event()
 
@@ -461,25 +485,28 @@ class TestQueueReservationContract:
         runtime.start()
         res = None
         try:
-            # Occupy the single worker so it cannot drain the hostile items.
+            # Occupy the single worker so it cannot drain the hostile rows.
             with runtime.reserve_job_slot() as first:
-                first.commit(_job_record(), {})
+                first.commit(_job_record())
             assert started.wait(timeout=5)
             res = runtime.try_reserve_job_slot()
-            # Hostile direct puts exceed capacity behind the worker's back.
-            runtime._job_queue.put(("external-1", {}))
-            runtime._job_queue.put(("external-2", {}))
-            with pytest.raises(RuntimeError, match="invariant"):
-                res.commit(_job_record(), {})
-            # The reservation stays ACTIVE and still releases cleanly.
-            assert res.state == "active"
-            assert runtime.snapshot()["job_queue_reserved"] == 1
+            # Hostile direct store writes exceed capacity behind the
+            # runtime's back — they are real rows, not queue internals.
+            runtime._store.create_queued(_job_record())
+            runtime._store.create_queued(_job_record())
+            with pytest.raises(JobQueueFullError):
+                runtime.try_reserve_job_slot()
+            # The earlier reservation is still ACTIVE and its commit lands
+            # (capacity was reserved before the hostile rows appeared).
+            job_id = res.commit(_job_record())
+            assert job_id
+            assert runtime.snapshot()["job_queue_reserved"] == 0
         finally:
-            if res is not None:
+            if res is not None and res.state == "active":
                 res.release()
             release.set()
         assert runtime.snapshot()["job_queue_reserved"] == 0
-        runtime.stop()  # drains the hostile items (unknown ids are dropped)
+        runtime.stop()  # cancels/drops the hostile rows with the runtime
         assert runtime.snapshot()["job_queue_reserved"] == 0
 
     def test_unknown_job_raises_public_error(self) -> None:
@@ -587,10 +614,10 @@ def test_commit_before_shutdown_is_cancelled_not_lost() -> None:
     )
     runtime.start()
     with runtime.reserve_job_slot() as res1:
-        job_running = res1.commit(_job_record(), {})
+        job_running = res1.commit(_job_record())
     assert started.wait(timeout=5), "worker never picked up the first job"
     with runtime.reserve_job_slot() as res2:
-        job_queued = res2.commit(_job_record(), {})
+        job_queued = res2.commit(_job_record())
 
     runtime.stop()  # grace expires with the blocked job -> forced
     # The queued job: seen by the drain and cancelled, never executed.
@@ -620,7 +647,7 @@ def test_reservation_commit_after_complete_stop_rejected() -> None:
     runtime.stop()
     assert runtime.state is RuntimeState.STOPPED
     with pytest.raises(RuntimeNotAcceptingWorkError):
-        res.commit(_job_record(), {})
+        res.commit(_job_record())
     assert runtime.snapshot()["job_queue_size"] == 0
     # The failed commit leaves the reservation ACTIVE; it releases once.
     res.release()
@@ -643,7 +670,7 @@ def test_commit_race_with_shutdown_never_strands_a_job() -> None:
         while not stop_now.is_set():
             try:
                 with runtime.reserve_job_slot() as res:
-                    committed.append(res.commit(_job_record(), {}))
+                    committed.append(res.commit(_job_record()))
             except RuntimeNotAcceptingWorkError:
                 return
             except JobQueueFullError:
@@ -663,8 +690,10 @@ def test_commit_race_with_shutdown_never_strands_a_job() -> None:
     snap = runtime.snapshot()
     assert snap["job_queue_size"] == 0, "no job may remain queued after STOPPED"
     assert snap["job_queue_reserved"] == 0
-    with runtime._job_lock:
-        statuses = [r["status"] for r in runtime._jobs.values()]
+    # PR-E: read the store before stop() closes it; whatever is still
+    # tracked must be terminal, nothing may remain queued, and the
+    # committer must have gotten real work through before shutdown.
+    statuses = [r.status.value for r in _store_records(runtime)]
     # History-cap eviction may have removed terminal records; whatever is
     # still tracked must be terminal, nothing may remain queued, and the
     # committer must have gotten real work through before shutdown.
@@ -806,7 +835,7 @@ def test_worker_admission_never_starts_after_draining_wins() -> None:
     # Job B: committed, dequeued by the worker, then parked waiting for
     # admission (PR-D: it stays QUEUED until admission is won).
     with runtime.reserve_job_slot() as res:
-        job_b = res.commit(_job_record(), {})
+        job_b = res.commit(_job_record())
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
         snap = runtime.get_job_snapshot(job_b)

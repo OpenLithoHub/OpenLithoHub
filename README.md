@@ -31,7 +31,7 @@ OpenLithoHub is an open-source, vendor-neutral computational lithography platfor
 - **Simulation** — Hopkins/SOCS partial-coherence imaging, Gaussian PSF, thick-mask 3D proxy, optional rigorous EM plugins (DiffNano RCWA/FDTD/FDFD), diffusion resist model
 - **OPC / ILT Optimization** — LevelSet-ILT, rule-based OPC, OpenILT, surrogate-accelerated ILT, warm-start and posterior-sampling front ends, model-agnostic registry
 - **Manufacturability** — EPE, PV Band, L2, shot count, stochastic robustness, MRC/DRC hard-fail gates, hotspot detection, process-window OPC
-- **Full-chip Streaming** — core/halo tiling with out-of-core sources/sinks, certified empty-context screening, exact-vector (non-rasterized) window reads; layout growth adds tiles, not memory (RFC 0008)
+- **Full-chip Streaming** — core/halo tiling with out-of-core sources/sinks, certified empty-context screening, exact-vector (non-rasterized) window reads; larger supported layouts add tiles without requiring a proportionally larger full-layout raster allocation (RFC 0008)
 - **Deployment** — Python API facade (`Mask`/`LitheEngine`), Typer CLI, FastAPI micro-service with `/v1/health` `/v1/version` `/v1/capabilities`, Docker images, Slurm/LSF-friendly
 - **Benchmarking** — Industrial Benchmark v1 (real routed GDS, apples-to-apples, artifact-backed claims) plus the public model-quality leaderboards
 - **Proof-carrying Verification** — theorem-facing `PASS`/`FAIL`/`INCONCLUSIVE` certificates with certified-halo brackets and the frozen P-054 replay chain (RFC 0007 / B04 / P-054); rigorous certification capability is profile/backend-specific
@@ -57,7 +57,7 @@ Dose-response is **monotonically decreasing** (19.4× from 10→100 ph/nm²), ma
 - **Manufacturing compliance** — MRC/DRC rule checking as hard-fail gates
 - **OASIS / GDSII workflow** — end-to-end tensor→mask-writer-oriented export (manhattan & curvilinear); NOT a foundry sign-off
 - **Model-agnostic evaluation** — plug any OPC/ILT model via minimal interface
-- **Streaming full-chip pipeline** — core/halo tiling with out-of-core sources/sinks; layout growth adds tiles, not memory (RFC 0008)
+- **Streaming full-chip pipeline** — core/halo tiling with out-of-core sources/sinks; larger supported layouts add tiles without requiring a proportionally larger full-layout raster allocation (RFC 0008)
 - **Proof-carrying verification** — theorem-facing `PASS`/`FAIL`/`INCONCLUSIVE` certificates with certified-halo brackets, coverage contract, and the source-native verification contract and replay infrastructure; rigorous certification capability is profile/backend-specific (RFC 0007 / B04 / P-054)
 - **Optional physics plugins** — DiffNano (EM solvers) and DiffCFD (litho + spin-coat) as opt-in extras
 
@@ -92,8 +92,31 @@ repeats, from real routed silicon: the OpenROAD-routed **Ibex RISC-V core**
 | Largest layout streamed end-to-end — `IB-SCALE-65536` | **65536x65536 px** | 4.29 GPx completed at **0.42 GiB** peak RSS; dense input alone would be 16 GiB and is infeasible under the 30 GB policy |
 | Dense raster of the full die — `IB-DIE-1` | **1.23 TB (1.12 TiB)** | exceeds the 48 GiB reference-machine RAM; per-tile streaming needs O(tile) memory |
 
-Streaming peak memory stays **flat from 4096² to 65536² (0.35 → 0.42 GiB)**
-while the layout grows 256× — memory scales with the tile, not the layout.
+**Why this matters:** OpenLithoHub's supported streaming execution paths
+process bounded core/halo windows, so they avoid requiring a proportionally
+larger full-layout raster allocation as layout area grows. In Industrial
+Benchmark v1.1, layout area increased **256×** from `4096²` to `65536²`
+while measured streaming peak RSS remained approximately **0.35–0.42 GiB**.
+This is a frozen benchmark measurement for the declared streaming
+configuration — not a universal memory guarantee across every model, input
+representation, or output backend.
+
+## Why OpenLithoHub
+
+- full-chip streaming without mandatory full-chip raster materialization
+- artifact-backed, self-auditing industrial benchmarks
+- proof-carrying `PASS` / `FAIL` / `INCONCLUSIVE` verification
+- vendor-neutral model / simulator / workflow integration
+- deployable CLI / Python / HTTP execution surfaces
+
+**Academic lineage:** [P-054](proof_artifacts/p054/README.md) (*Certified
+Stratified Phase Diagrams for Finite Hopkins Lithography*,
+DOI `10.5281/zenodo.22843141`) provides part of the mathematical foundation
+for OpenLithoHub's proof-carrying verification layer. The frozen finite-model
+result does not imply foundry qualification, wafer accuracy, or certification
+of every backend. Cite OpenLithoHub for general software use; cite
+OpenLithoHub **and** P-054 when using the frozen phase-diagram or
+certification results.
 
 Measured facts we report against ourselves: on CPU with the lightweight
 benchmark forward model, dense remains faster at every jointly measured size; see generated claims for the exact ratios;

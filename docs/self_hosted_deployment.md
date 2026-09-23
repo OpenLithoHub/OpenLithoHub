@@ -9,19 +9,54 @@ single machine and tuning for throughput.
 | Mode | Supported | Job persistence | Workers | GPU | Streaming execution |
 |------|-----------|-----------------|---------|-----|---------------------|
 | In-process Python (`LitheEngine`) | yes | n/a | n/a | environment-dependent | after execution gate |
-| HTTP dev server (`openlithohub serve`, workers=1) | yes | in-memory, restart loses jobs | 1 | environment-dependent | after execution gate |
-| CPU container (`ghcr.io/openlithohub/openlithohub`) | yes | in-memory, restart loses jobs | 1 (enforced) | no | after execution gate |
-| Minimal CPU server container (`*-server-cpu`) | yes | in-memory, restart loses jobs | 1 (enforced) | no | after execution gate |
-| Durable single-node (shared job store) | target | SQLite/filesystem | gated | optional | target |
+| HTTP dev server (`openlithohub serve`, workers=1) | yes | in-memory (default) or SQLite | 1 | environment-dependent | after execution gate |
+| CPU container (`ghcr.io/openlithohub/openlithohub`) | yes | backend-dependent (see below) | 1 (enforced) | no | after execution gate |
+| Minimal CPU server container (`*-server-cpu`) | yes | backend-dependent (see below) | 1 (enforced) | no | after execution gate |
+| Durable single-node (`OPENLITHOHUB_JOB_BACKEND=sqlite`) | yes | SQLite + filesystem, restart-safe | 1 (enforced) | optional | after execution gate |
 | Multi-worker server (`--workers > 1`) | **blocked** until a shared job backend exists | shared backend required | >1 | optional | target |
 | GPU container image | **not published** — build from source with a CUDA PyTorch wheel | backend-dependent | 1 | yes | target |
 
 Notes:
 
-* The async job API runs on a process-local, in-memory backend. Restarting
-  the process loses all job records, and `--workers > 1` is **rejected at
-  startup** (jobs created in one worker process would be invisible to the
-  others). See the `serve` reference in [cli-reference](cli-reference.md).
+* The async job API supports two backends (PR-E). The default
+  `in-memory` backend is process-local: restarting the process loses all
+  job records. The `sqlite` backend persists committed jobs, their inputs
+  and their artifacts under `OPENLITHOHUB_STATE_DIR`, and recovers them
+  across restarts (queued jobs run; a job that was mid-execution during a
+  crash fails closed with an explicit restart-interruption error — there
+  is no automatic retry). BOTH backends are single-process: `--workers > 1`
+  is still **rejected at startup**, and the SQLite store takes an
+  exclusive per-directory ownership lock, so a second process pointed at
+  the same state directory fails fast instead of racing it. See the
+  `serve` reference in [cli-reference](cli-reference.md).
+
+### Durable jobs (SQLite backend)
+
+```bash
+docker run \
+  -v "$PWD/olh-state:/var/lib/openlithohub" \
+  -e OPENLITHOHUB_JOB_BACKEND=sqlite \
+  -e OPENLITHOHUB_STATE_DIR=/var/lib/openlithohub \
+  ghcr.io/openlithohub/openlithohub serve --port 8000
+```
+
+State layout under `OPENLITHOHUB_STATE_DIR`:
+`jobs.sqlite3` (metadata + durable queue), `jobs/<job-id>/`
+(durable input + artifact bytes), `tmp/` (crash-safe staging).
+
+Durability boundaries, stated honestly:
+
+* **process restart** with the same `OPENLITHOHUB_STATE_DIR` — committed
+  jobs, artifacts and the queued workload survive; a job that was RUNNING
+  at crash time is marked failed (outcome unknown, never retried);
+* **container replacement** with the volume mounted — same as a process
+  restart;
+* **container deletion without the volume** — state is gone; durability
+  requires persistent storage and is not claimed otherwise.
+
+`OLH_SCRATCH_DIR` remains the *ephemeral* request scratch (synchronous
+optimize uploads/responses); it is deliberately separate from
+`OPENLITHOHUB_STATE_DIR`, which is the durable async-job authority.
 * The published container images are CPU images. They are not built from or
   tested with a CUDA PyTorch stack; GPU workloads should install from source
   with a CUDA wheel (below). Do not quote untested combinations as supported.

@@ -477,19 +477,21 @@ def test_job_upload_too_large_releases_reservation() -> None:
 
 
 def _seed_job(runtime, job_id: str, status: str) -> None:
-    import time as time_mod
+    """Seed a job through the store via legal transitions only (PR-E)."""
+    from openlithohub.server.job_store import JobRecord
+    from openlithohub.server.schemas import JobStatus
 
-    with runtime._job_lock:
-        runtime._jobs[job_id] = {
-            "status": status,
-            "error": None,
-            "summary": None,
-            "output_path": None,
-            "scratch_dir": "",
-            "created_utc": "now",
-            "job_id": job_id,
-            "_created_monotonic": time_mod.monotonic(),
-        }
+    runtime._store.create_queued(
+        JobRecord(job_id=job_id, status=JobStatus.QUEUED, created_utc="now")
+    )
+    if status in ("running", "succeeded", "failed"):
+        runtime._store.transition(job_id, JobStatus.RUNNING)
+    if status in ("succeeded", "failed"):
+        runtime._store.transition(
+            job_id, JobStatus(status), error="boom" if status == "failed" else None
+        )
+    if status == "cancelled":
+        runtime._store.transition(job_id, JobStatus.CANCELLED)
 
 
 def test_get_job_artifact_returns_409_for_failed_job() -> None:
@@ -497,11 +499,8 @@ def test_get_job_artifact_returns_409_for_failed_job() -> None:
     with TestClient(app) as client:
         runtime = app.state.runtime
         _seed_job(runtime, "test-failed", "failed")
-        runtime._jobs["test-failed"]["error"] = "boom"
         response = client.get("/v1/jobs/test-failed/artifact")
         assert response.status_code == 409
-        with runtime._job_lock:
-            runtime._jobs.clear()
 
 
 def test_job_delete_running_returns_409() -> None:
@@ -511,5 +510,3 @@ def test_job_delete_running_returns_409() -> None:
         _seed_job(runtime, "test-running", "running")
         response = client.delete("/v1/jobs/test-running")
         assert response.status_code == 409
-        with runtime._job_lock:
-            runtime._jobs.clear()

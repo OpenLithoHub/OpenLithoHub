@@ -37,6 +37,7 @@ hitting the same cached model cannot stomp on its mutable state.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -58,6 +59,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from openlithohub.server.config import ServerConfig
 from openlithohub.server.errors import ApiHTTPException, error_envelope, runtime_error_code
+from openlithohub.server.job_store import JobRecord, serialize_params
 from openlithohub.server.observability import emit_event, registry
 from openlithohub.server.runtime import (
     AdmissionDeniedError,
@@ -749,12 +751,14 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
             "streaming": streaming_capability_matrix(),
             "input_formats": ["npy", "pt", "oas", "gds"],
             "export_formats": ["oasis", "gds", "pt"],
-            # Truthful single-process job contract (repair-plan §4 Phase 1):
-            # in-memory store, no persistence, single worker process only.
+            # Truthful job contract (PR-E §17): in-memory is non-durable
+            # and loses jobs on restart; sqlite persists committed jobs and
+            # artifacts under OPENLITHOHUB_STATE_DIR. BOTH stay
+            # single-process — durability does not license more workers.
             "jobs": {
                 "backend": config.job_backend,
-                "durable": False,
-                "restart_loses_jobs": True,
+                "durable": config.job_backend == "sqlite",
+                "restart_loses_jobs": config.job_backend != "sqlite",
                 "single_process_only": True,
             },
             "proof_verification": {
@@ -974,15 +978,27 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
         # reserved BEFORE the upload body is ingested; the reservation is
         # consumed exactly once by commit() and released on EVERY other
         # exit path by the context manager.
+        #
+        # PR-E commit order (durable mode): validated upload -> atomic
+        # input publication -> QUEUED store commit -> reservation consumed
+        # -> HTTP 202. There is no state where the client saw a 202 and no
+        # durable job exists (PR-E §8/E5).
         tmp_path: Path | None = None
+        durable = config.job_backend == "sqlite"
+        staging: Path | None = None
+        job_dir: Path | None = None
         try:
             with runtime.reserve_job_slot() as reservation:
                 tmp_path = make_scratch_dir("olh_job_")
                 suffix = Path(layout.filename).suffix or ".bin"
-                input_path = tmp_path / f"input{suffix}"
-                output_path = tmp_path / "optimized.oas"
+                job_id = runtime.new_job_id()
+                if durable:
+                    staging = runtime.staging_path(job_id, suffix)
+                    upload_path = staging
+                else:
+                    upload_path = tmp_path / f"input{suffix}"
                 bytes_read = 0
-                with input_path.open("wb") as out_f:
+                with upload_path.open("wb") as out_f:
                     while True:
                         chunk = await layout.read(1024 * 1024)
                         if not chunk:
@@ -993,9 +1009,18 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                                 413, ErrorCode.UPLOAD_TOO_LARGE, "layout upload too large"
                             )
                         out_f.write(chunk)
+
+                if durable and staging is not None:
+                    input_path = Path(runtime.finalize_durable_input(job_id, staging, suffix))
+                    job_dir = runtime.durable_job_dir(job_id)
+                    output_path = job_dir / "artifact.oas"
+                else:
+                    input_path = upload_path
+                    output_path = tmp_path / "optimized.oas"
+
                 params: dict[str, Any] = dict(
-                    input_path=input_path,
-                    output_path=output_path,
+                    input_path=str(input_path),
+                    output_path=str(output_path),
                     model_name=model,
                     node=node,
                     pixel_nm=pixel_nm,
@@ -1006,19 +1031,15 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                     min_area_nm2=min_area_nm2,
                     execution_mode=execution_mode,
                 )
-                job_id = reservation.commit(
-                    {
-                        "status": JobStatus.QUEUED.value,
-                        "created_utc": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
-                        "started_utc": None,
-                        "completed_utc": None,
-                        "scratch_dir": str(tmp_path),
-                        "summary": None,
-                        "error": None,
-                        "output_path": None,
-                    },
-                    params,
+                record = JobRecord(
+                    job_id=job_id,
+                    status=JobStatus.QUEUED,
+                    created_utc=_time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+                    input_path=str(input_path),
+                    input_format=suffix.lstrip("."),
+                    params_json=serialize_params(params),
                 )
+                job_id = reservation.commit(record)
                 emit_event(
                     "job_created",
                     job_id=job_id,
@@ -1044,7 +1065,14 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
             ) from exc
         except BaseException:
             # The scratch dir is request-local garbage on every failure
-            # path (on success it belongs to the committed job record).
+            # path (on success the durable job owns its state instead).
+            # A crashed upload must leave no ghost job, no consumed
+            # capacity and no un-tracked staging bytes (PR-E E5).
+            if staging is not None:
+                with contextlib.suppress(OSError):
+                    staging.unlink()
+            if job_dir is not None:
+                shutil.rmtree(job_dir, ignore_errors=True)
             if tmp_path is not None:
                 shutil.rmtree(tmp_path, ignore_errors=True)
             raise
@@ -1077,12 +1105,16 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
             raise ApiHTTPException(
                 409, ErrorCode.JOB_ARTIFACT_UNAVAILABLE, f"job {job_id} has no artifact yet"
             ) from exc
+        # Download lease (PR-E §14): the artifact cannot be evicted while
+        # this response streams; the background task releases after the
+        # last byte is sent.
         return FileResponse(
             output_path,
             media_type="application/octet-stream",
             headers={
                 "Content-Disposition": f'attachment; filename="{Path(output_path).name}"',
             },
+            background=BackgroundTask(runtime.release_artifact_lease, job_id),
         )
 
     @app.delete("/v1/jobs/{job_id}", response_model=JobDeleteResponse, status_code=200)
