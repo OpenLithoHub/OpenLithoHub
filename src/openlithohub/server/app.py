@@ -44,18 +44,21 @@ import shutil
 import tempfile as _tempfile
 import threading
 import time as _time
-import uuid
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 import torch
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.background import BackgroundTask  # type: ignore[import-not-found]
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from openlithohub.server.config import ServerConfig
+from openlithohub.server.errors import ApiHTTPException, error_envelope, runtime_error_code
+from openlithohub.server.observability import emit_event, registry
 from openlithohub.server.runtime import (
     AdmissionDeniedError,
     JobArtifactUnavailableError,
@@ -64,6 +67,19 @@ from openlithohub.server.runtime import (
     RuntimeNotAcceptingWorkError,
     ServerRuntime,
     UnknownJobError,
+)
+from openlithohub.server.schemas import (
+    API_SCHEMA_VERSION,
+    CapabilitiesResponse,
+    ErrorCode,
+    HealthResponse,
+    JobCreateResponse,
+    JobDeleteResponse,
+    JobStatus,
+    JobStatusResponse,
+    MetricsResponse,
+    ReadyResponse,
+    VersionResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -244,12 +260,17 @@ def _run_optimize(
     pretrained: bool,
     min_area_nm2: float = 0.0,
     execution_mode: str = "auto",
+    request_id: str | None = None,
+    job_id: str | None = None,
 ) -> dict[str, Any]:
     """Synchronous optimization core. Both the sync endpoint and the job
     worker execute through this one function, which dispatches into the
     shared product execution spine (``workflow.execution.optimize_layout``)
     — dense under the memory policy, streaming for supported large jobs,
     fail-closed otherwise. Returns a small JSON-friendly summary."""
+    import time as _clock
+
+    from openlithohub.server import observability as _obs
     from openlithohub.workflow.execution import (
         OptimizeRequest,
         coerce_execution_mode,
@@ -265,49 +286,102 @@ def _run_optimize(
     model_kwargs: dict[str, Any] = {"pretrained": True} if pretrained else {}
     model, model_lock, model_key = _get_or_load_model(model_name, model_kwargs)
 
+    _obs.emit_event(
+        "optimize_started",
+        request_id=request_id,
+        job_id=job_id,
+        model_name=model_name,
+        execution_mode=mode,
+    )
+    _obs.registry.optimize_started()
+    started = _clock.perf_counter()
     try:
-        request = OptimizeRequest(
-            model=model,
-            pixel_size_nm=pixel_nm,
-            input_path=input_path,
-            output_path=output_path,
-            output_kind="oasis",
-            writer=writer,
-            layer=layer,
-            node=node_config,
-            tile_size=tile_size,
-            threshold=0.5,
-            min_area_nm2=min_area_nm2,
-            execution_mode=mode,
+        try:
+            request = OptimizeRequest(
+                model=model,
+                pixel_size_nm=pixel_nm,
+                input_path=input_path,
+                output_path=output_path,
+                output_kind="oasis",
+                writer=writer,
+                layer=layer,
+                node=node_config,
+                tile_size=tile_size,
+                threshold=0.5,
+                min_area_nm2=min_area_nm2,
+                execution_mode=mode,
+            )
+            # Hold the per-model lock across the whole run (dense tile loop
+            # or streaming tile schedule) so a concurrent request cannot
+            # interleave its predict() calls with ours and corrupt the
+            # model's per-tile state. PR-A ownership preserved: the runtime
+            # owns admission, the lock owns predict serialization, the
+            # streaming executor owns tile scheduling.
+            with model_lock:
+                result = optimize_layout(request)
+            summary = result_to_summary(result, writer=writer)
+        except Exception as exc:
+            _obs.registry.optimize_completed(
+                execution_mode=mode,
+                execution_reason="UNPLANNED_FAILURE",
+                input_backend="unknown",
+                output_backend="unknown",
+                tiles=0,
+                outcome="failed",
+            )
+            _obs.emit_event(
+                "optimize_failed",
+                request_id=request_id,
+                job_id=job_id,
+                model_name=model_name,
+                execution_mode=mode,
+                error_type=type(exc).__name__,
+                duration_ms=round((_clock.perf_counter() - started) * 1000, 3),
+            )
+            raise
+        _obs.registry.optimize_completed(
+            execution_mode=result.plan.mode,
+            execution_reason=result.plan.reason,
+            input_backend=result.plan.input_backend,
+            output_backend=result.plan.output_backend,
+            tiles=result.n_tiles,
+            forward_pixels=int(
+                (result.work_accounting or {}).get("forward_simulator_input_pixels", 0)
+            ),
+            screened_pixels=int((result.work_accounting or {}).get("screened_out_pixels", 0)),
         )
-        # Hold the per-model lock across the whole run (dense tile loop or
-        # streaming tile schedule) so a concurrent request cannot interleave
-        # its predict() calls with ours and corrupt the model's per-tile
-        # state (caches, RNG cursors, etc.). PR-A ownership preserved: the
-        # runtime owns admission, the lock owns predict serialization, the
-        # streaming executor owns tile scheduling.
-        with model_lock:
-            result = optimize_layout(request)
-        summary = result_to_summary(result, writer=writer)
+        _obs.emit_event(
+            "optimize_completed",
+            request_id=request_id,
+            job_id=job_id,
+            model_name=model_name,
+            execution_mode=result.plan.mode,
+            execution_reason=result.plan.reason,
+            input_backend=result.plan.input_backend,
+            output_backend=result.plan.output_backend,
+            tile_count=result.n_tiles,
+            halo_px=result.halo_px,
+            duration_ms=round((_clock.perf_counter() - started) * 1000, 3),
+        )
+        return summary
     finally:
         # Release the refcount before dropping request-local tensors so a
-        # concurrent eviction is free to teardown this model once we are
-        # no longer using it.
+        # concurrent eviction is free to teardown this model once we are no
+        # longer using it. Flush the CUDA caching allocator so per-request
+        # activations don't accumulate as reserved-but-unused VRAM.
         _release_model(model_key)
-
-    # Drop request-local tensors and flush the CUDA caching allocator so
-    # per-request activations from this optimize() don't accumulate as
-    # reserved (but unused) VRAM across many requests on the same worker.
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    return summary
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 def result_to_summary(result: Any, *, writer: str) -> dict[str, Any]:
     """JSON-friendly execution summary shared by the sync endpoint, the
-    job worker and (indirectly) the CLI."""
+    job worker and (indirectly) the CLI. Private fields (``output_path``)
+    ride along internally but are dropped by the public projection in
+    :func:`openlithohub.server.schemas.project_optimize_metadata`."""
     plan = result.plan
-    return {
+    accounting = result.work_accounting or {}
+    summary: dict[str, Any] = {
         "shape": [int(result.shape[0]), int(result.shape[1])],
         "tiles": int(result.n_tiles),
         "halo_px": int(result.halo_px),
@@ -318,9 +392,19 @@ def result_to_summary(result: Any, *, writer: str) -> dict[str, Any]:
         "execution_reason": plan.reason,
         "input_backend": plan.input_backend,
         "output_backend": plan.output_backend,
+        "threshold": float(result.threshold),
         "estimated_dense_bytes": int(plan.estimated_dense_bytes),
         "max_dense_bytes": int(plan.max_dense_bytes),
     }
+    if result.work_accounting is not None:
+        # Stable, bounded counter projection (PR-D §7) — the full internal
+        # ledger is never dumped into the contract.
+        summary["work"] = {
+            "forward_pixels": int(accounting.get("forward_simulator_input_pixels", 0)),
+            "read_pixels": int(accounting.get("read_window_pixels", 0)),
+            "screened_pixels": int(accounting.get("screened_out_pixels", 0)),
+        }
+    return summary
 
 
 def scratch_root() -> Path:
@@ -343,9 +427,10 @@ def _require_runtime(request: Request) -> ServerRuntime:
     before the lifespan starts it — construction deliberately does not."""
     runtime: ServerRuntime | None = getattr(request.app.state, "runtime", None)
     if runtime is None:
-        raise HTTPException(
-            status_code=503,
-            detail="server runtime not started (app lifespan has not been entered)",
+        raise ApiHTTPException(
+            503,
+            ErrorCode.SERVER_NOT_ACCEPTING,
+            "server runtime not started (app lifespan has not been entered)",
         )
     return runtime
 
@@ -376,13 +461,18 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                 "runtime still owns a live worker/in-flight run after a forced "
                 "stop; wait for it to exit before restarting"
             )
+        from openlithohub.server.observability import emit_event as _emit
+
         runtime = ServerRuntime(config, optimize_runner=_run_optimize)
         app.state.runtime = runtime
         runtime.start()
+        _emit("runtime_started", job_backend=config.job_backend)
         try:
             yield
         finally:
+            _emit("runtime_draining", stop_forced=False)
             runtime.stop()
+            _emit("runtime_stopped", stop_forced=runtime.stop_forced)
             if runtime.worker_alive or runtime.executing:
                 # Forced stop: RETAIN the reference so a future lifespan
                 # cannot overlap the detached execution (exclusion above).
@@ -405,24 +495,77 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def _request_observability(request: Any, call_next: Any) -> Any:
-        # P1.18: request id + timing on every response; structured enough
-        # for log-based queue/latency analysis without a metrics stack.
+        # PR-D §4/§11: one request_id correlates the response header, the
+        # error envelope and the structured access log. Client-supplied IDs
+        # are preserved only when bounded-safe; anything else is replaced by
+        # a generated ID (log-injection / cardinality firewall).
         import logging as _logging
 
-        request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+        from fastapi.responses import JSONResponse as _JSONResponse
+
+        from openlithohub.server.errors import error_envelope
+        from openlithohub.server.observability import (
+            emit_event,
+            registry,
+            sanitize_request_id,
+        )
+
+        request_id = sanitize_request_id(request.headers.get("X-Request-ID"))
+        request.state.request_id = request_id
         if (
             config.api_key
             and request.url.path != "/v1/health"
             and request.headers.get("X-API-Key") != config.api_key
         ):
-            from fastapi.responses import JSONResponse as _JSONResponse
-
+            registry.request_completed(401, 0.0)
             return _JSONResponse(
-                status_code=401, content={"detail": "invalid or missing X-API-Key"}
+                status_code=401,
+                content=error_envelope(
+                    code="INVALID_REQUEST",
+                    message="invalid or missing X-API-Key",
+                    request_id=request_id,
+                ),
+                headers={"X-Request-ID": request_id},
             )
         start = _time.perf_counter()
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Unhandled exception: log the traceback SERVER-side, answer the
+            # client with the fixed INTERNAL_ERROR envelope — never a stack
+            # trace or internal path. The exception-handler below covers
+            # HTTPException (which resolves inside the router); this covers
+            # everything that escapes it.
+            logger.exception("unhandled error on %s %s", request.method, request.url.path)
+            elapsed_ms = round((_time.perf_counter() - start) * 1000, 3)
+            registry.request_completed(500, elapsed_ms)
+            emit_event(
+                "http_request_completed",
+                request_id=request_id,
+                method=request.method,
+                status=500,
+                status_class="5xx",
+                duration_ms=elapsed_ms,
+            )
+            return _JSONResponse(
+                status_code=500,
+                content=error_envelope(
+                    code="INTERNAL_ERROR",
+                    message="internal server error",
+                    request_id=request_id,
+                ),
+                headers={"X-Request-ID": request_id},
+            )
         elapsed_ms = round((_time.perf_counter() - start) * 1000, 3)
+        registry.request_completed(response.status_code, elapsed_ms)
+        emit_event(
+            "http_request_completed",
+            request_id=request_id,
+            method=request.method,
+            status=response.status_code,
+            status_class=f"{response.status_code // 100}xx",
+            duration_ms=elapsed_ms,
+        )
         response.headers["X-Request-ID"] = request_id
         response.headers["X-OLH-Duration-Ms"] = str(elapsed_ms)
         _logging.getLogger("openlithohub.server.access").info(
@@ -439,11 +582,64 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
         )
         return response
 
-    @app.get("/v1/health")
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error_envelope(request: Request, exc: Exception) -> JSONResponse:
+        """Malformed user input is 400 INVALID_REQUEST (PR-D §3), not the
+        FastAPI default 422; body shape matches the standard envelope."""
+        request_id = getattr(request.state, "request_id", None)
+        return JSONResponse(
+            status_code=400,
+            content=error_envelope(
+                code=ErrorCode.INVALID_REQUEST,
+                message="invalid request payload",
+                detail=json.loads(exc.json()) if hasattr(exc, "json") else str(exc),
+                request_id=request_id,
+            ),
+            headers={"X-Request-ID": request_id} if request_id else {},
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_exception_envelope(request: Request, exc: Exception) -> JSONResponse:
+        """Render any HTTPException as the PR-D error envelope. The legacy
+        top-level ``detail`` is preserved verbatim for compatibility;
+        clients key on ``error.code``."""
+        request_id = getattr(request.state, "request_id", None)
+        if isinstance(exc, ApiHTTPException):
+            code: ErrorCode = exc.code
+            message = exc.error_message
+        else:
+            status = getattr(exc, "status_code", 500)
+            message = str(getattr(exc, "detail", "") or "")
+            if status in (400, 405, 422):
+                code = ErrorCode.INVALID_REQUEST
+            elif status == 404:
+                code = (
+                    ErrorCode.UNKNOWN_JOB
+                    if "/v1/jobs/" in request.url.path
+                    else ErrorCode.INVALID_REQUEST
+                )
+            else:
+                code = runtime_error_code(exc)[1]
+        exc_detail = getattr(exc, "detail", message)
+        headers = dict(getattr(exc, "headers", None) or {})
+        if request_id:
+            headers.setdefault("X-Request-ID", request_id)
+        return JSONResponse(
+            status_code=getattr(exc, "status_code", 500),
+            content=error_envelope(
+                code=code,
+                message=message,
+                detail=exc_detail,
+                request_id=request_id,
+            ),
+            headers=headers,
+        )
+
+    @app.get("/v1/health", response_model=HealthResponse, status_code=200)
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.get("/v1/ready")
+    @app.get("/v1/ready", response_model=ReadyResponse, status_code=200)
     def ready(request: Request) -> dict[str, Any]:
         # P1.16: readiness — can this instance accept work RIGHT NOW?
         # Runtime counters come from the public snapshot; no private
@@ -488,10 +684,10 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
             "runtime": snap,
         }
         if not ready_now:
-            raise HTTPException(status_code=503, detail=body)
+            raise ApiHTTPException(503, ErrorCode.SERVER_NOT_ACCEPTING, "server not ready")
         return body
 
-    @app.get("/v1/version")
+    @app.get("/v1/version", response_model=VersionResponse, status_code=200)
     def version() -> dict[str, Any]:
         from openlithohub._version import __version__
         from openlithohub.benchmark.industrial import git_commit
@@ -530,7 +726,7 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
             "torch": torch.__version__,
         }
 
-    @app.get("/v1/capabilities")
+    @app.get("/v1/capabilities", response_model=CapabilitiesResponse, status_code=200)
     def capabilities() -> dict[str, Any]:
         from openlithohub.models.registry import register_builtin_models, registry
         from openlithohub.simulators.registry import list_simulators
@@ -542,7 +738,7 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
             gpu["device_count"] = torch.cuda.device_count()
             gpu["device_name"] = torch.cuda.get_device_name(0)
         return {
-            "api_schema_version": "1",
+            "api_schema_version": API_SCHEMA_VERSION,
             "capability_schema_version": "1",
             "models": sorted(registry.list_models()),
             "simulator_backends": sorted(list_simulators()),
@@ -621,9 +817,11 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     ) -> Response | JSONResponse:
         runtime = _require_runtime(request)
         if not runtime.accepting_jobs:
-            raise HTTPException(status_code=503, detail="server is draining; not accepting work")
+            raise ApiHTTPException(
+                503, ErrorCode.SERVER_NOT_ACCEPTING, "server is draining; not accepting work"
+            )
         if not layout.filename:
-            raise HTTPException(status_code=400, detail="layout upload missing filename")
+            raise ApiHTTPException(400, ErrorCode.INVALID_REQUEST, "layout upload missing filename")
 
         suffix = Path(layout.filename).suffix or ".bin"
         # Per-request scratch dir WITHOUT a context manager: the optimized
@@ -648,9 +846,10 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                         break
                     bytes_read += len(chunk)
                     if bytes_read > config.max_upload_bytes:
-                        raise HTTPException(
-                            status_code=413,
-                            detail=(f"layout upload exceeds {config.max_upload_bytes} bytes"),
+                        raise ApiHTTPException(
+                            413,
+                            ErrorCode.UPLOAD_TOO_LARGE,
+                            f"layout upload exceeds {config.max_upload_bytes} bytes",
                         )
                     out_f.write(chunk)
 
@@ -674,40 +873,42 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                     pretrained=pretrained,
                     min_area_nm2=min_area_nm2,
                     execution_mode=execution_mode,
+                    request_id=getattr(request.state, "request_id", None),
                 )
-            except AdmissionDeniedError:
-                raise HTTPException(
-                    status_code=429,
-                    detail="server at maximum concurrent optimizations",
+            except AdmissionDeniedError as exc:
+                raise ApiHTTPException(
+                    429,
+                    ErrorCode.ADMISSION_FULL,
+                    "server at maximum concurrent optimizations",
                     headers={"Retry-After": "5"},
-                ) from None
-            except RuntimeNotAcceptingWorkError:
+                ) from exc
+            except RuntimeNotAcceptingWorkError as exc:
                 # Lifecycle authority rejection (draining/stopped) — 503,
                 # never 400/429 (PR-A red-team blocker B).
-                raise HTTPException(
-                    status_code=503,
-                    detail="server is draining; not accepting new work",
-                ) from None
-            except KeyError as e:
-                # Both unknown model names and unknown node names raise KeyError;
-                # disambiguate by message so the client gets the right status.
-                msg = str(e)
-                if "process node" in msg.lower():
-                    raise HTTPException(status_code=400, detail=msg.strip("'\"")) from None
-                raise HTTPException(status_code=404, detail=f"unknown model: {e}") from None
-            except (FileNotFoundError, ValueError) as e:
-                raise HTTPException(status_code=400, detail=str(e)) from None
-            except RuntimeError as e:
-                raise HTTPException(status_code=400, detail=str(e)) from None
-            except ImportError as e:
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"missing optional dependency: {e}",
-                ) from None
+                raise ApiHTTPException(
+                    503,
+                    ErrorCode.SERVER_NOT_ACCEPTING,
+                    "server is draining; not accepting new work",
+                ) from exc
+            except Exception as exc:
+                # PR-D §3: one central mapping owns exception -> (status,
+                # code). Messages stay user-facing; tracebacks stay local.
+                status, code = runtime_error_code(exc)
+                if code is ErrorCode.INTERNAL_ERROR:
+                    logger.exception("optimize failed")
+                    raise ApiHTTPException(
+                        500, ErrorCode.INTERNAL_ERROR, "internal server error"
+                    ) from exc
+                message = str(exc)
+                if isinstance(exc, KeyError):
+                    message = message.strip("'\"")
+                raise ApiHTTPException(status, code, message) from exc
 
             served_path = Path(summary["output_path"])
             if not served_path.exists():
-                raise HTTPException(status_code=500, detail="optimization produced no output file")
+                raise ApiHTTPException(
+                    500, ErrorCode.INTERNAL_ERROR, "optimization produced no output file"
+                )
 
             # Stream the file from disk instead of read_bytes(): a multi-GB
             # output no longer transits through RAM a second time.
@@ -722,6 +923,8 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                     "X-OLH-Shape": "x".join(str(d) for d in summary["shape"]),
                     "X-OLH-Execution-Mode": summary["execution_mode"],
                     "X-OLH-Execution-Reason": summary["execution_reason"],
+                    "X-OLH-Input-Backend": summary["input_backend"],
+                    "X-OLH-Output-Backend": summary["output_backend"],
                 },
                 background=BackgroundTask(shutil.rmtree, tmp_path, True),
             )
@@ -735,7 +938,11 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     # jobs live in the runtime (process-local, restart clears them) and
     # are bounded by ServerConfig.job_history_cap.
 
-    @app.post("/v1/jobs/optimize", response_model=None)
+    @app.post(
+        "/v1/jobs/optimize",
+        response_model=JobCreateResponse,
+        status_code=202,
+    )
     async def create_optimize_job(
         request: Request,
         layout: UploadFile = File(..., description="Layout file (.oas, .gds, .pt, .npy)"),
@@ -757,9 +964,11 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     ) -> JSONResponse:
         runtime = _require_runtime(request)
         if not runtime.accepting_jobs:
-            raise HTTPException(status_code=503, detail="server is not accepting new jobs")
+            raise ApiHTTPException(
+                503, ErrorCode.SERVER_NOT_ACCEPTING, "server is not accepting new jobs"
+            )
         if not layout.filename:
-            raise HTTPException(status_code=400, detail="layout upload missing filename")
+            raise ApiHTTPException(400, ErrorCode.INVALID_REQUEST, "layout upload missing filename")
 
         # P0.2: ONE transactional reservation protocol. The slot is
         # reserved BEFORE the upload body is ingested; the reservation is
@@ -780,7 +989,9 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                             break
                         bytes_read += len(chunk)
                         if bytes_read > config.max_upload_bytes:
-                            raise HTTPException(status_code=413, detail="layout upload too large")
+                            raise ApiHTTPException(
+                                413, ErrorCode.UPLOAD_TOO_LARGE, "layout upload too large"
+                            )
                         out_f.write(chunk)
                 params: dict[str, Any] = dict(
                     input_path=input_path,
@@ -797,8 +1008,10 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                 )
                 job_id = reservation.commit(
                     {
-                        "status": "queued",
+                        "status": JobStatus.QUEUED.value,
                         "created_utc": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+                        "started_utc": None,
+                        "completed_utc": None,
                         "scratch_dir": str(tmp_path),
                         "summary": None,
                         "error": None,
@@ -806,21 +1019,29 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
                     },
                     params,
                 )
-        except JobQueueFullError:
-            raise HTTPException(
-                status_code=429,
-                detail="job queue is full",
+                emit_event(
+                    "job_created",
+                    job_id=job_id,
+                    request_id=getattr(request.state, "request_id", None),
+                )
+                registry.job_created()
+        except JobQueueFullError as exc:
+            raise ApiHTTPException(
+                429,
+                ErrorCode.QUEUE_FULL,
+                "job queue is full",
                 headers={"Retry-After": "10"},
-            ) from None
-        except RuntimeNotAcceptingWorkError:
+            ) from exc
+        except RuntimeNotAcceptingWorkError as exc:
             # Commit-time lifecycle gate: shutdown won the race against
             # this reservation's upload/commit — 503, no job enqueued
             # (PR-A red-team blocker B). The context manager already
             # released the reservation.
-            raise HTTPException(
-                status_code=503,
-                detail="server is not accepting new jobs",
-            ) from None
+            raise ApiHTTPException(
+                503,
+                ErrorCode.SERVER_NOT_ACCEPTING,
+                "server is not accepting new jobs",
+            ) from exc
         except BaseException:
             # The scratch dir is request-local garbage on every failure
             # path (on success it belongs to the committed job record).
@@ -830,31 +1051,32 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
         return JSONResponse(
             status_code=202,
             content={
+                "api_schema_version": API_SCHEMA_VERSION,
                 "job_id": job_id,
-                "status": "queued",
+                "status": JobStatus.QUEUED.value,
                 "poll": f"/v1/jobs/{job_id}",
             },
         )
 
-    @app.get("/v1/jobs/{job_id}")
+    @app.get("/v1/jobs/{job_id}", response_model=JobStatusResponse, status_code=200)
     def get_job(request: Request, job_id: str) -> dict[str, Any]:
         runtime = _require_runtime(request)
         try:
             return runtime.get_job_snapshot(job_id)
-        except UnknownJobError:
-            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}") from None
+        except UnknownJobError as exc:
+            raise ApiHTTPException(404, ErrorCode.UNKNOWN_JOB, f"unknown job: {job_id}") from exc
 
     @app.get("/v1/jobs/{job_id}/artifact", response_model=None)
     def get_job_artifact(request: Request, job_id: str) -> FileResponse:
         runtime = _require_runtime(request)
         try:
             output_path = runtime.get_job_artifact_path(job_id)
-        except UnknownJobError:
-            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}") from None
-        except JobArtifactUnavailableError:
-            raise HTTPException(
-                status_code=409, detail=f"job {job_id} has no artifact yet"
-            ) from None
+        except UnknownJobError as exc:
+            raise ApiHTTPException(404, ErrorCode.UNKNOWN_JOB, f"unknown job: {job_id}") from exc
+        except JobArtifactUnavailableError as exc:
+            raise ApiHTTPException(
+                409, ErrorCode.JOB_ARTIFACT_UNAVAILABLE, f"job {job_id} has no artifact yet"
+            ) from exc
         return FileResponse(
             output_path,
             media_type="application/octet-stream",
@@ -863,17 +1085,33 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
             },
         )
 
-    @app.delete("/v1/jobs/{job_id}")
+    @app.delete("/v1/jobs/{job_id}", response_model=JobDeleteResponse, status_code=200)
     def delete_job(request: Request, job_id: str) -> dict[str, str]:
         runtime = _require_runtime(request)
         try:
             scratch = runtime.delete_job(job_id)
-        except UnknownJobError:
-            raise HTTPException(status_code=404, detail=f"unknown job: {job_id}") from None
-        except JobStillRunningError:
-            raise HTTPException(status_code=409, detail="running job cannot be deleted") from None
+        except UnknownJobError as exc:
+            raise ApiHTTPException(404, ErrorCode.UNKNOWN_JOB, f"unknown job: {job_id}") from exc
+        except JobStillRunningError as exc:
+            raise ApiHTTPException(
+                409, ErrorCode.JOB_RUNNING, "running job cannot be deleted"
+            ) from exc
         if scratch:
             shutil.rmtree(scratch, ignore_errors=True)
         return {"deleted": job_id}
+
+    # ---- process-local metrics (PR-D §12/§14) ----------------------------
+    # Rendered from the observability registry plus the runtime's public
+    # snapshot — never private semaphore/queue introspection. Documented as
+    # process-local, non-durable, single-worker authority.
+
+    @app.get("/v1/metrics", response_model=MetricsResponse, status_code=200)
+    def metrics(request: Request) -> dict[str, Any]:
+        runtime = _require_runtime(request)
+        body = registry.render()
+        body["api_schema_version"] = API_SCHEMA_VERSION
+        body["scope"] = "process"
+        body["runtime"] = runtime.snapshot()
+        return body
 
     return app

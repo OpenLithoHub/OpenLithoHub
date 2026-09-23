@@ -55,7 +55,17 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import Any
 
+from pydantic import ValidationError
+
 from openlithohub.server.config import ServerConfig
+from openlithohub.server.observability import emit_event
+from openlithohub.server.observability import registry as _metrics
+from openlithohub.server.schemas import (
+    API_SCHEMA_VERSION,
+    JobStatus,
+    project_optimize_metadata,
+    transition_job_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +107,19 @@ class AdmissionDeniedError(RuntimeError):
 class RuntimeNotAcceptingWorkError(RuntimeError):
     """Raised when the runtime is no longer accepting new work (draining
     or stopped). HTTP layer maps this to 503 — never 400/429."""
+
+
+def _safe_project(summary: Any) -> Any:
+    """Defend the public snapshot against contract-violating runner
+    summaries (a runner bug is logged, never leaked and never a 500)."""
+    try:
+        return project_optimize_metadata(summary)
+    except ValidationError:
+        logger.warning(
+            "job summary violated the OptimizeMetadata contract; "
+            "public snapshot reports summary=null"
+        )
+        return None
 
 
 def cleanup_scratch_dirs(doomed: list[str]) -> None:
@@ -231,6 +254,11 @@ class ServerRuntime:
     @property
     def state(self) -> RuntimeState:
         return self._state
+
+    @property
+    def stop_forced(self) -> bool:
+        """True when a stop had to retain ownership past its grace period."""
+        return self._stop_forced
 
     @property
     def accepting_jobs(self) -> bool:
@@ -376,9 +404,12 @@ class ServerRuntime:
             doomed = ""
             with self._job_lock:
                 record = self._jobs.get(job_id)
-                if record is not None and record["status"] == "queued":
-                    record["status"] = "cancelled"
+                if record is not None and record["status"] == JobStatus.QUEUED.value:
+                    record["status"] = transition_job_status(
+                        JobStatus(record["status"]), JobStatus.CANCELLED
+                    ).value
                     record["error"] = "server shutdown while queued"
+                    record["completed_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                     doomed = str(record.get("scratch_dir") or "")
             cleanup_scratch_dirs([doomed])
             self._job_queue.task_done()
@@ -542,6 +573,8 @@ class ServerRuntime:
                         "job queue capacity invariant violated: a reserved slot failed to enqueue"
                     ) from exc
                 record["job_id"] = job_id
+                record.setdefault("started_utc", None)
+                record.setdefault("completed_utc", None)
                 record["_created_monotonic"] = time.monotonic()
                 self._jobs[job_id] = record
                 doomed = self._evict_terminal_locked(time.monotonic())
@@ -563,11 +596,17 @@ class ServerRuntime:
             if record is None:
                 raise UnknownJobError(job_id)
             snapshot = {
-                "api_schema_version": "1",
+                "api_schema_version": API_SCHEMA_VERSION,
                 "job_id": job_id,
-                "status": record["status"],
-                "created_utc": record["created_utc"],
-                "summary": record["summary"],
+                "status": JobStatus(record["status"]).value,
+                "created_utc": record.get("created_utc"),
+                "started_utc": record.get("started_utc"),
+                "completed_utc": record.get("completed_utc"),
+                # Public OptimizeMetadata projection — private runner keys
+                # (output_path, scratch_dir, internal ledger) never leave.
+                # A runner summary that violates the contract must not take
+                # down public reads: log loudly, surface summary=None.
+                "summary": _safe_project(record["summary"]),
                 "error": record["error"],
             }
         cleanup_scratch_dirs(doomed)
@@ -597,10 +636,13 @@ class ServerRuntime:
             record = self._jobs.get(job_id)
             if record is None:
                 raise UnknownJobError(job_id)
-            if record["status"] == "running":
+            if record["status"] == JobStatus.RUNNING.value:
                 raise JobStillRunningError(job_id)
-            if record["status"] == "queued":
-                record["status"] = "cancelled"
+            if record["status"] == JobStatus.QUEUED.value:
+                record["status"] = transition_job_status(
+                    JobStatus(record["status"]), JobStatus.CANCELLED
+                ).value
+                record["completed_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             self._jobs.pop(job_id, None)
             return str(record.get("scratch_dir") or "")
 
@@ -639,12 +681,17 @@ class ServerRuntime:
             skip = False
             with self._job_lock:
                 record = self._jobs.get(job_id)
-                if record is None or record["status"] in ("cancelled", "uploading"):
+                if record is None or record["status"] in (
+                    JobStatus.CANCELLED.value,
+                    "uploading",
+                ):
                     doomed_scratch.append(str(record.get("scratch_dir") or "") if record else "")
                     self._job_queue.task_done()
                     skip = True
-                else:
-                    record["status"] = "running"
+                # PR-D §5: RUNNING means "worker begins ADMITTED execution"
+                # — the transition happens only after admission is won
+                # below, so a dequeued-but-never-admitted job stays QUEUED
+                # and can legally become CANCELLED.
             cleanup_scratch_dirs(doomed_scratch)
             if skip:
                 continue
@@ -655,34 +702,64 @@ class ServerRuntime:
                 with self._job_lock:
                     record = self._jobs.get(job_id)
                     if record is not None:
-                        record["status"] = "cancelled"
+                        record["status"] = transition_job_status(
+                            JobStatus(record["status"]), JobStatus.CANCELLED
+                        ).value
                         record["error"] = "server shutdown while waiting for admission"
+                        record["completed_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                emit_event("job_cancelled", job_id=job_id)
+                _metrics.job_terminal("cancelled")
                 self._job_queue.task_done()
                 continue
+            # Admission won — NOW the job is running (checked transition).
+            with self._job_lock:
+                record = self._jobs.get(job_id)
+                if record is not None:
+                    record["status"] = transition_job_status(
+                        JobStatus(record["status"]), JobStatus.RUNNING
+                    ).value
+                    record["started_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            emit_event("job_started", job_id=job_id)
             try:
-                summary = self._optimize_runner(**params)
+                summary = self._optimize_runner(**params, job_id=job_id)
                 with self._job_lock:
                     record = self._jobs.get(job_id)
                     doomed: list[str] = []
                     if record is not None:
-                        record["status"] = "succeeded"
+                        record["status"] = transition_job_status(
+                            JobStatus(record["status"]), JobStatus.SUCCEEDED
+                        ).value
                         record["summary"] = summary
                         record["output_path"] = str(summary["output_path"])
+                        record["completed_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                         record["_completed_monotonic"] = time.monotonic()
                         record["_last_access_monotonic"] = time.monotonic()
                         doomed = self._evict_terminal_locked(time.monotonic())
                 cleanup_scratch_dirs(doomed)
+                emit_event(
+                    "job_succeeded",
+                    job_id=job_id,
+                    execution_mode=summary.get("execution_mode"),
+                    execution_reason=summary.get("execution_reason"),
+                    tile_count=summary.get("tiles"),
+                )
+                _metrics.job_terminal("succeeded")
             except Exception as e:  # noqa: BLE001 - surfaced via job status
                 failed_scratch = ""
                 with self._job_lock:
                     record = self._jobs.get(job_id)
                     if record is not None:
-                        record["status"] = "failed"
+                        record["status"] = transition_job_status(
+                            JobStatus(record["status"]), JobStatus.FAILED
+                        ).value
                         record["error"] = str(e)
+                        record["completed_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                         record["_completed_monotonic"] = time.monotonic()
                         failed_scratch = str(record.get("scratch_dir") or "")
                 if failed_scratch:
                     shutil.rmtree(failed_scratch, ignore_errors=True)
+                emit_event("job_failed", job_id=job_id, error_type=type(e).__name__)
+                _metrics.job_terminal("failed")
             finally:
                 self.release_admission()
                 self._job_queue.task_done()

@@ -281,6 +281,47 @@ jobs:
       - name: Docs command smoke
         run: python scripts/docs_command_smoke.py
 
+  api-contract:
+    # PR-D §10: the checked-in OpenAPI snapshot is the API review gate.
+    # Kept OUT of the generic test shards: schema drift must fail fast and
+    # visibly, with its own required job.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install package (contract needs the app + pydantic only)
+        run: |
+          SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0 pip install -e ".[server]"
+      - name: OpenAPI drift gate
+        run: python scripts/check_openapi_snapshot.py
+      - name: Error-code registry + JobStatus vocabulary + sync headers authority
+        run: |
+          python - <<'PY'
+          from openlithohub.server.schemas import (
+              API_SCHEMA_VERSION, ErrorCode, JobStatus, JOB_TRANSITIONS,
+          )
+
+          expected_codes = {
+              "INVALID_REQUEST", "UNKNOWN_MODEL", "UNKNOWN_JOB", "UPLOAD_TOO_LARGE",
+              "QUEUE_FULL", "ADMISSION_FULL", "SERVER_NOT_ACCEPTING",
+              "JOB_ARTIFACT_UNAVAILABLE", "JOB_RUNNING", "STREAMING_UNSUPPORTED",
+              "MISSING_OPTIONAL_DEPENDENCY", "OPTIMIZATION_FAILED", "INTERNAL_ERROR",
+          }
+          assert {c.value for c in ErrorCode} == expected_codes, "error-code registry drifted"
+          assert {s.value for s in JobStatus} == {
+              "queued", "running", "succeeded", "failed", "cancelled",
+          }, "JobStatus vocabulary drifted"
+          legal = {(JobStatus.QUEUED, JobStatus.RUNNING), (JobStatus.QUEUED, JobStatus.CANCELLED),
+                   (JobStatus.RUNNING, JobStatus.SUCCEEDED), (JobStatus.RUNNING, JobStatus.FAILED)}
+          have = {(a, b) for a, outs in JOB_TRANSITIONS.items() for b in outs}
+          assert have == legal, f"transition table drifted: {have ^ legal}"
+          assert API_SCHEMA_VERSION == "1"
+          print("api-contract vocabulary OK")
+          PY
+
   perf-sentinel:
     # P2.8: a 1-2 minute sentinel that only catches CATASTROPHIC
     # performance regressions. Thresholds have >50x headroom over the

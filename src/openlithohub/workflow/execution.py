@@ -472,9 +472,11 @@ def plan_execution(
     input_ok = input_probe.streaming_supported
 
     if requested_mode == "dense":
+        # The caller asked for dense: the honest reason is that fact itself,
+        # whether or not the request sits under the memory policy.
         return ExecutionPlan(
             mode="dense",
-            reason=DENSE_REQUESTED_EXPLICITLY if over else DENSE_SMALL_LAYOUT,
+            reason=DENSE_REQUESTED_EXPLICITLY,
             estimated_dense_bytes=estimated,
             max_dense_bytes=max_dense_bytes,
             over_memory_policy=over,

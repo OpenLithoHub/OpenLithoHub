@@ -51,6 +51,7 @@ nav:
   - CLI Reference: cli-reference.md
   - Halo and Tiling: halo-and-tiling.md
   - Streaming Execution: streaming-execution.md
+  - Server API Contract: server-api-contract.md
   - Networking & Proxies: networking.md
   - Self-Hosted Deployment: self_hosted_deployment.md
   - HuggingFace Authentication: hf-auth.md
