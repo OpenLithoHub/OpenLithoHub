@@ -41,9 +41,7 @@ def normalize(document: dict) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--update", action="store_true", help="regenerate the checked-in snapshot"
-    )
+    parser.add_argument("--update", action="store_true", help="regenerate the snapshot")
     args = parser.parse_args()
 
     rendered = normalize(generate_openapi())
