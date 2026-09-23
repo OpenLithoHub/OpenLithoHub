@@ -39,6 +39,7 @@ v1.1 and P-054 authorities are untouched by this module.
 from __future__ import annotations
 
 import os
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -259,6 +260,10 @@ class OptimizeRequest:
     min_area_nm2: float = 0.0
     execution_mode: ExecutionMode = "auto"
     max_dense_bytes: int | None = None
+    gpu_batch_tiles: int = 1
+    """Bounded same-shape tile micro-batch (PR-G §10/§11). Only honoured
+    when the model declares SUPPORTS_BATCHED_PREDICT; otherwise a request
+    for >1 fails closed."""
     forward_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -278,6 +283,9 @@ class ExecutionResult:
     mask: torch.Tensor | None = None
     work_accounting: dict[str, float | int] | None = None
     streaming_report: Any = None
+    batch_size: int = 1
+    forward_batches: int = 0
+    stage_timing: dict[str, float] = field(default_factory=dict)
 
 
 # ---- probing ---------------------------------------------------------------
@@ -708,7 +716,19 @@ def _run_streaming(
     req: OptimizeRequest,
     probe: InputProbe,
     progress: ProgressFn | None,
-) -> tuple[Path | None, int, int, dict[str, float | int], Any, torch.Tensor | None]:
+) -> tuple[
+    Path | None,
+    int,
+    int,
+    dict[str, float | int],
+    Any,
+    torch.Tensor | None,
+    int,
+    int,
+    dict[str, float],
+]:
+    # returns: output_path, n_tiles, halo_px, work_accounting, report, mask,
+    #          batch_size, forward_batches, stage_timing
     """The product streaming branch: run_streaming as the scheduling
     authority, out-of-core source/sink, threshold applied per window
     before the pipeline slices each trusted core (pointwise, so it is
@@ -726,6 +746,24 @@ def _run_streaming(
     def forward_fn(tile: torch.Tensor) -> torch.Tensor:
         return (model_predict(tile, **forward_kwargs).mask > threshold).float()
 
+    # PR-G G3: bounded same-shape micro-batching, opt-in via model
+    # capability + request batch size. Anything else stays batch_size=1.
+    batch_size = 1
+    batched_forward_fn = None
+    if req.gpu_batch_tiles > 1:
+        if not bool(getattr(req.model, "supports_batched_predict", False)):
+            raise ValueError(
+                f"model {req.model.name!r} does not declare "
+                "SUPPORTS_BATCHED_PREDICT; gpu_batch_tiles must be 1"
+            )
+        batch_size = req.gpu_batch_tiles
+
+        def batched_forward_fn(batch: torch.Tensor) -> torch.Tensor:
+            out = model_predict(batch, **forward_kwargs).mask
+            if out.dim() == 4:
+                out = out[:, 0]
+            return (out > threshold).float()
+
     if req.output_kind == "raster-npy":
         if req.output_path is None:
             raise RuntimeError("raster-npy output requires output_path")
@@ -739,22 +777,82 @@ def _run_streaming(
         # dense tensor destination (documented caveat on the plan).
         sink = TensorTileSink(shape)
 
-    counting = _CountingSink(
-        sink,
-        (lambda done, total: progress(done, total) if progress else None),
-        _planned_tile_count(shape, req.tile_size, halo_px),
+    stage_timing: dict[str, float] = {}
+    index_stats = getattr(source, "index_stats", None)
+    if callable(index_stats):
+        for key, value in index_stats().items():
+            stage_timing[f"index_{key}"] = float(value)
+
+    forward_wall = 0.0
+    write_wall = 0.0
+
+    def timed_forward_fn(tile: torch.Tensor) -> torch.Tensor:
+        nonlocal forward_wall
+        start = time.perf_counter()
+        out = forward_fn(tile)
+        forward_wall += time.perf_counter() - start
+        return out
+
+    class _TimedSink:
+        """Delegates to the counting sink, measuring wall time in write."""
+
+        def __init__(self, inner: _CountingSink) -> None:
+            self._inner = inner
+
+        @property
+        def shape(self) -> tuple[int, int]:
+            return self._inner.shape
+
+        def write_core(
+            self,
+            tile_id: str,
+            bbox: BoundingBox,
+            tensor: torch.Tensor,
+            metadata: dict[str, Any] | None = None,
+        ) -> None:
+            nonlocal write_wall
+            start = time.perf_counter()
+            self._inner.write_core(tile_id, bbox, tensor, metadata)
+            write_wall += time.perf_counter() - start
+
+        def record_certified_core(
+            self,
+            tile_id: str,
+            bbox: BoundingBox,
+            *,
+            exact_fill: float | None,
+            metadata: dict[str, Any] | None = None,
+        ) -> None:
+            self._inner.record_certified_core(
+                tile_id, bbox, exact_fill=exact_fill, metadata=metadata
+            )
+
+        def finalize(self) -> Any:
+            return self._inner.finalize()
+
+    counting = _TimedSink(
+        _CountingSink(
+            sink,
+            (lambda done, total: progress(done, total) if progress else None),
+            _planned_tile_count(shape, req.tile_size, halo_px),
+        )
     )
 
     report: StreamingRunReport = run_streaming(
         source,
         counting,
-        forward_fn,
+        timed_forward_fn,
         core_size=req.tile_size,
         halo_policy=LegacyFixedHaloPolicy(halo_px),
         max_halo_px=halo_px,
         pixel_nm=req.pixel_size_nm,
+        batch_size=batch_size,
+        batched_forward_fn=batched_forward_fn,
     )
+    forward_batches = int(report.forward_batches)
     output: Any = sink.finalize()
+    stage_timing["forward_wall"] = forward_wall
+    stage_timing["write_wall"] = write_wall
     mask = None
     out_path = req.output_path
     if req.output_kind == "tensor-mask":
@@ -767,6 +865,9 @@ def _run_streaming(
         dict(report.work_accounting),
         report,
         mask,
+        batch_size,
+        forward_batches,
+        stage_timing,
     )
 
 
@@ -774,6 +875,10 @@ def _planned_tile_count(shape: tuple[int, int], core_size: int, halo_px: int) ->
     from openlithohub.streaming import plan_tile_requests
 
     return len(plan_tile_requests(shape, core_size, halo_px))
+
+
+def _stage_now(clock: list[tuple[str, float]], name: str, start: float) -> None:
+    clock.append((name, time.perf_counter() - start))
 
 
 def plan_request(req: OptimizeRequest) -> tuple[InputProbe, ExecutionPlan]:
@@ -815,10 +920,20 @@ def optimize_layout(
     else:
         probe, plan = plan_request(req)
 
+    started_wall = time.perf_counter()
     if plan.mode == "streaming":
-        output_path, n_tiles, halo_px, accounting, report, mask = _run_streaming(
-            req, probe, progress
-        )
+        (
+            output_path,
+            n_tiles,
+            halo_px,
+            accounting,
+            report,
+            mask,
+            batch_size,
+            forward_batches,
+            stage_timing,
+        ) = _run_streaming(req, probe, progress)
+        stage_timing["end_to_end_wall"] = time.perf_counter() - started_wall
         return ExecutionResult(
             plan=plan,
             shape=probe.shape,
@@ -835,8 +950,12 @@ def optimize_layout(
             mask=mask,
             work_accounting=accounting,
             streaming_report=report,
+            batch_size=batch_size,
+            forward_batches=forward_batches,
+            stage_timing=stage_timing,
         )
 
+    started_wall = time.perf_counter()
     mask, n_tiles, halo_px = _run_dense(req, probe, progress)
     if req.output_kind == "tensor-mask":
         return ExecutionResult(
@@ -886,6 +1005,8 @@ def optimize_layout(
         output_format=output_format,
         output_path=output_path,
         mask=mask,
+        batch_size=1,
+        stage_timing={"end_to_end_wall": time.perf_counter() - started_wall},
     )
 
 

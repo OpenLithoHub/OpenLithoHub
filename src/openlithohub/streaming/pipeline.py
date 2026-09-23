@@ -60,6 +60,10 @@ from .work_accounting import WorkAccounting
 class StreamingRunReport:
     n_tiles: int = 0
     n_requeued: int = 0
+    forward_batches: int = 0
+    """Number of forward invocations (PR-G G3). With batching this is the
+    number of batched calls — strictly fewer than ``n_tiles``; without, it
+    equals ``n_tiles``."""
     halo_requirement: HaloRequirement | None = None
     overhead: dict[str, float] = field(default_factory=dict)
     verification: Any = None
@@ -131,6 +135,8 @@ def run_streaming(
     pixel_nm: float = 1.0,
     max_requeues: int = 4,
     tolerance_nm: float | None = None,
+    batch_size: int = 1,
+    batched_forward_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
 ) -> StreamingRunReport:
     """Process a full chip tile-by-tile under core/halo ownership.
 
@@ -139,9 +145,68 @@ def run_streaming(
     budget gate requires per-verifier tolerances on each verifier's own
     :class:`MetricDescriptor` — a scalar cannot be a shared tolerance for
     heterogeneous metrics.
+
+    PR-G G3 micro-batching: with ``batch_size > 1`` and a
+    ``batched_forward_fn`` (``B x 1 x H x W -> B x 1 x H x W``), up to
+    ``batch_size`` same-shape windows are forwarded in one call.  This is
+    bounded (pending tiles never exceed ``batch_size``, independent of
+    total tile count) and semantically transparent: every tile is still
+    read, verified, sliced and committed individually — batching only
+    groups the forward invocation.  It requires NO verification plugins
+    and NO screening policy (verifier refinement re-entrancy would
+    otherwise reorder tile execution); boundary tiles flush naturally on
+    shape change — never padded.
     """
     policy = halo_policy or LegacyFixedHaloPolicy()
     verifier_list = list(verifiers)
+    batching = batch_size > 1 and batched_forward_fn is not None
+    if batching and (verifier_list or screening_policy is not None):
+        raise ValueError(
+            "batched forward requires no verification plugins and no "
+            "screening policy: verifier refinement re-entrancy would reorder "
+            "tile execution (PR-G §10)"
+        )
+    if batch_size < 1:
+        raise ValueError(f"batch_size must be >= 1, got {batch_size}")
+    pending_batch: list[tuple[TileRequest, torch.Tensor]] = []
+    pending_shape: tuple[int, int] | None = None
+
+    def _flush_batch() -> None:
+        """Forward the accumulated same-shape windows in one call, then
+        process every tile individually through the unchanged per-tile
+        tail (core slice, metadata, sink commit)."""
+        nonlocal pending_batch, pending_shape
+        if not pending_batch:
+            return
+        if batched_forward_fn is None:  # guarded by the batching precondition
+            raise RuntimeError("batch flush without a batched forward callable")
+        stacked = torch.stack([tile for _, tile in pending_batch]).unsqueeze(1)
+        outputs = batched_forward_fn(stacked)
+        report.forward_batches += 1
+        if outputs.dim() == 4 and outputs.shape[1] == 1:
+            outputs = outputs[:, 0]
+        if outputs.dim() == 2:
+            outputs = outputs.unsqueeze(0)
+        if outputs.dim() != 3 or outputs.shape[0] != len(pending_batch):
+            raise ValueError(
+                "batched_forward_fn must return B masks for a B-batch; got "
+                f"shape {tuple(outputs.shape)} for batch size {len(pending_batch)}"
+            )
+        for index, (request_i, tile_i) in enumerate(pending_batch):
+            accounting.record_forward(request_i.read_bbox.area)
+            accounting.record_forward_core(request_i.core_bbox)
+            ownership.mark_forward(request_i.tile_id)
+            ys_i, xs_i = _core_slices(request_i)
+            core_result = outputs[index][ys_i, xs_i]
+            # Identical per-tile tail: terminal disposition is set per tile
+            # exactly as in the sequential path — the ownership coverage
+            # ledger must never notice that the forward was batched.
+            ownership.set_terminal(request_i.tile_id, TERMINAL_ACTIVE)
+            sink.write_core(request_i.tile_id, request_i.core_bbox, core_result, {})
+            del tile_i, core_result
+        report.n_tiles += len(pending_batch)
+        pending_batch.clear()
+        pending_shape = None
 
     vctx = VerificationContext(model=forward_fn, pixel_nm=pixel_nm)
     plugin_requirements = []
@@ -304,7 +369,18 @@ def run_streaming(
                 source_meta["screening_status"] = screen_decision.status
                 source_meta["screening_reason"] = screen_decision.reason
 
+            if batching:
+                shape = (current.read_bbox.height, current.read_bbox.width)
+                if pending_batch and (shape != pending_shape or len(pending_batch) >= batch_size):
+                    _flush_batch()
+                pending_batch.append((current, tile))
+                pending_shape = shape
+                if len(pending_batch) >= batch_size:
+                    _flush_batch()
+                continue
+
             result = forward_fn(tile)
+            report.forward_batches += 1
             accounting.record_forward(current.read_bbox.area)
             accounting.record_forward_core(current.core_bbox)
             ownership.mark_forward(current.tile_id)
@@ -390,6 +466,9 @@ def run_streaming(
             else:
                 pending.append(_grown_request(current, refinement, source.shape))
             del tile, result, core_result
+
+    if batching:
+        _flush_batch()
 
     # R17 C4a: the terminal coverage ledger must partition the chip exactly
     # — gap, overlap, unterminated or double-disposition leaves fail closed.

@@ -96,7 +96,7 @@ logger = logging.getLogger(__name__)
 # process, not lifecycle-owned state; it stays module-level until the
 # model-cache ownership refactor (repair-plan P1.1 follow-up).
 _MODEL_CACHE_CAP = 8
-_MODEL_CACHE: OrderedDict[tuple[str, frozenset[tuple[str, Any]]], Any] = OrderedDict()
+_MODEL_CACHE: OrderedDict[tuple[str, frozenset[tuple[str, Any]], str], Any] = OrderedDict()
 # Guards _MODEL_CACHE itself (lookup / insert / eviction). Held only across
 # pure dict ops; the actual model load happens *outside* the lock so a slow
 # weight download does not stall unrelated requests.
@@ -105,17 +105,17 @@ _CACHE_LOCK = threading.Lock()
 # optimizer momentum, RNG cursors); concurrent predict() on the same
 # instance would interleave reads and writes. Stored in a sidecar dict
 # keyed identically to _MODEL_CACHE.
-_MODEL_LOCKS: dict[tuple[str, frozenset[tuple[str, Any]]], threading.Lock] = {}
+_MODEL_LOCKS: dict[tuple[str, frozenset[tuple[str, Any]], str], threading.Lock] = {}
 # In-flight request count per key, and models evicted from the LRU while
 # still in use. Calling teardown() on a model another request is
 # mid-predict() on frees its weights underneath the running forward pass,
 # so an evicted-but-busy model is parked in _PENDING_TEARDOWN until the
 # last holder releases it.
-_MODEL_REFCOUNTS: dict[tuple[str, frozenset[tuple[str, Any]]], int] = {}
-_PENDING_TEARDOWN: OrderedDict[tuple[str, frozenset[tuple[str, Any]]], Any] = OrderedDict()
+_MODEL_REFCOUNTS: dict[tuple[str, frozenset[tuple[str, Any]], str], int] = {}
+_PENDING_TEARDOWN: OrderedDict[tuple[str, frozenset[tuple[str, Any]], str], Any] = OrderedDict()
 
 
-def _teardown_model(key: tuple[str, frozenset[tuple[str, Any]]], model: Any) -> None:
+def _teardown_model(key: tuple[str, frozenset[tuple[str, Any]], str], model: Any) -> None:
     """Tear down an evicted model and release its CUDA memory.
 
     Must be called OUTSIDE ``_CACHE_LOCK`` — teardown can be slow (CUDA
@@ -136,8 +136,8 @@ def _teardown_model(key: tuple[str, frozenset[tuple[str, Any]]], model: Any) -> 
 
 
 def _acquire_locked(
-    key: tuple[str, frozenset[tuple[str, Any]]], model: Any, lock: threading.Lock
-) -> tuple[Any, threading.Lock, tuple[str, frozenset[tuple[str, Any]]]]:
+    key: tuple[str, frozenset[tuple[str, Any]], str], model: Any, lock: threading.Lock
+) -> tuple[Any, threading.Lock, tuple[str, frozenset[tuple[str, Any]], str]]:
     """Refcount an acquisition. MUST be called while holding _CACHE_LOCK:
     bumping the refcount after releasing the lock opens a window in which
     a concurrent eviction sees refcount == 0 and tears down a model this
@@ -147,9 +147,15 @@ def _acquire_locked(
     return model, lock, key
 
 
+def _model_cache_key(
+    name: str, kwargs: dict[str, Any], device: str
+) -> tuple[str, frozenset[tuple[str, Any]], str]:
+    return (name, frozenset(kwargs.items()), device)
+
+
 def _get_or_load_model(
-    name: str, kwargs: dict[str, Any]
-) -> tuple[Any, threading.Lock, tuple[str, frozenset[tuple[str, Any]]]]:
+    name: str, kwargs: dict[str, Any], device: str = "cpu"
+) -> tuple[Any, threading.Lock, tuple[str, frozenset[tuple[str, Any]], str]]:
     """Return a cached LithographyModel, its predict-serialisation lock, and
     the cache key to pass to :func:`_release_model` when done.
 
@@ -165,7 +171,7 @@ def _get_or_load_model(
     from openlithohub.models.registry import register_builtin_models, registry
 
     register_builtin_models()
-    key = (name, frozenset(kwargs.items()))
+    key = _model_cache_key(name, kwargs, device)
 
     with _CACHE_LOCK:
         if key in _MODEL_CACHE:
@@ -193,7 +199,7 @@ def _get_or_load_model(
         model = registry.get(name, ignore_unsupported=False, **kwargs)
         model.setup()
 
-        to_teardown: list[tuple[tuple[str, frozenset[tuple[str, Any]]], Any]] = []
+        to_teardown: list[tuple[tuple[str, frozenset[tuple[str, Any]], str], Any]] = []
         with _CACHE_LOCK:
             _MODEL_CACHE[key] = model
             while len(_MODEL_CACHE) > _MODEL_CACHE_CAP:
@@ -226,7 +232,7 @@ def _get_or_load_model(
         return acquired
 
 
-def _release_model(key: tuple[str, frozenset[tuple[str, Any]]]) -> None:
+def _release_model(key: tuple[str, frozenset[tuple[str, Any]], str]) -> None:
     """Drop the caller's reference acquired from ``_get_or_load_model``.
 
     The last release for an evicted-but-parked model performs the deferred
@@ -264,6 +270,8 @@ def _run_optimize(
     execution_mode: str = "auto",
     request_id: str | None = None,
     job_id: str | None = None,
+    device_policy: str = "auto",
+    gpu_batch_tiles: int = 1,
 ) -> dict[str, Any]:
     """Synchronous optimization core. Both the sync endpoint and the job
     worker execute through this one function, which dispatches into the
@@ -273,6 +281,7 @@ def _run_optimize(
     import time as _clock
 
     from openlithohub.server import observability as _obs
+    from openlithohub.server.config import resolve_execution_device
     from openlithohub.workflow.execution import (
         OptimizeRequest,
         coerce_execution_mode,
@@ -285,20 +294,37 @@ def _run_optimize(
     if pixel_nm is None:
         pixel_nm = node_config.pixel_size_nm
 
+    # PR-G §8: one server-owned execution device; explicit CUDA fails
+    # closed when unavailable — never a silent CPU fallback.
+    selected_device = resolve_execution_device(
+        device_policy,
+        cuda_available=torch.cuda.is_available(),
+        device_count=torch.cuda.device_count() if torch.cuda.is_available() else 0,
+    )
+
     model_kwargs: dict[str, Any] = {"pretrained": True} if pretrained else {}
-    model, model_lock, model_key = _get_or_load_model(model_name, model_kwargs)
+    model, model_lock, model_key = _get_or_load_model(model_name, model_kwargs, selected_device)
 
     _obs.emit_event(
         "optimize_started",
         request_id=request_id,
         job_id=job_id,
         model_name=model_name,
+        selected_device=selected_device,
         execution_mode=mode,
     )
     _obs.registry.optimize_started()
     started = _clock.perf_counter()
     try:
         try:
+            supported = getattr(model, "supported_devices", ("cpu",))
+            if selected_device not in supported:
+                raise ValueError(
+                    f"model {model_name!r} does not declare support for device "
+                    f"{selected_device!r} (supports: {', '.join(supported)}); the "
+                    "server device policy must match model capability"
+                )
+            forward_kwargs: dict[str, Any] = {"device": selected_device}
             request = OptimizeRequest(
                 model=model,
                 pixel_size_nm=pixel_nm,
@@ -312,6 +338,8 @@ def _run_optimize(
                 threshold=0.5,
                 min_area_nm2=min_area_nm2,
                 execution_mode=mode,
+                gpu_batch_tiles=max(1, int(gpu_batch_tiles)),
+                forward_kwargs=forward_kwargs,
             )
             # Hold the per-model lock across the whole run (dense tile loop
             # or streaming tile schedule) so a concurrent request cannot
@@ -321,7 +349,7 @@ def _run_optimize(
             # streaming executor owns tile scheduling.
             with model_lock:
                 result = optimize_layout(request)
-            summary = result_to_summary(result, writer=writer)
+            summary = result_to_summary(result, writer=writer, device=selected_device)
         except Exception as exc:
             _obs.registry.optimize_completed(
                 execution_mode=mode,
@@ -376,7 +404,7 @@ def _run_optimize(
             torch.cuda.empty_cache()
 
 
-def result_to_summary(result: Any, *, writer: str) -> dict[str, Any]:
+def result_to_summary(result: Any, *, writer: str, device: str = "cpu") -> dict[str, Any]:
     """JSON-friendly execution summary shared by the sync endpoint, the
     job worker and (indirectly) the CLI. Private fields (``output_path``)
     ride along internally but are dropped by the public projection in
@@ -397,6 +425,9 @@ def result_to_summary(result: Any, *, writer: str) -> dict[str, Any]:
         "threshold": float(result.threshold),
         "estimated_dense_bytes": int(plan.estimated_dense_bytes),
         "max_dense_bytes": int(plan.max_dense_bytes),
+        "selected_device": device,
+        "batch_size": int(result.batch_size),
+        "forward_batches": int(result.forward_batches),
     }
     if result.work_accounting is not None:
         # Stable, bounded counter projection (PR-D §7) — the full internal
@@ -735,9 +766,28 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
         from openlithohub.workflow.execution import streaming_capability_matrix
 
         register_builtin_models()
-        gpu: dict[str, Any] = {"available": bool(torch.cuda.is_available())}
-        if torch.cuda.is_available():
-            gpu["device_count"] = torch.cuda.device_count()
+        # PR-G §9: CUDA availability is NOT product GPU execution. The
+        # resolved device and whether the policy actually produced a usable
+        # device are reported separately and truthfully.
+        from openlithohub.server.config import resolve_execution_device
+
+        cuda_available = bool(torch.cuda.is_available())
+        device_count = torch.cuda.device_count() if cuda_available else 0
+        try:
+            selected_device = resolve_execution_device(
+                config.device, cuda_available=cuda_available, device_count=device_count
+            )
+            product_execution_enabled = True
+        except ValueError:
+            selected_device = "unavailable"
+            product_execution_enabled = False
+        gpu: dict[str, Any] = {
+            "available": cuda_available,
+            "device_count": device_count,
+            "selected_device": selected_device,
+            "product_execution_enabled": product_execution_enabled,
+        }
+        if cuda_available and device_count > 0:
             gpu["device_name"] = torch.cuda.get_device_name(0)
         return {
             "api_schema_version": API_SCHEMA_VERSION,

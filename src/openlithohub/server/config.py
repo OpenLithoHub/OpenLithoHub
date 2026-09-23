@@ -48,6 +48,56 @@ def _float_from_env(env: Mapping[str, str], name: str, default: float) -> float:
         raise ValueError(f"{name} must be a number, got {raw!r}") from exc
 
 
+def _validate_device_policy(policy: str) -> None:
+    """Validate the ``OPENLITHOHUB_DEVICE`` policy format (PR-G §8)."""
+    if policy in ("auto", "cpu", "cuda"):
+        return
+    if policy.startswith("cuda:"):
+        suffix = policy.split(":", 1)[1]
+        if not suffix.isdigit():
+            raise ValueError(
+                f"OPENLITHOHUB_DEVICE {policy!r} is invalid; expected auto | cpu | cuda | cuda:N"
+            )
+        return
+    raise ValueError(
+        f"OPENLITHOHUB_DEVICE {policy!r} is invalid; expected auto | cpu | cuda | cuda:N"
+    )
+
+
+def resolve_execution_device(
+    policy: str,
+    *,
+    cuda_available: bool,
+    device_count: int,
+) -> str:
+    """Resolve the device policy to one concrete torch device string.
+
+    ``auto`` uses a supported CUDA path when available, otherwise CPU.
+    Explicit ``cuda``/``cuda:N`` FAILS when unavailable or invalid —
+    never a silent CPU fallback (PR-G §8).
+    """
+    _validate_device_policy(policy)
+    if policy == "auto":
+        return "cuda" if cuda_available else "cpu"
+    if policy == "cpu":
+        return "cpu"
+    index: int | None = None
+    if policy.startswith("cuda:"):
+        index = int(policy.split(":", 1)[1])
+    if not cuda_available or device_count < 1:
+        raise ValueError(
+            f"OPENLITHOHUB_DEVICE={policy!r} requires CUDA, but torch reports "
+            "no usable CUDA device on this host; refusing to fall back to CPU "
+            "silently"
+        )
+    if index is not None and index >= device_count:
+        raise ValueError(
+            f"OPENLITHOHUB_DEVICE={policy!r} is out of range: only {device_count} "
+            "CUDA device(s) visible"
+        )
+    return policy
+
+
 @dataclass(frozen=True)
 class ServerConfig:
     """Validated configuration for one server runtime / app instance.
@@ -66,6 +116,17 @@ class ServerConfig:
     api_key: str = ""
     job_backend: str = "in-memory"
     state_dir: str | None = None
+    device: str = "auto"
+    """Execution-device policy (PR-G §8): ``auto`` | ``cpu`` | ``cuda`` |
+    ``cuda:N``. ``auto`` uses CUDA when available, else CPU. Explicit
+    ``cuda``/``cuda:N`` FAILS when unavailable — never a silent CPU
+    fallback. One selected device per process: per-request device picking
+    would complicate model-cache identity and VRAM ownership."""
+    gpu_batch_tiles: int = 1
+    """Bounded same-shape tile micro-batch for models declaring
+    SUPPORTS_BATCHED_PREDICT (PR-G §10/§11). Safe default 1 until
+    profiling supports a better one; CUDA OOM fails clearly and never
+    silently falls back to CPU."""
     """Durable async-job state root (OPENLITHOHUB_STATE_DIR); required for
     the sqlite backend and ignored by in-memory."""
 
@@ -87,12 +148,15 @@ class ServerConfig:
             raise ValueError(
                 f"unsupported job backend {self.job_backend!r}; supported: {supported}"
             )
+        _validate_device_policy(self.device)
         if self.job_backend == "sqlite" and not self.state_dir:
             raise ValueError(
                 "OPENLITHOHUB_JOB_BACKEND=sqlite requires OPENLITHOHUB_STATE_DIR "
                 "to point at a persistent directory; durability without "
                 "persistent storage is not claimed"
             )
+        if self.gpu_batch_tiles < 1:
+            raise ValueError("gpu_batch_tiles must be >= 1")
         if self.job_backend == "in-memory" and self.state_dir is not None:
             raise ValueError(
                 "state_dir only applies to the sqlite job backend; the "
@@ -116,4 +180,6 @@ class ServerConfig:
             api_key=env.get("OPENLITHOHUB_API_KEY") or "",
             job_backend=env.get("OPENLITHOHUB_JOB_BACKEND") or "in-memory",
             state_dir=env.get("OPENLITHOHUB_STATE_DIR") or None,
+            device=env.get("OPENLITHOHUB_DEVICE") or "auto",
+            gpu_batch_tiles=_int_from_env(env, "OPENLITHOHUB_GPU_BATCH_TILES", 1),
         )

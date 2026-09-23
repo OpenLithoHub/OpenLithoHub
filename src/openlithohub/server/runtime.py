@@ -510,7 +510,14 @@ class ServerRuntime:
             if not self.try_acquire_admission():
                 raise AdmissionDeniedError("server at maximum concurrent optimizations")
         try:
-            return self._optimize_runner(**params)
+            # Server-owned device/batch policy (PR-G §8): injected here so
+            # callers cannot pick per-request devices — that would
+            # complicate model-cache identity and VRAM ownership.
+            return self._optimize_runner(
+                **params,
+                device_policy=self.config.device,
+                gpu_batch_tiles=self.config.gpu_batch_tiles,
+            )
         finally:
             self.release_admission()
 
@@ -770,7 +777,12 @@ class ServerRuntime:
                 params["output_path"] = Path(str(output_final))
 
             try:
-                summary = self._optimize_runner(**params, job_id=job_id)
+                summary = self._optimize_runner(
+                    **params,
+                    job_id=job_id,
+                    device_policy=self.config.device,
+                    gpu_batch_tiles=self.config.gpu_batch_tiles,
+                )
             except Exception as e:  # noqa: BLE001 - surfaced via job status
                 self._fail_job(job_id, str(e))
                 if durable and output_final:
