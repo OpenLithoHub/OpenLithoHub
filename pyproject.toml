@@ -29,11 +29,11 @@ dependencies = [
     "torch>=2.12",
     "typer[all]>=0.9",
     "pydantic>=2.0",
-    # P0.6 (repair-plan PR-B): no VCS dependency in core metadata. The
-    # diff-surrogate integration stays lazy/optional (models import it
-    # inside methods; _utils falls back to None) and is pinned as a
-    # developer-only VCS dep in the `dev` extra below. Production
-    # installs therefore need no git and no GitHub reachability.
+    # P0.6 (repair-plan PR-B): no VCS dependency in ANY published metadata.
+    # The diff-surrogate integration stays lazy/optional (models import it
+    # inside methods; _utils falls back to None) and its source-commit pin
+    # lives only in requirements-dev-vcs.txt, which no extra references.
+    # Production installs therefore need no git and no GitHub reachability.
     "rich>=13.0",
     "tomli>=2.0; python_version<'3.11'",
 ]

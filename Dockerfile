@@ -1,19 +1,28 @@
 # syntax=docker/dockerfile:1.6
 # ---------------------------------------------------------------------------
-# Image tiering (repair-plan §9 / PR-B):
+# Image tiering (repair-plan §9 / PR-B, revised per PR-B review):
 #
-#   runtime     (default)  CLI/core image — fat dev-convenient venv
-#                          (data + models + workflow + jupyter)
-#   server                  the fat runtime venv + HTTP [server] extra
-#   server-cpu              MINIMAL production server: core + workflow +
-#                          required models + server; no jupyter, no dataset
-#                          clients, no developer tooling
+#   wheel-builder            builds THE ONE canonical openlithohub wheel.
+#                            Every other stage consumes that wheel — no
+#                            stage source-installs or re-builds the package.
 #
-# The wheel is built EXACTLY ONCE per variant branch and installed into
-# every target from /wheels — never re-fetched or rebuilt per target.
+#   wheel-builder ──┬─> fat-env-builder        wheel[data,models,workflow,jupyter]
+#                   │     └─> runtime  (default CLI image)
+#                   │         └─> server (fat CLI + [server])
+#                   ├─> server-env-builder    wheel[data,models,workflow,jupyter,server]
+#                   └─> server-cpu-env-builder
+#                         CPU torch FIRST (download.pytorch.org/whl/cpu),
+#                         then wheel[models,workflow,server]
+#                         └─> server-cpu (minimal CPU production server)
+#
+# ALL published targets are genuine CPU images: torch is installed from the
+# official CPU wheel index BEFORE the openlithohub wheel, so the
+# "torch>=2.12" requirement is satisfied by the +cpu build and pip never
+# pulls the CUDA stack. Gates in docker.yml assert
+# torch.version.cuda is None and the absence of nvidia-*/jupyter.
 # ---------------------------------------------------------------------------
 # Digest pinned (audit P1.11); Dependabot (docker ecosystem) keeps it current.
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS builder
+FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS wheel-builder
 
 WORKDIR /build
 
@@ -35,48 +44,59 @@ RUN SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} \
       --commit "${BUILD_COMMIT}" --version "${VERSION}" \
       --out src/openlithohub/_build.py
 
-# Build into a relocatable venv so the runtime stage can copy /opt/venv
-# wholesale; also build a wheel so the server stages can add the [server]
-# extra on top of EXACTLY the same package bytes (never a PyPI re-fetch).
-# Fat variant: data + models + workflow + jupyter (dev-convenient CLI).
-RUN python -m venv /opt/venv \
- && /opt/venv/bin/pip install --upgrade pip \
- && SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} \
-    /opt/venv/bin/pip install --no-cache-dir ".[data,models,workflow,jupyter]" \
- && SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} \
-    /opt/venv/bin/pip wheel --no-deps -w /wheels .
-
-# ---------------------------------------------------------------------------
-# builder-slim: minimal dependency set for the server-cpu target — core +
-# workflow (klayout/scipy) + model registry deps; NO jupyter, NO dataset
-# clients. Same wheel bytes as the fat builder.
-# ---------------------------------------------------------------------------
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS builder-slim
-
-WORKDIR /build
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        git \
-        build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY pyproject.toml README.md LICENSE ./
-COPY scripts/write_build_info.py /tmp/write_build_info.py
-COPY src/ src/
-
-ARG VERSION=0.0.0
-ARG BUILD_COMMIT=unknown
+# THE canonical package build. Exactly one `pip wheel` invocation exists in
+# this Dockerfile; every image tier installs the artifact produced here.
 RUN SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} \
-    python /tmp/write_build_info.py \
-      --commit "${BUILD_COMMIT}" --version "${VERSION}" \
-      --out src/openlithohub/_build.py
+    pip wheel --no-deps --no-cache-dir -w /wheels .
+
+# ---------------------------------------------------------------------------
+# fat-env-builder: dev-convenient CLI dependency set (data + models +
+# workflow + jupyter) on genuine CPU torch, from the canonical wheel.
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS fat-env-builder
+
+COPY --from=wheel-builder /wheels /wheels
 
 RUN python -m venv /opt/venv \
  && /opt/venv/bin/pip install --upgrade pip \
- && SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} \
-    /opt/venv/bin/pip install --no-cache-dir ".[models,workflow]" \
- && SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} \
-    /opt/venv/bin/pip wheel --no-deps -w /wheels .
+ # Genuine CPU torch FIRST: the +cpu wheel satisfies "torch>=2.12", so the
+ # openlithohub install below can never replace it with the CUDA stack.
+ && /opt/venv/bin/pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+      "torch>=2.12" \
+ && whl="$(ls /wheels/openlithohub-*.whl)" \
+ && /opt/venv/bin/pip install --no-cache-dir "${whl}[data,models,workflow,jupyter]" \
+ && rm -rf /wheels
+
+# ---------------------------------------------------------------------------
+# server-env-builder: the fat server set (adds the [server] extra).
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS server-env-builder
+
+COPY --from=wheel-builder /wheels /wheels
+
+RUN python -m venv /opt/venv \
+ && /opt/venv/bin/pip install --upgrade pip \
+ && /opt/venv/bin/pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+      "torch>=2.12" \
+ && whl="$(ls /wheels/openlithohub-*.whl)" \
+ && /opt/venv/bin/pip install --no-cache-dir "${whl}[data,models,workflow,jupyter,server]" \
+ && rm -rf /wheels
+
+# ---------------------------------------------------------------------------
+# server-cpu-env-builder: MINIMAL production dependency set (models +
+# workflow + server; no jupyter, no dataset clients) on genuine CPU torch.
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS server-cpu-env-builder
+
+COPY --from=wheel-builder /wheels /wheels
+
+RUN python -m venv /opt/venv \
+ && /opt/venv/bin/pip install --upgrade pip \
+ && /opt/venv/bin/pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+      "torch>=2.12" \
+ && whl="$(ls /wheels/openlithohub-*.whl)" \
+ && /opt/venv/bin/pip install --no-cache-dir "${whl}[models,workflow,server]" \
+ && rm -rf /wheels
 
 # ---------------------------------------------------------------------------
 # runtime-base: the shared non-root runtime skeleton — KLayout's Qt deps,
@@ -107,40 +127,24 @@ WORKDIR /app
 USER openlithohub
 
 # ---------------------------------------------------------------------------
-# Stage: runtime (default target) — fat CLI image.
+# Stage: runtime (default target) — fat CLI image, genuine CPU torch.
 # ---------------------------------------------------------------------------
 FROM runtime-base AS runtime
 
-COPY --from=builder /opt/venv /opt/venv
+COPY --from=fat-env-builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
 ENTRYPOINT ["openlithohub"]
 CMD ["--help"]
 
 # ---------------------------------------------------------------------------
-# Stage: server — the fat runtime image plus the HTTP service extra.
+# Stage: server — fat CLI + HTTP service extra, pre-built as one venv.
 # Build/publish with:  docker build --target server -t openlithohub:server .
-# The server adds fastapi/uvicorn and an HTTP healthcheck.
 # ---------------------------------------------------------------------------
-FROM runtime AS server
+FROM runtime-base AS server
 
-# P4.1: the CLI image does not carry build wheels; the server stage
-# copies them straight from the builder and deletes them after install.
-COPY --from=builder /wheels /wheels
-
-USER root
-RUN set -eux; \
-    whl="$(ls /wheels/openlithohub-*.whl)"; \
-    # --no-deps + explicit extra pins: the venv already satisfies every
-    # wheel dependency, so resolution is skipped on purpose — install stays
-    # deterministic and offline. (Since PR-B, the wheel itself carries no
-    # VCS requirement either: core/server metadata is git-free.)
-    /opt/venv/bin/pip install --no-deps --no-cache-dir "${whl}[server]"; \
-    /opt/venv/bin/pip install --no-cache-dir \
-        "fastapi>=0.110" "uvicorn[standard]>=0.27" "python-multipart>=0.0.9"; \
-    rm -rf /wheels; \
-    chown -R openlithohub:openlithohub /opt/venv
-USER openlithohub
+COPY --from=server-env-builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
@@ -151,28 +155,14 @@ CMD ["serve", "--host", "0.0.0.0", "--port", "8000"]
 
 # ---------------------------------------------------------------------------
 # Stage: server-cpu — MINIMAL production server image (repair-plan §9):
-# core + workflow + required models + server. Excludes jupyter, dataset
-# clients, docs tooling and developer tools. Build with:
+# core + workflow + required models + server, genuine CPU torch, no CUDA/
+# NVIDIA runtime distributions, no jupyter. Build with:
 #   docker build --target server-cpu -t openlithohub:server-cpu .
 # ---------------------------------------------------------------------------
 FROM runtime-base AS server-cpu
 
-COPY --from=builder-slim /opt/venv /opt/venv
+COPY --from=server-cpu-env-builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
-
-COPY --from=builder-slim /wheels /wheels
-
-USER root
-RUN set -eux; \
-    whl="$(ls /wheels/openlithohub-*.whl)"; \
-    # --no-deps + explicit extra pins: same determinism contract as the
-    # fat server stage; the slim venv already satisfies the wheel deps.
-    /opt/venv/bin/pip install --no-deps --no-cache-dir "${whl}[server]"; \
-    /opt/venv/bin/pip install --no-cache-dir \
-        "fastapi>=0.110" "uvicorn[standard]>=0.27" "python-multipart>=0.0.9"; \
-    rm -rf /wheels; \
-    chown -R openlithohub:openlithohub /opt/venv
-USER openlithohub
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
