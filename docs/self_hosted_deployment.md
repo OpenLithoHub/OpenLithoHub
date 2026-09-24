@@ -129,12 +129,17 @@ results = multiproc_predict(
 ```
 
 For tiling workloads (large layouts split into tiles), use the RFC-0004
-multi-GPU tile pipeline:
+multi-GPU tile pipeline (legacy DENSE path — streaming execution is
+single-device):
 
 ```bash
 openlithohub optimize run --model neural-ilt --input large_design.gds \
-    --tile-size 512 --halo 64 --num-gpus all
+    --tile-size 512 --halo 64 --num-gpus 4
 ```
+
+`--num-gpus` takes an integer. Worker `i` is pinned to `cuda:i` only when
+at least `--num-gpus` CUDA devices are visible; with fewer devices, every
+worker falls back to CPU dispatch (workers never share one GPU here).
 
 ## Monitoring
 
@@ -161,7 +166,9 @@ with torch.profiler.profile(
 
 1. Reduce batch size or tile size
 2. Use `torch.cuda.empty_cache()` between runs
-3. Use `surrogate_ilt` instead of `neural_ilt` for large layouts (8x less memory)
+3. Try a lower-memory model/configuration only after measuring it on your
+   own workload — the historical memory tables below are illustrative and
+   are not current benchmark authority
 
 ### Slow Compilation
 

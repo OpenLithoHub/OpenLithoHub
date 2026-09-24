@@ -131,6 +131,11 @@ artifacts (`benchmarks/results/industrial/`) by
 provenance (dataset, hardware, scope, artifact hash) in
 [`docs/generated/industrial-claims.md`](docs/generated/industrial-claims.md),
 with methodology in [`docs/industrial-benchmarks.md`](docs/industrial-benchmarks.md).
+
+GPU product-execution infrastructure (device policy, model capability
+contract, bounded micro-batching) is available for explicitly supported
+models/devices; formal artifact-backed GPU performance measurements are
+pending Industrial Benchmark v2.
 CI fails if a quoted number drifts from its artifact.
 
 **What is deliberately NOT claimed:** no foundry qualification (no wafer/SEM
