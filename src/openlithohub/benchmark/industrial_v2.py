@@ -254,9 +254,7 @@ def formal_publication_blockers(
     """
     blockers: list[str] = []
     if not env_lock.get("available"):
-        blockers.append(
-            "FORMAL_PUBLICATION_BLOCKED: CUDA measurement environment unavailable"
-        )
+        blockers.append("FORMAL_PUBLICATION_BLOCKED: CUDA measurement environment unavailable")
     if provisional:
         blockers.append("provisional run: canonical publication requires a formal run")
     if not git_clean:
@@ -266,16 +264,10 @@ def formal_publication_blockers(
         if row is None:
             blockers.append(f"tier {tier.upper()} has no measurement row")
         elif row.get("status") != StatusV2.SUCCESS.value:
-            blockers.append(
-                f"tier {tier.upper()} status {row.get('status')!r} is not SUCCESS"
-            )
+            blockers.append(f"tier {tier.upper()} status {row.get('status')!r} is not SUCCESS")
         elif not row.get("correctness_witness_pass"):
-            blockers.append(
-                f"tier {tier.upper()} correctness witness did not pass (B2-G)"
-            )
-        if row is not None and row.get("device_requires_cuda") and not env_lock.get(
-            "available"
-        ):
+            blockers.append(f"tier {tier.upper()} correctness witness did not pass (B2-G)")
+        if row is not None and row.get("device_requires_cuda") and not env_lock.get("available"):
             blockers.append(f"tier {tier.upper()} requires CUDA; environment lacks it")
     return blockers
 
@@ -420,9 +412,7 @@ class BatchedFiniteSupportBlur:
 
     def batch_forward(self, batch: torch.Tensor) -> torch.Tensor:
         if batch.dim() != 4 or batch.shape[1] != 1:
-            raise ValueError(
-                f"batch_forward expects (B, 1, H, W), got {tuple(batch.shape)}"
-            )
+            raise ValueError(f"batch_forward expects (B, 1, H, W), got {tuple(batch.shape)}")
         x = batch.float()
         x = torch.nn.functional.conv2d(x, self.kx, padding=(0, self.radius))
         x = torch.nn.functional.conv2d(x, self.ky, padding=(self.radius, 0))

@@ -296,7 +296,7 @@ jobs:
         run: |
           SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0 pip install -e ".[server,workflow]"
       - name: V2 protocol tests (identity/manifest/timing/correctness gates)
-        run: pytest -q tests/test_benchmark/test_industrial_v2.py
+        run: python -m pytest -q tests/test_benchmark/test_industrial_v2.py
       - name: CPU-host preflight must refuse formal publication
         run: |
           python scripts/preflight_industrial_v2.py --gds fixtures/none.gds --device cuda:0 &&           (echo "preflight must fail without CUDA/fixture" && exit 1) ||           test "$?" -eq 1

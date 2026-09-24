@@ -234,8 +234,11 @@ def test_e4_persisted_queue_enforces_capacity(
     first._store.close()  # crash with the job queued and unclaimed
 
     second = _runtime(state, _trivial_runner, job_queue_depth=1)
-    second.start()
+    # Freeze the worker claim BEFORE start: the durable row must stay
+    # QUEUED so the capacity gate sees it (otherwise the worker may claim
+    # it between start() and the reserve probe — a race, not a gate).
     monkeypatch.setattr(second._store, "peek_next_queued", lambda: None)
+    second.start()
     with pytest.raises(JobQueueFullError):
         second.try_reserve_job_slot()
     assert second._store.count_queued() == 1

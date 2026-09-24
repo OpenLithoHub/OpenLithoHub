@@ -161,12 +161,15 @@ def test_incomplete_tiers_or_dirty_tree_block_publication(tmp_path: Path) -> Non
     good_row = {"status": "SUCCESS", "correctness_witness_pass": True}
     env = {"available": True, "count": 1}
 
-    assert formal_publication_blockers(
-        env_lock=env,
-        tier_rows={"a": good_row, "b": good_row, "c": good_row},
-        git_clean=True,
-        provisional=False,
-    ) == []
+    assert (
+        formal_publication_blockers(
+            env_lock=env,
+            tier_rows={"a": good_row, "b": good_row, "c": good_row},
+            git_clean=True,
+            provisional=False,
+        )
+        == []
+    )
 
     dirty = formal_publication_blockers(
         env_lock=env,
@@ -344,14 +347,11 @@ class FamilyBuilder:
         # manifest FIRST (SHA256SUMS covers it); the manifest lists every
         # canonical member except itself and SHA256SUMS.txt (it cannot
         # carry its own byte count).
-        members = sorted(
-            CANONICAL_FAMILY - {"manifest.json", "SHA256SUMS.txt"}
-        )
+        members = sorted(CANONICAL_FAMILY - {"manifest.json", "SHA256SUMS.txt"})
         manifest = {
             "run_identity": self.identity,
             "members": [
-                {"name": name, "bytes": (self.root / name).stat().st_size}
-                for name in members
+                {"name": name, "bytes": (self.root / name).stat().st_size} for name in members
             ],
         }
         write_strict_json(self.root / "manifest.json", manifest)

@@ -155,9 +155,7 @@ def verify(canonical_root: Path) -> list[str]:
     recorded_identity = run_config.get("run_identity")
     recorded_identity = recorded_identity or manifest.get("run_identity")
     if recorded_identity != recomputed:
-        _fail(
-            f"run identity drift: recorded {recorded_identity!r} != recomputed {recomputed!r}"
-        )
+        _fail(f"run identity drift: recorded {recorded_identity!r} != recomputed {recomputed!r}")
 
     # environment lock completeness (§9, B2-D).  The freeze file carries
     # the full environment record with the gpu lock nested inside.
@@ -192,9 +190,7 @@ def verify(canonical_root: Path) -> list[str]:
                     f"{member}: NOT_RUN_ENVIRONMENT row in a CANONICAL family — "
                     "formal GPU measurement is missing (B2-D/§7)"
                 )
-            if row.get("device_requires_cuda") or str(row.get("device", "")).startswith(
-                "cuda"
-            ):
+            if row.get("device_requires_cuda") or str(row.get("device", "")).startswith("cuda"):
                 for key in GPU_ROW_REQUIRED_KEYS:
                     if key not in row:
                         _fail(f"{member}: GPU row missing {key!r} (B2-D)")

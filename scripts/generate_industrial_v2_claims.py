@@ -60,9 +60,7 @@ def build_claims(family: dict) -> dict:
             claim_id=claim_id,
             correctness_pass=bool(row.get("correctness_witness_pass")),
             repeat_count=repeats,
-            memory_reduction=(
-                float(reduction) / 100.0 if reduction is not None else None
-            ),
+            memory_reduction=(float(reduction) / 100.0 if reduction is not None else None),
             scope="Tier A indexed exact-vector window discovery on the declared "
             "fixture/hardware; same exact run semantics",
             status=row.get("status", "FAILED"),
@@ -165,9 +163,7 @@ def _extract_ib2_ids(text: str) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--canonical-root", default="benchmarks/results/industrial-v2"
-    )
+    parser.add_argument("--canonical-root", default="benchmarks/results/industrial-v2")
     parser.add_argument("--check", action="store_true", help="README drift gate only")
     args = parser.parse_args()
 
