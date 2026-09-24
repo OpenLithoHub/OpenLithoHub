@@ -105,6 +105,10 @@ OpenLithoHub **与** P-054。
 退化为空白掩膜（退化输出防火墙阻止了空白掩膜会得到的"100% MRC 降低"）；相同迭代预算下
 surrogate-ILT 在 CPU 上端到端并不更快。
 
+GPU 产品执行基础设施（设备策略、模型能力契约、有界微批）已可用于显式
+声明的模型/设备；正式的、以 artifact 为支撑的 GPU 性能测量待 Industrial
+Benchmark v2 完成后发布。
+
 上方每个头条数字均由 `scripts/generate_industrial_claims.py` 从入库的 benchmark artifact
 （`benchmarks/results/industrial/`）自动生成；claim ID 对应的完整溯源见
 [`docs/generated/industrial-claims.md`](docs/generated/industrial-claims.md)，
