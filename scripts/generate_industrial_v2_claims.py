@@ -53,16 +53,23 @@ def build_claims(family: dict) -> dict:
     repeats = int(run_config.get("repeat_count", 0))
 
     index = family["tiers"]["a"]
-    for row in index.get("rows", []):
-        claim_id = f"IB2-INDEX-QUERY-{row.get('window', 0)}"
-        reduction = row.get("candidate_reduction_pct")
+    # 2B.1-G: per-window aggregate rows are the canonical shape (fallback
+    # to flat rows for pre-ladder synthetic fixtures).
+    for row in index.get("window_rows", index.get("rows", [])):
+        # 2B.1-K: the honest Tier A metric is flat_scans_avoided_pct — the
+        # share of full-flat row scans the band index removes (exact run
+        # semantics unchanged).  The old candidate_reduction_pct compared
+        # per-row candidate counts that are EQUAL by construction.
+        avoided = row.get("flat_scans_avoided_pct")
+        claim_id = f"IB2-INDEX-SCANS-{row.get('window', 0)}"
         admitted, reason = admit_headline(
             claim_id=claim_id,
             correctness_pass=bool(row.get("correctness_witness_pass")),
             repeat_count=repeats,
-            memory_reduction=(float(reduction) / 100.0 if reduction is not None else None),
-            scope="Tier A indexed exact-vector window discovery on the declared "
-            "fixture/hardware; same exact run semantics",
+            memory_reduction=float(avoided) / 100.0 if avoided is not None else None,
+            scope="Tier A indexed exact-vector window discovery: share of "
+            "full-flat row scans avoided on the declared fixture/hardware; "
+            "same exact run semantics",
             status=row.get("status", "FAILED"),
         )
         claims.append(
@@ -70,17 +77,23 @@ def build_claims(family: dict) -> dict:
                 "claim_id": claim_id,
                 "admitted": admitted,
                 "reason": reason,
-                "value": row.get("candidate_reduction_pct"),
-                "unit": "candidate_reduction_pct",
+                "value": row.get("flat_scans_avoided_pct"),
+                "unit": "flat_scans_avoided_pct",
                 "scope": "architecture-only indexed geometry throughput",
             }
         )
 
     gpu = family["tiers"]["b"]
-    for row in gpu.get("rows", []):
-        wall1 = float(row.get("gpu_batch1_wall_s", 0) or 0)
-        walln = float(row.get("gpu_batch_n_wall_s", 0) or 0)
-        speedup = round(wall1 / walln, 4) if walln else None
+    for row in gpu.get("window_rows", gpu.get("rows", [])):
+        # §14: batching speedup from FORMAL MEDIANS (aggregate_median_s of
+        # batch=1 vs batch=N), never a single repeat or best-of-N.
+        batch1_median = float(row.get("aggregate_batch1_median_s", 0) or 0) or float(
+            row.get("gpu_batch1_wall_s", 0) or 0
+        )
+        batchn_median = float(row.get("aggregate_batch_n_median_s", 0) or 0) or float(
+            row.get("gpu_batch_n_wall_s", 0) or 0
+        )
+        speedup = round(batch1_median / batchn_median, 4) if batchn_median else None
         claim_id = f"IB2-GPU-BATCH-{row.get('window', 0)}"
         admitted, reason = admit_headline(
             claim_id=claim_id,

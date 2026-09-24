@@ -206,6 +206,20 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     from openlithohub.streaming.vector_runs import KLayoutAlignedRunSource
 
     device = str(cfg["device"])
+    # 2B.1-F: the ACTUAL runtime policy must equal the declared run-config
+    # policy for claim-bearing GPU tiers — identity labels are not enough.
+    actual_tf32_matmul = bool(torch.backends.cuda.matmul.allow_tf32)
+    if bool(cfg.get("tf32_matmul", False)) != actual_tf32_matmul:
+        return {
+            "status": "FAILED",
+            "reason": (
+                f"runtime TF32 matmul={actual_tf32_matmul} does not match the "
+                f"declared run config ({cfg.get('tf32_matmul')})"
+            ),
+            "device_requires_cuda": True,
+            "timing_method": "",
+            "correctness_witness_pass": False,
+        }
     if not device.startswith("cuda") or not torch.cuda.is_available():
         return {
             "status": "NOT_RUN_ENVIRONMENT",
@@ -283,6 +297,8 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         gpu1, gpu_n.to(gpu1.device), atol=tolerance, rtol=0.0
     )
     # restore the CPU artifact as the sink output semantics (same artifact)
+    from openlithohub.benchmark.industrial_v2 import host_peak_rss_bytes
+
     return {
         "window": cfg["window"],
         "batch": cfg["batch"],
@@ -291,6 +307,7 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         "forward_batches_batch_n": meta_n["forward_batches"],
         "gpu_batch1_wall_s": gpu1_wall,
         "gpu_batch_n_wall_s": gpu_n_wall,
+        "host_peak_rss_bytes": host_peak_rss_bytes(),
         "max_memory_allocated": gpu1_mem["max_memory_allocated"],
         "max_memory_reserved": gpu1_mem["max_memory_reserved"],
         "batch_n_max_memory_allocated": gpu_n_mem["max_memory_allocated"],
@@ -305,48 +322,134 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
 
 
 def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
-    """Tier C: fixed-configuration Hopkins compute tier.
+    """Tier C: fixed-configuration Hopkins compute tier (2B.1-I).
 
-    Phase 2A records ``UNSUPPORTED`` for the GPU-resident path (§23):
-    faking a GPU Hopkins measurement without a verified GPU-resident
-    implementation is exactly what the firewall forbids.  The CPU SOCS
-    witness IS measured so the tier has a real reference row.
+    The SOCS Hopkins primitives are device-aware
+    (``compute_socs_kernels(params, H, mask.device)``), so the GPU-resident
+    path executes the same mathematical operator on the mask's device.
+    Protocol requirements implemented here:
+
+    * CPU fixed-config witness (finite + deterministic across two calls)
+    * GPU fixed-config execution with synchronized wall timing
+    * cold (first GPU call incl. SOCS kernel construction) reported
+      SEPARATELY from warm steady-state (precomputed kernels)
+    * GPU allocated/reserved peaks reset before the timed region
+    * CPU vs GPU agreement within the frozen fp32 tolerance
     """
     import time
 
     import numpy as np
     import torch
 
-    from openlithohub.simulators.hopkins_sim import HopkinsSimulator, SimulatorConfig
+    from openlithohub._utils.hopkins import (
+        simulate_aerial_image_hopkins,
+    )
+    from openlithohub.simulators.hopkins_sim import HopkinsParams
 
-    sim_config = SimulatorConfig(
+    device = str(cfg["device"])
+    if not device.startswith("cuda") or not torch.cuda.is_available():
+        return {
+            "status": "NOT_RUN_ENVIRONMENT",
+            "reason": "CUDA measurement environment unavailable",
+            "device_requires_cuda": True,
+            "timing_method": "",
+            "correctness_witness_pass": False,
+        }
+    if cfg["dtype"] != "fp32":
+        return {
+            "status": "UNSUPPORTED",
+            "reason": f"dtype {cfg['dtype']!r} not implemented in Phase 2A",
+            "device_requires_cuda": True,
+            "timing_method": "",
+            "correctness_witness_pass": False,
+        }
+
+    grid = int(cfg["hopkins_grid"])
+    params = HopkinsParams(
         wavelength_nm=cfg["hopkins_wavelength_nm"],
         na=cfg["hopkins_na"],
-        sigma=cfg["hopkins_sigma_outer"],
+        sigma_outer=cfg["hopkins_sigma_outer"],
         sigma_inner=cfg["hopkins_sigma_inner"],
         pixel_size_nm=cfg["pixel_nm"],
+        defocus_nm=cfg.get("hopkins_defocus_nm", 0.0),
     )
-    grid = cfg["hopkins_grid"]
-    mask = (np.random.default_rng(0).random((grid, grid)) > 0.5).astype(np.float32)
-    simulator = HopkinsSimulator(sim_config)
-    start = time.perf_counter()
-    result = simulator.simulate(torch.from_numpy(mask))
-    cpu_wall = time.perf_counter() - start
-    aerial = np.asarray(result.aerial.cpu().numpy())
-    finite = bool(np.isfinite(aerial).all())
+    rng = np.random.default_rng(0)
+    mask_cpu = (rng.random((grid, grid)) > 0.5).astype(np.float32)
+    tolerance = 1e-5
+
+    # CPU reference (deterministic across two calls is part of the witness)
+    cpu_result = simulate_aerial_image_hopkins(torch.from_numpy(mask_cpu), params=params)
+    cpu_out = cpu_result.cpu().numpy()
+    cpu_again = simulate_aerial_image_hopkins(torch.from_numpy(mask_cpu), params=params)
+    cpu_deterministic = bool(
+        np.allclose(cpu_out, cpu_again.cpu().numpy(), atol=tolerance, rtol=0.0)
+    )
+
+    mask_gpu = torch.from_numpy(mask_cpu).to(device)
+
+    # COLD: first GPU call includes SOCS kernel construction on device.
+    torch.cuda.synchronize(device)
+    cold_start = time.perf_counter()
+    gpu_cold = simulate_aerial_image_hopkins(mask_gpu, params=params)
+    torch.cuda.synchronize(device)
+    cold_wall = time.perf_counter() - cold_start
+    del gpu_cold  # cold result carries the kernel-construction cost only
+
+    # WARM: precomputed kernels in device memory, synchronized steady-state.
+    kernels, weights = _build_socs(params, grid, mask_gpu.device)
+    kernels_f = torch.fft.fftn(torch.fft.ifftshift(kernels, dim=(-2, -1)), dim=(-2, -1)).to(
+        torch.complex64
+    )
+    warm_walls: list[float] = []
+    gpu_warm = None
+    for _ in range(3):
+        torch.cuda.synchronize(device)
+        start = time.perf_counter()
+        gpu_warm = simulate_aerial_image_hopkins(
+            mask_gpu,
+            kernels=kernels,
+            weights=weights,
+            precomputed_kernels_f=kernels_f,
+        )
+        torch.cuda.synchronize(device)
+        warm_walls.append(time.perf_counter() - start)
+    peaks = {
+        "max_memory_allocated": int(torch.cuda.max_memory_allocated(device)),
+        "max_memory_reserved": int(torch.cuda.max_memory_reserved(device)),
+    }
+    gpu_out = gpu_warm.detach().cpu().numpy()
+    parity = bool(
+        np.isfinite(gpu_out).all()
+        and np.allclose(cpu_out, gpu_out, atol=tolerance, rtol=0.0)
+        and cpu_deterministic
+    )
     return {
         "grid": grid,
-        "cpu_wall_s": cpu_wall,
-        "finite_witness": finite,
-        "correctness_witness_pass": finite,
-        "status": "UNSUPPORTED",
-        "reason": "GPU-resident Hopkins path is not implemented in Phase 2A; "
-        "CPU witness measured, GPU tier stays UNSUPPORTED rather than faked",
-        "timing_method": "host_perf_counter",
+        "cpu_reference_wall_s": None,
+        "gpu_cold_wall_s": round(cold_wall, 6),
+        "gpu_warm_wall_s": round(min(warm_walls), 6) if warm_walls else None,
+        "warm_walls_s": [round(w, 6) for w in warm_walls],
+        "finite_witness": bool(np.isfinite(gpu_out).all()),
+        "cpu_deterministic_witness": cpu_deterministic,
+        "correctness_witness_pass": parity,
+        "max_memory_allocated": peaks["max_memory_allocated"],
+        "max_memory_reserved": peaks["max_memory_reserved"],
+        "timing_method": "cuda_synchronized",
+        "dtype": "fp32",
+        "device": device,
         "device_requires_cuda": True,
+        "status": "SUCCESS" if parity else "FAILED",
     }
 
 
+def _build_socs(params: Any, grid: int, device: Any):
+    """Device-resident SOCS kernels via the existing device-aware primitives."""
+    from openlithohub._utils.hopkins import compute_socs_kernels
+
+    return compute_socs_kernels(params, grid, device)
+
+
+# ---- driver ------------------------------------------------------------------
 # ---- driver ------------------------------------------------------------------
 
 
@@ -362,6 +465,7 @@ def worker_entry(args: argparse.Namespace) -> int:
                 "gds": args.gds,
                 "device": args.device,
                 "dtype": args.dtype,
+                "layer": args.layer,
                 "window": args.window,
                 "tile": args.tile,
                 "batch": args.batch,
@@ -373,10 +477,13 @@ def worker_entry(args: argparse.Namespace) -> int:
     else:
         row = tier_c_worker_once(
             {
+                "device": args.device,
+                "dtype": args.dtype,
                 "hopkins_wavelength_nm": args.hopkins_wavelength_nm,
                 "hopkins_na": args.hopkins_na,
                 "hopkins_sigma_outer": args.hopkins_sigma_outer,
                 "hopkins_sigma_inner": args.hopkins_sigma_inner,
+                "hopkins_defocus_nm": 0.0,
                 "hopkins_grid": args.hopkins_grid,
                 "pixel_nm": args.pixel_nm,
             }
@@ -430,9 +537,15 @@ def main() -> int:
         StatusV2,
         compute_run_identity_v2,
         gpu_environment_lock,
+        gpu_environment_lock_sha256,
         write_strict_json,
     )
 
+    # 2B.1-A: the exact GDS bytes enter the run identity — identical args
+    # over different fixture bytes produce a DIFFERENT identity.
+    if not args.gds:
+        raise SystemExit("--gds is required: fixture identity is part of the run identity")
+    fixture_sha256 = sha256_file(args.gds)
     run_config = RunConfigV2(
         tiers=tuple(sorted(set(args.tiers.split(",")) - {""})),
         device=args.device,
@@ -451,7 +564,13 @@ def main() -> int:
         hopkins_grid=args.hopkins_grid,
         warmup_count=args.warmup,
         repeat_count=args.repeats,
+        layer=args.layer,
+        fixture_sha256=fixture_sha256,
     )
+    # 2B.1-D: the GPU environment lock is collected BEFORE identity so its
+    # canonical hash binds GPU model/driver/CUDA/Torch/TF32 into identity.
+    env_lock = gpu_environment_lock()
+    env_lock_sha = gpu_environment_lock_sha256(env_lock)
     identity = compute_run_identity_v2(
         run_config,
         measurement_commit=commit,
@@ -459,11 +578,11 @@ def main() -> int:
         core_sha256=source_hashes["core"],
         claim_generator_sha256=source_hashes["claim_generator"],
         verifier_sha256=source_hashes["verifier"],
+        environment_lock_sha256=env_lock_sha,
     )
     workspace = Path(args.out_root) / "runs" / identity
     workspace.mkdir(parents=True, exist_ok=True)
 
-    env_lock = gpu_environment_lock()
     write_strict_json(workspace / "environment-lock.json", env_lock)
     write_strict_json(
         workspace / "run-config.json",
@@ -472,6 +591,7 @@ def main() -> int:
             "measurement_commit": commit,
             "tracked_tree_clean": clean,
             "source_hashes": source_hashes,
+            "environment_lock_sha256": env_lock_sha,
             "run_identity": identity,
             "provisional": args.provisional and not args.formal,
             "run_config": run_config.to_payload(),
@@ -507,85 +627,123 @@ def main() -> int:
         },
     }
     write_strict_json(workspace / "run-summary.json", status)
+
+    # 2B.1-J: formal runs close by building the exact seven-member family
+    # through the fail-closed builder — the ONLY sanctioned path to
+    # promote_canonical_family().  Provisional runs keep workspace rows.
+    if args.formal:
+        from openlithohub.benchmark.industrial_v2 import (
+            build_canonical_family_in_workspace,
+        )
+
+        blockers = build_canonical_family_in_workspace(
+            workspace_dir=workspace,
+            run_config=run_config,
+            run_identity=identity,
+            measurement_commit=commit,
+            source_hashes=source_hashes,
+            environment_lock=env_lock,
+            tier_rows=tier_rows,
+            tracked_tree_clean=clean,
+            provisional=False,
+        )
+        status["canonical_build_blockers"] = blockers
+        write_strict_json(workspace / "run-summary.json", status)
+        if blockers:
+            print(json.dumps(status, indent=2, sort_keys=True))
+            print("FORMAL RUN: canonical family NOT built — blockers above")
+            return 1
     print(json.dumps(status, indent=2, sort_keys=True))
     return 0
 
 
-def run_tier(
-    args: argparse.Namespace, tier: str, identity: str, workspace: Path, run_config: Any
+def _worker_once(
+    args: argparse.Namespace, tier: str, window: int, run_config: Any
 ) -> dict[str, Any]:
-    """Driver-side tier execution: fresh worker process per repeat, then
-    median/p10/p90/n aggregation (never best-of-N)."""
-    results: list[dict[str, Any]] = []
-    total = max(1, args.warmup + args.repeats)
-    for _repeat_index in range(total):
-        cmd = [
-            sys.executable,
-            str(HARNESS_PATH),
-            "--worker",
-            "--worker-tier",
-            tier,
-            "--gds",
-            args.gds,
-            "--device",
-            args.device,
-            "--dtype",
-            args.dtype,
-            "--window",
-            # warmup and measured repeats run the SAME window; warmup
-            # differs only in that its timing is discarded.
-            str(min(int(run_config.window_sizes[0]), 8192)),
-            "--tile",
-            str(args.tile),
-            "--halo",
-            str(args.halo),
-            "--batch",
-            str(args.batch),
-            "--pixel-nm",
-            str(args.pixel_nm),
-            "--layer",
-            args.layer,
-        ]
-        proc = subprocess.run(  # noqa: S603 — fixed-argv worker re-invocation
-            cmd, capture_output=True, text=True, timeout=3600
-        )
-        if proc.returncode != 0:
-            results.append(
-                {
-                    "status": "FAILED",
-                    "reason": (proc.stderr or "worker failed")[-2000:],
-                    "correctness_witness_pass": False,
-                }
-            )
-            continue
-        try:
-            results.append(json.loads(proc.stdout.strip().splitlines()[-1]))
-        except (ValueError, IndexError):
-            results.append(
-                {
-                    "status": "FAILED",
-                    "reason": "worker produced no strict JSON row",
-                    "correctness_witness_pass": False,
-                }
-            )
-    measured = results[args.warmup :] if args.repeats <= len(results) else results
+    """One fresh worker process = one repeat on one window."""
+    cmd = [
+        sys.executable,
+        str(HARNESS_PATH),
+        "--worker",
+        "--worker-tier",
+        tier,
+        "--gds",
+        args.gds,
+        "--device",
+        args.device,
+        "--dtype",
+        args.dtype,
+        "--window",
+        str(window),
+        "--tile",
+        str(args.tile),
+        "--halo",
+        str(args.halo),
+        "--batch",
+        str(args.batch),
+        "--pixel-nm",
+        str(args.pixel_nm),
+        "--layer",
+        args.layer,
+    ]
+    proc = subprocess.run(  # noqa: S603 — fixed-argv worker re-invocation
+        cmd, capture_output=True, text=True, timeout=3600
+    )
+    if proc.returncode != 0:
+        return {
+            "status": "FAILED",
+            "reason": (proc.stderr or "worker failed")[-2000:],
+            "correctness_witness_pass": False,
+            "window": window,
+        }
+    try:
+        row = json.loads(proc.stdout.strip().splitlines()[-1])
+        row.setdefault("window", window)
+        return row
+    except (ValueError, IndexError):
+        return {
+            "status": "FAILED",
+            "reason": "worker produced no strict JSON row",
+            "correctness_witness_pass": False,
+            "window": window,
+        }
+
+
+def _run_window_repeats(
+    args: argparse.Namespace, tier: str, window: int, run_config: Any
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Warmup + measured fresh-process repeats for ONE window."""
+    warm: list[dict[str, Any]] = []
+    measured: list[dict[str, Any]] = []
+    for _ in range(max(0, args.warmup)):
+        warm.append(_worker_once(args, tier, window, run_config))
+    for _ in range(max(1, args.repeats)):
+        measured.append(_worker_once(args, tier, window, run_config))
+    return warm, measured
+
+
+def _aggregate_window(
+    tier: str, window: int, warm: list[dict[str, Any]], measured: list[dict[str, Any]]
+) -> dict[str, Any]:
     wall_key = {
         "a": "indexed_row_wall_s",
         "b": "gpu_batch_n_wall_s",
         "c": "cpu_wall_s",
     }.get(tier, "")
     walls = [float(r[wall_key]) for r in measured if wall_key in r]
-    all_pass = bool(results) and all(r.get("correctness_witness_pass") for r in results)
+    all_pass = bool(measured) and all(r.get("correctness_witness_pass") for r in measured)
     aggregate = summarize_repeats(walls)
     row: dict[str, Any] = {
         "tier": tier,
-        "repeats_recorded": len(measured),
+        "window": window,
+        "repeat_count": len(measured),
+        "warmup_discarded": len(warm),
         "correctness_witness_pass": all_pass,
         "claim_level": "REPRODUCED_INTERNAL",
         **{f"repeat_{i}": r for i, r in enumerate(measured)},
     }
     row.update({f"aggregate_{k}": v for k, v in aggregate.items()})
-    statuses = {r.get("status") for r in results}
+    statuses = {r.get("status") for r in measured} | {r.get("status") for r in warm}
     if statuses == {"NOT_RUN_ENVIRONMENT"}:
         row["status"] = "NOT_RUN_ENVIRONMENT"
     elif "FAILED" in statuses or not all_pass:
@@ -595,7 +753,7 @@ def run_tier(
     else:
         row["status"] = "SUCCESS"
     if tier == "a" and row["status"] == "SUCCESS":
-        first = next((r for r in results if r.get("status") == "SUCCESS"), {})
+        first = next((r for r in measured if r.get("status") == "SUCCESS"), {})
         row.update(
             {
                 "index_build_wall_s": first.get("parse_index_wall_s"),
@@ -610,7 +768,51 @@ def run_tier(
                 "owned_run_count": first.get("owned_run_count"),
             }
         )
+    if tier == "b" and row["status"] == "SUCCESS":
+        # §14: batching speedup from FORMAL MEDIANS, never one repeat.
+        b1 = [float(r["gpu_batch1_wall_s"]) for r in measured if r.get("gpu_batch1_wall_s")]
+        bn = [float(r["gpu_batch_n_wall_s"]) for r in measured if r.get("gpu_batch_n_wall_s")]
+        if b1 and bn:
+            row["batching_speedup_x"] = round(statistics.median(b1) / statistics.median(bn), 4)
     return row
+
+
+def run_tier(
+    args: argparse.Namespace, tier: str, identity: str, workspace: Path, run_config: Any
+) -> dict[str, Any]:
+    """Driver-side tier execution (2B.1-G): EVERY declared window gets its
+    own warmup + measured fresh-process repeats and its own aggregate row.
+
+    Tier C runs one fixed Hopkins grid row (the grid is the declared
+    workload, not a ladder).
+    """
+    if tier == "c":
+        warm, measured = _run_window_repeats(args, tier, run_config.hopkins_grid, run_config)
+        return _aggregate_window(tier, run_config.hopkins_grid, warm, measured)
+
+    window_rows = []
+    statuses = []
+    for window in run_config.window_sizes:
+        warm, measured = _run_window_repeats(args, tier, window, run_config)
+        row = _aggregate_window(tier, window, warm, measured)
+        window_rows.append(row)
+        statuses.append(row["status"])
+    if "FAILED" in statuses:
+        overall = "FAILED"
+    elif statuses and all(s == "SUCCESS" for s in statuses):
+        overall = "SUCCESS"
+    else:
+        overall = statuses[0] if statuses else "NOT_RUN_ENVIRONMENT"
+    return {
+        "tier": tier,
+        "status": overall,
+        "correctness_witness_pass": all(r.get("correctness_witness_pass") for r in window_rows)
+        if window_rows
+        else False,
+        "claim_level": "REPRODUCED_INTERNAL",
+        "window_rows": window_rows,
+        "repeats_recorded": sum(r.get("repeat_count", 0) for r in window_rows),
+    }
 
 
 if __name__ == "__main__":

@@ -90,6 +90,22 @@ def main() -> int:
         cudnn = torch.backends.cudnn.version()
         check("cuDNN version", cudnn is not None, str(cudnn))
     check("dtype fp32 support", True, "fp32 is always supported")
+    # 2B.1-I/§10: a CHEAP GPU Hopkins capability smoke — a failed probe
+    # blocks the formal run BEFORE expensive Tier A/B work starts.
+    if cuda_available:
+        try:
+            from openlithohub._utils.hopkins import simulate_aerial_image_hopkins
+            from openlithohub.simulators.hopkins_sim import HopkinsParams
+
+            params = HopkinsParams(wavelength_nm=13.5, na=0.33, pixel_size_nm=1.0)
+            grid = 128
+            mask = torch.ones((grid, grid), device="cuda:0")
+            aerial = simulate_aerial_image_hopkins(mask, params=params)
+            torch.cuda.synchronize("cuda:0")
+            ok = bool(torch.isfinite(aerial).all())
+            check("Tier C GPU Hopkins smoke", ok, f"grid={grid}")
+        except Exception as exc:  # noqa: BLE001 — capability probe
+            check("Tier C GPU Hopkins smoke", False, repr(exc)[:200])
     check(
         "TF32 policy",
         True,
@@ -113,9 +129,13 @@ def main() -> int:
     check("benchmark capabilities", True, "finite-support blur + hopkins sim present")
 
     cuda_required = any(tier.strip() in ("b", "c") for tier in args.tiers.split(","))
-    formal_blockers = [name for name, ok, _ in checks if not ok] + (
-        ["CUDA measurement environment unavailable"] if cuda_required and not cuda_available else []
-    )
+    formal_blockers = [name for name, ok, _ in checks if not ok]
+    if cuda_required and not cuda_available:
+        # exact machine-readable marker (§16): automation keys on this text;
+        # printed once by the summary loop below.
+        formal_blockers.append(
+            "FORMAL_PUBLICATION_BLOCKED: CUDA measurement environment unavailable"
+        )
 
     print("== Industrial Benchmark v2 preflight ==")
     for name, ok, detail in checks:

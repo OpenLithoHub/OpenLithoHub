@@ -138,6 +138,14 @@ def verify(canonical_root: Path) -> list[str]:
     unknown_config_fields = set(run_config_payload) - known_fields
     if unknown_config_fields:
         _fail(f"run config carries unknown semantic fields: {sorted(unknown_config_fields)}")
+    # 2B.1-D: the environment lock participates in the identity — the
+    # freeze file is the only sanctioned source for its canonical hash.
+    freeze = _load_strict_json(canonical_root / "industrial-v2-distribution-freeze.txt")
+    env_lock = freeze.get("gpu") if isinstance(freeze.get("gpu"), dict) else None
+    if env_lock is None:
+        _fail("distribution freeze has no gpu environment lock")
+    from openlithohub.benchmark.industrial_v2 import gpu_environment_lock_sha256
+
     recomputed = compute_run_identity_v2(
         RunConfigV2(
             **{
@@ -151,6 +159,7 @@ def verify(canonical_root: Path) -> list[str]:
         core_sha256=source_hashes["core"],
         claim_generator_sha256=source_hashes["claim_generator"],
         verifier_sha256=source_hashes["verifier"],
+        environment_lock_sha256=gpu_environment_lock_sha256(env_lock),
     )
     recorded_identity = run_config.get("run_identity")
     recorded_identity = recorded_identity or manifest.get("run_identity")
@@ -159,13 +168,24 @@ def verify(canonical_root: Path) -> list[str]:
 
     # environment lock completeness (§9, B2-D).  The freeze file carries
     # the full environment record with the gpu lock nested inside.
-    freeze = _load_strict_json(canonical_root / "industrial-v2-distribution-freeze.txt")
-    env_lock = freeze.get("gpu") if isinstance(freeze.get("gpu"), dict) else None
-    if env_lock is None:
-        _fail("distribution freeze has no gpu environment lock")
     for key in GPU_LOCK_REQUIRED_KEYS:
         if key not in env_lock:
             _fail(f"GPU environment lock missing required key {key!r} (B2-D)")
+    # 2B.1-E: formal CUDA provenance requires NONEMPTY driver + cuDNN.
+    if env_lock.get("available"):
+        if not env_lock.get("driver_version"):
+            _fail("formal CUDA family has empty driver_version (2B.1-E)")
+        if not env_lock.get("cudnn_version"):
+            _fail("formal CUDA family has empty cudnn_version (2B.1-E)")
+        if not env_lock.get("torch_cuda_version"):
+            _fail("formal CUDA family has empty torch_cuda_version (2B.1-E)")
+
+    # run config carries full data-selection semantics (§17)
+    for required in ("fixture_sha256", "layer"):
+        if not run_config_payload.get(required):
+            _fail(f"run config missing {required!r} (2B.1-A/B)")
+    if run_config.get("environment_lock_sha256") != gpu_environment_lock_sha256(env_lock):
+        _fail("run-config environment_lock_sha256 does not match the freeze")
 
     # tiers: correctness precedes performance; GPU rows fully locked (§16-18)
     claims: list[str] = []
