@@ -292,9 +292,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install package
+      - name: Install package + pytest (protocol tests only — no dev stack)
         run: |
-          SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0 pip install -e ".[server,workflow]"
+          SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0 pip install -e ".[server,workflow]" pytest
       - name: V2 protocol tests (identity/manifest/timing/correctness gates)
         run: python -m pytest -q tests/test_benchmark/test_industrial_v2.py
       - name: CPU-host preflight must refuse formal publication
