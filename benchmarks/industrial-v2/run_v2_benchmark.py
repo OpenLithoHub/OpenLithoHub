@@ -145,9 +145,7 @@ def tier_a_worker_once(
 
     # exact candidate parity: the index may only say "possibly relevant",
     # so the candidate TUPLES must be identical
-    candidate_parity = all(
-        reference_rows[y] == indexed_rows[y] for y in rows
-    )
+    candidate_parity = all(reference_rows[y] == indexed_rows[y] for y in rows)
     candidate_count = sum(len(v) for v in indexed_rows.values())
     reference_count = sum(len(v) for v in reference_rows.values())
     flat_scan_equivalent = rows.__len__() * flat_count
@@ -183,9 +181,7 @@ def tier_a_worker_once(
         "candidate_polygon_count": candidate_count,
         "reference_polygon_count": reference_count,
         "flat_scans_avoided_pct": round(
-            100.0 * (1 - candidate_count / flat_scan_equivalent)
-            if flat_scan_equivalent
-            else 0.0,
+            100.0 * (1 - candidate_count / flat_scan_equivalent) if flat_scan_equivalent else 0.0,
             4,
         ),
         "rows_visited": side,
