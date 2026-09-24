@@ -147,7 +147,12 @@ class RunConfigV2:
     hopkins_grid: int = 1024
     warmup_count: int = 2
     repeat_count: int = 5
+    layer: str = "66:44"
+    """GDS layer selection (sky130hd li1). Changing the layer changes the
+    measured workload, so it MUST change the run identity (2B.1-B)."""
     fixture_sha256: str = ""
+    """SHA-256 of the exact GDS bytes (2B.1-A). Identical args over
+    different fixture bytes must produce a different run identity."""
 
     def to_payload(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -167,15 +172,18 @@ def compute_run_identity_v2(
     core_sha256: str,
     claim_generator_sha256: str,
     verifier_sha256: str,
+    environment_lock_sha256: str = "",
 ) -> str:
-    """Content-addressed v2 run identity (§8).
+    """Content-addressed v2 run identity (§8, 2B.1-D).
 
     Binds ONE sha256 to the measurement commit, the exact bytes of the
-    harness/core/generator/verifier, the fixture identity and EVERY
-    semantic knob in the run config.  Any performance-relevant change —
-    code bytes, GPU model, driver, CUDA build, dtype, TF32, determinism,
-    batch, tile, halo, compile mode, Hopkins params, repeat/warmup
-    counts — changes the identity.
+    harness/core/generator/verifier, the GPU environment lock hash
+    (model/driver/CUDA build/Torch build/VRAM/topology/TF32), the fixture
+    identity and EVERY semantic knob in the run config.  Any
+    performance-relevant change — code bytes, GPU model, driver, CUDA
+    build, dtype, TF32, determinism, batch, tile, halo, compile mode,
+    Hopkins params, repeat/warmup counts, GDS bytes or layer — changes
+    the identity.
     """
     payload = {
         "schema": RUN_CONFIG_SCHEMA,
@@ -186,12 +194,42 @@ def compute_run_identity_v2(
             "claim_generator": claim_generator_sha256,
             "verifier": verifier_sha256,
         },
+        "environment_lock_sha256": environment_lock_sha256,
         "run_config": run_config.to_payload(),
     }
     return hashlib.sha256(canonical_json(payload).encode()).hexdigest()
 
 
 # ---- GPU environment lock (§9) ------------------------------------------------
+
+
+def gpu_environment_lock_sha256(lock: Mapping[str, Any]) -> str:
+    """Hash the canonicalized environment lock so it can enter the run
+    identity (2B.1-D)."""
+    return hashlib.sha256(canonical_json(dict(lock)).encode()).hexdigest()
+
+
+def nvidia_driver_version() -> str:
+    """Driver version from fixed-argv nvidia-smi, or "" when unavailable
+    (empty driver is acceptable ONLY on CPU-only hosts, where canonical
+    GPU publication is already blocked)."""
+    import shutil
+    import subprocess
+
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi is None:
+        return ""
+    try:
+        out = subprocess.run(  # noqa: S603 — fixed argv, no user input
+            [nvidia_smi, "--query-gpu=driver_version", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
+        return out.stdout.strip().splitlines()[0].strip() if out.stdout.strip() else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
 
 
 def gpu_environment_lock() -> dict[str, Any]:
@@ -210,7 +248,7 @@ def gpu_environment_lock() -> dict[str, Any]:
         "available": cuda_available,
         "count": torch.cuda.device_count() if cuda_available else 0,
         "devices": [],
-        "driver_version": "",
+        "driver_version": nvidia_driver_version() if cuda_available else "",
         "torch_cuda_version": torch.version.cuda or "",
         # torch.backends.cudnn.version() is untyped upstream; the value is
         # recorded verbatim (or None) and never used numerically.
@@ -270,6 +308,166 @@ def formal_publication_blockers(
         if row is not None and row.get("device_requires_cuda") and not env_lock.get("available"):
             blockers.append(f"tier {tier.upper()} requires CUDA; environment lacks it")
     return blockers
+
+
+def build_canonical_family_in_workspace(
+    *,
+    workspace_dir: str | Path,
+    run_config: RunConfigV2,
+    run_identity: str,
+    measurement_commit: str,
+    source_hashes: Mapping[str, str],
+    environment_lock: Mapping[str, Any],
+    tier_rows: Mapping[str, Mapping[str, Any]],
+    tracked_tree_clean: bool,
+    provisional: bool,
+) -> list[str]:
+    """Map a formal run workspace onto the exact seven-member canonical
+    family, with manifest + SHA256SUMS closure — fail-closed (2B.1-J/§12).
+
+    Refuses (returns blockers, writes NOTHING into the family) on: dirty
+    tree, provisional mode, non-SUCCESS tier, failed correctness,
+    insufficient repeats, incomplete environment lock, missing fixture
+    hash or layer, incomplete window ladder, unsynchronized GPU timing,
+    or missing GPU memory facts.  The only sanctioned path from a formal
+    workspace to ``promote_canonical_family()``.
+    """
+    blockers: list[str] = []
+    workspace = Path(workspace_dir)
+    if not tracked_tree_clean:
+        blockers.append("dirty tracked tree cannot build the canonical family (B2-A)")
+    if provisional:
+        blockers.append("provisional run cannot build the canonical family")
+    if not run_config.fixture_sha256:
+        blockers.append("run config has no fixture sha256 (B2-A)")
+    if not run_config.layer:
+        blockers.append("run config has no GDS layer selection (2B.1-B)")
+
+    env_lock = dict(environment_lock)
+    lock_hash = gpu_environment_lock_sha256(env_lock)
+    lock_required = (
+        "available",
+        "count",
+        "devices",
+        "driver_version",
+        "torch_cuda_version",
+        "torch_version",
+        "tf32_matmul",
+        "tf32_cudnn",
+    )
+    for key in lock_required:
+        if key not in env_lock:
+            blockers.append(f"environment lock incomplete: missing {key!r}")
+    if env_lock.get("available") and not env_lock.get("driver_version"):
+        blockers.append("formal CUDA run requires a nonempty driver_version (2B.1-E)")
+
+    identity = compute_run_identity_v2(
+        run_config,
+        measurement_commit=measurement_commit,
+        harness_sha256=source_hashes.get("harness", ""),
+        core_sha256=source_hashes.get("core", ""),
+        claim_generator_sha256=source_hashes.get("claim_generator", ""),
+        verifier_sha256=source_hashes.get("verifier", ""),
+        environment_lock_sha256=lock_hash,
+    )
+    if identity != run_identity:
+        blockers.append(
+            f"workspace identity {run_identity[:16]}… does not match recomputed "
+            f"{identity[:16]}… (stale workspace or drifted config)"
+        )
+
+    expected_windows = sorted(run_config.window_sizes)
+    tier_payloads: dict[str, dict[str, Any]] = {}
+    tier_members = {
+        "a": ("tier-a.json", "industrial-v2-index.json"),
+        "b": ("tier-b.json", "industrial-v2-gpu-runtime.json"),
+        "c": ("tier-c.json", "industrial-v2-hopkins.json"),
+    }
+    for tier, (_workspace_name, canonical_name) in tier_members.items():
+        row = tier_rows.get(tier)
+        if row is None:
+            blockers.append(f"tier {tier.upper()} has no workspace row")
+            continue
+        if row.get("status") != StatusV2.SUCCESS.value:
+            blockers.append(f"tier {tier.upper()} status {row.get('status')!r} is not SUCCESS")
+        if not row.get("correctness_witness_pass"):
+            blockers.append(f"tier {tier.upper()} correctness witness did not pass (B2-G)")
+        if tier in ("a", "b"):
+            windows_seen = sorted(w.get("window", 0) for w in row.get("window_rows", []))
+            if windows_seen != expected_windows:
+                blockers.append(
+                    f"tier {tier.upper()} window ladder incomplete: "
+                    f"{windows_seen} != {expected_windows} (2B.1-G)"
+                )
+        if tier == "b":
+            for wrow in row.get("window_rows", []):
+                if wrow.get("timing_method") != TIMING_CUDA_SYNC:
+                    blockers.append(
+                        f"tier B window {wrow.get('window')}: unsynchronized GPU timing (B2-E)"
+                    )
+                for key in ("max_memory_allocated", "max_memory_reserved", "host_peak_rss_bytes"):
+                    if key not in wrow:
+                        blockers.append(
+                            f"tier B window {wrow.get('window')}: missing {key!r} (§15)"
+                        )
+                if int(wrow.get("repeat_count") or 0) < HEADLINE_MIN_REPEATS:
+                    blockers.append(
+                        f"tier B window {wrow.get('window')}: insufficient repeats (B2)"
+                    )
+        repeat_level = row.get("repeat_level")
+        if repeat_level is not None and int(repeat_level) < HEADLINE_MIN_REPEATS:
+            blockers.append(f"tier {tier.upper()} has insufficient repeats")
+        tier_payloads[canonical_name] = {
+            "schema": SCHEMA_NAME,
+            "run_identity": run_identity,
+            "tier": tier,
+            "correctness_witness_pass": bool(row.get("correctness_witness_pass")),
+            "claim_level": ClaimLevelV2.REPRODUCED_INTERNAL.value,
+            "rows": row.get("window_rows", [row]),
+            "aggregate": {
+                k: v
+                for k, v in row.items()
+                if k.startswith("aggregate_") or k in ("status", "repeats_recorded")
+            },
+        }
+
+    if blockers:
+        return blockers
+
+    # ---- write the family (all gates closed) --------------------------
+    workspace = Path(workspace_dir)
+    write_strict_json(
+        workspace / "industrial-v2-run-config.json",
+        {
+            "schema": RUN_CONFIG_SCHEMA,
+            "measurement_commit": measurement_commit,
+            "tracked_tree_clean": tracked_tree_clean,
+            "provisional": False,
+            "source_hashes": dict(source_hashes),
+            "environment_lock_sha256": lock_hash,
+            "run_identity": run_identity,
+            "run_config": run_config.to_payload(),
+        },
+    )
+    write_strict_json(
+        workspace / "industrial-v2-distribution-freeze.txt",
+        {"gpu": dict(env_lock), "environment_lock_sha256": lock_hash},
+    )
+    for canonical_name, payload in tier_payloads.items():
+        write_strict_json(workspace / canonical_name, payload)
+
+    members = sorted(CANONICAL_FAMILY - {"manifest.json", "SHA256SUMS.txt"})
+    manifest = {
+        "run_identity": run_identity,
+        "members": [{"name": name, "bytes": (workspace / name).stat().st_size} for name in members],
+    }
+    write_strict_json(workspace / "manifest.json", manifest)
+    lines = [
+        f"{sha256_file(workspace / name)}  {name}"
+        for name in sorted(CANONICAL_FAMILY - {"SHA256SUMS.txt"})
+    ]
+    (workspace / "SHA256SUMS.txt").write_text("\n".join(lines) + "\n")
+    return []
 
 
 def promote_canonical_family(
@@ -363,6 +561,15 @@ def cuda_synchronized_wall(fn: Callable[[], Any], device: str) -> tuple[Any, flo
     return result, time.perf_counter() - start
 
 
+def host_peak_rss_bytes() -> int:
+    """Platform-normalized host peak RSS in bytes (§15)."""
+    import resource
+    import sys
+
+    value = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    return value if sys.platform == "darwin" else value * 1024
+
+
 def reset_gpu_peak_stats(device: str) -> None:
     import torch
 
@@ -401,26 +608,54 @@ class BatchedFiniteSupportBlur:
         axis = torch.arange(2 * radius + 1, dtype=torch.float32) - radius
         profile = torch.exp(-(axis**2) / (2.0 * sigma**2))
         profile = profile / profile.sum()
-        self.kx = profile.reshape(1, 1, 1, -1)
-        self.ky = profile.reshape(1, 1, -1, 1)
+        self._kx = profile.reshape(1, 1, 1, -1)
+        self._ky = profile.reshape(1, 1, -1, 1)
+        self._kernel_cache: dict[str, tuple[torch.Tensor, torch.Tensor]] = {}
+
+    def to(self, device: str) -> BatchedFiniteSupportBlur:
+        """Pre-position kernels on a device BEFORE the timed region
+        (2B.1-H: no uncontrolled per-tile kernel reconstruction inside the
+        timed path)."""
+        self._kernels_for(torch.device(device))
+        return self
+
+    def _kernels_for(self, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Frozen coefficients per device, built once and cached.
+
+        Single authority for the window and batched paths: the same
+        kernels execute on whatever device the input occupies — a CUDA
+        input can never meet a CPU kernel (2B.1-H).
+        """
+        key = str(device)
+        cached = self._kernel_cache.get(key)
+        if cached is None:
+            cached = (self._kx.to(device), self._ky.to(device))
+            self._kernel_cache[key] = cached
+        return cached
 
     def window_forward(self, tile: torch.Tensor) -> torch.Tensor:
+        kx, ky = self._kernels_for(tile.device)
         x = tile.float().unsqueeze(0).unsqueeze(0)
-        x = torch.nn.functional.conv2d(x, self.kx, padding=(0, self.radius))
-        x = torch.nn.functional.conv2d(x, self.ky, padding=(self.radius, 0))
+        x = torch.nn.functional.conv2d(x, kx, padding=(0, self.radius))
+        x = torch.nn.functional.conv2d(x, ky, padding=(self.radius, 0))
         return x.squeeze(0).squeeze(0)
 
     def batch_forward(self, batch: torch.Tensor) -> torch.Tensor:
         if batch.dim() != 4 or batch.shape[1] != 1:
             raise ValueError(f"batch_forward expects (B, 1, H, W), got {tuple(batch.shape)}")
+        kx, ky = self._kernels_for(batch.device)
         x = batch.float()
-        x = torch.nn.functional.conv2d(x, self.kx, padding=(0, self.radius))
-        x = torch.nn.functional.conv2d(x, self.ky, padding=(self.radius, 0))
+        x = torch.nn.functional.conv2d(x, kx, padding=(0, self.radius))
+        x = torch.nn.functional.conv2d(x, ky, padding=(self.radius, 0))
         return x
 
 
 __all__ = [
     "BatchedFiniteSupportBlur",
+    "build_canonical_family_in_workspace",
+    "gpu_environment_lock_sha256",
+    "host_peak_rss_bytes",
+    "nvidia_driver_version",
     "CANONICAL_FAMILY",
     "ClaimLevelV2",
     "FLOAT_TOLERANCE_BY_DTYPE",
