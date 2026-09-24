@@ -102,7 +102,7 @@ def summarize_repeats(values: list[float]) -> dict[str, float | int]:
 
 
 def tier_a_worker_once(
-    gds: str, window: int, tile: int, halo: int, pixel_nm: float
+    gds: str, window: int, tile: int, halo: int, pixel_nm: float, layer: str = LAYER
 ) -> dict[str, Any]:
     """One Tier A measurement: indexed vs reference window discovery on a
     real GDS, centered die-crop ladder window, EXACT parity as a gate."""
@@ -113,40 +113,55 @@ def tier_a_worker_once(
     from openlithohub.streaming.geometry import BoundingBox
     from openlithohub.streaming.vector_runs import KLayoutAlignedRunSource
 
-    build_start = time.perf_counter()
-    source = KLayoutAlignedRunSource.from_file(gds, pixel_size_nm=pixel_nm)
-    parse_index_wall = time.perf_counter() - build_start
-    stats = source.index_stats()
+    # TWO independent source instances: the reference pass must never warm
+    # the indexed path's row cache (that would measure cache reads, not
+    # first-touch discovery — the exact cost G1 removes).
+    parse_start = time.perf_counter()
+    indexed = KLayoutAlignedRunSource.from_file(gds, pixel_size_nm=pixel_nm, layer=layer)
+    parse_index_wall = time.perf_counter() - parse_start
+    stats = indexed.index_stats()
+    reference = KLayoutAlignedRunSource.from_file(gds, pixel_size_nm=pixel_nm, layer=layer)
 
-    side = min(window, source.shape[0], source.shape[1])
-    y0 = max(0, (source.shape[0] - side) // 2)
-    x0 = max(0, (source.shape[1] - side) // 2)
+    side = min(window, indexed.shape[0], indexed.shape[1])
+    y0 = max(0, (indexed.shape[0] - side) // 2)
+    x0 = max(0, (indexed.shape[1] - side) // 2)
     bbox = BoundingBox(x0, y0, x0 + side, y0 + side)
+    rows = list(range(bbox.y0, bbox.y1))
+    flat_count = len(indexed._flat)
 
-    # reference (full-flat) row candidate path
+    # reference: FULL-FLAT scan per unseen row (the pre-G1 bottleneck)
     reference_start = time.perf_counter()
-    reference_polys = 0
-    for y in range(bbox.y0, bbox.y1):
-        reference_polys += len(source._polygons_for_row_reference(y))
+    reference_rows: dict[int, tuple] = {}
+    for y in rows:
+        reference_rows[y] = tuple(
+            poly for poly in reference._flat if poly.bbox[1] <= y < poly.bbox[3]
+        )
     reference_wall = time.perf_counter() - reference_start
 
-    # indexed row candidate path
+    # indexed: band buckets + row cache (first touch on a fresh instance)
     indexed_start = time.perf_counter()
-    candidate_polys = 0
-    for y in range(bbox.y0, bbox.y1):
-        candidate_polys += len(source.candidates_for_row(y))
+    indexed_rows = {y: indexed.candidates_for_row(y) for y in rows}
     indexed_wall = time.perf_counter() - indexed_start
+
+    # exact candidate parity: the index may only say "possibly relevant",
+    # so the candidate TUPLES must be identical
+    candidate_parity = all(
+        reference_rows[y] == indexed_rows[y] for y in rows
+    )
+    candidate_count = sum(len(v) for v in indexed_rows.values())
+    reference_count = sum(len(v) for v in reference_rows.values())
+    flat_scan_equivalent = rows.__len__() * flat_count
 
     # window queries + EXACT parity (runs, ids, contributors, raster)
     query_start = time.perf_counter()
-    runs = list(source.iter_owned_runs_for_bbox(bbox))
+    runs = list(indexed.iter_owned_runs_for_bbox(bbox))
     query_wall = time.perf_counter() - query_start
-    raster = source.read_window(bbox).numpy()
-    reference_source = KLayoutAlignedRunSource.from_file(gds, pixel_size_nm=pixel_nm)
-    reference_raster = reference_source.read_window(bbox).numpy()
-    reference_runs = list(reference_source.iter_owned_runs_for_bbox(bbox))
+    raster = indexed.read_window(bbox).numpy()
+    reference_raster = reference.read_window(bbox).numpy()
+    reference_runs = list(reference.iter_owned_runs_for_bbox(bbox))
     parity_pass = (
-        np.array_equal(raster, reference_raster)
+        candidate_parity
+        and np.array_equal(raster, reference_raster)
         and len(runs) == len(reference_runs)
         and all(
             (a.parent.run_id, a.parent.y, a.x0, a.x1, a.parent.contributor_object_ids)
@@ -160,14 +175,18 @@ def tier_a_worker_once(
         "parse_index_wall_s": parse_index_wall,
         "reference_row_wall_s": reference_wall,
         "indexed_row_wall_s": indexed_wall,
+        "first_touch_speedup_x": round(reference_wall / indexed_wall, 4) if indexed_wall else None,
         "query_wall_s": query_wall,
-        "flat_polygon_count": stats["polygons"],
+        "flat_polygon_count": flat_count,
         "index_entries": stats["entries"],
         "index_bands": stats["bands"],
-        "candidate_polygon_count": candidate_polys,
-        "reference_polygon_count": reference_polys,
-        "candidate_reduction_pct": round(
-            100.0 * (1 - candidate_polys / reference_polys) if reference_polys else 0.0, 4
+        "candidate_polygon_count": candidate_count,
+        "reference_polygon_count": reference_count,
+        "flat_scans_avoided_pct": round(
+            100.0 * (1 - candidate_count / flat_scan_equivalent)
+            if flat_scan_equivalent
+            else 0.0,
+            4,
         ),
         "rows_visited": side,
         "owned_run_count": len(runs),
@@ -307,7 +326,7 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     sim_config = SimulatorConfig(
         wavelength_nm=cfg["hopkins_wavelength_nm"],
         na=cfg["hopkins_na"],
-        sigma_outer=cfg["hopkins_sigma_outer"],
+        sigma=cfg["hopkins_sigma_outer"],
         sigma_inner=cfg["hopkins_sigma_inner"],
         pixel_size_nm=cfg["pixel_nm"],
     )
@@ -315,9 +334,10 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     mask = (np.random.default_rng(0).random((grid, grid)) > 0.5).astype(np.float32)
     simulator = HopkinsSimulator(sim_config)
     start = time.perf_counter()
-    aerial = simulator.simulate(torch.from_numpy(mask))
+    result = simulator.simulate(torch.from_numpy(mask))
     cpu_wall = time.perf_counter() - start
-    finite = bool(np.isfinite(aerial.numpy()).all())
+    aerial = np.asarray(result.aerial.cpu().numpy())
+    finite = bool(np.isfinite(aerial).all())
     return {
         "grid": grid,
         "cpu_wall_s": cpu_wall,
@@ -336,9 +356,11 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def worker_entry(args: argparse.Namespace) -> int:
     """Fresh-process worker: one repeat, strict JSON row on stdout."""
-    if args.tier == "a":
-        row = tier_a_worker_once(args.gds, args.window, args.tile, args.halo, args.pixel_nm)
-    elif args.tier == "b":
+    if args.worker_tier == "a":
+        row = tier_a_worker_once(
+            args.gds, args.window, args.tile, args.halo, args.pixel_nm, args.layer
+        )
+    elif args.worker_tier == "b":
         row = tier_b_worker_once(
             {
                 "gds": args.gds,
@@ -386,6 +408,7 @@ def main() -> int:
     parser.add_argument("--hopkins-sigma-outer", type=float, default=0.9)
     parser.add_argument("--hopkins-sigma-inner", type=float, default=0.6)
     parser.add_argument("--hopkins-grid", type=int, default=1024)
+    parser.add_argument("--layer", default=LAYER, help="GDS layer as LAYER:DTYPE")
     parser.add_argument("--windows", default="4096,8192,16384,32768")
     parser.add_argument(
         "--out-root",
@@ -395,8 +418,8 @@ def main() -> int:
     parser.add_argument("--provisional", action="store_true", default=True)
     parser.add_argument("--formal", action="store_true", help="require a clean tracked tree")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--worker-tier", default="a")
-    parser.add_argument("--worker-window", type=int, default=4096)
+    parser.add_argument("--worker-tier", default="a", help=argparse.SUPPRESS)
+    parser.add_argument("--window", type=int, default=4096, help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     if args.worker:
@@ -433,7 +456,14 @@ def main() -> int:
         warmup_count=args.warmup,
         repeat_count=args.repeats,
     )
-    identity = compute_run_identity_v2(run_config, measurement_commit=commit, **source_hashes)
+    identity = compute_run_identity_v2(
+        run_config,
+        measurement_commit=commit,
+        harness_sha256=source_hashes["harness"],
+        core_sha256=source_hashes["core"],
+        claim_generator_sha256=source_hashes["claim_generator"],
+        verifier_sha256=source_hashes["verifier"],
+    )
     workspace = Path(args.out_root) / "runs" / identity
     workspace.mkdir(parents=True, exist_ok=True)
 
@@ -492,7 +522,7 @@ def run_tier(
     median/p10/p90/n aggregation (never best-of-N)."""
     results: list[dict[str, Any]] = []
     total = max(1, args.warmup + args.repeats)
-    for index in range(total):
+    for _repeat_index in range(total):
         cmd = [
             sys.executable,
             str(HARNESS_PATH),
@@ -506,11 +536,9 @@ def run_tier(
             "--dtype",
             args.dtype,
             "--window",
-            str(
-                args.worker_window
-                if index < args.warmup
-                else min(int(run_config.window_sizes[0]), args.worker_window)
-            ),
+            # warmup and measured repeats run the SAME window; warmup
+            # differs only in that its timing is discarded.
+            str(min(int(run_config.window_sizes[0]), 8192)),
             "--tile",
             str(args.tile),
             "--halo",
@@ -519,6 +547,8 @@ def run_tier(
             str(args.batch),
             "--pixel-nm",
             str(args.pixel_nm),
+            "--layer",
+            args.layer,
         ]
         proc = subprocess.run(  # noqa: S603 — fixed-argv worker re-invocation
             cmd, capture_output=True, text=True, timeout=3600
@@ -573,10 +603,12 @@ def run_tier(
         row.update(
             {
                 "index_build_wall_s": first.get("parse_index_wall_s"),
+                "reference_row_wall_s": first.get("reference_row_wall_s"),
+                "indexed_row_wall_s": first.get("indexed_row_wall_s"),
+                "first_touch_speedup_x": first.get("first_touch_speedup_x"),
                 "query_wall_s": first.get("query_wall_s"),
-                "candidate_polygon_count": first.get("candidate_polygon_count"),
                 "flat_polygon_count": first.get("flat_polygon_count"),
-                "candidate_reduction_pct": first.get("candidate_reduction_pct"),
+                "flat_scans_avoided_pct": first.get("flat_scans_avoided_pct"),
                 "index_entries": first.get("index_entries"),
                 "rows_visited": first.get("rows_visited"),
                 "owned_run_count": first.get("owned_run_count"),
