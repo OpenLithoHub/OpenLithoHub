@@ -80,4 +80,9 @@ proof_artifacts/p054/external/
 benchmarks/results/industrial/fixtures/
 benchmarks/results/industrial/checkpoints/
 benchmarks/results/industrial/runs/
+# v2: fixtures/mutable run workspaces are host-local; only the verified
+# canonical family (industrial-v2-*.json + manifest + SHA256SUMS) enters git.
+benchmarks/results/industrial-v2/fixtures/
+benchmarks/results/industrial-v2/runs/
+benchmarks/results/industrial-v2/tmp/
 coverage.xml
