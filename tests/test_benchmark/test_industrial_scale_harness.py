@@ -255,9 +255,12 @@ def test_full_die_row_runs_out_of_core(
     assert row["full_die"] is True, "1024 window covers the whole 256px die"
 
 
-def test_lane_b_multi_worker_recorded_unsupported_until_s3(
+def test_lane_b_multi_worker_executes_with_topology(
     prepared_fixture: tuple[Path, Path, str], tmp_path: Path
 ) -> None:
+    """Lane B with 3 CPU-emulated workers executes the sharded scheduler;
+    the row records the worker topology and bounded-queue facts.  (This
+    proves scheduler/ownership semantics ONLY — never GPU validation.)"""
     manifest_path, gds, _ = prepared_fixture
     out_root = tmp_path / "scale-b3"
     proc = _run_harness(
@@ -273,6 +276,8 @@ def test_lane_b_multi_worker_recorded_unsupported_until_s3(
         "128",
         "--repeats",
         "1",
+        "--tile",
+        "64",
         "--device",
         "cpu",
         "--out-root",
@@ -281,9 +286,12 @@ def test_lane_b_multi_worker_recorded_unsupported_until_s3(
     assert proc.returncode == 0, proc.stderr
     workspace = Path(json.loads(proc.stdout)["workspace"])
     row = json.loads((workspace / "row-B_MULTI_GPU_SCALING-128.json").read_text())
-    assert row["status"] == "UNSUPPORTED"
-    assert "PR-S3" in row["reason"]
-    assert "repeat_count" not in row or row.get("aggregate_n") in (None, 0)
+    assert row["status"] == "SUCCESS"
+    assert row["worker_count"] == 3
+    first = row["per_repeat"][0]
+    assert sum(first["worker_counts"].values()) == first["n_tiles"]
+    assert all(count > 0 for count in first["worker_counts"].values())
+    assert first["max_resident_results"] <= 3 * 64
 
 
 def test_harness_refuses_gds_manifest_mismatch(
@@ -342,3 +350,48 @@ def test_environment_lock_hash_is_stable_and_sensitive() -> None:
     sha = scale_environment_lock_sha256(lock)
     assert sha == scale_environment_lock_sha256(dict(lock))
     assert sha != scale_environment_lock_sha256({**lock, "count": (lock["count"] or 0) + 1})
+
+
+def test_lane_b_worker_count_parity(
+    prepared_fixture: tuple[Path, Path, str], tmp_path: Path
+) -> None:
+    """Charter §10.4 in CI: lane B at 1/2/3 CPU-emulated workers must
+    produce byte-identical out-of-core outputs for the same run config
+    (same fixture, same tile plan, same forward)."""
+    manifest_path, gds, _ = prepared_fixture
+    digests = []
+    for workers in (1, 2, 3):
+        out_root = tmp_path / f"scale-parity-{workers}"
+        proc = _run_harness(
+            "--fixture-manifest",
+            str(manifest_path),
+            "--gds",
+            str(gds),
+            "--lanes",
+            "b",
+            "--worker-count",
+            str(workers),
+            "--windows",
+            "128",
+            "--tile",
+            "32",
+            "--repeats",
+            "1",
+            "--warmup",
+            "0",
+            "--device",
+            "cpu",
+            "--out-root",
+            str(out_root),
+        )
+        assert proc.returncode == 0, proc.stderr
+        workspace = Path(json.loads(proc.stdout)["workspace"])
+        row = json.loads((workspace / "row-B_MULTI_GPU_SCALING-128.json").read_text())
+        assert row["status"] == "SUCCESS"
+        import hashlib
+
+        output = workspace / "w128-r0.npy"
+        digests.append(hashlib.sha256(output.read_bytes()).hexdigest())
+    assert digests[0] == digests[1] == digests[2], (
+        "1/2/3-worker runs must produce byte-identical out-of-core outputs"
+    )

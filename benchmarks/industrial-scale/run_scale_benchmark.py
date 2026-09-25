@@ -145,6 +145,16 @@ class ProfileUnavailableError(Exception):
     pass
 
 
+def _multi_worker_module():
+    import sys
+
+    if str(HARNESS_PATH.parent) not in sys.path:
+        sys.path.insert(0, str(HARNESS_PATH.parent))
+    import multi_worker
+
+    return multi_worker
+
+
 # ---- full-layout firewall (charter §Full-layout firewall) ------------------------
 
 
@@ -236,6 +246,74 @@ def stream_once(
     }
 
 
+def stream_once_multi(
+    *,
+    source: Any,
+    forward_fn: Any,
+    sink: Any,
+    tile: int,
+    halo: int,
+    queue_depth: int,
+    worker_count: int,
+    device_backend: str,
+    gpu_count: int,
+) -> dict[str, Any]:
+    """One bounded multi-worker streaming execution (lane B).  Each tile
+    is owned by exactly one worker; commits are deterministic and
+    exactly-once (charter §S6.2).  CPU hosts run cpu-worker-emulation;
+    CUDA hosts bind worker i to cuda:(i mod gpu_count)."""
+    import resource
+
+    import torch
+
+    multi_worker = _multi_worker_module()
+
+    devices_used: list[str] = []
+
+    def device_for_worker(index: int) -> str:
+        if device_backend == "cuda" and gpu_count > 0:
+            device = f"cuda:{index % gpu_count}"
+        else:
+            device = "cpu"
+        devices_used.append(device)
+        return device
+
+    report = multi_worker.run_multi_worker_stream(
+        source=source,
+        sink=sink,
+        forward_fn=forward_fn,
+        core_size=tile,
+        halo_px=halo,
+        worker_count=worker_count,
+        queue_depth=queue_depth,
+        device_for_worker=device_for_worker,
+    )
+    rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    peaks: dict[str, int] = {}
+    per_gpu: dict[str, dict[str, int]] = {}
+    for device in sorted(set(devices_used)):
+        if device.startswith("cuda"):
+            allocated = int(torch.cuda.max_memory_allocated(device))
+            reserved = int(torch.cuda.max_memory_reserved(device))
+            per_gpu[device] = {
+                "max_memory_allocated": allocated,
+                "max_memory_reserved": reserved,
+            }
+            peaks["max_memory_allocated"] = max(peaks.get("max_memory_allocated", 0), allocated)
+            peaks["max_memory_reserved"] = max(peaks.get("max_memory_reserved", 0), reserved)
+    return {
+        "wall_s": report.wall_s,
+        "host_peak_rss_bytes": rss if sys.platform == "darwin" else rss * 1024,
+        "max_memory_allocated": peaks.get("max_memory_allocated", 0),
+        "max_memory_reserved": peaks.get("max_memory_reserved", 0),
+        "per_gpu": per_gpu,
+        "n_tiles": report.n_tiles,
+        "n_forward_batches": report.n_tiles,
+        "worker_counts": report.worker_counts,
+        "max_resident_results": report.max_resident_results,
+    }
+
+
 def correctness_witness(
     *, gds: str, layer: str, pixel_nm: float, profile: str, radius: int, sigma_nm: float
 ) -> dict[str, Any]:
@@ -308,12 +386,12 @@ def run_window_row(
     queue_depth: int,
     device: str,
     worker_count: int,
+    gpu_count: int,
     lane: str,
     warmup: int,
     repeats: int,
     workspace: Path,
 ) -> dict[str, Any]:
-    del halo  # halo policy is owned by the production spine defaults
     row: dict[str, Any] = {
         "lane": lane,
         "window": window,
@@ -330,10 +408,6 @@ def run_window_row(
     if profile == "P2_HOPKINS_BOUNDED":
         row["status"] = "UNSUPPORTED"
         row["reason"] = "P2 lands with the GPU phase (G4); never faked on CPU"
-        return row
-    if lane == LANE_B and worker_count > 1:
-        row["status"] = "UNSUPPORTED"
-        row["reason"] = "multi-worker scheduler lands in PR-S3; recorded honestly, never faked"
         return row
     if device.startswith("cuda") and not torch_cuda_available():
         row["status"] = "NOT_RUN_ENVIRONMENT"
@@ -362,23 +436,40 @@ def run_window_row(
     forward_fn, batched_fn, _ = resolve_forward(profile, radius, sigma_nm, device)
     from openlithohub.streaming.sinks import MemmapTileSink
 
+    # Lane B uses the sharded executor at EVERY worker count — the T1
+    # baseline must share the exact execution semantics of T2/T3, or the
+    # scaling ratios would compare different code paths.
+    multi_worker = lane == LANE_B
     walls: list[float] = []
     metrics: list[dict[str, Any]] = []
     output_bytes = 0
     for index in range(max(0, warmup) + max(1, repeats)):
         sink_path = workspace / f"w{window}-r{index}.npy"
         sink = MemmapTileSink(source.shape, sink_path, npy=True)
-        one = stream_once(
-            source=source,
-            forward_fn=forward_fn,
-            batched_forward_fn=batched_fn,
-            sink=sink,
-            tile=tile,
-            microbatch=microbatch,
-            queue_depth=queue_depth,
-            device=device,
-            pixel_nm=pixel_nm,
-        )
+        if multi_worker:
+            one = stream_once_multi(
+                source=source,
+                forward_fn=lambda tile_tensor: forward_fn(tile_tensor),
+                sink=sink,
+                tile=tile,
+                halo=halo,
+                queue_depth=queue_depth,
+                worker_count=worker_count,
+                device_backend="cuda" if device.startswith("cuda") else "cpu-worker-emulation",
+                gpu_count=gpu_count,
+            )
+        else:
+            one = stream_once(
+                source=source,
+                forward_fn=forward_fn,
+                batched_forward_fn=batched_fn,
+                sink=sink,
+                tile=tile,
+                microbatch=microbatch,
+                queue_depth=queue_depth,
+                device=device,
+                pixel_nm=pixel_nm,
+            )
         one["output_bytes"] = sink_path.stat().st_size
         if index >= warmup:
             walls.append(one["wall_s"])
@@ -655,6 +746,7 @@ def main() -> int:
                 queue_depth=args.queue_depth,
                 device=args.device,
                 worker_count=args.worker_count,
+                gpu_count=args.gpu_count,
                 lane=lane,
                 warmup=args.warmup,
                 repeats=args.repeats,
