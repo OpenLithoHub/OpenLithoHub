@@ -9,8 +9,14 @@ claim generator's honest metrics.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
+import importlib.util
+import inspect
 import json
+import statistics
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -25,6 +31,19 @@ from openlithohub.benchmark.industrial_v2 import (
     gpu_environment_lock_sha256,
     host_peak_rss_bytes,
 )
+
+REPO = Path(__file__).resolve().parents[2]
+HARNESS_PATH = REPO / "benchmarks" / "industrial-v2" / "run_v2_benchmark.py"
+PROMOTER_PATH = REPO / "scripts" / "promote_industrial_v2_artifacts.py"
+
+
+def _load_module(name: str, path: Path):
+    """Load a repo script (dash-named dirs are not importable packages)."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _identity(cfg: RunConfigV2, env_lock: dict | None = None, **overrides: str) -> str:
@@ -214,6 +233,80 @@ def _window_row(window: int, status: str = "SUCCESS") -> dict:
     }
 
 
+def _tier_c_repeat(warm_wall: float, status: str = "SUCCESS") -> dict:
+    """One fresh-worker Tier C row EXACTLY as the executed worker emits it
+    post-2B.2: one synchronized steady-state observation, cold start as a
+    separate diagnostic, no best-of-N list."""
+    return {
+        "grid": 1024,
+        "cpu_reference_wall_s": None,
+        "gpu_cold_wall_s": 0.9,
+        "gpu_warm_wall_s": warm_wall,
+        "warmup_executions": 2,
+        "timing_observations": 1,
+        "finite_witness": status == "SUCCESS",
+        "cpu_deterministic_witness": status == "SUCCESS",
+        "correctness_witness_pass": status == "SUCCESS",
+        "host_peak_rss_bytes": 3000,
+        "max_memory_allocated": 500,
+        "max_memory_reserved": 800,
+        "timing_method": "cuda_synchronized",
+        "dtype": "fp32",
+        "device": "cuda:0",
+        "device_requires_cuda": True,
+        "status": status,
+    }
+
+
+def _tier_c_aggregate_row(status: str = "SUCCESS") -> dict:
+    """The Tier C row EXACTLY as the driver's _aggregate_window emits it:
+    the claim-bearing median/p10/p90/n aggregate over fresh-worker
+    observations, with the GPU facts the canonical family locks."""
+    measured = [_tier_c_repeat(0.020 + 0.001 * i, status=status) for i in range(5)]
+    row: dict = {
+        "tier": "c",
+        "window": 1024,
+        "repeat_count": len(measured),
+        "warmup_discarded": 2,
+        "correctness_witness_pass": status == "SUCCESS",
+        "claim_level": "REPRODUCED_INTERNAL",
+        "status": status,
+    }
+    for i, repeat in enumerate(measured):
+        row[f"repeat_{i}"] = repeat
+    if status == "SUCCESS":
+        walls = [r["gpu_warm_wall_s"] for r in measured]
+        row.update(
+            {
+                "aggregate_n": len(walls),
+                "aggregate_median_s": statistics.median(walls),
+                "aggregate_p10_s": 0.020,
+                "aggregate_p90_s": 0.024,
+                "grid": 1024,
+                "timing_method": "cuda_synchronized",
+                "device": "cuda:0",
+                "dtype": "fp32",
+                "device_requires_cuda": True,
+                "max_memory_allocated": 500,
+                "max_memory_reserved": 800,
+                "host_peak_rss_bytes": 3000,
+                "warmup_executions": 2,
+                "timing_observations": 1,
+                "gpu_cold_wall_s": 0.9,
+            }
+        )
+    else:
+        row.update(
+            {
+                "aggregate_n": 0,
+                "aggregate_median_s": 0.0,
+                "aggregate_p10_s": 0.0,
+                "aggregate_p90_s": 0.0,
+            }
+        )
+    return row
+
+
 def _formal_workspace(
     tmp_path: Path,
     *,
@@ -293,26 +386,7 @@ def _formal_workspace(
     )
     write_strict_json(
         workspace / "tier-c.json",
-        {
-            "tier": "c",
-            "status": tier_c_status,
-            "correctness_witness_pass": tier_c_status == "SUCCESS",
-            "repeats_recorded": 5,
-            "window_rows": [
-                {
-                    "window": 1024,
-                    "status": tier_c_status,
-                    "repeat_count": 5,
-                    "correctness_witness_pass": tier_c_status == "SUCCESS",
-                    "timing_method": "cuda_synchronized",
-                    "device": "cuda:0",
-                    "dtype": "fp32",
-                    "max_memory_allocated": 500,
-                    "max_memory_reserved": 800,
-                    "host_peak_rss_bytes": 3000,
-                }
-            ],
-        },
+        {**_tier_c_aggregate_row(status=tier_c_status), "repeats_recorded": 5},
     )
     return workspace, run_config, identity, source, env_lock
 
@@ -620,3 +694,461 @@ def test_claim_generator_uses_flat_scans_and_medians(tmp_path: Path, monkeypatch
     assert "candidate_reduction_pct" not in json.dumps(claims)
     batch = by_id["IB2-GPU-BATCH-4096"]
     assert batch["value"] == 2.0, "batching speedup must come from medians 2.0/1.0"
+
+
+# ---- 2B.2-A: Tier B EXECUTES the declared layer (not just declares it) ----
+
+
+def test_tier_b_execution_source_receives_declared_layer(monkeypatch) -> None:
+    """Execution-level: changing 66:44 → 67:20 changes the layer actually
+    passed into KLayoutAlignedRunSource.from_file() by the harness's real
+    source-construction step (the constructor is spied, everything else
+    executes)."""
+    harness = _load_module("run_v2_benchmark", HARNESS_PATH)
+    import openlithohub.streaming.vector_runs as vector_runs
+
+    calls: list[dict] = []
+
+    class SpySource:
+        def __init__(self, shape: tuple[int, int] = (8, 8)) -> None:
+            self.shape = shape
+
+        @classmethod
+        def from_file(
+            cls,
+            path: str,
+            *,
+            pixel_size_nm: float,
+            layer: str | None = None,
+            top_cell: str | None = None,
+        ) -> SpySource:
+            calls.append({"path": str(path), "pixel_size_nm": pixel_size_nm, "layer": layer})
+            return cls()
+
+    monkeypatch.setattr(vector_runs, "KLayoutAlignedRunSource", SpySource)
+
+    base = {"gds": "ibex.gds", "pixel_nm": 1.0}
+    harness._tier_b_execution_source({**base, "layer": "66:44"})
+    harness._tier_b_execution_source({**base, "layer": "67:20"})
+    assert [call["layer"] for call in calls] == ["66:44", "67:20"], (
+        "the executed source constructor must receive the declared layer"
+    )
+    assert all(call["pixel_size_nm"] == 1.0 for call in calls)
+    # the worker body must go through this constructor (never bypass it)
+    assert "_tier_b_execution_source(cfg)" in inspect.getsource(harness.tier_b_worker_once)
+    assert 'from_file(cfg["gds"], pixel_size_nm=cfg["pixel_nm"])' not in inspect.getsource(
+        harness.tier_b_worker_once
+    ), "the layer-less constructor call must stay dead"
+
+
+def test_worker_entry_carries_declared_layer_into_tier_b_cfg(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The declared --layer CLI arg reaches the executed Tier B cfg."""
+    harness = _load_module("run_v2_benchmark", HARNESS_PATH)
+    captured: dict = {}
+
+    def fake_tier_b(cfg: dict) -> dict:
+        captured.update(cfg)
+        return {"status": "NOT_RUN_ENVIRONMENT", "correctness_witness_pass": False}
+
+    monkeypatch.setattr(harness, "tier_b_worker_once", fake_tier_b)
+    args = argparse.Namespace(
+        worker_tier="b",
+        gds="ibex.gds",
+        device="cuda:0",
+        dtype="fp32",
+        layer="67:20",
+        window=64,
+        tile=256,
+        batch=2,
+        pixel_nm=1.0,
+        forward_radius=4,
+        forward_sigma=1.6,
+        hopkins_wavelength_nm=13.5,
+        hopkins_na=0.33,
+        hopkins_sigma_outer=0.9,
+        hopkins_sigma_inner=0.6,
+        hopkins_grid=256,
+    )
+    assert harness.worker_entry(args) == 0
+    assert captured["layer"] == "67:20"
+    out = json.loads(capsys.readouterr().out)
+    assert out["status"] == "NOT_RUN_ENVIRONMENT"
+
+
+# ---- 2B.2-B: Tier C aggregates the ACTUAL GPU warm timing field -----------
+
+
+def test_tier_c_aggregate_uses_gpu_warm_timing_field() -> None:
+    """Blocker B: the claim-bearing Tier C statistic is derived from the
+    executed synchronized GPU steady-state field (gpu_warm_wall_s), not a
+    stale key."""
+    harness = _load_module("run_v2_benchmark", HARNESS_PATH)
+    walls = [0.020, 0.021, 0.022, 0.023, 0.025]
+    measured = [_tier_c_repeat(w) for w in walls]
+    row = harness._aggregate_window("c", 1024, warm=[], measured=measured)
+    assert row["status"] == "SUCCESS"
+    assert row["aggregate_n"] == len(walls)
+    assert row["aggregate_median_s"] == statistics.median(walls)
+    assert row["aggregate_p10_s"] == pytest.approx(harness.percentile(walls, 0.10))
+    assert row["aggregate_p90_s"] == pytest.approx(harness.percentile(walls, 0.90))
+    # GPU row facts the canonical family locks propagate onto the row
+    assert row["timing_method"] == "cuda_synchronized"
+    assert row["device"] == "cuda:0"
+    assert row["timing_observations"] == 1
+    # raw per-repeat observations stay recorded
+    assert [row[f"repeat_{i}"]["gpu_warm_wall_s"] for i in range(len(walls))] == walls
+
+
+def test_tier_c_zero_length_aggregate_cannot_be_success() -> None:
+    """A stale/missing timing key must FAIL the row — a successful formal
+    Tier C artifact can never contain a zero-length timing aggregate."""
+    harness = _load_module("run_v2_benchmark", HARNESS_PATH)
+    measured = [_tier_c_repeat(0.02) for _ in range(5)]
+    for repeat in measured:
+        del repeat["gpu_warm_wall_s"]  # simulate the stale-key worker
+    row = harness._aggregate_window("c", 1024, warm=[], measured=measured)
+    assert row["status"] == "FAILED"
+    assert row["aggregate_n"] == 0
+    assert "stale" in row["reason"]
+    assert "gpu_warm_wall_s" in row["reason"]
+
+
+def test_tier_c_aggregate_n_equals_repeat_count() -> None:
+    """Hostile #3: formal Tier C aggregate has n == repeat_count; a
+    partial aggregate fails the row instead of publishing silently."""
+    harness = _load_module("run_v2_benchmark", HARNESS_PATH)
+    walls = [0.020, 0.021, 0.022, 0.023, 0.024]
+    measured = [_tier_c_repeat(w) for w in walls]
+    row = harness._aggregate_window("c", 1024, warm=[], measured=measured)
+    assert row["repeat_count"] == 5
+    assert row["aggregate_n"] == row["repeat_count"]
+
+    partial = [_tier_c_repeat(w) for w in walls]
+    del partial[4]["gpu_warm_wall_s"]
+    row_partial = harness._aggregate_window("c", 1024, warm=[], measured=partial)
+    assert row_partial["status"] == "FAILED"
+    assert row_partial["aggregate_n"] == 4 != row_partial["repeat_count"]
+
+
+def test_no_stale_or_best_of_n_keys_anywhere_in_harness() -> None:
+    """The stale Tier C key and the best-of-N emission are gone from the
+    executed harness source."""
+    harness = _load_module("run_v2_benchmark", HARNESS_PATH)
+    module_src = inspect.getsource(harness)
+    assert "cpu_wall_s" not in module_src, "stale Tier C timing key must not remain"
+    assert '"warm_walls_s"' not in module_src, "best-of-N wall list must not be emitted"
+    worker_src = inspect.getsource(harness.tier_c_worker_once)
+    assert "min(" not in worker_src, "no best-of-N over in-worker repetitions"
+    assert "cuda_synchronized_wall" in worker_src, (
+        "claim-bearing GPU timing must come through the synchronized helper"
+    )
+
+
+def test_no_best_of_n_enters_tier_c_claim_statistic() -> None:
+    """Hostile #4: the claim-bearing statistic is the median over one
+    observation per fresh worker — a fast outlier minimum can never
+    become the headline number."""
+    harness = _load_module("run_v2_benchmark", HARNESS_PATH)
+    walls = [0.050, 0.010, 0.090, 0.020, 0.080]  # min = 0.010 traps the fast outlier
+    measured = [_tier_c_repeat(w) for w in walls]
+    row = harness._aggregate_window("c", 1024, warm=[], measured=measured)
+    assert row["status"] == "SUCCESS"
+    assert row["aggregate_median_s"] == statistics.median(walls)
+    assert row["aggregate_median_s"] != min(walls)
+    assert row["timing_observations"] == 1, "exactly one observation per fresh worker"
+
+
+def test_builder_refuses_tier_c_aggregate_n_mismatch(tmp_path: Path) -> None:
+    """Authority-level: the canonical family builder refuses a Tier C row
+    whose claim-bearing aggregate is incomplete or insufficient."""
+    workspace, run_config, identity, source, env_lock = _formal_workspace(tmp_path)
+    rows = {
+        "a": json.loads((workspace / "tier-a.json").read_text()),
+        "b": json.loads((workspace / "tier-b.json").read_text()),
+        "c": json.loads((workspace / "tier-c.json").read_text()),
+    }
+    for tampered, why in ((3, "partial aggregate"), (0, "zero-length aggregate")):
+        rows["c"]["aggregate_n"] = tampered
+        blockers = build_canonical_family_in_workspace(
+            workspace_dir=workspace,
+            run_config=run_config,
+            run_identity=identity,
+            measurement_commit="a" * 40,
+            source_hashes=source,
+            environment_lock=env_lock,
+            tier_rows=rows,
+            tracked_tree_clean=True,
+            provisional=False,
+        )
+        assert any("timing aggregate n=" in b for b in blockers), why
+        assert any("insufficient claim-bearing repeats" in b for b in blockers), why
+
+
+# ---- 2B.2-E: operator promotion CLI ----------------------------------------
+
+
+def _workspace_rows(workspace: Path) -> dict[str, dict]:
+    return {
+        tier: json.loads((workspace / f"tier-{tier}.json").read_text()) for tier in ("a", "b", "c")
+    }
+
+
+def _built_formal_workspace(tmp_path: Path) -> tuple[Path, str, dict, dict]:
+    """A formal workspace whose seven-member canonical family was built
+    through the fail-closed builder (the only sanctioned source)."""
+    workspace, run_config, identity, source, env_lock = _formal_workspace(tmp_path)
+    blockers = build_canonical_family_in_workspace(
+        workspace_dir=workspace,
+        run_config=run_config,
+        run_identity=identity,
+        measurement_commit="a" * 40,
+        source_hashes=source,
+        environment_lock=env_lock,
+        tier_rows=_workspace_rows(workspace),
+        tracked_tree_clean=True,
+        provisional=False,
+    )
+    assert blockers == [], blockers
+    return workspace, identity, env_lock, run_config.to_payload()
+
+
+def test_promotion_cli_produces_exactly_seven_members(tmp_path: Path) -> None:
+    """Hostile #7: the operator path promotes EXACTLY the seven canonical
+    members and the promoted root closes under the real verifier."""
+    workspace, identity, env_lock, _ = _built_formal_workspace(tmp_path)
+    promoter = _load_module("promote_industrial_v2_artifacts", PROMOTER_PATH)
+    canonical = tmp_path / "canonical-staging"
+    promoted, blockers, info = promoter.promote(
+        workspace, canonical, promoter.REPO, tree_clean=True
+    )
+    assert promoted, blockers
+    assert {p.name for p in canonical.iterdir()} == set(CANONICAL_FAMILY)
+    assert info["run_identity"] == identity
+    # idempotent: re-promoting the byte-identical family is allowed
+    promoted2, blockers2, _ = promoter.promote(workspace, canonical, promoter.REPO, tree_clean=True)
+    assert promoted2, blockers2
+    assert {p.name for p in canonical.iterdir()} == set(CANONICAL_FAMILY)
+
+
+def test_promotion_cli_refuses_incomplete_family(tmp_path: Path) -> None:
+    """Hostile #5: a workspace whose canonical family is not complete is
+    refused — nothing is written to the canonical root."""
+    workspace, _, _, _ = _built_formal_workspace(tmp_path)
+    (workspace / "SHA256SUMS.txt").unlink()
+    promoter = _load_module("promote_industrial_v2_artifacts", PROMOTER_PATH)
+    canonical = tmp_path / "canonical"
+    promoted, blockers, _ = promoter.promote(workspace, canonical, promoter.REPO, tree_clean=True)
+    assert not promoted
+    assert any("canonical family" in blocker for blocker in blockers)
+    assert any("SHA256SUMS.txt" in blocker for blocker in blockers)
+    assert not canonical.exists(), "refusal must leave the canonical root untouched"
+
+
+def test_promotion_cli_refuses_provisional_run(tmp_path: Path) -> None:
+    """Hostile #6: a provisional run is refused even with a built family."""
+    workspace, _, _, _ = _built_formal_workspace(tmp_path)
+    run_config_path = workspace / "run-config.json"
+    run_config = json.loads(run_config_path.read_text())
+    run_config["provisional"] = True
+    run_config_path.write_text(json.dumps(run_config, indent=2, sort_keys=True))
+    promoter = _load_module("promote_industrial_v2_artifacts", PROMOTER_PATH)
+    canonical = tmp_path / "canonical"
+    promoted, blockers, _ = promoter.promote(workspace, canonical, promoter.REPO, tree_clean=True)
+    assert not promoted
+    assert any("provisional" in blocker for blocker in blockers)
+    assert not canonical.exists()
+
+
+def test_promotion_cli_refuses_dirty_tree(tmp_path: Path) -> None:
+    workspace, _, _, _ = _built_formal_workspace(tmp_path)
+    promoter = _load_module("promote_industrial_v2_artifacts", PROMOTER_PATH)
+    promoted, blockers, _ = promoter.promote(
+        workspace, tmp_path / "canonical", promoter.REPO, tree_clean=False
+    )
+    assert not promoted
+    assert any("dirty" in blocker for blocker in blockers)
+
+
+def test_promotion_cli_refuses_overwriting_different_authority(tmp_path: Path) -> None:
+    """An existing unrelated canonical authority is never silently
+    overwritten; the byte-identical family re-promotes idempotently."""
+    promoter = _load_module("promote_industrial_v2_artifacts", PROMOTER_PATH)
+    first, _, _, _ = _built_formal_workspace(tmp_path / "run-a")
+    canonical = tmp_path / "canonical"
+    promoted, blockers, _ = promoter.promote(first, canonical, promoter.REPO, tree_clean=True)
+    assert promoted, blockers
+
+    # a DIFFERENT run (different fixture bytes → different run identity)
+    workspace_b, run_config_b, identity_b, source_b, env_lock_b = _formal_workspace(
+        tmp_path / "run-b", fixture_sha256="e" * 64
+    )
+    assert identity_b != json.loads((first / "run-config.json").read_text())["run_identity"]
+    blockers_b = build_canonical_family_in_workspace(
+        workspace_dir=workspace_b,
+        run_config=run_config_b,
+        run_identity=identity_b,
+        measurement_commit="a" * 40,
+        source_hashes=source_b,
+        environment_lock=env_lock_b,
+        tier_rows=_workspace_rows(workspace_b),
+        tracked_tree_clean=True,
+        provisional=False,
+    )
+    assert blockers_b == [], blockers_b
+    promoted_b, blockers_b2, _ = promoter.promote(
+        workspace_b, canonical, promoter.REPO, tree_clean=True
+    )
+    assert not promoted_b
+    assert any("DIFFERENT" in blocker for blocker in blockers_b2)
+    # the FIRST authority is still intact, byte for byte
+    assert (
+        first.joinpath("SHA256SUMS.txt").read_bytes() == (canonical / "SHA256SUMS.txt").read_bytes()
+    )
+
+
+def test_promotion_cli_refuses_frozen_v11_root(tmp_path: Path) -> None:
+    """v1.1 is never a promotion target — neither a synthetic copy nor the
+    real frozen root (read-only guard check)."""
+    promoter = _load_module("promote_industrial_v2_artifacts", PROMOTER_PATH)
+    fake_repo = tmp_path / "repo"
+    blockers = promoter._frozen_v11_blockers(
+        fake_repo / "benchmarks" / "results" / "industrial",
+        tmp_path / "workspace",
+        fake_repo,
+    )
+    assert blockers and "v1.1" in blockers[0]
+    real = promoter._frozen_v11_blockers(
+        REPO / "benchmarks" / "results" / "industrial", tmp_path / "workspace", REPO
+    )
+    assert real, "the real frozen v1.1 root must be refused as a target"
+    assert not promoter._frozen_v11_blockers(tmp_path / "staging", tmp_path / "workspace", REPO), (
+        "an unrelated staging root stays promotable"
+    )
+
+
+def test_promotion_cli_subprocess_refuses_incomplete_family(tmp_path: Path) -> None:
+    """Operator executability: the documented CLI invocation refuses
+    fail-closed with a nonzero exit code."""
+    workspace, _, _, _ = _built_formal_workspace(tmp_path)
+    (workspace / "manifest.json").unlink()
+    canonical = tmp_path / "canonical"
+    proc = subprocess.run(  # noqa: S603 — fixed-argv repo script
+        [
+            sys.executable,
+            str(PROMOTER_PATH),
+            "--workspace",
+            str(workspace),
+            "--canonical-root",
+            str(canonical),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        cwd=str(REPO),
+    )
+    assert proc.returncode == 1
+    assert "V2 PROMOTION: REFUSED" in proc.stderr
+    assert not canonical.exists()
+
+
+def test_promotion_cli_subprocess_happy_path(tmp_path: Path) -> None:
+    """Operator executability: the documented CLI invocation promotes end
+    to end in a real subprocess, with the live git-clean gate actually
+    evaluated.  Runs against a THROWAWAY --shared clone pinned to the
+    checkout HEAD so the gate is deterministic and can never race with
+    parallel xdist workers touching the outer checkout — the CLI's
+    dirty-tree refusal is the feature under test, never weakened."""
+    head = subprocess.run(  # noqa: S603 — fixed-argv git query
+        ["git", "-C", str(REPO), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,
+    ).stdout.strip()
+    clone = tmp_path / "repo-clone"
+    subprocess.run(  # noqa: S603 — local --shared clone, no network
+        ["git", "clone", "--shared", "--quiet", "--no-checkout", str(REPO), str(clone)],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=300,
+    )
+    subprocess.run(  # noqa: S603 — fixed-argv git checkout
+        ["git", "-C", str(clone), "checkout", "--quiet", "--force", head],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=300,
+    )
+    workspace, _, _, _ = _built_formal_workspace(tmp_path)
+    canonical = tmp_path / "canonical"
+    proc = subprocess.run(  # noqa: S603 — fixed-argv repo script
+        [
+            sys.executable,
+            str(clone / "scripts" / "promote_industrial_v2_artifacts.py"),
+            "--workspace",
+            str(workspace),
+            "--canonical-root",
+            str(canonical),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        cwd=str(clone),
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "V2 PROMOTION: PASS" in proc.stdout
+    assert {p.name for p in canonical.iterdir()} == set(CANONICAL_FAMILY)
+
+
+# ---- frozen-artifact safety ------------------------------------------------
+
+
+def _frozen_artifact_snapshot() -> dict[str, str]:
+    tracked = subprocess.run(  # noqa: S603 — fixed-argv git query
+        ["git", "-C", str(REPO), "ls-files", "benchmarks/results/industrial", "proof_artifacts"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,
+    ).stdout.splitlines()
+    assert tracked, "frozen v1.1 + P-054/B04 artifacts must be git-tracked"
+    return {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest() for name in tracked}
+
+
+def test_promotion_never_touches_v11_or_p054_bytes(tmp_path: Path) -> None:
+    """Hostile #8: a full operator promotion leaves every tracked v1.1 and
+    P-054/B04 artifact byte-identical."""
+    before = _frozen_artifact_snapshot()
+    workspace, _, _, _ = _built_formal_workspace(tmp_path)
+    promoter = _load_module("promote_industrial_v2_artifacts", PROMOTER_PATH)
+    promoted, blockers, _ = promoter.promote(
+        workspace, tmp_path / "canonical", promoter.REPO, tree_clean=True
+    )
+    assert promoted, blockers
+    assert _frozen_artifact_snapshot() == before
+
+
+def test_harness_refuses_v11_out_root_before_writing(tmp_path: Path) -> None:
+    """The harness driver refuses a v1.1 output root (and any subpath of
+    it) BEFORE creating or writing anything."""
+    v11_like = tmp_path / "benchmarks" / "results" / "industrial"
+    proc = subprocess.run(  # noqa: S603 — fixed-argv repo script
+        [
+            sys.executable,
+            str(HARNESS_PATH),
+            "--tiers",
+            "a",
+            "--out-root",
+            str(v11_like),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        cwd=str(REPO),
+    )
+    assert proc.returncode == 1
+    assert "refusing to write v2 results into the frozen v1.1 root" in proc.stdout + proc.stderr
+    assert not v11_like.exists(), "nothing may be created inside the frozen root"

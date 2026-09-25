@@ -112,9 +112,12 @@ def main() -> int:
         f"matmul={torch.backends.cuda.matmul.allow_tf32} cudnn={torch.backends.cudnn.allow_tf32}",
     )
 
-    # disk + writability
+    # disk + writability.  16 GiB free disk is the AUTHORITATIVE documented
+    # host requirement (docs/industrial-v2-measurement.md): the 32768² fp32
+    # window alone spans ~4 GiB per tensor and the formal run keeps fixture,
+    # workspaces and results — the preflight enforces exactly that value.
     free = shutil.disk_usage(REPO).free
-    check("disk free > 8 GiB", free > 8 * 1024**3, f"{free} bytes free")
+    check("disk free >= 16 GiB", free >= 16 * 1024**3, f"{free} bytes free")
     probe = REPO / "benchmarks" / "results" / "industrial-v2" / ".preflight-probe"
     try:
         probe.parent.mkdir(parents=True, exist_ok=True)
