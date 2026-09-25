@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import shutil
 import subprocess  # noqa: S404 — fixed-argv git verification only
 import sys
@@ -80,6 +81,44 @@ def _fail(message: str) -> None:
     raise FixtureError(message)
 
 
+def git_blob_sha1(data: bytes) -> str:
+    """Native git blob object id — the integrity anchor for the pinned
+    tree verification mode (sha1 of ``blob <len>\\0`` + bytes).  sha1
+    is git's own content-addressing format here, not a security
+    primitive; the authenticity comes from matching the pinned commit's
+    tree entries fetched over the API."""
+    return hashlib.sha1(  # noqa: S324 — git object-id format, not crypto
+        b"blob %d\0" % len(data) + data
+    ).hexdigest()
+
+
+def verify_pinned_chunks(microwatt_dir: Path, design: str, pinned: dict) -> None:
+    """Verify discovered chunks against the pinned upstream tree
+    manifest (entries taken from the frozen PDB commit's tree via the
+    GitHub API at that exact ref).  Every chunk must match its recorded
+    git-blob sha1 and size, and EVERY pinned entry must be consumed —
+    a missing chunk fails exactly like a truncated one."""
+    chunks = discover_chunks(microwatt_dir, design)
+    entries = pinned.get("files") or {}
+    seen: set[str] = set()
+    for p in chunks:
+        entry = entries.get(p.name)
+        if entry is None:
+            _fail(f"chunk {p.name!r} is not present in the pinned tree manifest")
+        data = p.read_bytes()
+        if len(data) != int(entry["size"]):
+            _fail(f"chunk {p.name!r}: {len(data)} bytes != pinned {entry['size']}")
+        if git_blob_sha1(data) != entry["sha1"]:
+            _fail(
+                f"chunk {p.name!r}: git-blob sha1 mismatch against the pinned "
+                f"commit tree (corrupt or substituted content)"
+            )
+        seen.add(p.name)
+    missing = sorted(set(entries) - seen)
+    if missing:
+        _fail(f"pinned chunks missing from the source tree: {missing}")
+
+
 def verify_source_commit(source_root: Path, expected_commit: str) -> str:
     git = shutil.which("git")
     if git is None:
@@ -103,17 +142,40 @@ def verify_source_commit(source_root: Path, expected_commit: str) -> str:
     return head
 
 
-def discover_chunks(microwatt_dir: Path) -> list[Path]:
+def discover_chunks(microwatt_dir: Path, design: str = "microwatt") -> list[Path]:
     """Locate the split chunks and return them in CANONICAL lexical
-    order (``.part_aa, .part_ab, …``).  Canonical ordering is the
-    defense against reassembly-order nondeterminism: the same chunks
-    always concatenate to the same bytes."""
+    order (``part_aa, part_ab, …``).  Fail-closed on: malformed chunk
+    names, suffix gaps/duplicates/reorders, and zero-length chunks.
+    Canonical ordering is the defense against reassembly-order
+    nondeterminism: the same chunks always concatenate to the same
+    bytes.  Split artifacts of OTHER files (``.def``, ``.v``) are
+    siblings, not chunks, and are ignored."""
+    import re
+
     if not microwatt_dir.is_dir():
         _fail(f"microwatt chunk directory missing: {microwatt_dir}")
-    chunks = sorted(p for p in microwatt_dir.iterdir() if p.is_file() and ".part_" in p.name)
-    if not chunks:
-        _fail(f"no split chunks ('*.part_*') found in {microwatt_dir}")
-    return chunks
+    prefix = f"{design}.gds.part_"
+    pattern = re.compile(rf"^{re.escape(prefix)}[a-z]{{2}}$")
+    matching: list[Path] = []
+    for p in sorted(microwatt_dir.iterdir()):
+        if not p.is_file() or not p.name.startswith(prefix):
+            continue
+        if pattern.match(p.name) is None:
+            _fail(f"unexpected split chunk name {p.name!r} — corrupt split lineage")
+        if p.stat().st_size == 0:
+            _fail(f"zero-length split chunk: {p.name} (truncated source)")
+        matching.append(p)
+    if not matching:
+        _fail(f"no split chunks ('{prefix}[a-z][a-z]') found in {microwatt_dir}")
+    letters = "abcdefghijklmnopqrstuvwxyz"
+    expected = [f"{letters[i // 26 % 26]}{letters[i % 26]}" for i in range(len(matching))]
+    actual = [p.name.rsplit("_", 1)[1] for p in matching]
+    if actual != expected:
+        _fail(
+            f"split chunk suffixes {actual} are not the canonical consecutive "
+            f"sequence {expected} (gap, duplicate, or reorder)"
+        )
+    return matching
 
 
 def assemble_gds(source_root: Path, design: str, output_gds: Path) -> list[str]:
@@ -122,7 +184,7 @@ def assemble_gds(source_root: Path, design: str, output_gds: Path) -> list[str]:
     spec = DESIGN_SPECS[design]
     source_gds = source_root / spec["relative"]
     if spec["chunks"]:
-        chunks = discover_chunks(source_gds.parent)
+        chunks = discover_chunks(source_gds.parent, design)
         output_gds.parent.mkdir(parents=True, exist_ok=True)
         with open(output_gds, "wb") as sink:
             for chunk in chunks:
@@ -204,9 +266,16 @@ def prepare_fixture(
     expected_top_cell: str | None = None,
     expected_gds_sha256: str | None = None,
     preparation_script_path: Path | None = None,
+    pinned_tree_manifest: dict | None = None,
 ) -> dict:
     """Prepare one fixture and return its manifest payload (validated
-    before returning).  Raises :class:`FixtureError` on any failure."""
+    before returning).  Raises :class:`FixtureError` on any failure.
+
+    ``pinned_tree_manifest`` is the alternative source-authority path
+    for hosts where the git transport is unavailable: entries taken
+    from the frozen PDB commit's tree (via the API at that exact ref)
+    cryptographically verify every chunk (git-blob sha1) — HEAD-less
+    local staging is acceptable only in that mode."""
     if design not in DESIGN_SPECS:
         _fail(f"unknown design {design!r} (expected one of {sorted(DESIGN_SPECS)})")
     if ":" not in selected_layer:
@@ -217,11 +286,30 @@ def prepare_fixture(
     spec = DESIGN_SPECS[design]
     top_cell = expected_top_cell or str(spec["top_cell"])
 
-    verify_source_commit(source_root, expected_commit)
+    if pinned_tree_manifest is not None:
+        # API-transport mode: the pinned commit's own tree entries bind
+        # every chunk byte; no local git checkout is required.
+        if pinned_tree_manifest.get("commit") != expected_commit:
+            _fail(
+                f"pinned tree manifest commit {pinned_tree_manifest.get('commit')!r} "
+                f"!= expected frozen PDB commit {expected_commit!r}"
+            )
+    else:
+        verify_source_commit(source_root, expected_commit)
 
     output_dir = Path(output_dir)
     output_gds = output_dir / f"{design}.gds"
-    chunks = assemble_gds(source_root, design, output_gds)
+    if pinned_tree_manifest is not None:
+        split_dir = (source_root / spec["relative"]).parent
+        verify_pinned_chunks(split_dir, design, pinned_tree_manifest)
+        chunk_paths = discover_chunks(split_dir, design)
+        chunks = [p.name for p in chunk_paths]
+        output_gds.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_gds, "wb") as sink:
+            for chunk_path in chunk_paths:
+                sink.write(chunk_path.read_bytes())
+    else:
+        chunks = assemble_gds(source_root, design, output_gds)
 
     gds_sha = sha256_file(output_gds)
     gds_bytes = output_gds.stat().st_size
@@ -248,6 +336,7 @@ def prepare_fixture(
         bbox_dbu=tuple(facts["bbox_dbu"]),
         pixel_nm=pixel_nm,
         die_size_px=(width_px, height_px),
+        equivalent_pixels=width_px * height_px,
         dense_float32_equivalent_bytes=dense_float32_equivalent_bytes(width_px, height_px),
         layers=tuple(facts["layers"]),
         selected_layer=selected_layer,
@@ -281,6 +370,12 @@ def main() -> int:
     parser.add_argument("--expected-commit", default=PDB_COMMIT)
     parser.add_argument("--expected-top-cell", default=None)
     parser.add_argument("--expected-gds-sha256", default=None)
+    parser.add_argument(
+        "--pinned-tree-manifest",
+        default=None,
+        help="JSON {commit, path, files:{name:{sha1,size}}} captured from the frozen "
+        "PDB ref via the API — verifies chunks when a local git checkout is unavailable",
+    )
     args = parser.parse_args()
 
     output_dir = (
@@ -298,6 +393,11 @@ def main() -> int:
             expected_commit=args.expected_commit,
             expected_top_cell=args.expected_top_cell,
             expected_gds_sha256=args.expected_gds_sha256,
+            pinned_tree_manifest=(
+                json.loads(Path(args.pinned_tree_manifest).read_text())
+                if args.pinned_tree_manifest
+                else None
+            ),
         )
     except FixtureError as exc:
         print(f"FIXTURE PREP: FAIL — {exc}", file=sys.stderr)

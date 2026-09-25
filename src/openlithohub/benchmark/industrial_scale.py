@@ -161,6 +161,7 @@ class ScaleFixtureManifest:
     bbox_dbu: tuple[int, int, int, int]
     pixel_nm: float
     die_size_px: tuple[int, int]
+    equivalent_pixels: int
     dense_float32_equivalent_bytes: int
     layers: tuple[str, ...]
     selected_layer: str
@@ -216,6 +217,8 @@ class ScaleFixtureManifest:
                 f"die_size_px {(width_px, height_px)} inconsistent with bbox/dbu/pixel "
                 f"(expected {(expected_w, expected_h)})"
             )
+        if self.equivalent_pixels != width_px * height_px:
+            problems.append("equivalent_pixels inconsistent with die_size_px")
         if self.dense_float32_equivalent_bytes != dense_float32_equivalent_bytes(
             width_px, height_px
         ):
@@ -234,6 +237,9 @@ def load_scale_fixture_manifest(path: str) -> ScaleFixtureManifest:
     payload = json.loads(Path(path).read_text())
     if payload.get("schema") != FIXTURE_SCHEMA:
         raise ValueError(f"fixture manifest schema is not {FIXTURE_SCHEMA!r}")
+    if "equivalent_pixels" not in payload:
+        w, h = (int(v) for v in payload["die_size_px"])
+        payload["equivalent_pixels"] = w * h  # legacy manifest backfill
     manifest = ScaleFixtureManifest(
         source_repository=str(payload["source_repository"]),
         source_commit=str(payload["source_commit"]),
@@ -250,6 +256,7 @@ def load_scale_fixture_manifest(path: str) -> ScaleFixtureManifest:
         ),
         pixel_nm=float(payload["pixel_nm"]),
         die_size_px=(int(payload["die_size_px"][0]), int(payload["die_size_px"][1])),
+        equivalent_pixels=int(payload["equivalent_pixels"]),
         dense_float32_equivalent_bytes=int(payload["dense_float32_equivalent_bytes"]),
         layers=tuple(str(v) for v in payload["layers"]),
         selected_layer=str(payload["selected_layer"]),
