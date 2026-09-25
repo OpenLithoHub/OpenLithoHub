@@ -157,12 +157,18 @@ def test_three_workers_exactly_once_and_deterministic_order(routed_source) -> No
 # ---- §10.3: duplicate / missing / ownership mismatch ----------------------------
 
 
-def test_duplicate_tile_commit_is_fatal(routed_source) -> None:
+def test_duplicate_tile_commit_is_fatal() -> None:
     multi_worker = _load_multi_worker()
     from openlithohub.streaming.core_halo import plan_tile_requests
 
-    requests = plan_tile_requests(routed_source.shape, CORE, HALO)
-    sink = TensorTileSink(routed_source.shape)
+    requests = plan_tile_requests((WINDOW, WINDOW), CORE, HALO)
+    commits: list[str] = []
+
+    class Sink:
+        def write_core(self, tile_id, bbox, tensor, metadata) -> None:
+            commits.append(tile_id)
+
+    sink = Sink()
     ledger = multi_worker.OrderedCommitLedger(requests, sink)
     request = requests[0]
     core = torch.zeros(request.core_size)
@@ -171,12 +177,17 @@ def test_duplicate_tile_commit_is_fatal(routed_source) -> None:
         ledger.submit(0, core, request.tile_id)
 
 
-def test_missing_tile_is_fatal(routed_source) -> None:
+def test_missing_tile_is_fatal() -> None:
     multi_worker = _load_multi_worker()
     from openlithohub.streaming.core_halo import plan_tile_requests
 
-    requests = plan_tile_requests(routed_source.shape, CORE, HALO)
-    sink = TensorTileSink(routed_source.shape)
+    requests = plan_tile_requests((WINDOW, WINDOW), CORE, HALO)
+
+    class Sink:
+        def write_core(self, tile_id, bbox, tensor, metadata) -> None:
+            pass
+
+    sink = Sink()
     ledger = multi_worker.OrderedCommitLedger(requests, sink)
     for index in range(len(requests) - 1):  # never submit the last tile
         request = requests[index]
@@ -185,12 +196,17 @@ def test_missing_tile_is_fatal(routed_source) -> None:
         ledger.finish()
 
 
-def test_ownership_mismatch_is_fatal(routed_source) -> None:
+def test_ownership_mismatch_is_fatal() -> None:
     multi_worker = _load_multi_worker()
     from openlithohub.streaming.core_halo import plan_tile_requests
 
-    requests = plan_tile_requests(routed_source.shape, CORE, HALO)
-    sink = TensorTileSink(routed_source.shape)
+    requests = plan_tile_requests((WINDOW, WINDOW), CORE, HALO)
+
+    class Sink:
+        def write_core(self, tile_id, bbox, tensor, metadata) -> None:
+            pass
+
+    sink = Sink()
 
     # wrong tile id for the index
     ledger = multi_worker.OrderedCommitLedger(requests, sink)

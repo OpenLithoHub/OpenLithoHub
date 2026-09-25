@@ -436,7 +436,10 @@ def run_window_row(
     forward_fn, batched_fn, _ = resolve_forward(profile, radius, sigma_nm, device)
     from openlithohub.streaming.sinks import MemmapTileSink
 
-    multi_worker = lane == LANE_B and worker_count > 1
+    # Lane B uses the sharded executor at EVERY worker count — the T1
+    # baseline must share the exact execution semantics of T2/T3, or the
+    # scaling ratios would compare different code paths.
+    multi_worker = lane == LANE_B
     walls: list[float] = []
     metrics: list[dict[str, Any]] = []
     output_bytes = 0

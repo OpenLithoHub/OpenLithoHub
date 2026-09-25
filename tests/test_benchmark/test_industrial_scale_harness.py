@@ -350,3 +350,48 @@ def test_environment_lock_hash_is_stable_and_sensitive() -> None:
     sha = scale_environment_lock_sha256(lock)
     assert sha == scale_environment_lock_sha256(dict(lock))
     assert sha != scale_environment_lock_sha256({**lock, "count": (lock["count"] or 0) + 1})
+
+
+def test_lane_b_worker_count_parity(
+    prepared_fixture: tuple[Path, Path, str], tmp_path: Path
+) -> None:
+    """Charter §10.4 in CI: lane B at 1/2/3 CPU-emulated workers must
+    produce byte-identical out-of-core outputs for the same run config
+    (same fixture, same tile plan, same forward)."""
+    manifest_path, gds, _ = prepared_fixture
+    digests = []
+    for workers in (1, 2, 3):
+        out_root = tmp_path / f"scale-parity-{workers}"
+        proc = _run_harness(
+            "--fixture-manifest",
+            str(manifest_path),
+            "--gds",
+            str(gds),
+            "--lanes",
+            "b",
+            "--worker-count",
+            str(workers),
+            "--windows",
+            "128",
+            "--tile",
+            "32",
+            "--repeats",
+            "1",
+            "--warmup",
+            "0",
+            "--device",
+            "cpu",
+            "--out-root",
+            str(out_root),
+        )
+        assert proc.returncode == 0, proc.stderr
+        workspace = Path(json.loads(proc.stdout)["workspace"])
+        row = json.loads((workspace / "row-B_MULTI_GPU_SCALING-128.json").read_text())
+        assert row["status"] == "SUCCESS"
+        import hashlib
+
+        output = workspace / "w128-r0.npy"
+        digests.append(hashlib.sha256(output.read_bytes()).hexdigest())
+    assert digests[0] == digests[1] == digests[2], (
+        "1/2/3-worker runs must produce byte-identical out-of-core outputs"
+    )
