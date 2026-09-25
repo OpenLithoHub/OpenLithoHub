@@ -1054,15 +1054,40 @@ def test_promotion_cli_subprocess_refuses_incomplete_family(tmp_path: Path) -> N
 
 
 def test_promotion_cli_subprocess_happy_path(tmp_path: Path) -> None:
-    promoter = _load_module("promote_industrial_v2_artifacts", PROMOTER_PATH)
-    if not promoter._tracked_tree_clean(promoter.REPO):
-        pytest.skip("promotion re-runs formal blockers: needs a clean tracked tree (clean in CI)")
+    """Operator executability: the documented CLI invocation promotes end
+    to end in a real subprocess, with the live git-clean gate actually
+    evaluated.  Runs against a THROWAWAY --shared clone pinned to the
+    checkout HEAD so the gate is deterministic and can never race with
+    parallel xdist workers touching the outer checkout — the CLI's
+    dirty-tree refusal is the feature under test, never weakened."""
+    head = subprocess.run(  # noqa: S603 — fixed-argv git query
+        ["git", "-C", str(REPO), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,
+    ).stdout.strip()
+    clone = tmp_path / "repo-clone"
+    subprocess.run(  # noqa: S603 — local --shared clone, no network
+        ["git", "clone", "--shared", "--quiet", "--no-checkout", str(REPO), str(clone)],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=300,
+    )
+    subprocess.run(  # noqa: S603 — fixed-argv git checkout
+        ["git", "-C", str(clone), "checkout", "--quiet", "--force", head],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=300,
+    )
     workspace, _, _, _ = _built_formal_workspace(tmp_path)
     canonical = tmp_path / "canonical"
     proc = subprocess.run(  # noqa: S603 — fixed-argv repo script
         [
             sys.executable,
-            str(PROMOTER_PATH),
+            str(clone / "scripts" / "promote_industrial_v2_artifacts.py"),
             "--workspace",
             str(workspace),
             "--canonical-root",
@@ -1071,7 +1096,7 @@ def test_promotion_cli_subprocess_happy_path(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         timeout=300,
-        cwd=str(REPO),
+        cwd=str(clone),
     )
     assert proc.returncode == 0, proc.stderr
     assert "V2 PROMOTION: PASS" in proc.stdout
