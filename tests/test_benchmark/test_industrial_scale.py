@@ -300,6 +300,7 @@ def _manifest(**overrides) -> ScaleFixtureManifest:
         bbox_dbu=(0, 0, 1000, 2000),
         pixel_nm=1.0,
         die_size_px=(1000, 2000),
+        equivalent_pixels=1000 * 2000,
         dense_float32_equivalent_bytes=dense_float32_equivalent_bytes(1000, 2000),
         layers=("66:44", "67:20"),
         selected_layer="66:44",
@@ -392,7 +393,7 @@ def _split_into_chunks(gds: Path, chunk_dir: Path, chunk_size: int = 64) -> list
     paths = []
     for index in range(0, max(1, (len(data) + chunk_size - 1) // chunk_size)):
         part = data[index * chunk_size : (index + 1) * chunk_size]
-        name = f"microwatt.gds.part_a{letters[index // 26]}{letters[index % 26]}"
+        name = f"microwatt.gds.part_{letters[index // 26]}{letters[index % 26]}"
         target = chunk_dir / name
         target.write_bytes(part)
         paths.append(target)
@@ -623,3 +624,163 @@ def test_cli_end_to_end(pdb_tree: tuple[Path, str], tmp_path: Path) -> None:
     )
     assert bad.returncode == 1
     assert "FIXTURE PREP: FAIL" in bad.stderr
+
+
+# ---- split-chunk lineage hardening (PR-S5) ------------------------------------------
+
+
+def _write_microwatt_and_chunks(source_root: Path, count_bytes: int = 64) -> Path:
+    import klayout.db as db
+
+    microwatt_dir = source_root / "layout" / "sky130hd" / "microwatt"
+    microwatt_dir.mkdir(parents=True, exist_ok=True)
+    full = microwatt_dir / "microwatt_full.gds"
+    ly = db.Layout()
+    ly.dbu = 0.001
+    li = ly.layer(66, 44)
+    top = ly.create_cell("microwatt")
+    top.shapes(li).insert(db.Box(0, 0, 128, 128))
+    ly.write(str(full))
+    _split_into_chunks(full, microwatt_dir, chunk_size=count_bytes)
+    full.unlink()
+    return microwatt_dir
+
+
+def test_prepare_ignores_sibling_split_artifacts(pdb_tree: tuple, tmp_path: Path) -> None:
+    """.def / .v split parts are siblings of OTHER artifacts and must be
+    ignored — not treated as corrupt gds chunks."""
+    prepare = _load_prepare()
+    source_root, commit = pdb_tree
+    microwatt_dir = source_root / "layout" / "sky130hd" / "microwatt"
+    import klayout.db as db
+
+    full = microwatt_dir / "microwatt_full.gds"
+    ly = db.Layout()
+    ly.dbu = 0.001
+    li = ly.layer(66, 44)
+    top = ly.create_cell("microwatt")
+    top.shapes(li).insert(db.Box(0, 0, 128, 128))
+    ly.write(str(full))
+    _split_into_chunks(full, microwatt_dir, chunk_size=64)
+    full.unlink()
+    # sibling artifacts of other files
+    (microwatt_dir / "microwatt.def.part_aa").write_bytes(b"x" * 16)
+    (microwatt_dir / "microwatt_netlist.v.part_aa").write_bytes(b"y" * 16)
+
+    payload = prepare.prepare_fixture(
+        source_root=source_root,
+        design="microwatt",
+        selected_layer="66:44",
+        pixel_nm=1.0,
+        output_dir=tmp_path / "out",
+        expected_commit=commit,
+    )
+    assert payload["gds_bytes"] > 0
+
+
+def test_prepare_refuses_gap_in_chunk_sequence(pdb_tree: tuple, tmp_path: Path) -> None:
+    prepare = _load_prepare()
+    source_root, commit = pdb_tree
+    microwatt_dir = _write_microwatt_and_chunks(source_root)
+    chunks = sorted(p for p in microwatt_dir.iterdir() if ".part_" in p.name)
+    assert len(chunks) >= 3, "fixture must produce a multi-chunk split"
+    chunks[1].unlink()  # part_ab missing → gap
+
+    with pytest.raises(prepare.FixtureError, match="canonical consecutive"):
+        prepare.prepare_fixture(
+            source_root=source_root,
+            design="microwatt",
+            selected_layer="66:44",
+            pixel_nm=1.0,
+            output_dir=tmp_path / "out",
+            expected_commit=commit,
+        )
+
+
+def test_prepare_refuses_malformed_chunk_name(pdb_tree: tuple, tmp_path: Path) -> None:
+    prepare = _load_prepare()
+    source_root, commit = pdb_tree
+    microwatt_dir = _write_microwatt_and_chunks(source_root)
+    (microwatt_dir / "microwatt.gds.part_1a").write_bytes(b"corrupt")
+
+    with pytest.raises(prepare.FixtureError, match="unexpected split chunk name"):
+        prepare.prepare_fixture(
+            source_root=source_root,
+            design="microwatt",
+            selected_layer="66:44",
+            pixel_nm=1.0,
+            output_dir=tmp_path / "out",
+            expected_commit=commit,
+        )
+
+
+def test_prepare_refuses_empty_chunk(pdb_tree: tuple, tmp_path: Path) -> None:
+    prepare = _load_prepare()
+    source_root, commit = pdb_tree
+    microwatt_dir = _write_microwatt_and_chunks(source_root)
+    chunks = sorted(p for p in microwatt_dir.iterdir() if ".part_" in p.name)
+    chunks[0].write_bytes(b"")
+
+    with pytest.raises(prepare.FixtureError, match="zero-length split chunk"):
+        prepare.prepare_fixture(
+            source_root=source_root,
+            design="microwatt",
+            selected_layer="66:44",
+            pixel_nm=1.0,
+            output_dir=tmp_path / "out",
+            expected_commit=commit,
+        )
+
+
+def test_pinned_tree_mode_verifies_chunks_and_refuses_mismatch(
+    pdb_tree: tuple, tmp_path: Path
+) -> None:
+    """API-transport mode: chunks verified against git-blob sha1s from
+    the pinned commit's tree; a substituted byte is refused."""
+    prepare = _load_prepare()
+    source_root, commit = pdb_tree
+    microwatt_dir = _write_microwatt_and_chunks(source_root)
+
+    import hashlib
+
+    files = {}
+    for p in sorted(microwatt_dir.iterdir()):
+        if not p.name.startswith("microwatt.gds.part_"):
+            continue
+        data = p.read_bytes()
+        files[p.name] = {
+            # git blob object id (sha1 is git's content addressing, not crypto)
+            "sha1": hashlib.sha1(  # noqa: S324
+                b"blob %d\0" % len(data) + data
+            ).hexdigest(),
+            "size": len(data),
+        }
+    pinned = {"commit": commit, "files": files}
+
+    payload = prepare.prepare_fixture(
+        source_root=source_root,
+        design="microwatt",
+        selected_layer="66:44",
+        pixel_nm=1.0,
+        output_dir=tmp_path / "out",
+        expected_commit=commit,
+        pinned_tree_manifest=pinned,
+    )
+    assert payload["gds_bytes"] > 0
+
+    # substitute one byte in a chunk → git-blob sha1 mismatch
+    victim = next(microwatt_dir.glob("*.part_ab"))
+    data = bytearray(victim.read_bytes())
+    data[0] ^= 0xFF
+    victim.write_bytes(bytes(data))
+
+    with pytest.raises(prepare.FixtureError, match="sha1 mismatch"):
+        prepare.prepare_fixture(
+            source_root=source_root,
+            design="microwatt",
+            selected_layer="66:44",
+            pixel_nm=1.0,
+            output_dir=tmp_path / "out2",
+            expected_commit=commit,
+            pinned_tree_manifest=pinned,
+        )

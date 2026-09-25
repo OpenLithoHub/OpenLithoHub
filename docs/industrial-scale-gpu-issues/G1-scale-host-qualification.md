@@ -19,8 +19,16 @@ Fill only with the post-freeze scale-track merge commit. Do not
 substitute `main` / `latest` / any other commit.
 
 Blocked by:
-- the scale-track freeze (charter + harness + verifier + dry run merged);
-- the Microwatt fixture layer decision (or explicit G1-scope deferral).
+- the scale-track freeze (charter + harness + verifier + dry run merged).
+
+Frozen fixtures (verified 2026-09-25):
+
+```text
+PDB commit:      9e1e3399b1b707f26fee853bce1ff91ab466ce24
+Ibex layer:      66:44
+Microwatt GDS:   b0253af06f35d1a8b11c2a47f70aac89f33be53e8f28da844b35c2ad6cc92a6d (554,770,926 bytes)
+Microwatt layer: 66:44 (audited: 27.5M instances spanning 98.8% x 99.4% of die)
+```
 
 ## Execution
 

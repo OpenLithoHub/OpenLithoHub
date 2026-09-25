@@ -135,8 +135,18 @@ Fixtures come from the frozen PDB lineage
 * **Ibex** — the v1.1/v2 authority lineage (`layout/sky130hd/ibex/ibex.gds`,
   top cell `ibex_core`).
 * **Microwatt** — split-chunk stress fixture
-  (`layout/sky130hd/microwatt/`, top cell `microwatt`); chunks are
-  canonically sorted, concatenated, re-opened and verified before use.
+  (`layout/sky130hd/microwatt/split/`, top cell `microwatt`), FROZEN:
+  reconstructed GDS sha256
+  `b0253af06f35d1a8b11c2a47f70aac89f33be53e8f28da844b35c2ad6cc92a6d`
+  (554,770,926 bytes; 11 chunks, canonically ordered, byte-verified
+  against the pinned PDB tree, independently re-concatenated and
+  KLayout re-opened).  Die 3,020,000 × 3,610,000 px @ 1 nm/px;
+  dense float32 raster-equivalent 43,608,800,000,000 bytes (derived,
+  never materialized).  Audited selected layer: **66:44** — 27.5M
+  shape instances spanning 98.8% × 99.4% of the die; the same
+  sky130hd li1 routed class as the frozen v1.1/v2 lineage.  The choice
+  was made by the source-owned rule BEFORE any benchmarking; no
+  candidate was benchmarked for the selection.
 
 Every fixture is prepared by
 `scripts/prepare_industrial_scale_fixture.py` into a validated

@@ -31,7 +31,7 @@ sys.path.insert(0, str(REPO / "src"))
 
 README = REPO / "README.md"
 README_ZH = REPO / "README_zh.md"
-ISC_ID_RE = re.compile(r"ISC-[A-Z0-9-]+")
+ISC_ID_RE = re.compile(r"(?<![A-Za-z])ISC-[A-Z0-9-]+")  # "RISC-V" is not a claim
 
 PROVISIONAL_NOTE = (
     "PROVISIONAL / INTERNAL — NOT PERFORMANCE AUTHORITY. "

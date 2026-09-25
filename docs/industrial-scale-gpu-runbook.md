@@ -60,11 +60,12 @@ Clone the frozen PDB lineage and prepare both fixtures exactly once:
 ```bash
 git clone https://github.com/SJTU-YONGFU-RESEARCH-GRP/PDB-Physical-Design-Database.git
 git -C PDB-Physical-Design-Database checkout 9e1e3399b1b707f26fee853bce1ff91ab466ce24
+git -C PDB-Physical-Design-Database rev-parse HEAD   # must equal the commit above
 
 python scripts/prepare_industrial_scale_fixture.py \
   --source-root PDB-Physical-Design-Database \
   --design ibex \
-  --selected-layer <IBEX_FROZEN_LAYER> \
+  --selected-layer 66:44 \
   --pixel-nm 1.0 \
   --expected-commit 9e1e3399b1b707f26fee853bce1ff91ab466ce24 \
   | tee measurement-logs/fixture-ibex.txt
@@ -72,16 +73,50 @@ python scripts/prepare_industrial_scale_fixture.py \
 python scripts/prepare_industrial_scale_fixture.py \
   --source-root PDB-Physical-Design-Database \
   --design microwatt \
-  --selected-layer <MICROWATT_FROZEN_LAYER> \
+  --selected-layer 66:44 \
   --pixel-nm 1.0 \
   --expected-commit 9e1e3399b1b707f26fee853bce1ff91ab466ce24 \
   | tee measurement-logs/fixture-microwatt.txt
 ```
 
 Each must print `FIXTURE PREP: PASS`. Record both manifest
-`gds_sha256` values. The `<..._FROZEN_LAYER>` values are maintainer
-decisions recorded in the fixture manifests — never chosen on the GPU
-host.
+`gds_sha256` values. The layers above are the maintainer's audited,
+frozen decisions recorded in the committed fixture manifests — never
+chosen on the GPU host.
+
+### Frozen fixture facts (maintainer-verified 2026-09-25)
+
+Ibex (`layout/sky130hd/ibex/ibex.gds`, top cell `ibex_core`,
+layer 66:44): the v1.1/v2 authority lineage.
+
+Microwatt (`layout/sky130hd/microwatt/split/`, top cell `microwatt`,
+11 split chunks `microwatt.gds.part_[aa..ak]`):
+
+```text
+GDS sha256:            b0253af06f35d1a8b11c2a47f70aac89f33be53e8f28da844b35c2ad6cc92a6d
+GDS bytes:             554,770,926
+DBU:                   1.0 nm
+bbox (DBU):            [0, 0, 3020000, 3610000]
+die size px @1nm/px:   3,020,000 × 3,610,000
+equivalent pixels:     10,902,200,000,000
+dense float32 raster-  43,608,800,000,000 bytes
+equivalent:            (hypothetical — DERIVED, never materialized)
+layers present:        41 (full inventory in the committed fixture manifest)
+selected layer:        66:44
+```
+
+Layer-decision rationale (source-owned rule, fixed BEFORE any
+benchmark): 66:44 is the same sky130hd li1 routed-layout semantic
+class as the frozen v1.1/v2 lineage; the audit shows it is non-empty
+(27,487,849 shape instances, second densest of 41 layers) and
+spans 98.8% × 99.4% of the die. Marker/fill/boundary layers
+(14:0, 81:*, 235:*, 236:0) were rejected as non-representative. No
+candidate was benchmarked before selection.
+
+Verification evidence committed with this freeze:
+`benchmarks/results/industrial-scale/fixtures/microwatt/fixture-manifest.json`
+and `pdb-split-manifest.json` (per-chunk git-blob sha1 from the pinned
+PDB tree; every chunk byte-verified against it).
 
 ## 4. Preflight
 
