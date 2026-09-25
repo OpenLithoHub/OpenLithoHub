@@ -2,8 +2,10 @@
 
 ## Purpose
 
-Execute the frozen scaling protocol: same fixture, same tile geometry,
-same P1 forward, same output semantics at 1, 2 and 3 GPUs.
+Execute the frozen scaling protocol: same fixture (the Ibex scale
+fixture, layer 66:44 — the manifest committed with the scale freeze;
+prepared per runbook step 3), same tile geometry, same P1 forward,
+same output semantics at 1, 2 and 3 GPUs.
 
 ## Prerequisite
 

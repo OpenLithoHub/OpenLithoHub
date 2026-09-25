@@ -64,14 +64,17 @@ run_scale_benchmark.py --lanes a --windows 4096 \
   to the 1-worker run.
 * P0_IDENTITY rows are emitted `headline_eligible = false`.
 
-## S13 status (Microwatt)
+## S13 status (Microwatt): FROZEN
 
-Microwatt split-chunk reassembly, KLayout re-open, top-cell/DBU/bbox/
-layer verification and manifest emission are implemented and hostile-
-tested on synthetic PDB trees (including truncated-chunk and canonical-
-ordering tests). The REAL Microwatt fixture freeze (`microwatt.gds`
-SHA-256, selected layer decision, exact dense equivalent) is PENDING
-until the PDB checkout containing `layout/sky130hd/microwatt/` is
-available to the maintainer — the GPU runbook keeps
-`<MICROWATT_FROZEN_LAYER>` as an explicit placeholder for exactly this
-reason. Microwatt must not enter any benchmark before that freeze.
+The real Microwatt fixture freeze landed with the scale fixture
+authority (see `benchmarks/results/industrial-scale/fixtures/microwatt/`
+and the GPU runbook): reconstructed GDS sha256
+`b0253af06f35d1a8b11c2a47f70aac89f33be53e8f28da844b35c2ad6cc92a6d`
+(554,770,926 bytes from 11 canonically ordered chunks, byte-verified
+against the pinned PDB tree), top cell `microwatt`, DBU 1.0 nm,
+bbox [0, 0, 3020000, 3610000] DBU, 41 layers audited, selected layer
+**66:44** (audited: 27.5M instances spanning 98.8% × 99.4% of die —
+the same li1 class as the v1.1/v2 lineage), dense float32
+raster-equivalent 43,608,800,000,000 bytes (derived, never
+materialized). Microwatt still must not enter any benchmark before the
+GPU-phase issues execute the frozen commands.

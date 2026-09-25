@@ -1,0 +1,50 @@
+{
+  "commit": "9e1e3399b1b707f26fee853bce1ff91ab466ce24",
+  "files": {
+    "microwatt.gds.part_aa": {
+      "sha1": "29808f8413b0c144699e457b1b7deedd11185213",
+      "size": 52428800
+    },
+    "microwatt.gds.part_ab": {
+      "sha1": "5482c031955bfc44090260a0a95448b5a5aa277a",
+      "size": 52428800
+    },
+    "microwatt.gds.part_ac": {
+      "sha1": "a2486e3d278ed3411fa7f928fb91f5bdfb333458",
+      "size": 52428800
+    },
+    "microwatt.gds.part_ad": {
+      "sha1": "78bd7f937f50f6818b3f32d7a051389514e9e9c4",
+      "size": 52428800
+    },
+    "microwatt.gds.part_ae": {
+      "sha1": "ba07fa05a4827503092a409eb74c4a9aaee3801f",
+      "size": 52428800
+    },
+    "microwatt.gds.part_af": {
+      "sha1": "81e5caf39a1f3e8ba6fa42066b3313ade2c0d0d7",
+      "size": 52428800
+    },
+    "microwatt.gds.part_ag": {
+      "sha1": "ec24c228a2dfab60bbd4cee4bb8d82065c45fa5a",
+      "size": 52428800
+    },
+    "microwatt.gds.part_ah": {
+      "sha1": "ea6d781eb1119bd109853398fa071710db823b58",
+      "size": 52428800
+    },
+    "microwatt.gds.part_ai": {
+      "sha1": "ef138e84d73b0ef50b43b9509268a47862567481",
+      "size": 52428800
+    },
+    "microwatt.gds.part_aj": {
+      "sha1": "f3db7f939ef606c98bcbf5c54656ba3a8bde16db",
+      "size": 52428800
+    },
+    "microwatt.gds.part_ak": {
+      "sha1": "3cfeb0fd9f0366c4d8361a3b6647e9f8e64850fd",
+      "size": 30482926
+    }
+  },
+  "path": "layout/sky130hd/microwatt/split"
+}
