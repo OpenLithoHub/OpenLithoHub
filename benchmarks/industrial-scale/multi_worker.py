@@ -172,12 +172,22 @@ def run_multi_worker_stream(
         maxsize=max(1, queue_depth)
     )
     failures: list[BaseException] = []
+    stopped = threading.Event()
+    # Order-aware backpressure (§S6.2 bounded resident tensors): a worker
+    # may produce tile i+1 only after uncommitted work drains below the
+    # cap.  Without this, an adversarially slow worker could inflate the
+    # reorder buffer to O(all tiles).
+    resident_cap = max(1, queue_depth) + max(1, worker_count)
+    slots = threading.BoundedSemaphore(resident_cap)
 
     def worker(worker_index: int, indices: list[int]) -> None:
         try:
             if device_for_worker is not None:
                 device_for_worker(worker_index)
             for index in indices:
+                while not slots.acquire(timeout=0.05):
+                    if failures or stopped.is_set():
+                        return  # abort a doomed run; the sentinel still fires
                 request = requests[index]
                 tile = source.read_window(request.read_bbox)
                 forwarded = forward_fn(tile)
@@ -188,6 +198,7 @@ def run_multi_worker_stream(
                 result_queue.put((index, core, request.tile_id))
         except Exception as exc:  # noqa: BLE001 — failure MUST propagate, no retry
             failures.append(exc)
+            stopped.set()
         finally:
             # EVERY worker reports exactly one sentinel on every exit path,
             # so the committer can never wait on a finished worker forever
@@ -215,7 +226,10 @@ def run_multi_worker_stream(
             finished_workers += 1
             continue
         index, core, tile_id = item
+        committed_before = ledger.committed
         ledger.submit(index, core, tile_id)
+        for _ in range(ledger.committed - committed_before):
+            slots.release()  # a commit frees one production slot
 
     if failures:
         raise WorkerFailureError(f"worker failed: {failures[0]!r}") from failures[0]

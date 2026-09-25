@@ -231,8 +231,9 @@ def test_bounded_queue_and_resident_watermark(routed_source) -> None:
     sink = TensorTileSink(routed_source.shape)
     report = _run_workers(routed_source, lambda tile: forward(tile).cpu(), sink, 3, queue_depth=1)
     assert report.n_tiles == (WINDOW // CORE) ** 2
-    # resident reorder buffer never exceeds workers × queue depth (+ commit edge)
-    assert report.max_resident_results <= 3 * 1 + 3
+    # order-aware backpressure caps the resident reorder buffer at
+    # queue_depth + worker_count — bounded regardless of worker timing
+    assert report.max_resident_results <= 1 + 3
 
 
 def test_shard_plan_is_an_exact_partition() -> None:
