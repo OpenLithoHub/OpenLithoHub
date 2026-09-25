@@ -166,6 +166,8 @@ ignore = ["B008", "B027", "A002"]
 # Benchmark harness/support modules run fixed-argv git/sysctl probes and
 # re-invoke their own worker mode.
 "benchmarks/industrial/**" = ["S101", "S603", "S607", "S404"]
+# Scale-track harness: same class of fixed-argv probes / self re-invocation.
+"benchmarks/industrial-scale/**" = ["S101", "S324", "S603", "S607", "S404"]
 # klayout macro entry points run under klayout's own Python and shell out
 # to the klayout CLI itself — the partial-path / subprocess warnings are
 # false positives.
