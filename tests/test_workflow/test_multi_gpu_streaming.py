@@ -1,27 +1,30 @@
 """Multi-worker streaming scheduler hostile tests (scale track, S6/S7).
 
-Proves the charter invariants on CPU-emulated workers: exact 1/2/3
-worker output parity, exactly-once ownership, duplicate/missing/mismatch
-refusals, worker-failure propagation, deterministic commit order and
-bounded queues.  CPU emulation validates SCHEDULER SEMANTICS ONLY — it
-is never multi-GPU validation.
+Runs entirely WITHOUT klayout (numpy fake source — the production
+planner and executor never touch klayout), so the whole hostile matrix
+executes in every CI shard.  Proves the charter invariants on
+CPU-emulated workers: exact 1/2/3-worker output parity, exactly-once
+ownership, duplicate/missing/mismatch refusals, worker-failure
+propagation, deterministic commit order and bounded queues.
+
+CPU emulation validates SCHEDULER SEMANTICS ONLY — it is never
+multi-GPU validation.  Real-GDS integration lives in the benchmark
+shard (tests/test_benchmark/test_industrial_scale_harness.py).
 """
 
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 
-from openlithohub.benchmark.industrial_v2 import BatchedFiniteSupportBlur
 from openlithohub.streaming import run_streaming
-from openlithohub.streaming.crop_source import ExactVectorCropSource
-from openlithohub.streaming.geometry import BoundingBox
 from openlithohub.streaming.halo_policy import LegacyFixedHaloPolicy
 from openlithohub.streaming.sinks import TensorTileSink
-from openlithohub.streaming.vector_runs import KLayoutAlignedRunSource
 
 REPO = Path(__file__).resolve().parents[2]
 MULTI_WORKER = REPO / "benchmarks" / "industrial-scale" / "multi_worker.py"
@@ -29,16 +32,12 @@ WINDOW = 128
 CORE = 32
 HALO = 64
 
-
 _MULTI_WORKER = None
 
 
 def _load_multi_worker():
-    # memoized: exception classes must be THE SAME objects across the test
     global _MULTI_WORKER
     if _MULTI_WORKER is None:
-        import sys
-
         spec = importlib.util.spec_from_file_location("scale_multi_worker", MULTI_WORKER)
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
@@ -48,28 +47,28 @@ def _load_multi_worker():
     return _MULTI_WORKER
 
 
+class NumpyFakeSource:
+    """Minimal TileSource over a numpy raster (klayout-free)."""
+
+    def __init__(self, array: np.ndarray) -> None:
+        self._array = array
+        self.shape = array.shape
+
+    def read_window(self, bbox) -> torch.Tensor:
+        window = self._array[bbox.y0 : bbox.y1, bbox.x0 : bbox.x1]
+        return torch.from_numpy(window.copy())
+
+
 @pytest.fixture(scope="module")
-def routed_source() -> ExactVectorCropSource:
-    import tempfile
-
-    import klayout.db as db
-
-    tmp = Path(tempfile.mkdtemp())
-    gds = tmp / "routed.gds"
-    ly = db.Layout()
-    ly.dbu = 0.001
-    li = ly.layer(66, 44)
-    top = ly.create_cell("ibex_core")
-    # a few rectangles so the raster is non-trivial
-    top.shapes(li).insert(db.Box(0, 0, 256, 256))
-    top.shapes(li).insert(db.Box(10, 10, 200, 120))
-    top.shapes(li).insert(db.Box(30, 140, 250, 250))
-    ly.write(str(gds))
-    parent = KLayoutAlignedRunSource.from_file(str(gds), pixel_size_nm=1.0, layer="66:44")
-    return ExactVectorCropSource(parent, BoundingBox(0, 0, WINDOW, WINDOW))
+def routed_source() -> NumpyFakeSource:
+    rng = np.random.default_rng(42)
+    raster = rng.random((WINDOW, WINDOW)).astype(np.float32)
+    return NumpyFakeSource(raster)
 
 
-def _blur_forward() -> object:
+def _blur_forward():
+    from openlithohub.benchmark.industrial_v2 import BatchedFiniteSupportBlur
+
     return BatchedFiniteSupportBlur(radius=4, sigma=1.6).window_forward
 
 
@@ -142,19 +141,23 @@ def test_three_workers_exactly_once_and_deterministic_order(routed_source) -> No
         def finalize(self):
             return None
 
-    outputs = []
     orders = []
+    report = None
     for _ in range(3):
         sink = RecordingSink()
         report = _run_workers(routed_source, lambda tile: forward(tile).cpu(), sink, 3)
-        outputs.append(sink.order)
-        orders.append(report)
-    assert outputs[0] == outputs[1] == outputs[2], "commit order is deterministic"
-    assert outputs[0][0] == "tile_0" and outputs[0][-1] == f"tile_{report.n_tiles - 1}"
-    assert len(outputs[0]) == report.n_tiles
+        orders.append(sink.order)
+    assert orders[0] == orders[1] == orders[2], "commit order is deterministic"
+    assert orders[0][0] == "tile_0" and orders[0][-1] == f"tile_{report.n_tiles - 1}"
+    assert len(orders[0]) == report.n_tiles
 
 
 # ---- §10.3: duplicate / missing / ownership mismatch ----------------------------
+
+
+class LedgerSink:
+    def write_core(self, tile_id, bbox, tensor, metadata) -> None:
+        pass
 
 
 def test_duplicate_tile_commit_is_fatal() -> None:
@@ -162,19 +165,11 @@ def test_duplicate_tile_commit_is_fatal() -> None:
     from openlithohub.streaming.core_halo import plan_tile_requests
 
     requests = plan_tile_requests((WINDOW, WINDOW), CORE, HALO)
-    commits: list[str] = []
-
-    class Sink:
-        def write_core(self, tile_id, bbox, tensor, metadata) -> None:
-            commits.append(tile_id)
-
-    sink = Sink()
-    ledger = multi_worker.OrderedCommitLedger(requests, sink)
+    ledger = multi_worker.OrderedCommitLedger(requests, LedgerSink())
     request = requests[0]
-    core = torch.zeros(request.core_size)
-    ledger.submit(0, core, request.tile_id)
+    ledger.submit(0, torch.zeros(request.core_size), request.tile_id)
     with pytest.raises(multi_worker.DuplicateTileCommitError):
-        ledger.submit(0, core, request.tile_id)
+        ledger.submit(0, torch.zeros(request.core_size), request.tile_id)
 
 
 def test_missing_tile_is_fatal() -> None:
@@ -182,13 +177,7 @@ def test_missing_tile_is_fatal() -> None:
     from openlithohub.streaming.core_halo import plan_tile_requests
 
     requests = plan_tile_requests((WINDOW, WINDOW), CORE, HALO)
-
-    class Sink:
-        def write_core(self, tile_id, bbox, tensor, metadata) -> None:
-            pass
-
-    sink = Sink()
-    ledger = multi_worker.OrderedCommitLedger(requests, sink)
+    ledger = multi_worker.OrderedCommitLedger(requests, LedgerSink())
     for index in range(len(requests) - 1):  # never submit the last tile
         request = requests[index]
         ledger.submit(index, torch.zeros(request.core_size), request.tile_id)
@@ -202,20 +191,14 @@ def test_ownership_mismatch_is_fatal() -> None:
 
     requests = plan_tile_requests((WINDOW, WINDOW), CORE, HALO)
 
-    class Sink:
-        def write_core(self, tile_id, bbox, tensor, metadata) -> None:
-            pass
-
-    sink = Sink()
-
     # wrong tile id for the index
-    ledger = multi_worker.OrderedCommitLedger(requests, sink)
+    ledger = multi_worker.OrderedCommitLedger(requests, LedgerSink())
     request = requests[0]
     with pytest.raises(multi_worker.OwnershipMismatchError):
         ledger.submit(0, torch.zeros(request.core_size), "tile_999")
 
     # wrong core geometry for the planned tile
-    ledger2 = multi_worker.OrderedCommitLedger(requests, sink)
+    ledger2 = multi_worker.OrderedCommitLedger(requests, LedgerSink())
     with pytest.raises(multi_worker.OwnershipMismatchError):
         ledger2.submit(0, torch.zeros(1, 1), requests[0].tile_id)
 
