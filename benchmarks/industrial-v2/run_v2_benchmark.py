@@ -8,15 +8,17 @@
 * Tier B (requires real CUDA): CPU batch=1 vs GPU batch=1 vs GPU batch=N
   streaming execution with the deterministic finite-support forward —
   synchronized CUDA timing, separate allocated/reserved peak memory.
-* Tier C (requires real CUDA): fixed-configuration Hopkins compute tier;
-  recorded ``UNSUPPORTED`` in Phase 2A until the GPU-resident Hopkins
-  path is implemented and verified (never faked).
+* Tier C (requires real CUDA): fixed-configuration Hopkins compute tier
+  on the GPU-resident SOCS path. Each fresh worker performs untimed
+  setup/warmup and then records EXACTLY ONE synchronized steady-state
+  timing observation; cold start (kernel construction) is a separate
+  diagnostic fact, never part of the warm headline statistic.
 
 Formal discipline retained from v1.1: fresh worker process per
 claim-bearing repeat (the driver re-invokes itself with ``--worker``),
-setup/warmup/timed phases explicit, median/p10/p90/n statistics (never
-best-of-N), strict JSON artifacts under
-``benchmarks/results/industrial-v2/runs/<run_identity>/``.
+setup/warmup/timed phases explicit, median/p10/p90/n statistics computed
+by the DRIVER across fresh-process repeats (never best-of-N), strict
+JSON artifacts under ``benchmarks/results/industrial-v2/runs/<run_identity>/``.
 
 On a host without CUDA, Tier B/C rows record ``NOT_RUN_ENVIRONMENT`` and
 canonical publication stays blocked — that is the honest terminal state
@@ -31,7 +33,6 @@ import json
 import statistics
 import subprocess  # noqa: S404 — fixed-argv worker re-invocation only
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -194,16 +195,33 @@ def tier_a_worker_once(
     }
 
 
+def _tier_b_execution_source(cfg: dict[str, Any]) -> Any:
+    """Construct the ACTUAL Tier B execution source from the declared run
+    config.  The declared GDS layer MUST reach the parser: the formal
+    fixture is a multi-layer GDS, so dropping the layer would silently
+    measure a different workload than the run identity declares."""
+    from openlithohub.streaming.vector_runs import KLayoutAlignedRunSource
+
+    return KLayoutAlignedRunSource.from_file(
+        cfg["gds"],
+        pixel_size_nm=cfg["pixel_nm"],
+        layer=cfg["layer"],
+    )
+
+
 def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     """One Tier B measurement (CUDA required): CPU batch=1 vs GPU batch=1
     vs GPU batch=N streaming execution with the deterministic finite-
-    support forward, synchronized CUDA timing, separate GPU peak memory."""
+    support forward, synchronized CUDA timing, separate GPU peak memory.
+    The declared GDS layer is executed, not just declared (2B.2-A)."""
     import torch
 
-    from openlithohub.benchmark.industrial_v2 import BatchedFiniteSupportBlur
+    from openlithohub.benchmark.industrial_v2 import (
+        BatchedFiniteSupportBlur,
+        cuda_synchronized_wall,
+    )
     from openlithohub.streaming import run_streaming
     from openlithohub.streaming.sinks import TensorTileSink
-    from openlithohub.streaming.vector_runs import KLayoutAlignedRunSource
 
     device = str(cfg["device"])
     # 2B.1-F: the ACTUAL runtime policy must equal the declared run-config
@@ -240,7 +258,7 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     from openlithohub.streaming.crop_source import ExactVectorCropSource
     from openlithohub.streaming.geometry import BoundingBox
 
-    parent = KLayoutAlignedRunSource.from_file(cfg["gds"], pixel_size_nm=cfg["pixel_nm"])
+    parent = _tier_b_execution_source(cfg)
     side = min(cfg["window"], parent.shape[0], parent.shape[1])
     y0 = max(0, (parent.shape[0] - side) // 2)
     x0 = max(0, (parent.shape[1] - side) // 2)
@@ -267,26 +285,17 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
             "forward_batches": report.forward_batches,
         }
 
-    def synced(fn, *, needs_device: bool):
-        if needs_device:
-            torch.cuda.synchronize(device)
-        start = time.perf_counter()
-        result = fn()
-        if needs_device:
-            torch.cuda.synchronize(device)
-        return result, time.perf_counter() - start
-
     # correctness first (§18): CPU reference vs GPU batch=1 vs GPU batch=N
     cpu_out, _ = run_stream("cpu", 1)
     torch.cuda.reset_peak_memory_stats(device)
-    (gpu1, meta1), gpu1_wall = synced(lambda: run_stream(device, 1), needs_device=True)
+    (gpu1, meta1), gpu1_wall = cuda_synchronized_wall(lambda: run_stream(device, 1), device)
     gpu1_mem = {
         "max_memory_allocated": int(torch.cuda.max_memory_allocated(device)),
         "max_memory_reserved": int(torch.cuda.max_memory_reserved(device)),
     }
     torch.cuda.reset_peak_memory_stats(device)
-    (gpu_n, meta_n), gpu_n_wall = synced(
-        lambda: run_stream(device, cfg["batch"]), needs_device=True
+    (gpu_n, meta_n), gpu_n_wall = cuda_synchronized_wall(
+        lambda: run_stream(device, cfg["batch"]), device
     )
     gpu_n_mem = {
         "max_memory_allocated": int(torch.cuda.max_memory_allocated(device)),
@@ -330,19 +339,25 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     Protocol requirements implemented here:
 
     * CPU fixed-config witness (finite + deterministic across two calls)
-    * GPU fixed-config execution with synchronized wall timing
-    * cold (first GPU call incl. SOCS kernel construction) reported
-      SEPARATELY from warm steady-state (precomputed kernels)
-    * GPU allocated/reserved peaks reset before the timed region
+    * fresh-worker timing contract (2B.2-C): untimed setup / warmup, then
+      EXACTLY ONE synchronized measured steady-state GPU execution — one
+      timing observation per worker; the DRIVER owns median/p10/p90/n
+      across fresh-process repeats (never best-of-N within a worker)
+    * cold start (first GPU call incl. SOCS kernel construction) reported
+      SEPARATELY as a diagnostic — never mixed into the warm steady-state
+      headline statistic
+    * GPU allocated/reserved peaks recorded after the timed region
     * CPU vs GPU agreement within the frozen fp32 tolerance
     """
-    import time
-
     import numpy as np
     import torch
 
     from openlithohub._utils.hopkins import (
         simulate_aerial_image_hopkins,
+    )
+    from openlithohub.benchmark.industrial_v2 import (
+        cuda_synchronized_wall,
+        host_peak_rss_bytes,
     )
     from openlithohub.simulators.hopkins_sim import HopkinsParams
 
@@ -387,32 +402,32 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
 
     mask_gpu = torch.from_numpy(mask_cpu).to(device)
 
-    # COLD: first GPU call includes SOCS kernel construction on device.
-    torch.cuda.synchronize(device)
-    cold_start = time.perf_counter()
-    gpu_cold = simulate_aerial_image_hopkins(mask_gpu, params=params)
-    torch.cuda.synchronize(device)
-    cold_wall = time.perf_counter() - cold_start
-    del gpu_cold  # cold result carries the kernel-construction cost only
+    # COLD (diagnostic only): first GPU call includes SOCS kernel
+    # construction on device. Never part of the warm headline statistic.
+    _, cold_wall = cuda_synchronized_wall(
+        lambda: simulate_aerial_image_hopkins(mask_gpu, params=params), device
+    )
 
-    # WARM: precomputed kernels in device memory, synchronized steady-state.
+    # UNTIMED setup: device-resident kernels + pre-FFT'd kernel tables.
     kernels, weights = _build_socs(params, grid, mask_gpu.device)
     kernels_f = torch.fft.fftn(torch.fft.ifftshift(kernels, dim=(-2, -1)), dim=(-2, -1)).to(
         torch.complex64
     )
-    warm_walls: list[float] = []
-    gpu_warm = None
-    for _ in range(3):
-        torch.cuda.synchronize(device)
-        start = time.perf_counter()
-        gpu_warm = simulate_aerial_image_hopkins(
-            mask_gpu,
-            kernels=kernels,
-            weights=weights,
-            precomputed_kernels_f=kernels_f,
+
+    # UNTIMED warmup executions: reach steady state before the timed call.
+    warmup_executions = 2
+    for _ in range(warmup_executions):
+        simulate_aerial_image_hopkins(
+            mask_gpu, kernels=kernels, weights=weights, precomputed_kernels_f=kernels_f
         )
-        torch.cuda.synchronize(device)
-        warm_walls.append(time.perf_counter() - start)
+
+    # THE ONE claim-bearing observation: synchronized warm steady state.
+    gpu_warm, warm_wall = cuda_synchronized_wall(
+        lambda: simulate_aerial_image_hopkins(
+            mask_gpu, kernels=kernels, weights=weights, precomputed_kernels_f=kernels_f
+        ),
+        device,
+    )
     peaks = {
         "max_memory_allocated": int(torch.cuda.max_memory_allocated(device)),
         "max_memory_reserved": int(torch.cuda.max_memory_reserved(device)),
@@ -427,11 +442,13 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         "grid": grid,
         "cpu_reference_wall_s": None,
         "gpu_cold_wall_s": round(cold_wall, 6),
-        "gpu_warm_wall_s": round(min(warm_walls), 6) if warm_walls else None,
-        "warm_walls_s": [round(w, 6) for w in warm_walls],
+        "gpu_warm_wall_s": round(warm_wall, 6),
+        "warmup_executions": warmup_executions,
+        "timing_observations": 1,
         "finite_witness": bool(np.isfinite(gpu_out).all()),
         "cpu_deterministic_witness": cpu_deterministic,
         "correctness_witness_pass": parity,
+        "host_peak_rss_bytes": host_peak_rss_bytes(),
         "max_memory_allocated": peaks["max_memory_allocated"],
         "max_memory_reserved": peaks["max_memory_reserved"],
         "timing_method": "cuda_synchronized",
@@ -529,6 +546,17 @@ def main() -> int:
         return worker_entry(args)
 
     repo = Path(__file__).resolve().parents[2]
+    # the frozen v1.1 root is never a v2 output root — checked BEFORE any
+    # workspace is created, including subpaths of the frozen root.
+    out_root = Path(args.out_root).resolve()
+    v11_root = (repo / "benchmarks" / "results" / "industrial").resolve()
+    if (
+        out_root.as_posix().endswith("results/industrial")
+        or out_root == v11_root
+        or v11_root in out_root.parents
+    ):
+        raise SystemExit("refusing to write v2 results into the frozen v1.1 root")
+
     commit, clean = git_measurement_commit(repo)
     source_hashes = build_source_hashes(repo)
 
@@ -597,10 +625,6 @@ def main() -> int:
             "run_config": run_config.to_payload(),
         },
     )
-
-    out_root = Path(args.out_root)
-    if out_root.resolve().as_posix().endswith("results/industrial"):
-        raise SystemExit("refusing to write v2 results into the frozen v1.1 root")
 
     tier_rows: dict[str, dict[str, Any]] = {}
     for tier in run_config.tiers:
@@ -685,6 +709,23 @@ def _worker_once(
         str(args.pixel_nm),
         "--layer",
         args.layer,
+        # semantic forward/Hopkins knobs MUST reach the worker — the
+        # parser defaults would otherwise silently override a declared
+        # non-default run config (declared vs executed semantics).
+        "--forward-radius",
+        str(args.forward_radius),
+        "--forward-sigma",
+        str(args.forward_sigma),
+        "--hopkins-wavelength-nm",
+        str(args.hopkins_wavelength_nm),
+        "--hopkins-na",
+        str(args.hopkins_na),
+        "--hopkins-sigma-outer",
+        str(args.hopkins_sigma_outer),
+        "--hopkins-sigma-inner",
+        str(args.hopkins_sigma_inner),
+        "--hopkins-grid",
+        str(args.hopkins_grid),
     ]
     proc = subprocess.run(  # noqa: S603 — fixed-argv worker re-invocation
         cmd, capture_output=True, text=True, timeout=3600
@@ -725,10 +766,18 @@ def _run_window_repeats(
 def _aggregate_window(
     tier: str, window: int, warm: list[dict[str, Any]], measured: list[dict[str, Any]]
 ) -> dict[str, Any]:
+    """Aggregate fresh-worker repeats for one window/grid row.
+
+    The claim-bearing statistic is computed by THIS driver from one timing
+    observation per fresh worker (2B.2-B/C): median/p10/p90/n over the
+    tier's synchronized steady-state wall field — never best-of-N, and
+    never a zero-length aggregate on a SUCCESS row (a stale timing key
+    fails the row instead of silently publishing empty statistics).
+    """
     wall_key = {
         "a": "indexed_row_wall_s",
         "b": "gpu_batch_n_wall_s",
-        "c": "cpu_wall_s",
+        "c": "gpu_warm_wall_s",
     }.get(tier, "")
     walls = [float(r[wall_key]) for r in measured if wall_key in r]
     all_pass = bool(measured) and all(r.get("correctness_witness_pass") for r in measured)
@@ -752,6 +801,16 @@ def _aggregate_window(
         row["status"] = "UNSUPPORTED"
     else:
         row["status"] = "SUCCESS"
+    # 2B.2-B: a SUCCESS row must carry one timing observation per measured
+    # repeat — a zero-length or partial aggregate means the timing key
+    # drifted from the executed worker contract and MUST fail the row.
+    if row["status"] == "SUCCESS" and aggregate["n"] != len(measured):
+        row["status"] = "FAILED"
+        row["reason"] = (
+            f"timing field {wall_key!r} yielded {aggregate['n']} observations for "
+            f"{len(measured)} measured repeats — stale/missing timing key "
+            "(no zero-length claim-bearing aggregate)"
+        )
     if tier == "a" and row["status"] == "SUCCESS":
         first = next((r for r in measured if r.get("status") == "SUCCESS"), {})
         row.update(
@@ -769,11 +828,49 @@ def _aggregate_window(
             }
         )
     if tier == "b" and row["status"] == "SUCCESS":
+        first = next((r for r in measured if r.get("status") == "SUCCESS"), {})
+        # the canonical/verifier layer locks GPU row FACTS on the window
+        # row itself; the executed worker rows carry them per repeat.
+        row.update(
+            {
+                "timing_method": first.get("timing_method"),
+                "device": first.get("device"),
+                "dtype": first.get("dtype"),
+                "device_requires_cuda": first.get("device_requires_cuda"),
+                "max_memory_allocated": first.get("max_memory_allocated"),
+                "max_memory_reserved": first.get("max_memory_reserved"),
+                "batch_n_max_memory_allocated": first.get("batch_n_max_memory_allocated"),
+                "batch_n_max_memory_reserved": first.get("batch_n_max_memory_reserved"),
+                "host_peak_rss_bytes": first.get("host_peak_rss_bytes"),
+            }
+        )
         # §14: batching speedup from FORMAL MEDIANS, never one repeat.
         b1 = [float(r["gpu_batch1_wall_s"]) for r in measured if r.get("gpu_batch1_wall_s")]
         bn = [float(r["gpu_batch_n_wall_s"]) for r in measured if r.get("gpu_batch_n_wall_s")]
         if b1 and bn:
+            row["aggregate_batch1_median_s"] = statistics.median(b1)
+            row["aggregate_batch_n_median_s"] = statistics.median(bn)
             row["batching_speedup_x"] = round(statistics.median(b1) / statistics.median(bn), 4)
+    if tier == "c" and row["status"] == "SUCCESS":
+        first = next((r for r in measured if r.get("status") == "SUCCESS"), {})
+        # 2B.2-B: the Tier C aggregate row carries the GPU facts the
+        # canonical family + verifier lock (synchronized timing, device,
+        # memory peaks); cold start stays per-repeat diagnostic provenance.
+        row.update(
+            {
+                "grid": first.get("grid"),
+                "timing_method": first.get("timing_method"),
+                "device": first.get("device"),
+                "dtype": first.get("dtype"),
+                "device_requires_cuda": first.get("device_requires_cuda"),
+                "max_memory_allocated": first.get("max_memory_allocated"),
+                "max_memory_reserved": first.get("max_memory_reserved"),
+                "host_peak_rss_bytes": first.get("host_peak_rss_bytes"),
+                "warmup_executions": first.get("warmup_executions"),
+                "timing_observations": first.get("timing_observations"),
+                "gpu_cold_wall_s": first.get("gpu_cold_wall_s"),
+            }
+        )
     return row
 
 

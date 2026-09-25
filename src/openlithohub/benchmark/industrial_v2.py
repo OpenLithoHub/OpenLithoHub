@@ -399,21 +399,29 @@ def build_canonical_family_in_workspace(
                     f"tier {tier.upper()} window ladder incomplete: "
                     f"{windows_seen} != {expected_windows} (2B.1-G)"
                 )
-        if tier == "b":
-            for wrow in row.get("window_rows", []):
+        if tier in ("b", "c"):
+            for wrow in row.get("window_rows", [row]):
+                label = f"tier {tier.upper()} window {wrow.get('window')}"
                 if wrow.get("timing_method") != TIMING_CUDA_SYNC:
-                    blockers.append(
-                        f"tier B window {wrow.get('window')}: unsynchronized GPU timing (B2-E)"
-                    )
+                    blockers.append(f"{label}: unsynchronized GPU timing (B2-E)")
                 for key in ("max_memory_allocated", "max_memory_reserved", "host_peak_rss_bytes"):
                     if key not in wrow:
-                        blockers.append(
-                            f"tier B window {wrow.get('window')}: missing {key!r} (§15)"
-                        )
+                        blockers.append(f"{label}: missing {key!r} (§15)")
                 if int(wrow.get("repeat_count") or 0) < HEADLINE_MIN_REPEATS:
-                    blockers.append(
-                        f"tier B window {wrow.get('window')}: insufficient repeats (B2)"
-                    )
+                    blockers.append(f"{label}: insufficient repeats (B2)")
+        if tier == "c":
+            # 2B.2-B: the claim-bearing Tier C repeat statistics must be
+            # complete (n == repeat_count) and sufficient (n >= 5) — a
+            # zero-length aggregate from a stale timing key can never
+            # enter the canonical family.
+            aggregate_n = int(row.get("aggregate_n") or 0)
+            if aggregate_n != int(row.get("repeat_count") or -1):
+                blockers.append(
+                    f"tier C timing aggregate n={aggregate_n} != repeat_count "
+                    f"{row.get('repeat_count')!r} (stale timing key or partial repeats)"
+                )
+            if aggregate_n < HEADLINE_MIN_REPEATS:
+                blockers.append(f"tier C has insufficient claim-bearing repeats: {aggregate_n}")
         repeat_level = row.get("repeat_level")
         if repeat_level is not None and int(repeat_level) < HEADLINE_MIN_REPEATS:
             blockers.append(f"tier {tier.upper()} has insufficient repeats")

@@ -285,6 +285,12 @@ class FamilyBuilder:
             "max_memory_allocated": 1,
             "max_memory_reserved": 2,
             "device_requires_cuda": False,
+            # claim-bearing repeat statistics (verifier-locked on hopkins)
+            "aggregate_n": 5,
+            "aggregate_median_s": 1.0,
+            "aggregate_p10_s": 0.9,
+            "aggregate_p90_s": 1.1,
+            "timing_observations": 1,
         }
 
     def write(self) -> Path:

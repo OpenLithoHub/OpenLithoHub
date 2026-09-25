@@ -27,6 +27,7 @@ sys.path.insert(0, str(REPO / "src"))
 
 from openlithohub.benchmark.industrial_v2 import (  # noqa: E402
     CANONICAL_FAMILY,
+    HEADLINE_MIN_REPEATS,
     SCHEMA_NAME,
     compute_run_identity_v2,
 )
@@ -221,10 +222,29 @@ def verify(canonical_root: Path) -> list[str]:
         if payload.get("correctness_witness_pass") and payload.get("claim_level"):
             claims.append(f"{tier_key}:{payload['claim_level']}")
 
-    # cold/warm separation on hopkins (B2-F)
+    # cold/warm separation on hopkins (B2-F): cold is diagnostic only and
+    # every executed row must carry a warm steady-state aggregate — the
+    # claim-bearing statistic is the driver's median/p10/p90/n over fresh
+    # synchronized workers, never best-of-N and never zero-length (2B.2-B/C).
     hopkins = _load_strict_json(canonical_root / "industrial-v2-hopkins.json")
     if hopkins.get("cold_wall_s") is not None and "warm_wall_s" not in hopkins:
         _fail("hopkins reports cold timing without warm steady-state (B2-F)")
+    for row in hopkins.get("rows", []):
+        if row.get("gpu_cold_wall_s") is not None and row.get("aggregate_median_s") is None:
+            _fail("hopkins row reports cold timing without a warm steady-state aggregate (B2-F)")
+        if row.get("status") == "SUCCESS":
+            aggregate_n = int(row.get("aggregate_n") or 0)
+            if aggregate_n < HEADLINE_MIN_REPEATS:
+                _fail(
+                    f"hopkins SUCCESS row has {aggregate_n} claim-bearing repeats "
+                    f"< {HEADLINE_MIN_REPEATS} (B2)"
+                )
+            for key in ("aggregate_median_s", "aggregate_p10_s", "aggregate_p90_s"):
+                if key not in row:
+                    _fail(f"hopkins SUCCESS row missing {key!r} (2B.2-B repeat statistics)")
+            observations = row.get("timing_observations")
+            if observations is not None and int(observations) != 1:
+                _fail("hopkins warm statistic must be one observation per fresh worker (2B.2-C)")
 
     return claims
 
