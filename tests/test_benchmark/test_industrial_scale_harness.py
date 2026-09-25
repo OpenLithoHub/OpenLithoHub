@@ -144,17 +144,17 @@ def test_harness_end_to_end_lane_a(
     assert output.shape == (128, 128)
     assert np.isfinite(np.asarray(output)).all()
 
-    # the exact 8-member family is in the workspace, with closures
-    members = {p.name for p in workspace.iterdir()}
-    assert members >= SCALE_CANONICAL_FAMILY
-    sums = (workspace / "SHA256SUMS.txt").read_text().strip().splitlines()
+    # the exact 8-member family is closed inside workspace/family
+    family = workspace / "family"
+    assert {p.name for p in family.iterdir()} == SCALE_CANONICAL_FAMILY
+    sums = (family / "SHA256SUMS.txt").read_text().strip().splitlines()
     assert len(sums) == len(SCALE_CANONICAL_FAMILY) - 1
     manifest = load_scale_fixture_manifest(manifest_path)
-    fixture_member = json.loads((workspace / "industrial-scale-fixture.json").read_text())
+    fixture_member = json.loads((family / "industrial-scale-fixture.json").read_text())
     assert fixture_member["fixture"]["gds_sha256"] == manifest.gds_sha256
 
     # identity recomputes from the written run-config member
-    run_config_member = json.loads((workspace / "industrial-scale-run-config.json").read_text())
+    run_config_member = json.loads((family / "industrial-scale-run-config.json").read_text())
     payload = run_config_member["run_config"]
     recomputed = compute_scale_run_identity(
         __import__(
@@ -342,7 +342,9 @@ def test_formal_run_refused_on_cpu_host(
     assert summary["family_blockers"], "CPU host must carry formal blockers"
     assert any("cuda backend" in b for b in summary["family_blockers"])
     workspace = Path(summary["workspace"])
-    assert not (workspace / "manifest.json").exists(), "refused formal runs write NO family"
+    assert not (workspace / "family" / "manifest.json").exists(), (
+        "refused formal runs write NO family"
+    )
 
 
 def test_environment_lock_hash_is_stable_and_sensitive() -> None:
