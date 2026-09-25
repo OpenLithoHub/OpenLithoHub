@@ -130,9 +130,13 @@ Required: `PREFLIGHT: PASS`. Otherwise STOP.
 
 ## 5. Frozen measurement commands
 
-> FILL AT FREEZE: `FROZEN_SCALE_COMMIT`, window lists and repeat
-> counts below are the frozen protocol. Do not alter them after seeing
-> results.
+> FILL AT FREEZE: `FROZEN_SCALE_COMMIT` below is the only remaining
+> placeholder (filled at handoff).  The window ladders, tile/halo/
+> microbatch and repeat/warmup counts below are the FROZEN protocol
+> (aligned with the v2 formal protocol) — do not alter them after
+> seeing results.
+>
+> FROZEN SCALE COMMIT: <FULL_40_HEX_SHA>
 
 ### Command A — Lane A, single GPU, Ibex ladder
 
@@ -141,11 +145,11 @@ python benchmarks/industrial-scale/run_scale_benchmark.py \
   --fixture-manifest benchmarks/results/industrial-scale/fixtures/ibex/fixture-manifest.json \
   --gds benchmarks/results/industrial-scale/fixtures/ibex/ibex.gds \
   --lanes a \
-  --windows <FROZEN_IBEX_LADDER> \
+  --windows 4096,8192,16384,32768 \
   --device cuda:0 --device-backend cuda --gpu-count 1 \
   --forward-profile P1_FINITE_SUPPORT --sink memmap_npy \
-  --tile <FROZEN_TILE> --halo <FROZEN_HALO> --microbatch <FROZEN_MICROBATCH> \
-  --repeats <FROZEN_REPEATS> --warmup <FROZEN_WARMUP> \
+  --tile 1024 --halo 64 --microbatch 8 \
+  --repeats 5 --warmup 2 \
   --formal \
   2>&1 | tee measurement-logs/lane-a.txt
 ```
@@ -158,11 +162,11 @@ python benchmarks/industrial-scale/run_scale_benchmark.py \
   --fixture-manifest benchmarks/results/industrial-scale/fixtures/ibex/fixture-manifest.json \
   --gds benchmarks/results/industrial-scale/fixtures/ibex/ibex.gds \
   --lanes b \
-  --windows <FROZEN_SCALING_WINDOW> \
+  --windows 8192 \
   --device cuda:0 --device-backend cuda --gpu-count $GPUS --worker-count $GPUS \
   --forward-profile P1_FINITE_SUPPORT --sink memmap_npy \
-  --tile <FROZEN_TILE> --halo <FROZEN_HALO> --microbatch <FROZEN_MICROBATCH> \
-  --repeats <FROZEN_REPEATS> --warmup <FROZEN_WARMUP> \
+  --tile 1024 --halo 64 --microbatch 8 \
+  --repeats 5 --warmup 2 \
   --formal \
   2>&1 | tee measurement-logs/lane-b-$GPUS-gpu.txt
 done
@@ -175,11 +179,11 @@ python benchmarks/industrial-scale/run_scale_benchmark.py \
   --fixture-manifest benchmarks/results/industrial-scale/fixtures/microwatt/fixture-manifest.json \
   --gds benchmarks/results/industrial-scale/fixtures/microwatt/microwatt.gds \
   --lanes a \
-  --windows <FROZEN_MICROWATT_LADDER> \
+  --windows 4096,8192 \
   --device cuda:0 --device-backend cuda --gpu-count 1 \
   --forward-profile P1_FINITE_SUPPORT --sink memmap_npy \
-  --tile <FROZEN_TILE> --halo <FROZEN_HALO> --microbatch <FROZEN_MICROBATCH> \
-  --repeats <FROZEN_REPEATS> --warmup <FROZEN_WARMUP> \
+  --tile 1024 --halo 64 --microbatch 8 \
+  --repeats 5 --warmup 2 \
   --formal \
   2>&1 | tee measurement-logs/microwatt.txt
 ```
