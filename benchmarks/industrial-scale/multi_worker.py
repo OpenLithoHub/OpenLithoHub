@@ -232,8 +232,17 @@ def run_multi_worker_stream(
             slots.release()  # a commit frees one production slot
 
     if failures:
+        # best-effort bounded drain so the process never tears down C++
+        # thread state (torch intra-op pools) underneath a live worker
+        for thread in threads:
+            thread.join(timeout=1.0)
         raise WorkerFailureError(f"worker failed: {failures[0]!r}") from failures[0]
     ledger.finish()
+    # success path: join EVERY worker — torch/OMP per-thread C++ state
+    # must be dismantled before interpreter shutdown, or the process can
+    # abort with "terminate called without an active exception" at exit
+    for thread in threads:
+        thread.join()
     return MultiWorkerReport(
         n_tiles=len(requests),
         worker_counts={f"worker{i}": len(shard) for i, shard in enumerate(shards)},

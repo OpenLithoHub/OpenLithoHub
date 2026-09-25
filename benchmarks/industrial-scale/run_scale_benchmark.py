@@ -525,6 +525,7 @@ def torch_cuda_available() -> bool:
 def build_scale_family_in_workspace(
     *,
     workspace_dir: Path,
+    family_dir: Path,
     identity: str,
     measurement_commit: str,
     tracked_tree_clean: bool,
@@ -570,7 +571,7 @@ def build_scale_family_in_workspace(
             return blockers
 
     write_strict_json(
-        workspace_dir / "industrial-scale-run-config.json",
+        family_dir / "industrial-scale-run-config.json",
         {
             "schema": RUN_CONFIG_SCHEMA,
             "measurement_commit": measurement_commit,
@@ -583,15 +584,15 @@ def build_scale_family_in_workspace(
         },
     )
     write_strict_json(
-        workspace_dir / "industrial-scale-environment.json",
+        family_dir / "industrial-scale-environment.json",
         {"environment_lock": env_lock, "environment_lock_sha256": env_lock_sha},
     )
     write_strict_json(
-        workspace_dir / "industrial-scale-distribution-freeze.txt",
+        family_dir / "industrial-scale-distribution-freeze.txt",
         {"gpu": env_lock, "environment_lock_sha256": env_lock_sha},
     )
     write_strict_json(
-        workspace_dir / "industrial-scale-fixture.json",
+        family_dir / "industrial-scale-fixture.json",
         {
             "schema": "OpenLithoHub.industrial-scale-benchmark.v1",
             "run_identity": identity,
@@ -612,24 +613,24 @@ def build_scale_family_in_workspace(
             "headline_eligible": bool(rows)
             and all(bool(r.get("headline_eligible")) for r in successes),
         }
-    write_strict_json(workspace_dir / "industrial-scale-index.json", lane_summary.get(LANE_A, {}))
-    write_strict_json(workspace_dir / "industrial-scale-runtime.json", lane_summary.get(LANE_B, {}))
+    write_strict_json(family_dir / "industrial-scale-index.json", lane_summary.get(LANE_A, {}))
+    write_strict_json(family_dir / "industrial-scale-runtime.json", lane_summary.get(LANE_B, {}))
 
     members = sorted(SCALE_CANONICAL_FAMILY - {"manifest.json", "SHA256SUMS.txt"})
     write_strict_json(
-        workspace_dir / "manifest.json",
+        family_dir / "manifest.json",
         {
             "run_identity": identity,
             "members": [
-                {"name": name, "bytes": (workspace_dir / name).stat().st_size} for name in members
+                {"name": name, "bytes": (family_dir / name).stat().st_size} for name in members
             ],
         },
     )
     lines = [
-        f"{sha256_file(workspace_dir / name)}  {name}"
+        f"{sha256_file(family_dir / name)}  {name}"
         for name in sorted(SCALE_CANONICAL_FAMILY - {"SHA256SUMS.txt"})
     ]
-    (workspace_dir / "SHA256SUMS.txt").write_text("\n".join(lines) + "\n")
+    (family_dir / "SHA256SUMS.txt").write_text("\n".join(lines) + "\n")
     return []
 
 
@@ -758,6 +759,7 @@ def main() -> int:
     run_config_payload = run_config.to_payload()
     blockers = build_scale_family_in_workspace(
         workspace_dir=workspace,
+        family_dir=workspace / "family",
         identity=identity,
         measurement_commit=commit,
         tracked_tree_clean=clean,
