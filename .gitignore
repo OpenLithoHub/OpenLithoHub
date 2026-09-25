@@ -85,4 +85,9 @@ benchmarks/results/industrial/runs/
 benchmarks/results/industrial-v2/fixtures/
 benchmarks/results/industrial-v2/runs/
 benchmarks/results/industrial-v2/tmp/
+# scale track: fixtures/mutable run workspaces are host-local until the
+# formal protocol freezes; only verifier-closed families may enter git.
+benchmarks/results/industrial-scale/fixtures/
+benchmarks/results/industrial-scale/runs/
+benchmarks/results/industrial-scale/tmp/
 coverage.xml

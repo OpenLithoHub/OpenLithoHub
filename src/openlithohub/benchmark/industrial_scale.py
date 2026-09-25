@@ -479,6 +479,11 @@ def formal_scale_blockers(
     host the first blocker is the missing CUDA environment; CPU emulation
     can NEVER satisfy a formal cuda-backend run (charter §S6.3)."""
     blockers: list[str] = []
+    if run_config.device_backend != "cuda":
+        blockers.append(
+            "formal scale runs require the cuda backend; "
+            "cpu-worker-emulation is development-only and never authority"
+        )
     if run_config.device_backend == "cuda" and not env_lock.get("available"):
         blockers.append("FORMAL_SCALE_BLOCKED: CUDA measurement environment unavailable")
     if (
