@@ -1,3 +1,10 @@
+> **STATUS: SUPERSEDED — HISTORICAL 3×RTX 3080 TEMPLATE.**
+> The hardware plan moved to 1×RTX 4090; the live contracts are the
+> G*-4090 templates. This file is retained as frozen-protocol
+> provenance. DO NOT EXECUTE from this template.
+
+---
+
 # GPU Issue G1 — Scale Host Qualification (3×RTX 3080)
 
 ## Purpose

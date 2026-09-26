@@ -69,6 +69,11 @@ TIMING_HOST = "host_perf_counter"
 # SEPARATE claims — one number must never mix them.
 LANE_A = "A_LARGE_LAYOUT_STREAMING"
 LANE_B = "B_MULTI_GPU_SCALING"
+LANE_C = "C_SINGLE_GPU_SATURATION"
+
+FROZEN_MICROBATCH_LADDER: tuple[int, ...] = (1, 2, 4, 8, 16, 32)
+"""Lane C's frozen microbatch ladder (1×RTX4090 migration).  Frozen
+BEFORE any GPU observation; changing it is a protocol change."""
 
 
 class ScaleStatus(str, Enum):
@@ -87,6 +92,7 @@ SCALE_CANONICAL_FAMILY: frozenset[str] = frozenset(
     {
         "industrial-scale-index.json",
         "industrial-scale-runtime.json",
+        "industrial-scale-saturation.json",
         "industrial-scale-fixture.json",
         "industrial-scale-run-config.json",
         "industrial-scale-environment.json",
@@ -95,9 +101,10 @@ SCALE_CANONICAL_FAMILY: frozenset[str] = frozenset(
         "SHA256SUMS.txt",
     }
 )
-"""The scale canonical family.  Once the formal protocol freezes, family
-membership is fail-closed: a partial or augmented root must never pass
-the verifier (S10)."""
+"""The scale canonical family (nine members since the 1×RTX4090
+migration added the Lane C saturation member).  Family membership is
+fail-closed: a partial or augmented root must never pass the verifier
+(S10)."""
 
 
 def canonical_json(payload: Mapping[str, Any]) -> str:
@@ -291,6 +298,7 @@ class ScaleRunConfig:
     tile_size: int = 1024
     halo_px: int = 64
     microbatch: int = 8
+    microbatch_ladder: tuple[int, ...] = ()
     queue_depth: int = 64
     forward_profile: str = "P1_FINITE_SUPPORT"
     forward_radius: int = 4
@@ -310,6 +318,7 @@ class ScaleRunConfig:
         payload = asdict(self)
         payload["lanes"] = list(self.lanes)
         payload["window_sizes"] = list(self.window_sizes)
+        payload["microbatch_ladder"] = list(self.microbatch_ladder)
         return payload
 
     def with_changes(self, **changes: Any) -> ScaleRunConfig:
@@ -520,16 +529,35 @@ def formal_scale_blockers(
             blockers.append(f"lane {lane} correctness witness did not pass")
         if row is not None and int(row.get("repeat_count") or 0) < 5:
             blockers.append(f"lane {lane} has insufficient repeats for formal claims")
+    if LANE_C in run_config.lanes:
+        # single-GPU saturation is single-GPU BY DEFINITION (1×RTX4090
+        # migration): multi-worker emulation can never satisfy it.
+        if run_config.gpu_count != 1:
+            blockers.append(f"lane C requires gpu_count == 1, got {run_config.gpu_count}")
+        if tuple(run_config.microbatch_ladder) != FROZEN_MICROBATCH_LADDER:
+            blockers.append(
+                f"lane C microbatch ladder {list(run_config.microbatch_ladder)} != "
+                f"frozen {list(FROZEN_MICROBATCH_LADDER)}"
+            )
+    if LANE_B in run_config.lanes and run_config.gpu_count < 2:
+        # multi-GPU scaling remains a multi-GPU claim: it keeps requiring
+        # multiple physical GPUs (deferred on the 1×RTX4090 host)
+        blockers.append(
+            "lane B is a multi-GPU claim and requires gpu_count >= 2 — "
+            "deferred on the current 1×RTX4090 host"
+        )
     return blockers
 
 
 __all__ = [
     "AUTHORITY_SCOPE",
     "DEVICE_BACKENDS",
+    "FROZEN_MICROBATCH_LADDER",
     "FIXTURE_SCHEMA",
     "FORWARD_PROFILES",
     "LANE_A",
     "LANE_B",
+    "LANE_C",
     "PDB_COMMIT",
     "PDB_REPOSITORY",
     "RESULTS_ROOT",
