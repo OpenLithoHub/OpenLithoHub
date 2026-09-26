@@ -36,6 +36,11 @@ NOT PERFORMANCE AUTHORITY
 
 ## Problem definition
 
+Reference GPU host (current campaign): **1×RTX 4090**. The historical
+3×RTX 3080 multi-GPU campaign is superseded for measurement; Lane B
+multi-GPU remains a retained engineering capability with measurement
+DEFERRED.
+
 The scale benchmark does NOT answer:
 
 ```text
@@ -44,18 +49,24 @@ Does it reach foundry sign-off?
 Does it have production lithography accuracy?
 ```
 
-It answers exactly:
+The current 1×RTX4090 campaign answers exactly:
 
 ```text
-1. How large can a real routed vector layout be processed?
-2. Is full-layout rasterization avoided?
-3. Do host RSS / VRAM stay bounded?
-4. What is the single-GPU throughput?
-5. How does 1/2/3-GPU scaling behave?
-6. Where is the bottleneck: geometry / transfer / forward / sink?
+1. How large a real routed vector layout can be processed with bounded
+   host/GPU working memory?
+2. Does the pipeline avoid resident full-layout rasterization?
+3. What is single-RTX4090 end-to-end throughput on the frozen P1 profile?
+4. How does throughput / VRAM usage scale with microbatch size on ONE GPU?
+5. Where are the bottlenecks: geometry / H2D / forward / D2H / sink /
+   end-to-end?
+6. How does the Microwatt stress fixture behave under the same frozen
+   single-GPU protocol?
 ```
 
-## Two lanes — never mixed into one number
+The current campaign must NOT claim 1/2/3-GPU scaling, multi-GPU
+efficiency, or multi-GPU speedup: only one physical GPU is available.''
+
+## Three lanes — never mixed into one number
 
 ### Lane A — Large-Layout Streaming Scale
 
@@ -73,10 +84,16 @@ n_forward_batches          screened_tiles        forwarded_pixels
 output_bytes               throughput_gpx_s
 ```
 
-### Lane B — Multi-GPU Scaling
+### Lane B — Multi-GPU Scaling (capability RETAINED, measurement DEFERRED)
 
-Same fixture, same tile geometry, same forward kernel, same output
-semantics at 1 / 2 / 3 GPUs:
+Lane B remains implemented end to end (tile-sharded multi-worker
+scheduler, exactly-once ownership, bounded queues, CPU-emulated hostile
+matrix) as an engineering capability for future multi-GPU hardware.
+On the current 1×RTX4090 host its formal measurement is DEFERRED: it
+keeps requiring gpu_count >= 2 in the formal blockers, and CPU-emulated
+1/2/3-worker runs prove scheduler semantics only — never GPU scaling.
+The quantities below are the frozen Lane B definitions for when such
+hardware exists:
 
 ```text
 T1, T2, T3
@@ -93,6 +110,31 @@ per_gpu_peak_vram   per_gpu_forward_tiles
 ```
 
 Kernel-only time must never be headlined alone.
+
+### Lane C — Single-GPU Saturation (current formal lane)
+
+Measures single-GPU P1 throughput saturation while varying ONLY the
+microbatch size on one fixed physical GPU (cuda:0, gpu_count = 1); all
+other semantics stay fixed.  Frozen setup:
+
+```text
+fixture:          Ibex scale fixture, layer 66:44
+window:           8192
+forward profile:  P1_FINITE_SUPPORT
+tile:             1024, halo: 64, dtype: fp32
+sink:             memmap_npy
+warmup:           2, repeats: 5
+microbatch ladder: 1, 2, 4, 8, 16, 32   (FROZEN before any measurement)
+baseline:         microbatch = 1
+```
+
+Every rung records: microbatch, status, aggregate median/p10/p90/n,
+throughput_gpx_s, peak host RSS, VRAM allocated/reserved peaks, n_tiles,
+n_forward_batches, output_bytes, correctness witness, timing method.
+SUCCESS requires aggregate_n == repeat_count == 5 and the witness pass.
+No best-of-N.  The FULL ladder is reported — the baseline is
+microbatch = 1 and no rung is suppressed.  Lane C executes on the
+single-device production spine (never the multi-worker executor).
 
 ## Forward profiles
 
@@ -165,6 +207,7 @@ Never:
 
 ```text
 "processed 40 TB of GDS"            (if it is a dense equivalent)
+"multi-GPU scaling"                 (single-GPU host — Lane B deferred)
 "3× GPU = unified VRAM"             (device memory is not unified)
 "full-chip Hopkins sign-off"
 "foundry validated"
@@ -178,10 +221,10 @@ artifacts):
 real routed layout streamed end-to-end without constructing a
 resident full-layout raster
 
-peak host RSS remained bounded across the declared scale ladder
+peak host RSS / VRAM remained bounded across the declared scale ladder
 
-N-GPU end-to-end throughput speedup under the frozen
-tile-sharded protocol
+single-GPU microbatch saturation behaviour under the frozen
+Lane C protocol
 ```
 
 ## Environment lock

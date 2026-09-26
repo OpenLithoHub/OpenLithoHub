@@ -54,6 +54,7 @@ FLOAT_TOLERANCE = 1e-5
 
 LANE_A = "A_LARGE_LAYOUT_STREAMING"
 LANE_B = "B_MULTI_GPU_SCALING"
+LANE_C = "C_SINGLE_GPU_SATURATION"
 
 
 class FirewallViolationError(Exception):
@@ -206,28 +207,42 @@ def stream_once(
     device: str,
     pixel_nm: float,
 ) -> dict[str, Any]:
-    """One bounded streaming execution over the production spine."""
+    """One bounded streaming execution over the production spine.
+
+    CUDA timing contract (audited, 1×RTX4090 migration §9): the claim-
+    bearing wall comes from the core ``cuda_synchronized_wall`` helper —
+    synchronize before the timed region, host timer, full operation,
+    synchronize after, stop — NEVER from an incidental D2H transfer."""
     import torch
 
+    from openlithohub.benchmark.industrial_v2 import cuda_synchronized_wall
     from openlithohub.streaming import run_streaming
 
     del queue_depth  # run_streaming's pending window is bounded by microbatch
     peak: dict[str, int] = {}
     if device.startswith("cuda"):
         torch.cuda.reset_peak_memory_stats(device)
-    start = time.perf_counter()
-    report = run_streaming(
-        source,
-        sink,
-        lambda tile_tensor: forward_fn(tile_tensor).cpu(),
-        core_size=tile,
-        pixel_nm=pixel_nm,
-        batch_size=microbatch,
-        batched_forward_fn=(
-            (lambda batch: batched_forward_fn(batch).cpu()) if batched_forward_fn else None
-        ),
-    )
-    wall = time.perf_counter() - start
+
+    def _execute():
+        return run_streaming(
+            source,
+            sink,
+            lambda tile_tensor: forward_fn(tile_tensor).cpu(),
+            core_size=tile,
+            pixel_nm=pixel_nm,
+            batch_size=microbatch,
+            batched_forward_fn=(
+                (lambda batch: batched_forward_fn(batch).cpu()) if batched_forward_fn else None
+            ),
+        )
+
+    if device.startswith("cuda"):
+        _report, wall = cuda_synchronized_wall(_execute, device)
+        report = _report
+    else:
+        start = time.perf_counter()
+        report = _execute()
+        wall = time.perf_counter() - start
     if device.startswith("cuda"):
         peak = {
             "max_memory_allocated": int(torch.cuda.max_memory_allocated(device)),
@@ -391,11 +406,72 @@ def run_window_row(
     warmup: int,
     repeats: int,
     workspace: Path,
+    microbatch_ladder: tuple[int, ...] = (),
+) -> list[dict[str, Any]]:
+    # Lane C expands into one row PER frozen microbatch rung, each rung a
+    # full warmup+repeats cycle through the single-device spine.
+    rung_microbatches = tuple(microbatch_ladder) if lane == LANE_C else (microbatch,)
+    rows: list[dict[str, Any]] = []
+    for rung_microbatch in rung_microbatches:
+        rows.append(
+            _run_window_row_single(
+                gds=gds,
+                layer=layer,
+                pixel_nm=pixel_nm,
+                window=window,
+                full_die=full_die,
+                die_px=die_px,
+                profile=profile,
+                radius=radius,
+                sigma_nm=sigma_nm,
+                sink_kind=sink_kind,
+                tile=tile,
+                halo=halo,
+                microbatch=rung_microbatch,
+                queue_depth=queue_depth,
+                device=device,
+                worker_count=worker_count,
+                gpu_count=gpu_count,
+                lane=lane,
+                warmup=warmup,
+                repeats=repeats,
+                workspace=workspace,
+            )
+        )
+    return rows
+
+
+def _run_window_row_single(
+    *,
+    gds: str,
+    layer: str,
+    pixel_nm: float,
+    window: int,
+    full_die: bool,
+    die_px: tuple[int, int],
+    profile: str,
+    radius: int,
+    sigma_nm: float,
+    sink_kind: str,
+    tile: int,
+    halo: int,
+    microbatch: int,
+    queue_depth: int,
+    device: str,
+    worker_count: int,
+    gpu_count: int,
+    lane: str,
+    warmup: int,
+    repeats: int,
+    workspace: Path,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "lane": lane,
         "window": window,
         "worker_count": worker_count,
+        "gpu_count": gpu_count,
+        "device_backend": ("cuda" if device.startswith("cuda") else "cpu-worker-emulation"),
+        "microbatch": microbatch,
         "forward_profile": profile,
         "sink_kind": sink_kind,
         "device": device,
@@ -443,8 +519,9 @@ def run_window_row(
     walls: list[float] = []
     metrics: list[dict[str, Any]] = []
     output_bytes = 0
+    mb_tag = f"-mb{microbatch}" if lane == LANE_C else ""
     for index in range(max(0, warmup) + max(1, repeats)):
-        sink_path = workspace / f"w{window}-r{index}.npy"
+        sink_path = workspace / f"w{window}{mb_tag}-r{index}.npy"
         sink = MemmapTileSink(source.shape, sink_path, npy=True)
         if multi_worker:
             one = stream_once_multi(
@@ -554,6 +631,7 @@ def build_scale_family_in_workspace(
             **run_config_payload,
             "lanes": tuple(run_config_payload["lanes"]),
             "window_sizes": tuple(run_config_payload["window_sizes"]),
+            "microbatch_ladder": tuple(run_config_payload.get("microbatch_ladder", [])),
         }
     )
     blockers: list[str] = []
@@ -615,6 +693,7 @@ def build_scale_family_in_workspace(
         }
     write_strict_json(family_dir / "industrial-scale-index.json", lane_summary.get(LANE_A, {}))
     write_strict_json(family_dir / "industrial-scale-runtime.json", lane_summary.get(LANE_B, {}))
+    write_strict_json(family_dir / "industrial-scale-saturation.json", lane_summary.get(LANE_C, {}))
 
     members = sorted(SCALE_CANONICAL_FAMILY - {"manifest.json", "SHA256SUMS.txt"})
     write_strict_json(
@@ -653,6 +732,11 @@ def main() -> int:
     parser.add_argument("--tile", type=int, default=1024)
     parser.add_argument("--halo", type=int, default=64)
     parser.add_argument("--microbatch", type=int, default=8)
+    parser.add_argument(
+        "--microbatch-ladder",
+        default="1,2,4,8,16,32",
+        help="Lane C frozen microbatch ladder (comma list)",
+    )
     parser.add_argument("--queue-depth", type=int, default=64)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--warmup", type=int, default=1)
@@ -691,6 +775,7 @@ def main() -> int:
     lane_names = {
         "a": LANE_A,
         "b": LANE_B,
+        "c": LANE_C,
     }
     lanes = tuple(lane_names[lane.strip()] for lane in args.lanes.split(",") if lane.strip())
     windows = tuple(int(w) for w in args.windows.split(",") if w.strip())
@@ -702,6 +787,7 @@ def main() -> int:
         tile_size=args.tile,
         halo_px=args.halo,
         microbatch=args.microbatch,
+        microbatch_ladder=tuple(int(v) for v in args.microbatch_ladder.split(",") if v.strip()),
         queue_depth=args.queue_depth,
         forward_profile=args.forward_profile,
         sink_kind=args.sink,
@@ -730,7 +816,7 @@ def main() -> int:
     lane_rows: dict[str, list[dict[str, Any]]] = {lane: [] for lane in lanes}
     for lane in lanes:
         for window in windows:
-            row = run_window_row(
+            rows = run_window_row(
                 gds=args.gds,
                 layer=manifest.selected_layer,
                 pixel_nm=pixel_nm,
@@ -752,9 +838,12 @@ def main() -> int:
                 warmup=args.warmup,
                 repeats=args.repeats,
                 workspace=workspace,
+                microbatch_ladder=run_config.microbatch_ladder,
             )
-            lane_rows[lane].append(row)
-            write_strict_json(workspace / f"row-{lane}-{window}.json", row)
+            lane_rows[lane].extend(rows)
+            for row in rows:
+                suffix = f"-mb{row.get('microbatch')}" if lane == LANE_C else ""
+                write_strict_json(workspace / f"row-{lane}-{window}{suffix}.json", row)
 
     run_config_payload = run_config.to_payload()
     blockers = build_scale_family_in_workspace(

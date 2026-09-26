@@ -13,18 +13,23 @@ failure is diagnostic evidence, never permission to change the protocol.
 ## 0. What this run is
 
 ```text
+reference GPU host: 1 × NVIDIA RTX 4090
 authority_scope = SCALE_CHARACTERIZATION
-Lane A: large-layout streaming scale (single device)
-Lane B: 1/2/3-GPU scaling (same fixture, same protocol)
+Lane A: large-layout single-GPU streaming scale
+Lane C: single-GPU microbatch saturation (frozen ladder 1,2,4,8,16,32)
+Lane B: multi-GPU capability RETAINED — measurement DEFERRED on this host
 NOT v1.1 authority / NOT v2 authority / NOT foundry calibrated
 NO commercial-tool comparison
+Current campaign must NOT claim multi-GPU scaling/speedup/efficiency.
 Results are characterization evidence, not marketing claims.
+Historical 3×RTX 3080 protocol provenance is retained in the charter
+and the superseded issue/templates — it is not the current protocol.
 ```
 
 ## 1. Host requirements
 
-* 3× NVIDIA RTX 3080 (10 GB each) — or a subset; the frozen commands
-  name the exact GPU count per run;
+* 1× NVIDIA RTX 4090 (24 GB); the frozen commands name the exact GPU
+  count per run (Lane A/C: 1 GPU — multi-GPU measurement is deferred);
 * working NVIDIA driver + CUDA-enabled PyTorch + cuDNN visible;
 * KLayout Python API (installed with the repository);
 * ≥ 32 GiB host RAM recommended; free disk ≥ the prepared fixture size
@@ -124,9 +129,18 @@ PDB tree; every chunk byte-verified against it).
 python scripts/preflight_industrial_v2.py \
   --gds benchmarks/results/industrial-scale/fixtures/ibex/ibex.gds \
   --device cuda:0 | tee measurement-logs/preflight.txt
+
+python scripts/preflight_industrial_scale.py \
+  --ibex-manifest benchmarks/results/industrial-scale/fixtures/ibex/fixture-manifest.json \
+  --gds-ibex benchmarks/results/industrial-scale/fixtures/ibex/ibex.gds \
+  --microwatt-manifest benchmarks/results/industrial-scale/fixtures/microwatt/fixture-manifest.json \
+  --gds-microwatt benchmarks/results/industrial-scale/fixtures/microwatt/microwatt.gds \
+  --device cuda:0 \
+  --expected-commit <FROZEN_SCALE_COMMIT> \
+  | tee measurement-logs/scale-preflight.txt
 ```
 
-Required: `PREFLIGHT: PASS`. Otherwise STOP.
+Required: `PREFLIGHT: PASS` AND `SCALE PREFLIGHT: PASS`. Otherwise STOP.
 
 ## 5. Frozen measurement commands
 
@@ -154,23 +168,31 @@ python benchmarks/industrial-scale/run_scale_benchmark.py \
   2>&1 | tee measurement-logs/lane-a.txt
 ```
 
-### Command B — Lane B, 1/2/3-GPU scaling (repeat per GPU count)
+### Command B — Lane C, single-GPU microbatch saturation (frozen ladder)
 
 ```bash
-for GPUS in 1 2 3; do
 python benchmarks/industrial-scale/run_scale_benchmark.py \
   --fixture-manifest benchmarks/results/industrial-scale/fixtures/ibex/fixture-manifest.json \
   --gds benchmarks/results/industrial-scale/fixtures/ibex/ibex.gds \
-  --lanes b \
+  --lanes c \
   --windows 8192 \
-  --device cuda:0 --device-backend cuda --gpu-count $GPUS --worker-count $GPUS \
+  --device cuda:0 --device-backend cuda --gpu-count 1 --worker-count 1 \
   --forward-profile P1_FINITE_SUPPORT --sink memmap_npy \
-  --tile 1024 --halo 64 --microbatch 8 \
+  --tile 1024 --halo 64 \
   --repeats 5 --warmup 2 \
+  --microbatch-ladder 1,2,4,8,16,32 \
   --formal \
-  2>&1 | tee measurement-logs/lane-b-$GPUS-gpu.txt
-done
+  2>&1 | tee measurement-logs/lane-c-4090.txt
 ```
+
+Baseline is microbatch = 1. The FULL ladder (1,2,4,8,16,32) is
+reported — never select the best rung and suppress the others.
+
+**Lane B (multi-GPU scaling) is DEFERRED on this host.** Do NOT emulate
+it by mapping several workers onto one device — that measures host-side
+contention, not multi-GPU scaling, and must never be labeled
+"multi-GPU". The scheduler/executor remain retained capabilities (CPU
+hostile tests prove scheduler semantics only).
 
 ### Command C — optional Microwatt bounded stress (only after G1 passes)
 
@@ -192,6 +214,10 @@ python benchmarks/industrial-scale/run_scale_benchmark.py \
 for rungs the device cannot serve — record them, never retry with
 smaller windows to "make it fit" unless that smaller window is in the
 frozen ladder.
+
+Microwatt wording rule: the 43,608,800,000,000-byte figure is the
+hypothetical dense float32 raster EQUIVALENT derived from the exact
+bbox — never word it as "processed a 43.6 TB file".
 
 ## 6. Verify + bundle
 

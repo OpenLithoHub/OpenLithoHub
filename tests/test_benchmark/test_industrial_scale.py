@@ -65,10 +65,13 @@ def test_status_vocabulary_is_frozen() -> None:
     }
 
 
-def test_canonical_family_has_exactly_eight_members() -> None:
-    assert len(SCALE_CANONICAL_FAMILY) == 8
+def test_canonical_family_members_are_exact() -> None:
+    # nine members since the 1×RTX4090 migration added the Lane C
+    # saturation member
+    assert len(SCALE_CANONICAL_FAMILY) == 9
     assert "manifest.json" in SCALE_CANONICAL_FAMILY
     assert "SHA256SUMS.txt" in SCALE_CANONICAL_FAMILY
+    assert "industrial-scale-saturation.json" in SCALE_CANONICAL_FAMILY
 
 
 def test_dense_equivalent_math() -> None:

@@ -164,6 +164,7 @@ def test_harness_end_to_end_lane_a(
                 **payload,
                 "lanes": tuple(payload["lanes"]),
                 "window_sizes": tuple(payload["window_sizes"]),
+                "microbatch_ladder": tuple(payload.get("microbatch_ladder", [])),
             }
         ),
         measurement_commit=run_config_member["measurement_commit"],

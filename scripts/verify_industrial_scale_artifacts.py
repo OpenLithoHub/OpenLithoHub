@@ -33,6 +33,8 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from openlithohub.benchmark.industrial_scale import (  # noqa: E402
+    FROZEN_MICROBATCH_LADDER,
+    LANE_C,
     RUN_CONFIG_SCHEMA,
     SCALE_CANONICAL_FAMILY,
     SCHEMA_NAME,
@@ -131,6 +133,7 @@ def verify(root: Path, *, require_formal: bool = False) -> list[str]:
             **payload,
             "lanes": tuple(payload.get("lanes", [])),
             "window_sizes": tuple(payload.get("window_sizes", [])),
+            "microbatch_ladder": tuple(payload.get("microbatch_ladder", [])),
         }
     )
 
@@ -192,6 +195,7 @@ def verify(root: Path, *, require_formal: bool = False) -> list[str]:
     lane_members = (
         ("industrial-scale-index.json", "A_LARGE_LAYOUT_STREAMING"),
         ("industrial-scale-runtime.json", "B_MULTI_GPU_SCALING"),
+        ("industrial-scale-saturation.json", "C_SINGLE_GPU_SATURATION"),
     )
     claims: list[str] = []
     for member_name, lane in lane_members:
@@ -228,7 +232,29 @@ def verify(root: Path, *, require_formal: bool = False) -> list[str]:
                     counts = repeat.get("worker_counts") or {}
                     if sum(counts.values()) != repeat.get("n_tiles"):
                         _fail(f"{member_name}: worker topology does not cover all tiles")
-        if rows:
+        if lane == LANE_C and rows:
+            rungs = [int(r.get("microbatch") or 0) for r in rows]
+            declared = sorted(run_config.microbatch_ladder)
+            if rungs != declared:
+                _fail(
+                    f"{member_name}: microbatch rungs {rungs} != the run config's "
+                    f"declared ladder {declared} (silent missing rung)"
+                )
+            for row in rows:
+                if row.get("status") == "SUCCESS":
+                    if int(row.get("gpu_count") or 0) != 1:
+                        _fail(
+                            f"{member_name}: Lane C rung mb={row.get('microbatch')} "
+                            "is a SINGLE-GPU claim (gpu_count must be 1)"
+                        )
+                    for key in ("max_memory_allocated", "max_memory_reserved"):
+                        if key not in row:
+                            _fail(
+                                f"{member_name}: Lane C rung mb="
+                                f"{row.get('microbatch')} missing VRAM fact {key!r}"
+                            )
+            claims.append(f"{lane}:{len(rows)} rungs")
+        elif rows:
             claims.append(f"{lane}:{len(rows)} rows")
 
     if require_formal:
@@ -245,8 +271,15 @@ def verify(root: Path, *, require_formal: bool = False) -> list[str]:
                 f"environment has {env_lock.get('count')} GPU(s); "
                 f"run config requests {run_config.gpu_count}"
             )
-        for member_name, _ in lane_members:
+        for member_name, lane in lane_members:
             payload_member = _load_strict_json(root / member_name)
+            if lane == LANE_C:
+                rungs = [int(r.get("microbatch") or 0) for r in payload_member.get("rows", [])]
+                if rungs != list(FROZEN_MICROBATCH_LADDER):
+                    _fail(
+                        f"{member_name}: microbatch ladder {rungs} != frozen "
+                        f"{list(FROZEN_MICROBATCH_LADDER)} (no silent missing rung)"
+                    )
             for row in payload_member.get("rows", []):
                 if (
                     row.get("status") == "SUCCESS"
@@ -256,6 +289,11 @@ def verify(root: Path, *, require_formal: bool = False) -> list[str]:
                         f"{member_name}: SUCCESS row has {row.get('repeat_count')} repeats "
                         f"< {FORMAL_MIN_REPEATS}"
                     )
+                if lane == LANE_C and row.get("status") == "SUCCESS":
+                    if row.get("device_backend") != "cuda":
+                        _fail("Lane C formal rows must record the cuda backend")
+                    if int(row.get("gpu_count") or 0) != 1:
+                        _fail("Lane C formal rows must record gpu_count == 1")
 
     return claims
 
