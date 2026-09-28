@@ -3,7 +3,7 @@ torch>=2.0
 gradio==4.44.1
 gradio_client>=1.3.0
 huggingface_hub>=0.20,<1.0
-starlette>=0.40,<0.46
+starlette>=1.7.0,<1.8
 fastapi>=0.115,<0.116
 matplotlib>=3.7
 Pillow>=10.0
