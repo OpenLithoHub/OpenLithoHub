@@ -47,7 +47,7 @@ data = [
     "gdown>=5.0",
 ]
 workflow = [
-    "klayout>=0.28",
+    "klayout>=0.30.12",
     "scipy>=1.10",
 ]
 freepdk45-sram = [
