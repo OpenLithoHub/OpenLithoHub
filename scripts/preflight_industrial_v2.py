@@ -24,6 +24,80 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 
 
+def load_v2_harness() -> object:
+    """Import the v2 harness module by path.  The Tier C probe MUST
+    construct ``HopkinsParams`` through the worker's own constructor
+    (GPU Authority Repair §6: no preflight-only code path that can drift
+    away from the benchmark worker)."""
+    harness_path = REPO / "benchmarks" / "industrial-v2" / "run_v2_benchmark.py"
+    spec = importlib.util.spec_from_file_location("run_v2_benchmark_harness", harness_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load the v2 harness at {harness_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def tier_b_preflight_probe(device: str) -> tuple[bool, str]:
+    """Bounded Tier B probe through the SHARED worker-path helpers
+    (GPU Authority Repair §6): CUDA initialization → peak-stat reset (the
+    exact ordering that failed as issue #56 defect 1) → one actual
+    finite-support CUDA forward → input/output device witness."""
+    import torch
+
+    from openlithohub.benchmark.industrial_v2 import BatchedFiniteSupportBlur
+    from openlithohub.benchmark.measurement_support import (
+        ForwardExecutionWitness,
+        initialize_cuda_measurement_device,
+    )
+
+    initialize_cuda_measurement_device(device)
+    torch.cuda.reset_peak_memory_stats(device)
+    blur = BatchedFiniteSupportBlur(radius=4, sigma=1.6)
+    blur.to(device)
+    tile = torch.rand((64, 64), dtype=torch.float32)
+    gpu_in = tile.to(device)
+    out = blur.window_forward(gpu_in)
+    witness = ForwardExecutionWitness(device)
+    witness.record(gpu_in, out)
+    summary = witness.summary()
+    ok = bool(summary["cuda_execution_witness_pass"] and torch.isfinite(out).all())
+    detail = (
+        f"input={summary['forward_input_device']} "
+        f"output_before_d2h={summary['forward_output_device_before_d2h']}"
+    )
+    return ok, detail
+
+
+def tier_c_preflight_probe(device: str) -> tuple[bool, str]:
+    """Bounded Tier C probe through the SHARED worker-path helpers
+    (GPU Authority Repair §6): the EXACT worker ``HopkinsParams``
+    constructor (issue #56 defect 2) + one bounded CUDA Hopkins
+    execution with a finite output."""
+    import torch
+
+    from openlithohub._utils.hopkins import simulate_aerial_image_hopkins
+
+    harness = load_v2_harness()
+    params = harness.tier_c_hopkins_params(
+        {
+            "hopkins_wavelength_nm": 13.5,
+            "hopkins_na": 0.33,
+            "hopkins_sigma_outer": 0.9,
+            "hopkins_sigma_inner": 0.6,
+            "hopkins_defocus_nm": 0.0,
+            "pixel_nm": 1.0,
+        }
+    )
+    grid = 128
+    mask = torch.ones((grid, grid), device=device)
+    aerial = simulate_aerial_image_hopkins(mask, params=params)
+    torch.cuda.synchronize(device)
+    ok = bool(torch.isfinite(aerial).all() and str(aerial.device).startswith("cuda"))
+    detail = f"grid={grid} sigma=({params.sigma_inner},{params.sigma}) device={aerial.device}"
+    return ok, detail
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gds", required=True, help="real routed GDS fixture path")
@@ -40,25 +114,18 @@ def main() -> int:
     def check(name: str, ok: bool, detail: str = "") -> None:
         checks.append((name, bool(ok), detail))
 
-    # git state
+    # git state — GPU Authority Repair §8: the shared cross-platform
+    # helper (shutil.which + fixed argv); no hard-coded /usr/bin/git and
+    # no Windows operator shim.
     import subprocess
 
     try:
-        commit = subprocess.run(  # noqa: S603 — fixed argv
-            ["/usr/bin/git", "-C", str(REPO), "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        dirty = subprocess.run(  # noqa: S603 — fixed argv
-            ["/usr/bin/git", "-C", str(REPO), "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
+        from openlithohub.benchmark.measurement_support import measurement_git_state
+
+        commit, clean = measurement_git_state(REPO)
         check("measurement commit", True, commit)
-        check("tracked tree clean", dirty == "", "dirty files block formal runs (B2-A)")
-    except (OSError, subprocess.CalledProcessError) as exc:
+        check("tracked tree clean", clean, "dirty files block formal runs (B2-A)")
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         check("git state", False, str(exc)[-200:])
 
     # fixture
@@ -90,20 +157,19 @@ def main() -> int:
         cudnn = torch.backends.cudnn.version()
         check("cuDNN version", cudnn is not None, str(cudnn))
     check("dtype fp32 support", True, "fp32 is always supported")
-    # 2B.1-I/§10: a CHEAP GPU Hopkins capability smoke — a failed probe
-    # blocks the formal run BEFORE expensive Tier A/B work starts.
+    # 2B.1-I/§10 + GPU Authority Repair §6: bounded probes through the
+    # SAME shared helpers as the real workers — a failed probe blocks the
+    # formal run BEFORE expensive Tier A/B work starts, and the preflight
+    # can never pass while a real worker path is broken.
     if cuda_available:
         try:
-            from openlithohub._utils.hopkins import simulate_aerial_image_hopkins
-            from openlithohub.simulators.hopkins_sim import HopkinsParams
-
-            params = HopkinsParams(wavelength_nm=13.5, na=0.33, pixel_size_nm=1.0)
-            grid = 128
-            mask = torch.ones((grid, grid), device="cuda:0")
-            aerial = simulate_aerial_image_hopkins(mask, params=params)
-            torch.cuda.synchronize("cuda:0")
-            ok = bool(torch.isfinite(aerial).all())
-            check("Tier C GPU Hopkins smoke", ok, f"grid={grid}")
+            ok, detail = tier_b_preflight_probe(args.device)
+            check("Tier B actual-CUDA forward probe", ok, detail)
+        except Exception as exc:  # noqa: BLE001 — capability probe
+            check("Tier B actual-CUDA forward probe", False, repr(exc)[:200])
+        try:
+            ok, detail = tier_c_preflight_probe(args.device)
+            check("Tier C GPU Hopkins smoke", ok, detail)
         except Exception as exc:  # noqa: BLE001 — capability probe
             check("Tier C GPU Hopkins smoke", False, repr(exc)[:200])
     check(

@@ -95,3 +95,9 @@ benchmarks/results/industrial-scale/fixtures/microwatt/*
 benchmarks/results/industrial-scale/runs/
 benchmarks/results/industrial-scale/tmp/
 coverage.xml
+# GPU Authority Repair §11: measurement evidence logs are a committed
+# generated-path ignore policy — the documented runbook workflow writes
+# into measurement-logs/ inside the repo while every formal gate requires
+# `git status --porcelain` to be empty.  No nested operator-created
+# .gitignore (issue #75 accommodation 3) is ever needed.
+measurement-logs/

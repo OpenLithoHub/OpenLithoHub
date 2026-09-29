@@ -33,6 +33,7 @@ import json
 import statistics
 import subprocess  # noqa: S404 — fixed-argv worker re-invocation only
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -54,20 +55,14 @@ def sha256_file(path: str | Path) -> str:
 
 
 def git_measurement_commit(repo: Path) -> tuple[str, bool]:
-    """(commit, clean) for the tracked tree the measurement would bind to."""
-    import subprocess
+    """(commit, clean) for the tracked tree the measurement would bind to.
 
-    def git(*args: str) -> str:
-        return subprocess.run(  # noqa: S603,S607 — fixed-argv git query
-            ["/usr/bin/git", "-C", str(repo), *args],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
+    GPU Authority Repair §8: the git-state authority is the shared
+    cross-platform helper (``shutil.which("git")`` + fixed argv) — no
+    hard-coded ``/usr/bin/git``, no Windows operator shim."""
+    from openlithohub.benchmark.measurement_support import measurement_git_state
 
-    commit = git("rev-parse", "HEAD")
-    dirty = git("status", "--porcelain")
-    return commit, dirty == ""
+    return measurement_git_state(repo)
 
 
 def build_source_hashes(repo: Path) -> dict[str, str]:
@@ -209,16 +204,47 @@ def _tier_b_execution_source(cfg: dict[str, Any]) -> Any:
     )
 
 
+def tier_c_hopkins_params(cfg: Mapping[str, Any]) -> Any:
+    """The EXACT ``HopkinsParams`` object the Tier C worker constructs
+    from the V2 run config (GPU Authority Repair §5, issue #56 defect 2).
+
+    The declared ``RunConfigV2.hopkins_sigma_outer`` maps to the library
+    dataclass field ``sigma`` — the shared public dataclass has no
+    ``sigma_outer`` field, so calling it with that keyword raises
+    ``TypeError`` on every host.  The preflight Tier C probe MUST share
+    this constructor (§6: no preflight-only code path), so a preflight
+    can never pass while the real worker path is broken."""
+    from openlithohub.simulators.hopkins_sim import HopkinsParams
+
+    return HopkinsParams(
+        wavelength_nm=float(cfg["hopkins_wavelength_nm"]),
+        na=float(cfg["hopkins_na"]),
+        sigma=float(cfg["hopkins_sigma_outer"]),
+        sigma_inner=float(cfg["hopkins_sigma_inner"]),
+        pixel_size_nm=float(cfg["pixel_nm"]),
+        defocus_nm=float(cfg.get("hopkins_defocus_nm", 0.0)),
+    )
+
+
 def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     """One Tier B measurement (CUDA required): CPU batch=1 vs GPU batch=1
     vs GPU batch=N streaming execution with the deterministic finite-
     support forward, synchronized CUDA timing, separate GPU peak memory.
-    The declared GDS layer is executed, not just declared (2B.2-A)."""
+    The declared GDS layer is executed, not just declared (2B.2-A).
+
+    GPU Authority Repair §4/§7: the CUDA context is initialized BEFORE
+    the first peak-stat reset (issue #56 defect 1), and every timed pass
+    records an actual-CUDA execution witness — the devices its forward
+    tensors occupied.  The tensor path is the authority."""
     import torch
 
     from openlithohub.benchmark.industrial_v2 import (
         BatchedFiniteSupportBlur,
         cuda_synchronized_wall,
+    )
+    from openlithohub.benchmark.measurement_support import (
+        ForwardExecutionWitness,
+        initialize_cuda_measurement_device,
     )
     from openlithohub.streaming import run_streaming
     from openlithohub.streaming.sinks import TensorTileSink
@@ -255,6 +281,11 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
             "correctness_witness_pass": False,
         }
 
+    # GPU Authority Repair §4: initialize CUDA FIRST — before the CPU
+    # reference pass and before the first peak-stat reset.  Never
+    # catch-and-ignore: failure here must fail the worker.
+    initialize_cuda_measurement_device(device)
+
     from openlithohub.streaming.crop_source import ExactVectorCropSource
     from openlithohub.streaming.geometry import BoundingBox
 
@@ -267,22 +298,38 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     source = ExactVectorCropSource(parent, BoundingBox(x0, y0, x0 + side, y0 + side))
 
     forward = BatchedFiniteSupportBlur(radius=cfg["forward_radius"], sigma=cfg["forward_sigma_nm"])
+    if device.startswith("cuda"):
+        # 2B.1-H: pre-position CUDA kernels BEFORE the timed region.
+        forward.to(device)
 
-    def run_stream(device: str, batch: int) -> tuple[torch.Tensor, dict[str, Any]]:
+    def run_stream(run_device: str, batch: int) -> tuple[torch.Tensor, dict[str, Any]]:
+        witness = ForwardExecutionWitness(run_device)
         sink = TensorTileSink(source.shape)
+
+        def window_forward(tile: torch.Tensor) -> torch.Tensor:
+            gpu_in = tile.to(run_device)
+            out = forward.window_forward(gpu_in)
+            witness.record(gpu_in, out)
+            return out.cpu()
+
+        def batch_forward(batch_tensor: torch.Tensor) -> torch.Tensor:
+            gpu_in = batch_tensor.to(run_device)
+            out = forward.batch_forward(gpu_in)
+            witness.record(gpu_in, out)
+            return out.cpu()
+
         report = run_streaming(
             source,
             sink,
-            lambda tile: forward.window_forward(tile.to(device)).cpu(),
+            window_forward,
             core_size=cfg["tile"],
             batch_size=batch,
-            batched_forward_fn=lambda b: (
-                forward.batch_forward(b.to(device)).cpu() if batch > 1 else None
-            ),
+            batched_forward_fn=batch_forward if batch > 1 else None,
         )
         return sink.finalize(), {
             "n_tiles": report.n_tiles,
             "forward_batches": report.forward_batches,
+            "witness": witness.summary(),
         }
 
     # correctness first (§18): CPU reference vs GPU batch=1 vs GPU batch=N
@@ -305,6 +352,14 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     parity = torch.allclose(cpu_out, gpu1.to("cpu"), atol=tolerance, rtol=0.0) and torch.allclose(
         gpu1, gpu_n.to(gpu1.device), atol=tolerance, rtol=0.0
     )
+    # GPU Authority Repair §7: BOTH timed passes must carry a valid
+    # actual-CUDA execution witness — a CPU tensor path is never a CUDA
+    # claim, whatever the device argument said.
+    witness_b1 = meta1["witness"]
+    witness_bn = meta_n["witness"]
+    cuda_witness_pass = bool(
+        witness_b1["cuda_execution_witness_pass"] and witness_bn["cuda_execution_witness_pass"]
+    )
     # restore the CPU artifact as the sink output semantics (same artifact)
     from openlithohub.benchmark.industrial_v2 import host_peak_rss_bytes
 
@@ -324,8 +379,14 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         "timing_method": "cuda_synchronized",
         "dtype": "fp32",
         "device": device,
+        "requested_device": device,
+        "forward_input_device": witness_bn["forward_input_device"],
+        "forward_output_device_before_d2h": witness_bn["forward_output_device_before_d2h"],
+        "cuda_execution_witness_pass": cuda_witness_pass,
+        "forward_witness_batch1": witness_b1,
+        "forward_witness_batch_n": witness_bn,
         "correctness_witness_pass": bool(parity),
-        "status": "SUCCESS" if parity else "FAILED",
+        "status": "SUCCESS" if (parity and cuda_witness_pass) else "FAILED",
         "device_requires_cuda": True,
     }
 
@@ -348,6 +409,9 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
       headline statistic
     * GPU allocated/reserved peaks recorded after the timed region
     * CPU vs GPU agreement within the frozen fp32 tolerance
+    * actual-CUDA execution witness (GPU Authority Repair §7): input and
+      output devices recorded for EVERY execution BEFORE the D2H copy —
+      a CPU tensor path can never produce a SUCCESS row
     """
     import numpy as np
     import torch
@@ -359,7 +423,10 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         cuda_synchronized_wall,
         host_peak_rss_bytes,
     )
-    from openlithohub.simulators.hopkins_sim import HopkinsParams
+    from openlithohub.benchmark.measurement_support import (
+        ForwardExecutionWitness,
+        initialize_cuda_measurement_device,
+    )
 
     device = str(cfg["device"])
     if not device.startswith("cuda") or not torch.cuda.is_available():
@@ -379,15 +446,16 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
             "correctness_witness_pass": False,
         }
 
+    # GPU Authority Repair §4: guarantee the CUDA context before any
+    # device-resident work (same ordering authority as Tier B).
+    initialize_cuda_measurement_device(device)
+
     grid = int(cfg["hopkins_grid"])
-    params = HopkinsParams(
-        wavelength_nm=cfg["hopkins_wavelength_nm"],
-        na=cfg["hopkins_na"],
-        sigma_outer=cfg["hopkins_sigma_outer"],
-        sigma_inner=cfg["hopkins_sigma_inner"],
-        pixel_size_nm=cfg["pixel_nm"],
-        defocus_nm=cfg.get("hopkins_defocus_nm", 0.0),
-    )
+    # GPU Authority Repair §5: the EXACT worker params constructor —
+    # ``RunConfigV2.hopkins_sigma_outer`` maps to ``HopkinsParams.sigma``
+    # (issue #56 defect 2); an invalid keyword is now impossible here and
+    # in the shared preflight probe.
+    params = tier_c_hopkins_params(cfg)
     rng = np.random.default_rng(0)
     mask_cpu = (rng.random((grid, grid)) > 0.5).astype(np.float32)
     tolerance = 1e-5
@@ -401,12 +469,16 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     )
 
     mask_gpu = torch.from_numpy(mask_cpu).to(device)
+    # GPU Authority Repair §7 (Tier C analog): the tensor path is the
+    # authority — record input/output devices for EVERY execution.
+    witness = ForwardExecutionWitness(device)
 
     # COLD (diagnostic only): first GPU call includes SOCS kernel
     # construction on device. Never part of the warm headline statistic.
-    _, cold_wall = cuda_synchronized_wall(
+    cold_gpu, cold_wall = cuda_synchronized_wall(
         lambda: simulate_aerial_image_hopkins(mask_gpu, params=params), device
     )
+    witness.record(mask_gpu, cold_gpu)
 
     # UNTIMED setup: device-resident kernels + pre-FFT'd kernel tables.
     kernels, weights = _build_socs(params, grid, mask_gpu.device)
@@ -417,9 +489,10 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     # UNTIMED warmup executions: reach steady state before the timed call.
     warmup_executions = 2
     for _ in range(warmup_executions):
-        simulate_aerial_image_hopkins(
+        warm_gpu = simulate_aerial_image_hopkins(
             mask_gpu, kernels=kernels, weights=weights, precomputed_kernels_f=kernels_f
         )
+        witness.record(mask_gpu, warm_gpu)
 
     # THE ONE claim-bearing observation: synchronized warm steady state.
     gpu_warm, warm_wall = cuda_synchronized_wall(
@@ -428,6 +501,8 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         ),
         device,
     )
+    witness.record(mask_gpu, gpu_warm)
+    witness_summary = witness.summary()
     peaks = {
         "max_memory_allocated": int(torch.cuda.max_memory_allocated(device)),
         "max_memory_reserved": int(torch.cuda.max_memory_reserved(device)),
@@ -437,6 +512,7 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         np.isfinite(gpu_out).all()
         and np.allclose(cpu_out, gpu_out, atol=tolerance, rtol=0.0)
         and cpu_deterministic
+        and witness_summary["cuda_execution_witness_pass"]
     )
     return {
         "grid": grid,
@@ -454,6 +530,11 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         "timing_method": "cuda_synchronized",
         "dtype": "fp32",
         "device": device,
+        "requested_device": device,
+        "forward_input_device": witness_summary["forward_input_device"],
+        "forward_output_device_before_d2h": witness_summary["forward_output_device_before_d2h"],
+        "cuda_execution_witness_pass": witness_summary["cuda_execution_witness_pass"],
+        "forward_witness": witness_summary,
         "device_requires_cuda": True,
         "status": "SUCCESS" if parity else "FAILED",
     }
@@ -842,6 +923,14 @@ def _aggregate_window(
                 "batch_n_max_memory_allocated": first.get("batch_n_max_memory_allocated"),
                 "batch_n_max_memory_reserved": first.get("batch_n_max_memory_reserved"),
                 "host_peak_rss_bytes": first.get("host_peak_rss_bytes"),
+                # GPU Authority Repair §7: the actual-CUDA execution
+                # witness is a locked GPU row fact.
+                "requested_device": first.get("requested_device"),
+                "forward_input_device": first.get("forward_input_device"),
+                "forward_output_device_before_d2h": first.get("forward_output_device_before_d2h"),
+                "cuda_execution_witness_pass": first.get("cuda_execution_witness_pass"),
+                "forward_witness_batch1": first.get("forward_witness_batch1"),
+                "forward_witness_batch_n": first.get("forward_witness_batch_n"),
             }
         )
         # §14: batching speedup from FORMAL MEDIANS, never one repeat.
@@ -869,6 +958,13 @@ def _aggregate_window(
                 "warmup_executions": first.get("warmup_executions"),
                 "timing_observations": first.get("timing_observations"),
                 "gpu_cold_wall_s": first.get("gpu_cold_wall_s"),
+                # GPU Authority Repair §7: the actual-CUDA execution
+                # witness is a locked GPU row fact (Tier C analog).
+                "requested_device": first.get("requested_device"),
+                "forward_input_device": first.get("forward_input_device"),
+                "forward_output_device_before_d2h": first.get("forward_output_device_before_d2h"),
+                "cuda_execution_witness_pass": first.get("cuda_execution_witness_pass"),
+                "forward_witness": first.get("forward_witness"),
             }
         )
     return row

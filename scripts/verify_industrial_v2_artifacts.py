@@ -50,6 +50,14 @@ GPU_ROW_REQUIRED_KEYS = (
     "correctness_witness_pass",
     "status",
 )
+# GPU Authority Repair §7: a formal CUDA row must lock the actual-CUDA
+# execution witness — the devices the forward tensors occupied.
+CUDA_WITNESS_ROW_KEYS = (
+    "requested_device",
+    "forward_input_device",
+    "forward_output_device_before_d2h",
+    "cuda_execution_witness_pass",
+)
 KNOWN_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -173,9 +181,22 @@ def verify(canonical_root: Path) -> list[str]:
         if key not in env_lock:
             _fail(f"GPU environment lock missing required key {key!r} (B2-D)")
     # 2B.1-E: formal CUDA provenance requires NONEMPTY driver + cuDNN.
+    # GPU Authority Repair §10: the driver identity must also carry an
+    # explicit source-owned source — never executable-presence-as-success,
+    # never a silently empty identity.
     if env_lock.get("available"):
         if not env_lock.get("driver_version"):
             _fail("formal CUDA family has empty driver_version (2B.1-E)")
+        if not env_lock.get("driver_identity_source"):
+            _fail(
+                "formal CUDA family has no explicit driver identity source "
+                "(GPU Authority Repair §10)"
+            )
+        if env_lock.get("driver_identity_source") == "unavailable":
+            _fail(
+                "formal CUDA family records driver_identity_source='unavailable' — "
+                "empty device/driver identity is never accepted (GPU Authority Repair §10)"
+            )
         if not env_lock.get("cudnn_version"):
             _fail("formal CUDA family has empty cudnn_version (2B.1-E)")
         if not env_lock.get("torch_cuda_version"):
@@ -219,6 +240,29 @@ def verify(canonical_root: Path) -> list[str]:
                     _fail(f"{member}: GPU row timing is not synchronized (B2-E)")
                 if not row.get("correctness_witness_pass"):
                     _fail(f"{member}: GPU row failed correctness (B2-G)")
+                # GPU Authority Repair §7: reject formal CUDA rows without
+                # a valid actual-CUDA execution witness — CUDA execution
+                # is never inferred from is_available()/device args/sync.
+                for key in CUDA_WITNESS_ROW_KEYS:
+                    if key not in row:
+                        _fail(
+                            f"{member}: formal CUDA row missing witness key {key!r} "
+                            "(GPU Authority Repair §7)"
+                        )
+                if not row.get("cuda_execution_witness_pass"):
+                    _fail(
+                        f"{member}: formal CUDA row lacks a valid CUDA execution "
+                        "witness (GPU Authority Repair §7)"
+                    )
+                if (
+                    str(row.get("forward_input_device", "")).startswith("cuda") is False
+                    or str(row.get("forward_output_device_before_d2h", "")).startswith("cuda")
+                    is False
+                ):
+                    _fail(
+                        f"{member}: formal CUDA row's forward tensors did not run on "
+                        "CUDA before D2H (GPU Authority Repair §7)"
+                    )
         if payload.get("correctness_witness_pass") and payload.get("claim_level"):
             claims.append(f"{tier_key}:{payload['claim_level']}")
 

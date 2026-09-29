@@ -205,7 +205,11 @@ _FULL_LOCK = {
             "compute_capability": "8.9",
         }
     ],
+    "platform": "Linux-6.8.0-x86_64",
     "driver_version": "550.54",
+    "driver_identity_source": "nvidia-smi",
+    "device_identifier": "GPU-fake-uuid",
+    "device_identifier_type": "cuda-uuid",
     "torch_cuda_version": "12.4",
     "cudnn_version": 90100,
     "torch_version": "2.14.0+cu124",
@@ -230,6 +234,10 @@ def _window_row(window: int, status: str = "SUCCESS") -> dict:
         "gpu_batch_n_wall_s": 0.4,
         "flat_scans_avoided_pct": 99.5,
         "aggregate_median_s": 0.4,
+        "requested_device": "cuda:0",
+        "forward_input_device": "cuda:0",
+        "forward_output_device_before_d2h": "cuda:0",
+        "cuda_execution_witness_pass": True,
     }
 
 
@@ -293,6 +301,10 @@ def _tier_c_aggregate_row(status: str = "SUCCESS") -> dict:
                 "warmup_executions": 2,
                 "timing_observations": 1,
                 "gpu_cold_wall_s": 0.9,
+                "requested_device": "cuda:0",
+                "forward_input_device": "cuda:0",
+                "forward_output_device_before_d2h": "cuda:0",
+                "cuda_execution_witness_pass": True,
             }
         )
     else:

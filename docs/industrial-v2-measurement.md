@@ -93,6 +93,9 @@ fact that never enters the warm steady-state headline statistic.
 5. **Save operator evidence** (preflight output, `nvidia-smi -q`, git
    status, commit) under `measurement-logs/`. Canonical facts remain
    harness-owned — operator logs are context, never claim inputs.
+   `measurement-logs/` is ignored by the committed root `.gitignore`
+   (GPU Authority Repair §11): the tracked tree stays verifiably clean
+   with no operator-created nested `.gitignore`.
 6. **Run the formal tiers through the harness only** — never ad-hoc
    Python, never shell `time`:
    ```bash

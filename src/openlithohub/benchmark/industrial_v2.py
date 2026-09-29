@@ -241,14 +241,27 @@ def gpu_environment_lock() -> dict[str, Any]:
     devices; every GPU-required tier then resolves to
     ``NOT_RUN_ENVIRONMENT`` and canonical publication stays blocked.
     """
+    import platform
+
     import torch
+
+    from openlithohub.benchmark.measurement_support import gpu_driver_identity
 
     cuda_available = bool(torch.cuda.is_available())
     lock: dict[str, Any] = {
         "available": cuda_available,
         "count": torch.cuda.device_count() if cuda_available else 0,
         "devices": [],
-        "driver_version": nvidia_driver_version() if cuda_available else "",
+        "platform": platform.platform(),
+        # GPU Authority Repair §10: the driver identity comes from the
+        # source-owned cross-platform authority — nvidia-smi first, a
+        # registry fallback on Windows, and NEVER executable-presence
+        # masquerading as a successful identity capture.  The identity
+        # source is recorded and formal authority rejects an empty one.
+        "driver_version": "",
+        "driver_identity_source": "unavailable",
+        "device_identifier": "",
+        "device_identifier_type": "none",
         "torch_cuda_version": torch.version.cuda or "",
         # torch.backends.cudnn.version() is untyped upstream; the value is
         # recorded verbatim (or None) and never used numerically.
@@ -260,6 +273,7 @@ def gpu_environment_lock() -> dict[str, Any]:
         "torch_version": torch.__version__,
     }
     if cuda_available:
+        lock.update(gpu_driver_identity())
         for index in range(lock["count"]):
             props = torch.cuda.get_device_properties(index)
             lock["devices"].append(
@@ -350,6 +364,8 @@ def build_canonical_family_in_workspace(
         "count",
         "devices",
         "driver_version",
+        "driver_identity_source",
+        "platform",
         "torch_cuda_version",
         "torch_version",
         "tf32_matmul",
@@ -360,6 +376,15 @@ def build_canonical_family_in_workspace(
             blockers.append(f"environment lock incomplete: missing {key!r}")
     if env_lock.get("available") and not env_lock.get("driver_version"):
         blockers.append("formal CUDA run requires a nonempty driver_version (2B.1-E)")
+    if env_lock.get("available") and not env_lock.get("driver_identity_source"):
+        blockers.append(
+            "formal CUDA run requires an explicit driver identity source (GPU Authority Repair §10)"
+        )
+    if env_lock.get("available") and env_lock.get("driver_identity_source") == "unavailable":
+        blockers.append(
+            "formal CUDA run requires a source-owned driver/device identity — "
+            "empty identity is never silently accepted (GPU Authority Repair §10)"
+        )
 
     identity = compute_run_identity_v2(
         run_config,
@@ -409,6 +434,17 @@ def build_canonical_family_in_workspace(
                         blockers.append(f"{label}: missing {key!r} (§15)")
                 if int(wrow.get("repeat_count") or 0) < HEADLINE_MIN_REPEATS:
                     blockers.append(f"{label}: insufficient repeats (B2)")
+                # GPU Authority Repair §7: a formal CUDA row must carry a
+                # valid actual-CUDA execution witness — the devices the
+                # forward tensors occupied are the authority, never
+                # torch.cuda.is_available() or a device argument.
+                if str(wrow.get("device", "")).startswith("cuda") and not wrow.get(
+                    "cuda_execution_witness_pass"
+                ):
+                    blockers.append(
+                        f"{label}: GPU row without a valid CUDA execution witness "
+                        "(GPU Authority Repair §7 — the tensor path is the authority)"
+                    )
         if tier == "c":
             # 2B.2-B: the claim-bearing Tier C repeat statistics must be
             # complete (n == repeat_count) and sufficient (n >= 5) — a
@@ -570,12 +606,15 @@ def cuda_synchronized_wall(fn: Callable[[], Any], device: str) -> tuple[Any, flo
 
 
 def host_peak_rss_bytes() -> int:
-    """Platform-normalized host peak RSS in bytes (§15)."""
-    import resource
-    import sys
+    """Platform-normalized host peak RSS in bytes (§15).
 
-    value = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-    return value if sys.platform == "darwin" else value * 1024
+    Delegates to the shared cross-platform implementation
+    (``measurement_support``): POSIX ``resource`` semantics on
+    Linux/macOS, a source-owned ``GetProcessMemoryInfo`` implementation
+    on Windows — no ``resource.py`` operator shim anywhere."""
+    from openlithohub.benchmark.measurement_support import host_peak_rss_bytes as _rss
+
+    return _rss()
 
 
 def reset_gpu_peak_stats(device: str) -> None:
