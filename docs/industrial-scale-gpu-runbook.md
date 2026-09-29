@@ -47,6 +47,9 @@ git status --porcelain | tee measurement-logs/git-status-before.txt
 ```
 
 Required: `HEAD` equals the frozen scale commit; `git status` empty.
+`measurement-logs/` is ignored by the committed root `.gitignore`
+(GPU Authority Repair §11), so evidence logs never dirty the tracked
+tree and no operator-created nested `.gitignore` is needed.
 
 ## 2. Environment
 
