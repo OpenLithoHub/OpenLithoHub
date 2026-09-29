@@ -471,7 +471,6 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     * CPU vs GPU agreement within the frozen fp32 tolerance
     * actual-CUDA execution witness (GPU Authority Repair §7)
     """
-    import json as _json
 
     import numpy as np
     import torch
@@ -718,11 +717,7 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         "forward_witness": witness_summary,
         "device_requires_cuda": True,
         "status": "SUCCESS" if (parity and env_pass and peak_witness_pass) else "FAILED",
-        **(
-            {"failure_class": failure_class, "reason": failure_reason}
-            if failure_class
-            else {}
-        ),
+        **({"failure_class": failure_class, "reason": failure_reason} if failure_class else {}),
     }
 
 
@@ -813,6 +808,8 @@ def worker_entry(args: argparse.Namespace) -> int:
         # re-invocation, same interpreter resolution) emitting ONLY the
         # environment fingerprint, so a preflight can prove parent/child
         # environment parity without running a measurement.
+        from openlithohub.benchmark.measurement_support import worker_environment_fingerprint
+
         row = worker_environment_fingerprint(args.measurement_commit)
         sys.stdout.write(json.dumps(row, allow_nan=False))
         return 0
@@ -1320,9 +1317,7 @@ def _aggregate_window(
         # any per-repeat plan hash drift demotes the row to FAILED (a
         # worker replanned somewhere).
         plan_shas = {
-            str(r.get("memory_plan_sha256") or "")
-            for r in measured
-            if r.get("status") == "SUCCESS"
+            str(r.get("memory_plan_sha256") or "") for r in measured if r.get("status") == "SUCCESS"
         }
         if len(plan_shas) > 1 or "" in plan_shas:
             row["status"] = "FAILED"
@@ -1356,9 +1351,7 @@ def run_tier(
     window_rows = []
     statuses = []
     for window in run_config.window_sizes:
-        warm, measured = _run_window_repeats(
-            args, tier, window, run_config, commit, workspace
-        )
+        warm, measured = _run_window_repeats(args, tier, window, run_config, commit, workspace)
         row = _aggregate_window(tier, window, warm, measured)
         window_rows.append(row)
         statuses.append(row["status"])
