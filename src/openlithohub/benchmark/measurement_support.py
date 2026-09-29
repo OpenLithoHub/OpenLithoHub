@@ -52,6 +52,20 @@ def worker_environment_fingerprint(measurement_commit: str = "") -> dict[str, An
     from openlithohub._utils import hopkins as _hopkins_module
     from openlithohub.benchmark import industrial_v2 as _industrial_v2_module
 
+    # torch.backends.cudnn.version() lazily probes the CUDA device on
+    # first call; on hosts (or under CI mocks) without a real device this
+    # raises instead of returning.  The fingerprint must never fail the
+    # worker: record None there — parent and child run in the SAME
+    # environment, so parity semantics are unaffected.
+    try:
+        cudnn_version = (
+            torch.backends.cudnn.version()  # type: ignore[no-untyped-call]
+            if torch.cuda.is_available()
+            else None
+        )
+    except (AttributeError, RuntimeError, OSError):
+        cudnn_version = None
+
     def file_sha256(module: Any) -> str:
         path = getattr(module, "__file__", None)
         if not path:
@@ -66,9 +80,7 @@ def worker_environment_fingerprint(measurement_commit: str = "") -> dict[str, An
         "platform": sys.platform,
         "torch_version": torch.__version__,
         "torch_cuda_version": torch.version.cuda or "",
-        "cudnn_version": torch.backends.cudnn.version()  # type: ignore[no-untyped-call]
-        if torch.cuda.is_available()
-        else None,
+        "cudnn_version": cudnn_version,
         "openlithohub_path": str(Path(openlithohub.__file__).resolve()),
         "openlithohub_hopkins_sha256": file_sha256(_hopkins_module),
         "openlithohub_industrial_v2_sha256": file_sha256(_industrial_v2_module),
