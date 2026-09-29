@@ -30,7 +30,16 @@ from typing import Any
 
 import torch
 
-from openlithohub._constants import WAVELENGTH_EUV_NM as DEFAULT_HOPKINS_WAVELENGTH_NM
+from openlithohub._constants import (
+    NUM_KERNELS_DEFAULT,
+)
+from openlithohub._constants import (
+    WAVELENGTH_EUV_NM as DEFAULT_HOPKINS_WAVELENGTH_NM,
+)
+from openlithohub._utils.socs_memory_plan import (
+    SOCS_MEMORY_PLAN_SCHEMA,
+    SOCS_STRATEGY,
+)
 
 SCHEMA_NAME = "OpenLithoHub.industrial-benchmark.v2"
 RUN_CONFIG_SCHEMA = "OpenLithoHub.industrial-run-config.v2"
@@ -41,14 +50,17 @@ CANONICAL_FAMILY: frozenset[str] = frozenset(
         "industrial-v2-index.json",
         "industrial-v2-gpu-runtime.json",
         "industrial-v2-hopkins.json",
+        "industrial-v2-socs-memory-plan.json",
         "industrial-v2-run-config.json",
         "industrial-v2-distribution-freeze.txt",
         "manifest.json",
         "SHA256SUMS.txt",
     }
 )
-"""The complete canonical family (PR-G §6). Publication is all-or-nothing:
-a partial canonical root must never exist (verifier rejects it)."""
+"""The complete canonical family (PR-G §6; v3 adds the frozen SOCS
+memory-plan artifact — GPU Authority Repair v3 §9/§10). Publication is
+all-or-nothing: a partial canonical root must never exist (verifier
+rejects it)."""
 
 TIMING_HOST = "host_perf_counter"
 TIMING_CUDA_SYNC = "cuda_synchronized"
@@ -106,11 +118,13 @@ def sha256_file(path: str | Path) -> str:
 
 
 def write_strict_json(path: str | Path, payload: Mapping[str, Any]) -> None:
-    """Write canonical strict JSON; NaN/Infinity raise instead of landing
-    in an artifact (B2 gate: artifacts are strict JSON, always)."""
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
-    Path(path).write_text(text)
+    """Write canonical strict JSON through the shared byte-based writer
+    (GPU Authority Repair v3 §24): UTF-8, LF only, stable trailing
+    newline — a Windows host can never introduce CRLF drift.  NaN/Infinity
+    raise instead of landing in an artifact (B2 gate)."""
+    from openlithohub._utils.canonical_json import write_canonical_json
+
+    write_canonical_json(path, payload)
 
 
 # ---- run identity (§8) ------------------------------------------------------
@@ -153,11 +167,24 @@ class RunConfigV2:
     fixture_sha256: str = ""
     """SHA-256 of the exact GDS bytes (2B.1-A). Identical args over
     different fixture bytes must produce a different run identity."""
+    socs_memory_plan_sha256: str = ""
+    """GPU Authority Repair v3 §10: the canonical SHA-256 of the frozen
+    SOCS memory plan, computed by the driver BEFORE identity and honored
+    by every fresh worker (workers validate, never replan). Empty only on
+    runs that declare no Tier C."""
+    tier_timeouts_s: tuple[int, int, int] = (3600, 3600, 14400)
+    """GPU Authority Repair v3 §23: the source-owned fresh-worker timeout
+    policy per tier (a, b, c) — frozen BEFORE qualification.  The old
+    fixed 3600 s constant is superseded: the bounded cold Tier-C
+    decomposition legitimately runs longer than the legacy failure path,
+    and this policy is bound into the run identity so it can never be
+    quietly extended after seeing results."""
 
     def to_payload(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["tiers"] = list(self.tiers)
         payload["window_sizes"] = list(self.window_sizes)
+        payload["tier_timeouts_s"] = list(self.tier_timeouts_s)
         return payload
 
     def with_changes(self, **changes: Any) -> RunConfigV2:
@@ -335,16 +362,20 @@ def build_canonical_family_in_workspace(
     tier_rows: Mapping[str, Mapping[str, Any]],
     tracked_tree_clean: bool,
     provisional: bool,
+    socs_memory_plan: Mapping[str, Any] | None = None,
 ) -> list[str]:
-    """Map a formal run workspace onto the exact seven-member canonical
-    family, with manifest + SHA256SUMS closure — fail-closed (2B.1-J/§12).
+    """Map a formal run workspace onto the exact canonical family, with
+    manifest + SHA256SUMS closure — fail-closed (2B.1-J/§12; v3 §9/§10/§32
+    adds the SOCS memory-plan artifact and its Tier-C authority locks).
 
     Refuses (returns blockers, writes NOTHING into the family) on: dirty
     tree, provisional mode, non-SUCCESS tier, failed correctness,
     insufficient repeats, incomplete environment lock, missing fixture
     hash or layer, incomplete window ladder, unsynchronized GPU timing,
-    or missing GPU memory facts.  The only sanctioned path from a formal
-    workspace to ``promote_canonical_family()``.
+    missing GPU memory facts, a missing/mismatched/unhonored SOCS memory
+    plan on Tier C, or missing worker environment/memory-peak witnesses.
+    The only sanctioned path from a formal workspace to
+    ``promote_canonical_family()``.
     """
     blockers: list[str] = []
     workspace = Path(workspace_dir)
@@ -458,6 +489,83 @@ def build_canonical_family_in_workspace(
                 )
             if aggregate_n < HEADLINE_MIN_REPEATS:
                 blockers.append(f"tier C has insufficient claim-bearing repeats: {aggregate_n}")
+            # GPU Authority Repair v3 §32: Tier-C formal SUCCESS requires
+            # the frozen bounded strategy, the driver-owned memory plan,
+            # and the environment/peak witnesses — a legacy dense row, a
+            # missing plan, a runtime replan, or OOM-retry evidence can
+            # never be promoted.
+            if socs_memory_plan is None:
+                blockers.append("tier C has no SOCS memory plan artifact (v3 §9/§10)")
+            elif not run_config.socs_memory_plan_sha256:
+                blockers.append("run config does not bind a SOCS memory plan SHA-256 (v3 §10)")
+            elif str(socs_memory_plan.get("plan_sha256")) != run_config.socs_memory_plan_sha256:
+                blockers.append(
+                    "SOCS memory plan SHA-256 does not match the run-config binding (v3 §10)"
+                )
+            for wrow in row.get("window_rows", [row]):
+                label = f"tier C grid {wrow.get('grid')}"
+                if str(wrow.get("strategy", "")) != SOCS_STRATEGY:
+                    blockers.append(
+                        f"{label}: strategy {wrow.get('strategy')!r} is not the frozen "
+                        f"bounded strategy {SOCS_STRATEGY!r} (v3 §32)"
+                    )
+                row_plan_sha = str(wrow.get("memory_plan_sha256", ""))
+                if not row_plan_sha:
+                    blockers.append(f"{label}: missing memory_plan_sha256 (v3 §32)")
+                elif row_plan_sha != run_config.socs_memory_plan_sha256:
+                    blockers.append(
+                        f"{label}: memory_plan_sha256 differs from the run-config "
+                        "binding — runtime replan evidence (v3 §32)"
+                    )
+                if not wrow.get("memory_feasible"):
+                    blockers.append(f"{label}: memory plan not feasible (v3 §32)")
+                if int(wrow.get("selected_chunk_columns") or 0) <= 0:
+                    blockers.append(f"{label}: selected_chunk_columns <= 0 (v3 §32)")
+                if int(wrow.get("chunk_count") or 0) <= 0:
+                    blockers.append(f"{label}: chunk_count <= 0 (v3 §32)")
+                if int(wrow.get("grid") or -1) != int(run_config.hopkins_grid):
+                    blockers.append(
+                        f"{label}: formal grid != frozen RunConfigV2 hopkins_grid "
+                        f"{run_config.hopkins_grid} (v3 §32)"
+                    )
+                expected_k = max(1, min(NUM_KERNELS_DEFAULT, int(wrow.get("n_src") or 0)))
+                if int(wrow.get("kernel_count") or -1) != expected_k:
+                    blockers.append(
+                        f"{label}: kernel_count {wrow.get('kernel_count')!r} != frozen "
+                        f"K={expected_k} (v3 §32)"
+                    )
+                if not wrow.get("worker_environment_witness_pass"):
+                    blockers.append(
+                        f"{label}: fresh-worker environment witness missing or failed (v3 §22/§32)"
+                    )
+                if not wrow.get("memory_plan_peak_witness_pass"):
+                    blockers.append(
+                        f"{label}: planned-vs-observed memory peak witness missing or "
+                        "failed (v3 §16/§32)"
+                    )
+                if str(wrow.get("failure_class", "")) == "PLANNER_CONTRACT_VIOLATION":
+                    blockers.append(f"{label}: planner contract violation recorded (v3 §11)")
+                # §32: identical plan across repeats — per-repeat plan
+                # hashes must equal the row-level binding (never replanned).
+                for key, repeat in sorted(
+                    (k, v) for k, v in wrow.items() if k.startswith("repeat_")
+                ):
+                    if not isinstance(repeat, Mapping):
+                        continue
+                    repeat_sha = str(repeat.get("memory_plan_sha256", ""))
+                    if (
+                        run_config.socs_memory_plan_sha256
+                        and repeat_sha != run_config.socs_memory_plan_sha256
+                    ):
+                        blockers.append(
+                            f"{label}: {key} used a different memory plan "
+                            f"{repeat_sha[:16]}… (v3 §32 — plan drift across repeats)"
+                        )
+                    if not repeat.get("worker_environment_witness_pass"):
+                        blockers.append(
+                            f"{label}: {key} failed the fresh-worker environment "
+                            "witness (v3 §22/§32)"
+                        )
         repeat_level = row.get("repeat_level")
         if repeat_level is not None and int(repeat_level) < HEADLINE_MIN_REPEATS:
             blockers.append(f"tier {tier.upper()} has insufficient repeats")
@@ -497,6 +605,18 @@ def build_canonical_family_in_workspace(
         workspace / "industrial-v2-distribution-freeze.txt",
         {"gpu": dict(env_lock), "environment_lock_sha256": lock_hash},
     )
+    if socs_memory_plan is not None:
+        write_strict_json(
+            workspace / "industrial-v2-socs-memory-plan.json",
+            dict(socs_memory_plan),
+        )
+    elif "c" not in run_config.tiers:
+        # Keep the family closed when Tier C is not part of the run: the
+        # member exists but records explicitly that no SOCS plan applies.
+        write_strict_json(
+            workspace / "industrial-v2-socs-memory-plan.json",
+            {"schema": SOCS_MEMORY_PLAN_SCHEMA, "plan": "NOT_APPLICABLE_NO_TIER_C"},
+        )
     for canonical_name, payload in tier_payloads.items():
         write_strict_json(workspace / canonical_name, payload)
 
@@ -506,11 +626,13 @@ def build_canonical_family_in_workspace(
         "members": [{"name": name, "bytes": (workspace / name).stat().st_size} for name in members],
     }
     write_strict_json(workspace / "manifest.json", manifest)
+    # §24: SHA256SUMS.txt is written through bytes (LF only) — a Windows
+    # host can never produce CRLF authority bytes.
     lines = [
         f"{sha256_file(workspace / name)}  {name}"
         for name in sorted(CANONICAL_FAMILY - {"SHA256SUMS.txt"})
     ]
-    (workspace / "SHA256SUMS.txt").write_text("\n".join(lines) + "\n")
+    (workspace / "SHA256SUMS.txt").write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
     return []
 
 

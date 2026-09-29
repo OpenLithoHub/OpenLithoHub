@@ -20,11 +20,72 @@ from typing import Any
 
 __all__ = [
     "ForwardExecutionWitness",
+    "compare_worker_environment_fingerprints",
     "gpu_driver_identity",
     "host_peak_rss_bytes",
     "initialize_cuda_measurement_device",
     "measurement_git_state",
+    "worker_environment_fingerprint",
 ]
+
+
+# ---- fresh-worker environment identity (GPU Authority Repair v3 §22) -------------
+
+
+def worker_environment_fingerprint(measurement_commit: str = "") -> dict[str, Any]:
+    """The environment identity a fresh worker must emit (§22): interpreter,
+    torch/CUDA/cuDNN versions, and the exact source bytes of the SOCS and
+    v2-core modules this process imported.
+
+    The parent driver owns the environment authority: it fingerprints
+    itself, passes the fingerprint to every fresh worker, and accepts a
+    worker row only when the child matches field-for-field.  Recording the
+    SHA-256 of the imported ``hopkins``/``industrial_v2`` modules catches
+    the ambiguous-interpreter failure mode (a worker resolving a different
+    checkout or site-packages than the driver) that trusting
+    ``sys.executable`` intent alone cannot."""
+    import hashlib
+
+    import torch
+
+    import openlithohub
+    from openlithohub._utils import hopkins as _hopkins_module
+    from openlithohub.benchmark import industrial_v2 as _industrial_v2_module
+
+    def file_sha256(module: Any) -> str:
+        path = getattr(module, "__file__", None)
+        if not path:
+            return ""
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+    return {
+        "sys_executable": sys.executable,
+        "sys_prefix": sys.prefix,
+        "sys_base_prefix": sys.base_prefix,
+        "python_version": sys.version,
+        "platform": sys.platform,
+        "torch_version": torch.__version__,
+        "torch_cuda_version": torch.version.cuda or "",
+        "cudnn_version": torch.backends.cudnn.version()  # type: ignore[no-untyped-call]
+        if torch.cuda.is_available()
+        else None,
+        "openlithohub_path": str(Path(openlithohub.__file__).resolve()),
+        "openlithohub_hopkins_sha256": file_sha256(_hopkins_module),
+        "openlithohub_industrial_v2_sha256": file_sha256(_industrial_v2_module),
+        "measurement_commit": measurement_commit,
+    }
+
+
+def compare_worker_environment_fingerprints(
+    parent: dict[str, Any], child: dict[str, Any]
+) -> tuple[bool, list[str]]:
+    """Field-for-field comparison of parent authority vs child fingerprint
+    (§22).  Returns ``(pass, mismatches)``; a worker row is accepted only
+    when ``pass`` is true."""
+    mismatches = [
+        key for key in sorted(set(parent) | set(child)) if parent.get(key) != child.get(key)
+    ]
+    return (not mismatches), mismatches
 
 
 # ---- CUDA initialization (GPU Authority Repair §4 / issue #56 defect 1) ---------

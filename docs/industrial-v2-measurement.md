@@ -71,6 +71,47 @@ closed. Cold start (first GPU call including SOCS kernel construction)
 is recorded per repeat as `gpu_cold_wall_s` — a separate diagnostic
 fact that never enters the warm steady-state headline statistic.
 
+## Tier C bounded-SOCS memory authority (GPU Authority Repair v3)
+
+Tier C executes the **exact bounded-memory SOCS decomposition**
+(`exact_block_gram_topk_v1`): a streamed two-pass Gram construction —
+frequency-column blocks are generated, accumulated into the (n_src ×
+n_src) complex128 Gram matrix, one eigendecomposition selects the
+top-K modes, and a second streamed pass reconstructs the kernels
+directly into the output slices. **Full H and full Vh are never
+resident.** The legacy dense full-H `torch.linalg.svd` runtime has been
+removed from every production, benchmark and preflight path with **no
+fallback** (no flag, no environment variable, no re-enable).
+
+The driver computes the **SOCS memory plan** once — from the real frozen
+optical configuration (actual `n_src`, `n_freq`, `K`) and quiescent
+device memory facts — BEFORE the run identity exists, binds its
+canonical SHA-256 into `RunConfigV2`, and writes it to the workspace as
+`socs-memory-plan.json`. Every fresh worker receives that exact plan,
+validates its hash and semantic inputs, and executes it — **workers
+never replan**. Free memory is checked against the plan floor before
+every chunk allocation (`MEMORY_PLAN_HEADROOM_VIOLATION` stops before
+allocation), and an unexpected CUDA OOM after a planner PASS is a
+`PLANNER_CONTRACT_VIOLATION` that fails the run — **CUDA OOM is never
+adaptive control flow**, and no shrink-and-retry exists.
+
+Chunk selection is **capacity-optimal** under the frozen policy (the
+largest aligned chunk satisfying the conservative peak-memory
+inequality) and depends only on the formal dimensions, dtype, K, GPU
+memory facts and frozen planner constants — never on benchmark results.
+The planned-vs-observed memory peak (`memory_plan_peak_witness_pass`)
+and the fresh-worker environment fingerprint
+(`worker_environment_witness_pass`) are locked facts of every formal
+Tier-C SUCCESS row, enforced by the verifier.
+
+The preflight has two distinct Tier-C gates (v3 §14): the
+**analytical formal-grid memory plan** on the ACTUAL frozen grid (never
+a stand-in grid — a small-grid smoke proves nothing about formal-grid
+capacity), and a **bounded real-CUDA block-path probe** through the
+exact worker implementation. Formal preflight PASS means: the formal
+problem is analytically feasible under the frozen policy AND the real
+bounded block path executes on CUDA.
+
 ## Procedure
 
 1. **Clone the exact measurement commit** (the frozen candidate
@@ -106,10 +147,11 @@ fact that never enters the warm steady-state headline statistic.
        --formal
    ```
    The harness owns the run workspace
-   (`runs/<run_identity>/`), fresh-process repeats, synchronized CUDA
-   timing, allocated/reserved GPU peaks, correctness witnesses, the
-   environment lock, and — on a formal run — the fail-closed build of
-   the exact seven-member canonical family inside the workspace
+   (`runs/<run_identity>/`), the frozen SOCS memory plan, fresh-process
+   repeats, synchronized CUDA timing, allocated/reserved GPU peaks,
+   correctness witnesses, the environment lock, and — on a formal run —
+   the fail-closed build of the exact canonical family (including
+   `industrial-v2-socs-memory-plan.json`) inside the workspace
    (`run-summary.json` then records `canonical_build_blockers`; it must
    be `[]`).
 7. **Acceptance**: Tier A exact parity (runs, run ids, contributor ids,

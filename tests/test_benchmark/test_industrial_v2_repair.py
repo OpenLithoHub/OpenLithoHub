@@ -241,12 +241,39 @@ def _window_row(window: int, status: str = "SUCCESS") -> dict:
     }
 
 
+# v3 §32: the synthetic memory-plan binding shared by the workspace plan
+# artifact, the run config, every Tier C row and every repeat row.
+PLAN_SHA = "e" * 64
+
+PLAN_PAYLOAD = {
+    "schema": "OpenLithoHub.socs-memory-plan.v1",
+    "strategy": "exact_block_gram_topk_v1",
+    "strategy_version": 1,
+    "plan_sha256": PLAN_SHA,
+    "memory_feasible": True,
+    "selected_chunk_columns": 65536,
+    "chunk_count": 16,
+}
+
+
 def _tier_c_repeat(warm_wall: float, status: str = "SUCCESS") -> dict:
     """One fresh-worker Tier C row EXACTLY as the executed worker emits it
-    post-2B.2: one synchronized steady-state observation, cold start as a
-    separate diagnostic, no best-of-N list."""
+    post-2B.2 + v3: one synchronized steady-state observation, cold start
+    as a separate diagnostic, no best-of-N list, and the full bounded-SOCS
+    memory/worker-environment authority fields."""
     return {
         "grid": 1024,
+        "n_src": 1609,
+        "kernel_count": 24,
+        "strategy": "exact_block_gram_topk_v1",
+        "strategy_version": 1,
+        "memory_plan_sha256": PLAN_SHA,
+        "memory_feasible": True,
+        "selected_chunk_columns": 65536,
+        "chunk_count": 16,
+        "planner_estimated_peak_bytes": 4000,
+        "minimum_free_bytes_observed": 12345,
+        "headroom_checks": 16,
         "cpu_reference_wall_s": None,
         "gpu_cold_wall_s": 0.9,
         "gpu_warm_wall_s": warm_wall,
@@ -258,6 +285,10 @@ def _tier_c_repeat(warm_wall: float, status: str = "SUCCESS") -> dict:
         "host_peak_rss_bytes": 3000,
         "max_memory_allocated": 500,
         "max_memory_reserved": 800,
+        "observed_max_memory_allocated": 500,
+        "observed_max_memory_reserved": 800,
+        "memory_plan_peak_witness_pass": status == "SUCCESS",
+        "worker_environment_witness_pass": status == "SUCCESS",
         "timing_method": "cuda_synchronized",
         "dtype": "fp32",
         "device": "cuda:0",
@@ -305,6 +336,20 @@ def _tier_c_aggregate_row(status: str = "SUCCESS") -> dict:
                 "forward_input_device": "cuda:0",
                 "forward_output_device_before_d2h": "cuda:0",
                 "cuda_execution_witness_pass": True,
+                "strategy": "exact_block_gram_topk_v1",
+                "strategy_version": 1,
+                "memory_plan_sha256": PLAN_SHA,
+                "memory_feasible": True,
+                "selected_chunk_columns": 65536,
+                "chunk_count": 16,
+                "n_src": 1609,
+                "kernel_count": 24,
+                "planner_estimated_peak_bytes": 4000,
+                "observed_max_memory_allocated": 500,
+                "observed_max_memory_reserved": 800,
+                "minimum_free_bytes_observed": 12345,
+                "memory_plan_peak_witness_pass": True,
+                "worker_environment_witness_pass": True,
             }
         )
     else:
@@ -341,6 +386,7 @@ def _formal_workspace(
         fixture_sha256=fixture_sha256,
         window_sizes=windows,
         repeat_count=5,
+        socs_memory_plan_sha256=PLAN_SHA,
     )
     source = {
         "harness": "h",
@@ -362,6 +408,18 @@ def _formal_workspace(
     write_strict_json(
         workspace / "environment-lock.json",
         env_lock,
+    )
+    write_strict_json(
+        workspace / "socs-memory-plan.json",
+        {
+            "schema": "OpenLithoHub.socs-memory-plan.v1",
+            "strategy": "exact_block_gram_topk_v1",
+            "strategy_version": 1,
+            "plan_sha256": PLAN_SHA,
+            "memory_feasible": True,
+            "selected_chunk_columns": 65536,
+            "chunk_count": 16,
+        },
     )
     write_strict_json(
         workspace / "run-config.json",
@@ -420,6 +478,7 @@ def test_builder_builds_exact_seven_member_family(tmp_path: Path) -> None:
         tier_rows=rows,
         tracked_tree_clean=True,
         provisional=False,
+        socs_memory_plan=PLAN_PAYLOAD,
     )
     assert blockers == [], blockers
     members = {p.name for p in workspace.iterdir()}
@@ -490,6 +549,7 @@ def test_builder_fails_closed_on_incomplete_window_ladder(tmp_path: Path) -> Non
         tier_rows=rows,
         tracked_tree_clean=True,
         provisional=False,
+        socs_memory_plan=PLAN_PAYLOAD,
     )
     assert any("window ladder incomplete" in b for b in blockers)
 
@@ -512,6 +572,7 @@ def test_builder_fails_closed_on_identity_mismatch(tmp_path: Path) -> None:
         tier_rows=rows,
         tracked_tree_clean=True,
         provisional=False,
+        socs_memory_plan=PLAN_PAYLOAD,
     )
     assert any("does not match recomputed" in b for b in blockers)
     assert not (workspace / "manifest.json").exists(), "nothing written on refusal"
@@ -535,6 +596,7 @@ def test_builder_fails_closed_on_empty_fixture_or_driver(tmp_path: Path) -> None
         tier_rows=rows,
         tracked_tree_clean=True,
         provisional=False,
+        socs_memory_plan=PLAN_PAYLOAD,
     )
     assert any("fixture sha256" in b for b in blockers)
 
@@ -549,6 +611,7 @@ def test_builder_fails_closed_on_empty_fixture_or_driver(tmp_path: Path) -> None
         tier_rows=rows,
         tracked_tree_clean=True,
         provisional=False,
+        socs_memory_plan=PLAN_PAYLOAD,
     )
     assert any("driver_version" in b for b in blockers2)
 
@@ -574,6 +637,7 @@ def test_builder_fails_closed_on_unsynced_timing_or_missing_rss(
         tier_rows=rows,
         tracked_tree_clean=True,
         provisional=False,
+        socs_memory_plan=PLAN_PAYLOAD,
     )
     assert any("unsynchronized" in b for b in blockers)
 
@@ -590,6 +654,7 @@ def test_builder_fails_closed_on_unsynced_timing_or_missing_rss(
         tier_rows=rows,
         tracked_tree_clean=True,
         provisional=False,
+        socs_memory_plan=PLAN_PAYLOAD,
     )
     assert any("host_peak_rss_bytes" in b for b in blockers2)
 
@@ -782,6 +847,9 @@ def test_worker_entry_carries_declared_layer_into_tier_b_cfg(
         hopkins_sigma_outer=0.9,
         hopkins_sigma_inner=0.6,
         hopkins_grid=256,
+        memory_plan="",
+        parent_environment="{}",
+        measurement_commit="",
     )
     assert harness.worker_entry(args) == 0
     assert captured["layer"] == "67:20"
@@ -893,6 +961,7 @@ def test_builder_refuses_tier_c_aggregate_n_mismatch(tmp_path: Path) -> None:
             tier_rows=rows,
             tracked_tree_clean=True,
             provisional=False,
+            socs_memory_plan=PLAN_PAYLOAD,
         )
         assert any("timing aggregate n=" in b for b in blockers), why
         assert any("insufficient claim-bearing repeats" in b for b in blockers), why
@@ -921,6 +990,7 @@ def _built_formal_workspace(tmp_path: Path) -> tuple[Path, str, dict, dict]:
         tier_rows=_workspace_rows(workspace),
         tracked_tree_clean=True,
         provisional=False,
+        socs_memory_plan=PLAN_PAYLOAD,
     )
     assert blockers == [], blockers
     return workspace, identity, env_lock, run_config.to_payload()
@@ -1007,6 +1077,7 @@ def test_promotion_cli_refuses_overwriting_different_authority(tmp_path: Path) -
         tier_rows=_workspace_rows(workspace_b),
         tracked_tree_clean=True,
         provisional=False,
+        socs_memory_plan=PLAN_PAYLOAD,
     )
     assert blockers_b == [], blockers_b
     promoted_b, blockers_b2, _ = promoter.promote(

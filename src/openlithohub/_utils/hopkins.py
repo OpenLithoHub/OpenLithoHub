@@ -44,6 +44,17 @@ from openlithohub._constants import (
     SIGMA_OUTER_DEFAULT,
     WAVELENGTH_ARF_NM,
 )
+from openlithohub._utils.socs_memory_plan import (
+    SOCS_STRATEGY,
+    SOCS_STRATEGY_VERSION,
+    DeviceMemoryFacts,
+    MemoryPlanContractViolation,
+    SocsMemoryPlan,
+    assert_headroom,
+    collect_cuda_memory_facts,
+    plan_socs_decomposition,
+    validate_worker_plan,
+)
 
 IlluminationKind = Literal["circular", "annular", "dipole", "quasar"]
 
@@ -85,7 +96,7 @@ class HopkinsParams:
     pole_opening_deg: float = POLE_OPENING_DEG_DEFAULT
     defocus_nm: float = DEFOCUS_NM_DEFAULT
 
-    def cache_key(self, grid_size: int, device: str, kernel_dtype: str) -> Hashable:
+    def cache_key(self, grid_size: int, device: str, kernel_dtype: str) -> tuple[Hashable, ...]:
         return (
             self.wavelength_nm,
             self.na,
@@ -246,21 +257,198 @@ def _pupil(
     return torch.complex(real, imag)
 
 
+# ---- bounded SOCS decomposition (GPU Authority Repair v3, §3-§4) ----------------
+
+SOCS_EIG_NEG_TOLERANCE_RTOL = 1e-6
+"""Frozen §4 policy: an eigenvalue below ``-rtol * lambda_max`` is a
+material negative (Hermitian violation), not roundoff — hard failure."""
+
+SOCS_RANK_RTOL = 1e-9
+SOCS_RANK_ATOL = 1e-12
+"""Frozen §4 numerical-rank tolerance: eigenmodes at or below
+``atol + rtol * lambda_max`` are not numerically positive."""
+
+
+class SocsNumericalClosureError(RuntimeError):
+    """The exact bounded Gram route failed numerical closure (§4/§30).
+
+    Raised on materially negative eigenvalues or fewer than K numerically
+    positive modes.  Per protocol this STOPs the track and moves to a
+    memory-bounded matrix-free top-K solver — it NEVER restores the old
+    dense runtime, and it is never resolved by lowering the grid."""
+
+
+@dataclass(frozen=True)
+class SocsProblemDimensions:
+    """The exact formal SOCS problem dimensions (§14: preflight and
+    planner must reason about the ACTUAL formal grid)."""
+
+    n_src: int
+    n_freq: int
+    K: int
+
+
+def socs_problem_dimensions(
+    params: HopkinsParams,
+    grid_size: int,
+    device: torch.device | str = "cpu",
+) -> SocsProblemDimensions:
+    """Compute the exact ``(n_src, n_freq, K)`` for the frozen optical
+    configuration (§37 Q5: n_src comes from the REAL source sampling of
+    the frozen params, never from a nominal estimate)."""
+    dev = torch.device(device)
+    shifts, _ = _illumination_samples(params, grid_size, dev)
+    n_src = int(shifts.shape[0])
+    return SocsProblemDimensions(
+        n_src=n_src,
+        n_freq=grid_size * grid_size,
+        K=max(1, min(params.num_kernels, n_src)),
+    )
+
+
+def _build_frequency_block(
+    pupil_flat: torch.Tensor,
+    src_shifts_cpu: list[tuple[int, int]],
+    src_weights_sqrt: list[float],
+    grid_size: int,
+    start: int,
+    end: int,
+    device: torch.device,
+) -> torch.Tensor:
+    """Generate ``H[:, start:end]`` — the (n_src, chunk) complex64 block of
+    shifted-pupil columns — WITHOUT materializing full-grid index tensors
+    (§12): only the chunk's flat indices exist, and each source row is
+    filled by one bounded gather."""
+    cols = torch.arange(start, end, device=device, dtype=torch.int64)
+    y = torch.div(cols, grid_size, rounding_mode="floor")
+    x = cols - y * grid_size
+    block = torch.empty((len(src_shifts_cpu), end - start), dtype=torch.complex64, device=device)
+    for k, ((sy, sx), weight_sqrt) in enumerate(zip(src_shifts_cpu, src_weights_sqrt, strict=True)):
+        iy = (y - sy) % grid_size
+        ix = (x - sx) % grid_size
+        gathered = pupil_flat.index_select(0, iy * grid_size + ix)
+        block[k] = gathered * weight_sqrt
+    return block
+
+
+def _socs_static_tables(
+    params: HopkinsParams,
+    grid_size: int,
+    device: torch.device,
+) -> tuple[torch.Tensor, list[tuple[int, int]], list[float]]:
+    """Pupil (flattened) + CPU-resident source tables shared by both
+    streamed passes."""
+    f = _frequency_grid(grid_size, params.pixel_size_nm, device)
+    fy, fx = torch.meshgrid(f, f, indexing="ij")
+    pupil_flat = _pupil(fy, fx, params).reshape(-1)
+    src_shifts, src_weights = _illumination_samples(params, grid_size, device)
+    src_shifts_cpu = [(int(a), int(b)) for a, b in src_shifts.cpu().tolist()]
+    weights_sqrt = [float(w) ** 0.5 for w in src_weights.cpu().tolist()]
+    return pupil_flat, src_shifts_cpu, weights_sqrt
+
+
+def run_bounded_block_probe(
+    params: HopkinsParams,
+    grid_size: int,
+    device: torch.device | str,
+    block_columns: int = 4096,
+) -> dict[str, object]:
+    """Preflight Gate B (§14B): push ONE representative H block through the
+    EXACT worker block path — bounded generation, CUDA Gram update, finite
+    checks, actual device witness.  Shares ``_build_frequency_block`` with
+    the production decomposition, so a probe can never pass while the real
+    worker path is broken."""
+    dev = torch.device(device)
+    pupil_flat, shifts, weights_sqrt = _socs_static_tables(params, grid_size, dev)
+    end = min(int(block_columns), grid_size * grid_size)
+    block = _build_frequency_block(pupil_flat, shifts, weights_sqrt, grid_size, 0, end, dev)
+    gram_part = block.to(torch.complex128) @ block.to(torch.complex128).mH
+    del block
+    if dev.type == "cuda":
+        torch.cuda.synchronize(dev)
+    finite = bool(torch.isfinite(gram_part.real).all() and torch.isfinite(gram_part.imag).all())
+    return {
+        "requested_device": str(device),
+        "block_device": str(pupil_flat.device),
+        "gram_update_device": str(gram_part.device),
+        "block_columns": end,
+        "n_src": len(shifts),
+        "finite": finite,
+        "pass": bool(
+            finite
+            and str(pupil_flat.device).startswith(str(dev))
+            and str(gram_part.device).startswith(str(dev))
+        ),
+    }
+
+
+def _plan_for_device(
+    params: HopkinsParams,
+    grid_size: int,
+    device: torch.device,
+    memory_plan: SocsMemoryPlan | None,
+) -> SocsMemoryPlan:
+    """Resolve the plan for this computation: an explicitly supplied plan
+    is VALIDATED (a worker may never replan, §10); otherwise a fresh plan
+    is computed from live device facts."""
+    dims = socs_problem_dimensions(params, grid_size, device)
+    if memory_plan is not None:
+        validate_worker_plan(
+            memory_plan,
+            grid_size=grid_size,
+            n_src=dims.n_src,
+            n_freq=dims.n_freq,
+            K=dims.K,
+            dtype="complex64",
+            device=str(device),
+        )
+        return memory_plan
+    facts: DeviceMemoryFacts | None = None
+    if device.type == "cuda":
+        facts = collect_cuda_memory_facts(str(device))
+    return plan_socs_decomposition(
+        grid_size=grid_size,
+        n_src=dims.n_src,
+        n_freq=dims.n_freq,
+        K=dims.K,
+        dtype="complex64",
+        complex_bytes=8,
+        device=str(device),
+        facts=facts,
+    )
+
+
 def compute_socs_kernels(
     params: HopkinsParams,
     grid_size: int,
     device: torch.device | str = "cpu",
     dtype: torch.dtype = torch.complex64,
+    memory_plan: SocsMemoryPlan | None = None,
+    memory_witness: dict[str, object] | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute SOCS kernels and their weights for a square grid.
+
+    The implementation is the EXACT two-pass bounded-memory Gram
+    construction (GPU Authority Repair v3 §3): a streamed Gram
+    accumulation over frequency-column blocks, one eigendecomposition of
+    the (n_src x n_src) Gram matrix, then a streamed top-K
+    reconstruction writing each block directly into the output slice.
+    Full H and full Vh are NEVER resident (§2); the legacy dense
+    full-H ``torch.linalg.svd`` runtime has been removed with no
+    fallback (§2: no flag, no env var, no re-enable).
 
     Args:
         params: Optical parameters.
         grid_size: Square grid edge length (pixels).
         device: PyTorch device.
         dtype: Complex dtype of the returned kernels (``complex64`` or
-            ``complex128``). The internal FFT/SVD always runs in
-            ``complex64`` — this dtype only controls the cached output.
+            ``complex128``). The internal decomposition runs in
+            ``complex64`` blocks with a ``complex128`` Gram accumulator.
+        memory_plan: Optional frozen :class:`SocsMemoryPlan` (the formal
+            worker path passes the driver-owned plan; supplying one means
+            this call VALIDATES instead of replans, §10).
+        memory_witness: Optional dict filled with the planned-vs-observed
+            memory facts (§16) for the caller's authority artifact.
 
     Returns:
         kernels: complex tensor of shape (K, H, W) with the requested dtype.
@@ -273,59 +461,99 @@ def compute_socs_kernels(
     `simulate_aerial_image_hopkins` expects.
     """
     dev = torch.device(device)
-    cache_key = params.cache_key(grid_size, str(dev), str(dtype))
+    dims = socs_problem_dimensions(params, grid_size, dev)
+    n_src, n_freq = dims.n_src, dims.n_freq
+    K: int = dims.K  # noqa: N806 — K is the frozen SOCS truncation order
+
+    plan = _plan_for_device(params, grid_size, dev, memory_plan)
+    if not plan.memory_feasible:
+        raise MemoryPlanContractViolation(
+            f"{plan.reason} — refusing to execute an infeasible memory plan"
+        )
+    chunk = plan.selected_chunk_columns
+
+    # §13: cache identity binds optical params, grid, device, dtype, K,
+    # the strategy version and the chunk policy.  A cache produced by an
+    # obsolete strategy can never satisfy this key.
+    cache_key = tuple(params.cache_key(grid_size, str(dev), str(dtype))) + (
+        SOCS_STRATEGY,
+        SOCS_STRATEGY_VERSION,
+        chunk,
+    )
     cached = _KERNEL_CACHE.get(cache_key)
     if cached is not None:
         _KERNEL_CACHE.move_to_end(cache_key)
         return cached
 
-    f = _frequency_grid(grid_size, params.pixel_size_nm, dev)
-    fy, fx = torch.meshgrid(f, f, indexing="ij")
+    pupil_flat, shifts, weights_sqrt = _socs_static_tables(params, grid_size, dev)
+    min_free_observed = 2**62
+    headroom_checks = 0
 
-    pupil = _pupil(fx, fy, params)
+    def guard() -> None:
+        nonlocal min_free_observed, headroom_checks
+        if dev.type == "cuda":
+            free = assert_headroom(plan, str(dev))
+            if free >= 0:
+                min_free_observed = min(min_free_observed, free)
+            headroom_checks += 1
 
-    src_shifts, src_weights = _illumination_samples(params, grid_size, dev)
-    n_src = src_shifts.shape[0]
+    # ---- Pass 1: streamed Gram accumulation, complex128 (§3/§4) -------
+    gram = torch.zeros((n_src, n_src), dtype=torch.complex128, device=dev)
+    for start in range(0, n_freq, chunk):
+        end = min(start + chunk, n_freq)
+        guard()
+        block = _build_frequency_block(pupil_flat, shifts, weights_sqrt, grid_size, start, end, dev)
+        block128 = block.to(torch.complex128)
+        gram.addmm_(block128, block128.mH)
+        del block, block128
 
-    n_freq = grid_size * grid_size
-    # SVD matrix is (n_src, n_freq) complex64 — warn on large grids where
-    # memory and compute time grow as O(n_src * grid_size^2).
-    mem_gb = n_src * n_freq * 8 / 1e9
-    if mem_gb > 4.0:
-        warnings.warn(
-            f"SOCS kernel computation for grid_size={grid_size} allocates ~{mem_gb:.1f} GB. "
-            f"Consider using a smaller grid or reducing num_kernels.",
-            stacklevel=2,
+    # §4: symmetrize, descending sort, clamp only tiny roundoff, hard-fail
+    # on material negatives, enforce the frozen numerical rank.
+    gram = (gram + gram.mH) * 0.5
+    eigvals, eigvecs = torch.linalg.eigh(gram)
+    del gram
+    lam = torch.flip(eigvals, dims=(0,))
+    u = torch.flip(eigvecs, dims=(1,))
+    del eigvals, eigvecs
+    lam_max = float(lam[0].real) if lam.numel() else 0.0
+    neg_tolerance = SOCS_EIG_NEG_TOLERANCE_RTOL * max(lam_max, 0.0)
+    if lam.numel() and float(lam[-1].real) < -neg_tolerance:
+        raise SocsNumericalClosureError(
+            f"bounded Gram route failed numerical closure: most negative "
+            f"eigenvalue {float(lam[-1].real):.3e} < -{neg_tolerance:.3e} (§4 hard fail)"
         )
+    lam = lam.clamp(min=0.0)
+    rank_tolerance = SOCS_RANK_ATOL + SOCS_RANK_RTOL * max(lam_max, 0.0)
+    positive_modes = int((lam.real > rank_tolerance).sum()) if lam.numel() else 0
+    if positive_modes < K:
+        raise SocsNumericalClosureError(
+            f"bounded Gram route failed numerical closure: {positive_modes} "
+            f"numerically positive modes < K={K} at frozen rank tolerance "
+            f"(atol={SOCS_RANK_ATOL}, rtol={SOCS_RANK_RTOL})"
+        )
+    lam_k = lam[:K]
+    u_k = u[:, :K]
+    del lam, u
+    sigma_inv = torch.rsqrt(lam_k.clamp(min=1e-300)).to(torch.complex128)
 
-    yy, xx = torch.meshgrid(
-        torch.arange(grid_size, device=dev),
-        torch.arange(grid_size, device=dev),
-        indexing="ij",
-    )
-    H = torch.zeros((n_src, n_freq), dtype=torch.complex64, device=dev)  # noqa: N806
-    for k in range(n_src):
-        sy = int(src_shifts[k, 0].item())
-        sx = int(src_shifts[k, 1].item())
-        idx_y = (yy - sy) % grid_size
-        idx_x = (xx - sx) % grid_size
-        shifted = pupil[idx_y, idx_x]
-        weight = torch.sqrt(src_weights[k])
-        H[k] = (shifted * weight).reshape(-1)
+    # ---- Pass 2: streamed top-K reconstruction, direct slice writes ----
+    kernels_freq = torch.empty((K, n_freq), dtype=torch.complex64, device=dev)
+    for start in range(0, n_freq, chunk):
+        end = min(start + chunk, n_freq)
+        guard()
+        block = _build_frequency_block(pupil_flat, shifts, weights_sqrt, grid_size, start, end, dev)
+        v_block = (block.to(torch.complex128).mH @ u_k) * sigma_inv.unsqueeze(0)
+        kernels_freq[:, start:end] = v_block.conj().T.to(torch.complex64)
+        del block, v_block
+    del u_k, sigma_inv
 
-    K = max(1, min(params.num_kernels, n_src))  # noqa: N806
-    u, s, vh = torch.linalg.svd(H, full_matrices=False)
-    s2 = (s**2)[:K]
-    eigvecs = vh[:K]
-
-    kernels_freq = eigvecs.reshape(K, grid_size, grid_size)
-    weights = s2.to(torch.float32)
-
-    kernels_spatial = torch.fft.ifft2(kernels_freq, norm="backward")
+    kernels_spatial = torch.fft.ifft2(kernels_freq.reshape(K, grid_size, grid_size))
     kernels_spatial = torch.fft.fftshift(kernels_spatial, dim=(-2, -1))
+    del kernels_freq
 
     # Calibrate so that an open-frame (all-ones) mask produces aerial ≈ 1.
     # For a constant mask, coherent_k = sum(kernel_k); aerial_open = Σ_k w_k |sum(k_k)|².
+    weights = lam_k.real.to(torch.float32)
     open_frame = torch.zeros((), dtype=torch.float32, device=dev)
     for k_idx in range(K):
         coherent_dc = kernels_spatial[k_idx].sum()
@@ -337,6 +565,21 @@ def compute_socs_kernels(
         weights = weights.clamp(max=1e6)
 
     kernels_spatial = kernels_spatial.to(dtype)
+    if memory_witness is not None:
+        memory_witness.update(
+            {
+                "strategy": plan.strategy,
+                "strategy_version": plan.strategy_version,
+                "memory_plan_sha256": plan.plan_sha256,
+                "memory_feasible": plan.memory_feasible,
+                "selected_chunk_columns": plan.selected_chunk_columns,
+                "chunk_count": plan.chunk_count,
+                "planner_estimated_peak_bytes": plan.estimated_peak_bytes,
+                "required_free_floor_bytes": plan.required_free_floor_bytes,
+                "minimum_free_bytes_observed": (min_free_observed if headroom_checks else -1),
+                "headroom_checks": headroom_checks,
+            }
+        )
     _KERNEL_CACHE[cache_key] = (kernels_spatial.detach(), weights.detach())
     while len(_KERNEL_CACHE) > _KERNEL_CACHE_MAXSIZE:
         _KERNEL_CACHE.popitem(last=False)
@@ -377,6 +620,8 @@ def simulate_aerial_image_hopkins(
     dose: float = 1.0,
     dtype: torch.dtype = torch.float32,
     precomputed_kernels_f: torch.Tensor | None = None,
+    memory_plan: SocsMemoryPlan | None = None,
+    memory_witness: dict[str, object] | None = None,
 ) -> torch.Tensor:
     """Simulate aerial image via SOCS-truncated Hopkins imaging.
 
@@ -399,6 +644,12 @@ def simulate_aerial_image_hopkins(
             per-kernel ``ifftshift + fft2`` cost. Must be the FFT of
             ``ifftshift(kernels, dim=(-2,-1))`` for numerical equivalence.
             Coerced to complex64 if a different complex dtype is passed.
+        memory_plan: Optional frozen plan forwarded to the bounded SOCS
+            construction when kernels must be built (v3 §10 — a formal
+            worker passes the driver-owned plan here; it is never
+            replanned).
+        memory_witness: Optional dict forwarded to the bounded SOCS
+            construction for the §16 planned-vs-observed facts.
 
     Returns:
         Real-valued aerial image with the same spatial shape as `mask`.
@@ -419,7 +670,9 @@ def simulate_aerial_image_hopkins(
     if kernels is None or weights is None:
         if params is None:
             raise ValueError("Provide either (params) or (kernels and weights).")
-        kernels, weights = compute_socs_kernels(params, H, mask4d.device)
+        kernels, weights = compute_socs_kernels(
+            params, H, mask4d.device, memory_plan=memory_plan, memory_witness=memory_witness
+        )
 
     if params is not None:
         # Tile must be wider than a few Rayleigh units, otherwise the

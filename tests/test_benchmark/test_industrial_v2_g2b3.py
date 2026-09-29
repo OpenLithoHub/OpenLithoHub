@@ -345,8 +345,10 @@ def test_preflight_tier_c_probe_routes_through_worker_constructor(
         "load_v2_harness",
         lambda: types.SimpleNamespace(tier_c_hopkins_params=broken_params),
     )
+    # v3 §14: the probe routes through the bounded block-path gate, which
+    # still constructs params via the SHARED worker constructor.
     with pytest.raises(RuntimeError, match="shared-constructor sentinel"):
-        preflight.tier_c_preflight_probe("cuda:0")
+        preflight.bounded_block_probe_gate(preflight.load_v2_harness(), "cuda:0", hopkins_grid=1024)
 
 
 def test_preflight_tier_b_probe_routes_through_shared_cuda_init(
@@ -571,6 +573,16 @@ def _tier_c_row() -> dict:
         "forward_input_device": "cuda:0",
         "forward_output_device_before_d2h": "cuda:0",
         "cuda_execution_witness_pass": True,
+        "strategy": "exact_block_gram_topk_v1",
+        "strategy_version": 1,
+        "memory_plan_sha256": "e" * 64,
+        "memory_feasible": True,
+        "selected_chunk_columns": 65536,
+        "chunk_count": 16,
+        "n_src": 1609,
+        "kernel_count": 24,
+        "memory_plan_peak_witness_pass": True,
+        "worker_environment_witness_pass": True,
     }
 
 
@@ -595,6 +607,19 @@ def _g2b3_workspace(tmp_path: Path, *, env_lock: dict, tier_b_witness: bool = Tr
         repeat_count=5,
         fixture_sha256="d" * 64,
         layer="66:44",
+        socs_memory_plan_sha256="e" * 64,
+    )
+    write_strict_json(
+        workspace / "socs-memory-plan.json",
+        {
+            "schema": "OpenLithoHub.socs-memory-plan.v1",
+            "strategy": "exact_block_gram_topk_v1",
+            "strategy_version": 1,
+            "plan_sha256": "e" * 64,
+            "memory_feasible": True,
+            "selected_chunk_columns": 65536,
+            "chunk_count": 16,
+        },
     )
     source = {"harness": "h", "core": "c", "claim_generator": "g", "verifier": "v"}
     lock_sha = gpu_environment_lock_sha256(env_lock)
@@ -664,6 +689,15 @@ def _build_family(tmp_path: Path, *, env_lock: dict, tier_b_witness: bool = True
         tier_rows=rows,
         tracked_tree_clean=True,
         provisional=False,
+        socs_memory_plan={
+            "schema": "OpenLithoHub.socs-memory-plan.v1",
+            "strategy": "exact_block_gram_topk_v1",
+            "strategy_version": 1,
+            "plan_sha256": "e" * 64,
+            "memory_feasible": True,
+            "selected_chunk_columns": 65536,
+            "chunk_count": 16,
+        },
     )
     return workspace, identity, blockers
 
