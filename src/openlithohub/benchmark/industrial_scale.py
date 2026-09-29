@@ -75,6 +75,62 @@ FROZEN_MICROBATCH_LADDER: tuple[int, ...] = (1, 2, 4, 8, 16, 32)
 """Lane C's frozen microbatch ladder (1×RTX4090 migration).  Frozen
 BEFORE any GPU observation; changing it is a protocol change."""
 
+FROZEN_LANE_A_WINDOWS: tuple[int, ...] = (4096, 8192, 16384, 32768)
+"""Lane A's frozen window ladder (GPU Authority Repair §19).  The formal
+Lane A campaign is WINDOW-SCOPED: each window is its own run with its own
+canonical family + verifier PASS, and the campaign manifest binds exactly
+these four windows — a restart only re-runs the missing window."""
+
+# Formal Scale host policy (GPU Authority Repair §22).  Frozen BEFORE the
+# rerun: the reference campaign host is the Windows 11 / RTX 4090 Laptop
+# 16 GiB machine; the desktop 24 GiB 4090 is also enumerated explicitly.
+SUPPORTED_SCALE_GPU_MODELS: frozenset[str] = frozenset(
+    {
+        "NVIDIA GeForce RTX 4090",
+        "NVIDIA GeForce RTX 4090 Laptop GPU",
+    }
+)
+FORMAL_SCALE_MIN_VRAM_BYTES: int = 15 * 1024**3
+FORMAL_SCALE_COMPUTE_CAPABILITY: str = "8.9"
+SUPPORTED_SCALE_OS: frozenset[str] = frozenset({"Windows", "Linux"})
+
+
+def scale_host_policy_blockers(env_lock: Mapping[str, Any], gpu_count: int = 1) -> list[str]:
+    """Every reason the host fails the FROZEN formal Scale host policy
+    (§22) — fail-closed, source-owned, checked by preflight AND the
+    formal family builder.  Only meaningful on a CUDA host; CPU
+    development hosts are already blocked by the backend rule."""
+    blockers: list[str] = []
+    platform_name = str(env_lock.get("platform_system", ""))
+    if platform_name and platform_name not in SUPPORTED_SCALE_OS:
+        blockers.append(
+            f"host OS {platform_name!r} is not a supported formal Scale host "
+            f"(supported: {sorted(SUPPORTED_SCALE_OS)}) (§22)"
+        )
+    devices = env_lock.get("devices") or []
+    for device in devices[: max(1, gpu_count)]:
+        name = str(device.get("name", ""))
+        if name not in SUPPORTED_SCALE_GPU_MODELS:
+            blockers.append(
+                f"GPU model {name!r} is not a supported formal Scale GPU "
+                f"(supported: {sorted(SUPPORTED_SCALE_GPU_MODELS)}) (§22)"
+            )
+        vram = int(device.get("total_memory_bytes") or 0)
+        if vram < FORMAL_SCALE_MIN_VRAM_BYTES:
+            blockers.append(
+                f"GPU {name!r} VRAM {vram} bytes < frozen minimum "
+                f"{FORMAL_SCALE_MIN_VRAM_BYTES} (§22)"
+            )
+        capability = str(device.get("compute_capability", ""))
+        if capability != FORMAL_SCALE_COMPUTE_CAPABILITY:
+            blockers.append(
+                f"GPU {name!r} compute capability {capability!r} != frozen "
+                f"{FORMAL_SCALE_COMPUTE_CAPABILITY!r} (§22)"
+            )
+    if not devices:
+        blockers.append("host policy check found no CUDA devices (§22)")
+    return blockers
+
 
 class ScaleStatus(str, Enum):
     """Scale status vocabulary — silent skips are impossible (§S7.3)."""
@@ -390,9 +446,19 @@ def scale_environment_lock(
     record ``available: false`` with an empty device list — multi-worker
     CPU emulation still gets a complete, hashable lock.  GPU hosts must
     additionally record per-device identity (name/UUID/PCI bus/VRAM/
-    compute capability), driver, CUDA/cuDNN builds, TF32 state and the
-    nvidia-smi topology facts."""
+    compute capability), driver, CUDA/cuDNN builds, TF32 state, the OS
+    platform and the nvidia-smi topology facts.
+
+    GPU Authority Repair §10/§21: the driver/device identity comes from
+    the shared source-owned authority — nvidia-smi first, a Windows
+    registry fallback when NVML is broken; executable presence is never
+    treated as a successful identity capture and the identity source is
+    recorded explicitly."""
+    import platform
+
     import torch
+
+    from openlithohub.benchmark.measurement_support import gpu_driver_identity
 
     cuda_available = bool(torch.cuda.is_available())
     lock: dict[str, Any] = {
@@ -400,7 +466,12 @@ def scale_environment_lock(
         "count": torch.cuda.device_count() if cuda_available else 0,
         "requested_gpu_count": requested_gpu_count,
         "devices": [],
-        "driver_version": nvidia_driver_version() if cuda_available else "",
+        "platform": platform.platform(),
+        "platform_system": platform.system(),
+        "driver_version": "",
+        "driver_identity_source": "unavailable",
+        "device_identifier": "",
+        "device_identifier_type": "none",
         "torch_cuda_version": torch.version.cuda or "",
         "torch_version": torch.__version__,
         "cudnn_version": (
@@ -413,6 +484,7 @@ def scale_environment_lock(
         "topology": parse_nvidia_smi_topology(topology_text) if cuda_available else [],
     }
     if cuda_available:
+        lock.update(gpu_driver_identity())
         for index in range(lock["count"]):
             props = torch.cuda.get_device_properties(index)
             lock["devices"].append(
@@ -502,15 +574,25 @@ def formal_scale_blockers(
         )
     if run_config.device_backend == "cuda" and not env_lock.get("available"):
         blockers.append("FORMAL_SCALE_BLOCKED: CUDA measurement environment unavailable")
-    if (
-        run_config.device_backend == "cuda"
-        and env_lock.get("available")
-        and int(env_lock.get("count") or 0) < run_config.gpu_count
-    ):
-        blockers.append(
-            f"environment has {env_lock.get('count')} GPU(s); "
-            f"run config requests {run_config.gpu_count}"
-        )
+    if run_config.device_backend == "cuda" and env_lock.get("available"):
+        if int(env_lock.get("count") or 0) < run_config.gpu_count:
+            blockers.append(
+                f"environment has {env_lock.get('count')} GPU(s); "
+                f"run config requests {run_config.gpu_count}"
+            )
+        # GPU Authority Repair §10: formal CUDA authority must not
+        # silently accept an empty device/driver identity.
+        if not env_lock.get("driver_version"):
+            blockers.append("formal CUDA run requires a nonempty driver_version (§10)")
+        if not env_lock.get("driver_identity_source"):
+            blockers.append("formal CUDA run requires an explicit driver identity source (§10)")
+        elif env_lock.get("driver_identity_source") == "unavailable":
+            blockers.append(
+                "formal CUDA run requires a source-owned driver/device identity — "
+                "empty identity is never silently accepted (§10)"
+            )
+        # GPU Authority Repair §22: the FROZEN formal Scale host policy.
+        blockers.extend(scale_host_policy_blockers(env_lock, run_config.gpu_count))
     if provisional:
         blockers.append("provisional run: canonical publication requires a formal run")
     if not git_clean:
@@ -529,6 +611,15 @@ def formal_scale_blockers(
             blockers.append(f"lane {lane} correctness witness did not pass")
         if row is not None and int(row.get("repeat_count") or 0) < 5:
             blockers.append(f"lane {lane} has insufficient repeats for formal claims")
+        # GPU Authority Repair §15: a formal CUDA row must carry a valid
+        # actual-CUDA execution witness — the devices the forward tensors
+        # occupied are the authority, never the device argument.
+        if (
+            row is not None
+            and run_config.device_backend == "cuda"
+            and not row.get("cuda_execution_witness_pass")
+        ):
+            blockers.append(f"lane {lane} formal row lacks a valid CUDA execution witness (§15)")
     if LANE_C in run_config.lanes:
         # single-GPU saturation is single-GPU BY DEFINITION (1×RTX4090
         # migration): multi-worker emulation can never satisfy it.
@@ -552,6 +643,9 @@ def formal_scale_blockers(
 __all__ = [
     "AUTHORITY_SCOPE",
     "DEVICE_BACKENDS",
+    "FORMAL_SCALE_COMPUTE_CAPABILITY",
+    "FORMAL_SCALE_MIN_VRAM_BYTES",
+    "FROZEN_LANE_A_WINDOWS",
     "FROZEN_MICROBATCH_LADDER",
     "FIXTURE_SCHEMA",
     "FORWARD_PROFILES",
@@ -567,6 +661,8 @@ __all__ = [
     "SCHEMA_NAME",
     "SINK_KINDS",
     "OUTPUT_SEMANTICS",
+    "SUPPORTED_SCALE_GPU_MODELS",
+    "SUPPORTED_SCALE_OS",
     "ScaleFixtureManifest",
     "ScaleRunConfig",
     "ScaleStatus",
@@ -582,6 +678,7 @@ __all__ = [
     "parse_nvidia_smi_topology",
     "scale_environment_lock",
     "scale_environment_lock_sha256",
+    "scale_host_policy_blockers",
     "sha256_bytes",
     "sha256_file",
     "write_strict_json",

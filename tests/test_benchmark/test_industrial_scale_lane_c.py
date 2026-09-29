@@ -115,11 +115,30 @@ def test_lane_c_accepted_by_schema_and_identity_binds_ladder() -> None:
 
 
 def test_lane_c_formal_blockers() -> None:
-    env = {"available": True, "count": 1}
+    # GPU Authority Repair §10/§15/§22: the formal contract now also
+    # requires a source-owned driver/device identity, the frozen host
+    # policy and the actual-CUDA execution witness on SUCCESS rows.
+    env = {
+        "available": True,
+        "count": 1,
+        "platform": "Windows-11-10.0.26200-SP0",
+        "platform_system": "Windows",
+        "devices": [
+            {
+                "index": 0,
+                "name": "NVIDIA GeForce RTX 4090 Laptop GPU",
+                "total_memory_bytes": 17_170_956_288,
+                "compute_capability": "8.9",
+            }
+        ],
+        "driver_version": "32.0.16.1088",
+        "driver_identity_source": "windows-fallback",
+    }
     good = {
         "status": "SUCCESS",
         "correctness_witness_pass": True,
         "repeat_count": 5,
+        "cuda_execution_witness_pass": True,
     }
     cfg = ScaleRunConfig(
         lanes=(LANE_C,),
@@ -154,7 +173,7 @@ def test_lane_c_formal_blockers() -> None:
     # multi-GPU lane C refused — single-GPU by definition
     multi = cfg.with_changes(gpu_count=3)
     blockers = formal_scale_blockers(
-        env_lock={"available": True, "count": 3},
+        env_lock={**env, "count": 3},
         run_config=multi,
         lane_rows={LANE_C: good},
         git_clean=True,
@@ -171,7 +190,7 @@ def test_lane_c_formal_blockers() -> None:
         selected_layer="66:44",
     )
     blockers = formal_scale_blockers(
-        env_lock={"available": True, "count": 1},
+        env_lock=env,
         run_config=lane_b,
         lane_rows={"B_MULTI_GPU_SCALING": good},
         git_clean=True,
@@ -304,7 +323,7 @@ def test_lane_c_family_verifies_structurally_and_refuses_missing_rung(
         cwd=str(REPO),
     )
     assert bad.returncode == 1
-    assert "silent missing rung" in bad.stderr
+    assert "silent missing" in bad.stderr
 
 
 def test_lane_c_formal_refused_on_cpu(

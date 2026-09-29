@@ -26,15 +26,28 @@ Historical 3×RTX 3080 protocol provenance is retained in the charter
 and the superseded issue/templates — it is not the current protocol.
 ```
 
-## 1. Host requirements
+## 1. Host requirements (frozen formal Scale host policy, §22)
 
-* 1× NVIDIA RTX 4090 (24 GB); the frozen commands name the exact GPU
-  count per run (Lane A/C: 1 GPU — multi-GPU measurement is deferred);
-* working NVIDIA driver + CUDA-enabled PyTorch + cuDNN visible;
+The formal host policy is FROZEN IN SOURCE
+(`openlithohub.benchmark.industrial_scale.SUPPORTED_SCALE_GPU_MODELS`)
+BEFORE the rerun — the preflight and the formal family builder both
+enforce it fail-closed:
+
+* GPU model: `NVIDIA GeForce RTX 4090 Laptop GPU` (this campaign's
+  reference host) **or** `NVIDIA GeForce RTX 4090` (desktop) — both
+  enumerated explicitly;
+* VRAM ≥ 15 GiB; compute capability 8.9; device count ≥ 1 (`cuda:0`);
+* OS: Windows 11 or Linux (both supported — the preflight records the
+  actual platform);
+* working NVIDIA driver + CUDA-enabled PyTorch + cuDNN visible; the
+  driver/device identity is captured by source-owned code (nvidia-smi
+  first, a Windows registry fallback when NVML fails) — an empty or
+  unattributed identity blocks the formal run;
 * KLayout Python API (installed with the repository);
 * ≥ 32 GiB host RAM recommended; free disk ≥ the prepared fixture size
   + ~64 GiB for run outputs;
-* Linux. No MPS, no ROCm, no CPU emulation of CUDA.
+* No MPS, no ROCm, no CPU emulation of CUDA — a CPU forward under a
+  CUDA-enabled PyTorch can never pass the preflight's actual-CUDA probe.
 
 Record, before anything else:
 
@@ -155,21 +168,50 @@ Required: `PREFLIGHT: PASS` AND `SCALE PREFLIGHT: PASS`. Otherwise STOP.
 >
 > FROZEN SCALE COMMIT: <FULL_40_HEX_SHA>
 
-### Command A — Lane A, single GPU, Ibex ladder
+### Command A — Lane A, single GPU, WINDOW-SCOPED frozen ladder
+
+GPU Authority Repair §19: Lane A is **window-scoped** — each frozen
+window is its OWN formal invocation with its own canonical family and
+its own verifier PASS. An interrupted run restarts at ONLY the missing
+window; arbitrary rows are never stitched together after the fact.
+
+Run each window exactly once, unmodified:
 
 ```bash
-python benchmarks/industrial-scale/run_scale_benchmark.py \
-  --fixture-manifest benchmarks/results/industrial-scale/fixtures/ibex/fixture-manifest.json \
-  --gds benchmarks/results/industrial-scale/fixtures/ibex/ibex.gds \
-  --lanes a \
-  --windows 4096,8192,16384,32768 \
-  --device cuda:0 --device-backend cuda --gpu-count 1 \
-  --forward-profile P1_FINITE_SUPPORT --sink memmap_npy \
-  --tile 1024 --halo 64 --microbatch 8 \
-  --repeats 5 --warmup 2 \
-  --formal \
-  2>&1 | tee measurement-logs/lane-a.txt
+for W in 4096 8192 16384 32768; do
+  python benchmarks/industrial-scale/run_scale_benchmark.py \
+    --fixture-manifest benchmarks/results/industrial-scale/fixtures/ibex/fixture-manifest.json \
+    --gds benchmarks/results/industrial-scale/fixtures/ibex/ibex.gds \
+    --lanes a \
+    --windows $W \
+    --device cuda:0 --device-backend cuda --gpu-count 1 \
+    --forward-profile P1_FINITE_SUPPORT --sink memmap_npy \
+    --tile 1024 --halo 64 --microbatch 8 \
+    --repeats 5 --warmup 2 \
+    --formal \
+    2>&1 | tee measurement-logs/lane-a-w$W.txt
+done
 ```
+
+After ALL FOUR window families verify (`SCALE VERIFIER: PASS — formal
+tier`), bind the campaign:
+
+```bash
+python scripts/build_industrial_scale_lane_a_campaign.py \
+  --window 4096=<WS_4096>/family --window 8192=<WS_8192>/family \
+  --window 16384=<WS_16384>/family --window 32768=<WS_32768>/family \
+  --out measurement-logs/industrial-scale-lane-a-campaign.json
+
+python scripts/verify_industrial_scale_lane_a_campaign.py \
+  --campaign measurement-logs/industrial-scale-lane-a-campaign.json \
+  --window 4096=<WS_4096>/family --window 8192=<WS_8192>/family \
+  --window 16384=<WS_16384>/family --window 32768=<WS_32768>/family
+```
+
+Required: `LANE-A CAMPAIGN VERIFIER: PASS — four frozen windows, one
+authority`. The campaign manifest binds one measurement source SHA, one
+fixture SHA, one environment-lock SHA and one frozen protocol across
+all four windows — mixed anything is a hard FAIL.
 
 ### Command B — Lane C, single-GPU microbatch saturation (frozen ladder)
 
@@ -222,7 +264,7 @@ Microwatt wording rule: the 43,608,800,000,000-byte figure is the
 hypothetical dense float32 raster EQUIVALENT derived from the exact
 bbox — never word it as "processed a 43.6 TB file".
 
-## 6. Verify + bundle
+## 6. Verify + evidence packaging
 
 ```bash
 for WS in <RUN_WORKSPACES>; do
@@ -232,11 +274,28 @@ done
 
 python scripts/generate_industrial_scale_claims.py --check
 # required: SCALE CLAIMS CHECK: OK (no ISC-* in any README)
-
-tar -czf industrial-scale-evidence.tar.gz measurement-logs \
-  benchmarks/results/industrial-scale/runs
-sha256sum industrial-scale-evidence.tar.gz | tee measurement-logs/bundle-sha256.txt
 ```
+
+Then build the deterministic authority bundle (GPU Authority Repair
+§25) — run config, environment lock, fixture member, row JSONs,
+run-summary, canonical family + SHA256SUMS, preflight/verifier outputs,
+git HEAD/clean-tree evidence, environment identity capture and the
+Lane-A campaign manifest. Raw sink buffers stay LOCAL and are recorded
+by SHA-256 + byte count only (never upload tens of GB of `.npy`):
+
+```bash
+python scripts/package_gpu_authority_evidence.py \
+  --workspace <RUN_WORKSPACE> \
+  --preflight-log measurement-logs/scale-preflight.txt \
+  --verifier-log measurement-logs/verifier.txt \
+  --campaign-manifest measurement-logs/industrial-scale-lane-a-campaign.json \
+  --out-dir evidence/
+# required: EVIDENCE PACKAGING: BUILT — gpu-authority-evidence-<run-id>.tar.gz
+# record the printed archive sha256
+```
+
+The packaging is deterministic: identical inputs produce byte-identical
+archives.
 
 ## 7. STOP conditions
 
@@ -248,9 +307,9 @@ STOP and attach evidence if ANY of:
 * any SUCCESS row lacks its correctness witness;
 * you feel tempted to edit source, parameters, or artifacts.
 
-Upload: `industrial-scale-evidence.tar.gz` + its SHA-256 + the final
-`git status --porcelain` (must be empty) + the completion report from
-the GPU issue you are executing.
+Upload: the `gpu-authority-evidence-<run-id>.tar.gz` bundle(s) + their
+SHA-256 + the final `git status --porcelain` (must be empty) + the
+completion report from the GPU issue you are executing.
 
 ## 8. Explicit non-goals
 
