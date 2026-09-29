@@ -198,12 +198,29 @@ def test_environment_lock_completeness_on_cpu_host() -> None:
 
 
 def _cuda_lock(count: int = 3) -> dict:
+    # GPU Authority Repair §10/§22: the complete-formal-run fixture now
+    # carries the source-owned driver/device identity and the frozen
+    # host policy facts (3×RTX 4090 desktop class).
     return {
         "available": True,
         "count": count,
         "requested_gpu_count": count,
-        "devices": [],
+        "platform": "Linux-6.8.0-x86_64",
+        "platform_system": "Linux",
+        "devices": [
+            {
+                "index": index,
+                "name": "NVIDIA GeForce RTX 4090",
+                "total_memory_bytes": 25_769_803_776,
+                "compute_capability": "8.9",
+                "uuid": f"GPU-fake-{index}",
+            }
+            for index in range(count)
+        ],
         "driver_version": "550",
+        "driver_identity_source": "nvidia-smi",
+        "device_identifier": "GPU-fake-0",
+        "device_identifier_type": "cuda-uuid",
         "torch_cuda_version": "12.4",
         "torch_version": "2.14",
         "cudnn_version": 90100,
@@ -219,6 +236,7 @@ def _good_rows(lanes: tuple[str, ...]) -> dict:
             "status": "SUCCESS",
             "correctness_witness_pass": True,
             "repeat_count": 5,
+            "cuda_execution_witness_pass": True,
         }
         for lane in lanes
     }

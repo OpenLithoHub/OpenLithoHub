@@ -37,7 +37,6 @@ import argparse
 import hashlib
 import json
 import statistics
-import subprocess  # noqa: S404 — fixed-argv worker re-invocation / git only
 import sys
 import time
 from pathlib import Path
@@ -71,17 +70,12 @@ def sha256_file(path: str | Path) -> str:
 
 
 def git_measurement_commit(repo: Path) -> tuple[str, bool]:
-    def git(*args: str) -> str:
-        return subprocess.run(  # noqa: S603,S607 — fixed-argv git query
-            ["/usr/bin/git", "-C", str(repo), *args],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
+    """GPU Authority Repair §21: the git-state authority is the shared
+    cross-platform helper (``shutil.which("git")`` + fixed argv) — no
+    hard-coded ``/usr/bin/git``, no Windows operator shim."""
+    from openlithohub.benchmark.measurement_support import measurement_git_state
 
-    commit = git("rev-parse", "HEAD")
-    dirty = git("status", "--porcelain")
-    return commit, dirty == ""
+    return measurement_git_state(repo)
 
 
 def build_source_hashes() -> dict[str, str]:
@@ -120,7 +114,14 @@ def summarize_repeats(values: list[float]) -> dict[str, float | int]:
 
 
 def resolve_forward(profile: str, radius: int, sigma_nm: float, device: str):
-    """Return (forward_fn, batched_forward_fn, headline_eligible)."""
+    """Return (forward_fn, batched_forward_fn, headline_eligible).
+
+    GPU Authority Repair §14: the forward is DEVICE-SELECTED-BY-INPUT —
+    kernels follow whatever device the input tensor occupies.  The
+    measured path MUST move the tile/batch to the target device BEFORE
+    calling the forward (see ``stream_once``); caching CUDA kernels here
+    alone would leave the measured forward on CPU (the historical
+    #75 routing defect)."""
     if profile == "P0_IDENTITY":
         return (lambda tile: tile), None, False
     if profile == "P1_FINITE_SUPPORT":
@@ -212,28 +213,64 @@ def stream_once(
     CUDA timing contract (audited, 1×RTX4090 migration §9): the claim-
     bearing wall comes from the core ``cuda_synchronized_wall`` helper —
     synchronize before the timed region, host timer, full operation,
-    synchronize after, stop — NEVER from an incidental D2H transfer."""
+    synchronize after, stop — NEVER from an incidental D2H transfer.
+    The wall is the END-TO-END lane wall: it includes tiling, the H2D
+    copy, the forward, the D2H copy and the out-of-core sink writes (any
+    forward-only timing would be a SEPARATELY labeled fact, never mixed
+    into this number).
+
+    GPU Authority Repair §14/§15 (the historical #75 routing defect):
+    the tile/batch tensor is EXPLICITLY moved to the target CUDA device
+    before the forward and the output is kept on-device until the
+    witness is recorded — caching CUDA kernels without moving the input
+    measured a CPU forward and must never happen again.  Every measured
+    execution records the actual-CUDA witness (requested/input/output
+    devices); the witness is the authority, not the device argument.
+    """
     import torch
 
     from openlithohub.benchmark.industrial_v2 import cuda_synchronized_wall
+    from openlithohub.benchmark.measurement_support import (
+        ForwardExecutionWitness,
+        host_peak_rss_bytes,
+    )
     from openlithohub.streaming import run_streaming
 
     del queue_depth  # run_streaming's pending window is bounded by microbatch
     peak: dict[str, int] = {}
     if device.startswith("cuda"):
+        from openlithohub.benchmark.measurement_support import (
+            initialize_cuda_measurement_device,
+        )
+
+        # GPU Authority Repair §4/§14: guarantee the CUDA context before
+        # the first peak-stat reset (issue #56 defect 1 analog on Scale).
+        initialize_cuda_measurement_device(device)
         torch.cuda.reset_peak_memory_stats(device)
+
+    witness = ForwardExecutionWitness(device)
+
+    def _forward_with_witness(tile_tensor):
+        gpu_in = tile_tensor.to(device)
+        out = forward_fn(gpu_in)
+        witness.record(gpu_in, out)
+        return out.cpu()
+
+    def _batch_with_witness(batch):
+        gpu_in = batch.to(device)
+        out = batched_forward_fn(gpu_in)
+        witness.record(gpu_in, out)
+        return out.cpu()
 
     def _execute():
         return run_streaming(
             source,
             sink,
-            lambda tile_tensor: forward_fn(tile_tensor).cpu(),
+            _forward_with_witness,
             core_size=tile,
             pixel_nm=pixel_nm,
             batch_size=microbatch,
-            batched_forward_fn=(
-                (lambda batch: batched_forward_fn(batch).cpu()) if batched_forward_fn else None
-            ),
+            batched_forward_fn=_batch_with_witness if batched_forward_fn else None,
         )
 
     if device.startswith("cuda"):
@@ -248,16 +285,19 @@ def stream_once(
             "max_memory_allocated": int(torch.cuda.max_memory_allocated(device)),
             "max_memory_reserved": int(torch.cuda.max_memory_reserved(device)),
         }
-    import resource
-
-    rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    witness_summary = witness.summary()
     return {
         "wall_s": wall,
-        "host_peak_rss_bytes": rss if sys.platform == "darwin" else rss * 1024,
+        "host_peak_rss_bytes": host_peak_rss_bytes(),
         "max_memory_allocated": peak.get("max_memory_allocated", 0),
         "max_memory_reserved": peak.get("max_memory_reserved", 0),
         "n_tiles": report.n_tiles,
         "n_forward_batches": report.forward_batches,
+        "requested_device": device,
+        "forward_input_device": witness_summary["forward_input_device"],
+        "forward_output_device_before_d2h": witness_summary["forward_output_device_before_d2h"],
+        "cuda_execution_witness_pass": witness_summary["cuda_execution_witness_pass"],
+        "forward_witness": witness_summary,
     }
 
 
@@ -276,14 +316,26 @@ def stream_once_multi(
     """One bounded multi-worker streaming execution (lane B).  Each tile
     is owned by exactly one worker; commits are deterministic and
     exactly-once (charter §S6.2).  CPU hosts run cpu-worker-emulation;
-    CUDA hosts bind worker i to cuda:(i mod gpu_count)."""
-    import resource
+    CUDA hosts bind worker i to cuda:(i mod gpu_count).
 
+    GPU Authority Repair §16: the assigned device is actually USED — a
+    per-worker forward factory moves each tile to the worker's assigned
+    device, forwards there, records the ACTUAL executed device per
+    worker and moves the result back to CPU for the ordered commit.  An
+    assignment/execution mismatch fails the witness (Lane B stays
+    deferred on this single-GPU campaign, but the semantics are now
+    correct and future multi-GPU verification can reject mismatches)."""
     import torch
+
+    from openlithohub.benchmark.measurement_support import (
+        ForwardExecutionWitness,
+        host_peak_rss_bytes,
+    )
 
     multi_worker = _multi_worker_module()
 
     devices_used: list[str] = []
+    witnesses: dict[str, ForwardExecutionWitness] = {}
 
     def device_for_worker(index: int) -> str:
         if device_backend == "cuda" and gpu_count > 0:
@@ -293,32 +345,55 @@ def stream_once_multi(
         devices_used.append(device)
         return device
 
+    def forward_factory(worker_index: int, device: str):
+        witness = ForwardExecutionWitness(device)
+        witnesses[f"worker{worker_index}"] = witness
+
+        def forward(tile_tensor):
+            gpu_in = tile_tensor.to(device)
+            out = forward_fn(gpu_in)
+            witness.record(gpu_in, out)
+            return out
+
+        return forward
+
     report = multi_worker.run_multi_worker_stream(
         source=source,
         sink=sink,
-        forward_fn=forward_fn,
+        forward_fn=lambda tile_tensor: forward_fn(tile_tensor),
         core_size=tile,
         halo_px=halo,
         worker_count=worker_count,
         queue_depth=queue_depth,
         device_for_worker=device_for_worker,
+        forward_factory=forward_factory,
     )
-    rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    rss = host_peak_rss_bytes()
     peaks: dict[str, int] = {}
     per_gpu: dict[str, dict[str, int]] = {}
     for device in sorted(set(devices_used)):
         if device.startswith("cuda"):
-            allocated = int(torch.cuda.max_memory_allocated(device))
-            reserved = int(torch.cuda.max_memory_reserved(device))
+            allocated = int(torch.max_memory_allocated(device))
+            reserved = int(torch.max_memory_reserved(device))
             per_gpu[device] = {
                 "max_memory_allocated": allocated,
                 "max_memory_reserved": reserved,
             }
             peaks["max_memory_allocated"] = max(peaks.get("max_memory_allocated", 0), allocated)
             peaks["max_memory_reserved"] = max(peaks.get("max_memory_reserved", 0), reserved)
+    # GPU Authority Repair §16: assignment/execution binding is a witness
+    # fact — a worker that executed anywhere other than its assigned
+    # device fails the row, and a CPU forward under a cuda backend is
+    # never a multi-GPU claim.
+    binding_pass = (
+        report.device_binding_pass
+        and all(w.summary()["cuda_execution_witness_pass"] for w in witnesses.values())
+        if device_backend == "cuda"
+        else report.device_binding_pass
+    )
     return {
         "wall_s": report.wall_s,
-        "host_peak_rss_bytes": rss if sys.platform == "darwin" else rss * 1024,
+        "host_peak_rss_bytes": rss,
         "max_memory_allocated": peaks.get("max_memory_allocated", 0),
         "max_memory_reserved": peaks.get("max_memory_reserved", 0),
         "per_gpu": per_gpu,
@@ -326,6 +401,11 @@ def stream_once_multi(
         "n_forward_batches": report.n_tiles,
         "worker_counts": report.worker_counts,
         "max_resident_results": report.max_resident_results,
+        "worker_forward_devices": report.worker_forward_devices,
+        "worker_assigned_devices": report.worker_assigned_devices,
+        "device_binding_pass": binding_pass,
+        "cuda_execution_witness_pass": bool(binding_pass),
+        "forward_witnesses": {name: witness.summary() for name, witness in witnesses.items()},
     }
 
 
@@ -571,6 +651,25 @@ def _run_window_row_single(
     row["peak_host_rss_bytes"] = max((m["host_peak_rss_bytes"] for m in metrics), default=0)
     row["max_memory_allocated"] = max((m["max_memory_allocated"] for m in metrics), default=0)
     row["max_memory_reserved"] = max((m["max_memory_reserved"] for m in metrics), default=0)
+    # GPU Authority Repair §15: the actual-CUDA execution witness is a
+    # locked formal row fact — every measured repeat must have executed
+    # its forward on the requested CUDA device (input and output, before
+    # D2H).  The detailed per-repeat witness stays in per_repeat.
+    row["requested_device"] = device
+    row["forward_input_device"] = metrics[0].get("forward_input_device") if metrics else ""
+    row["forward_output_device_before_d2h"] = (
+        metrics[0].get("forward_output_device_before_d2h") if metrics else ""
+    )
+    cuda_witness_pass = (
+        all(bool(m.get("cuda_execution_witness_pass")) for m in metrics)
+        if device.startswith("cuda")
+        else True
+    )
+    row["cuda_execution_witness_pass"] = cuda_witness_pass
+    if lane == LANE_B and metrics:
+        row["worker_forward_devices"] = metrics[0].get("worker_forward_devices", {})
+        row["worker_assigned_devices"] = metrics[0].get("worker_assigned_devices", {})
+        row["device_binding_pass"] = bool(metrics[0].get("device_binding_pass"))
     median_wall = float(aggregate["median_s"])
     row["throughput_gpx_s"] = round(executed_px / median_wall / 1e9, 6) if median_wall else None
     row["per_repeat"] = metrics
@@ -585,6 +684,11 @@ def _run_window_row_single(
     elif not witness["correctness_witness_pass"]:
         row["status"] = "FAILED_CORRECTNESS"
         row["reason"] = "bounded dense parity witness failed"
+    elif not cuda_witness_pass:
+        # GPU Authority Repair §15: a CUDA row whose forward tensors did
+        # NOT run on the requested device is never a SUCCESS row.
+        row["status"] = "FAILED"
+        row["reason"] = "actual-CUDA execution witness failed (tensor path is the authority)"
     else:
         row["status"] = "SUCCESS"
     return row

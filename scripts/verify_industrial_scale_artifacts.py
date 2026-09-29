@@ -232,28 +232,42 @@ def verify(root: Path, *, require_formal: bool = False) -> list[str]:
                     counts = repeat.get("worker_counts") or {}
                     if sum(counts.values()) != repeat.get("n_tiles"):
                         _fail(f"{member_name}: worker topology does not cover all tiles")
-        if lane == LANE_C and rows:
-            rungs = [int(r.get("microbatch") or 0) for r in rows]
-            declared = sorted(run_config.microbatch_ladder)
-            if rungs != declared:
+        if lane == LANE_C:
+            # GPU Authority Repair §18: Lane-C ladder semantics are
+            # SCOPED TO THE RUN CONFIG — a Lane A-only family has an
+            # EMPTY saturation member and that is VALID; demanding the
+            # frozen ladder from a run that never declared Lane C was
+            # the historical verifier defect.
+            if LANE_C in run_config.lanes:
+                rungs = [int(r.get("microbatch") or 0) for r in rows]
+                declared = sorted(run_config.microbatch_ladder)
+                if rungs != declared:
+                    _fail(
+                        f"{member_name}: microbatch rungs {rungs} != the run config's "
+                        f"declared ladder {declared} (silent missing/duplicate rung)"
+                    )
+                if rows and len(rows) != len(set(rungs)):
+                    _fail(f"{member_name}: duplicate microbatch rung (exactly-once ladder)")
+            elif rows:
                 _fail(
-                    f"{member_name}: microbatch rungs {rungs} != the run config's "
-                    f"declared ladder {declared} (silent missing rung)"
+                    f"{member_name}: Lane-C rows present but Lane C is not in the "
+                    "run config lanes — inconsistent family"
                 )
-            for row in rows:
-                if row.get("status") == "SUCCESS":
-                    if int(row.get("gpu_count") or 0) != 1:
-                        _fail(
-                            f"{member_name}: Lane C rung mb={row.get('microbatch')} "
-                            "is a SINGLE-GPU claim (gpu_count must be 1)"
-                        )
-                    for key in ("max_memory_allocated", "max_memory_reserved"):
-                        if key not in row:
+            if LANE_C in run_config.lanes:
+                for row in rows:
+                    if row.get("status") == "SUCCESS":
+                        if int(row.get("gpu_count") or 0) != 1:
                             _fail(
-                                f"{member_name}: Lane C rung mb="
-                                f"{row.get('microbatch')} missing VRAM fact {key!r}"
+                                f"{member_name}: Lane C rung mb={row.get('microbatch')} "
+                                "is a SINGLE-GPU claim (gpu_count must be 1)"
                             )
-            claims.append(f"{lane}:{len(rows)} rungs")
+                        for key in ("max_memory_allocated", "max_memory_reserved"):
+                            if key not in row:
+                                _fail(
+                                    f"{member_name}: Lane C rung mb="
+                                    f"{row.get('microbatch')} missing VRAM fact {key!r}"
+                                )
+                claims.append(f"{lane}:{len(rows)} rungs")
         elif rows:
             claims.append(f"{lane}:{len(rows)} rows")
 
@@ -274,11 +288,20 @@ def verify(root: Path, *, require_formal: bool = False) -> list[str]:
         for member_name, lane in lane_members:
             payload_member = _load_strict_json(root / member_name)
             if lane == LANE_C:
-                rungs = [int(r.get("microbatch") or 0) for r in payload_member.get("rows", [])]
-                if rungs != list(FROZEN_MICROBATCH_LADDER):
+                # GPU Authority Repair §18: the FROZEN ladder is required
+                # exactly when the run declared Lane C — a formal Lane
+                # A-only family has an empty saturation member and PASSES.
+                if LANE_C in run_config.lanes:
+                    rungs = [int(r.get("microbatch") or 0) for r in payload_member.get("rows", [])]
+                    if rungs != list(FROZEN_MICROBATCH_LADDER):
+                        _fail(
+                            f"{member_name}: microbatch ladder {rungs} != frozen "
+                            f"{list(FROZEN_MICROBATCH_LADDER)} (no silent missing rung)"
+                        )
+                elif payload_member.get("rows"):
                     _fail(
-                        f"{member_name}: microbatch ladder {rungs} != frozen "
-                        f"{list(FROZEN_MICROBATCH_LADDER)} (no silent missing rung)"
+                        f"{member_name}: Lane-C rows present but Lane C is not in "
+                        "the run config lanes"
                     )
             for row in payload_member.get("rows", []):
                 if (
@@ -294,6 +317,35 @@ def verify(root: Path, *, require_formal: bool = False) -> list[str]:
                         _fail("Lane C formal rows must record the cuda backend")
                     if int(row.get("gpu_count") or 0) != 1:
                         _fail("Lane C formal rows must record gpu_count == 1")
+                # GPU Authority Repair §15: every formal CUDA SUCCESS row
+                # must carry a valid actual-CUDA execution witness — a CPU
+                # tensor path under a cuda backend never establishes GPU
+                # authority.
+                if row.get("status") == "SUCCESS" and str(row.get("device", "")).startswith("cuda"):
+                    for key in (
+                        "requested_device",
+                        "forward_input_device",
+                        "forward_output_device_before_d2h",
+                        "cuda_execution_witness_pass",
+                    ):
+                        if key not in row:
+                            _fail(
+                                f"{member_name}: formal CUDA row missing witness key "
+                                f"{key!r} (GPU Authority Repair §15)"
+                            )
+                    if not row.get("cuda_execution_witness_pass"):
+                        _fail(
+                            f"{member_name}: formal CUDA row lacks a valid CUDA execution "
+                            "witness (GPU Authority Repair §15)"
+                        )
+                    if not str(row.get("forward_input_device", "")).startswith("cuda") or not str(
+                        row.get("forward_output_device_before_d2h", "")
+                    ).startswith("cuda"):
+                        _fail(
+                            f"{member_name}: formal CUDA row's forward tensors did not run "
+                            "on CUDA before D2H — CPU actual-forward under a cuda backend "
+                            "is rejected (GPU Authority Repair §15)"
+                        )
 
     return claims
 

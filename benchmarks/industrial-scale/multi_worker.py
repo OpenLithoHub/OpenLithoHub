@@ -144,6 +144,21 @@ class MultiWorkerReport:
     worker_counts: dict[str, int] = field(default_factory=dict)
     wall_s: float = 0.0
     max_resident_results: int = 0
+    # GPU Authority Repair §16: the ACTUAL forward device per worker —
+    # recorded from the tensors the forward executed on, never inferred
+    # from the assignment.  Future multi-GPU verification must reject an
+    # assignment/execution mismatch.
+    worker_forward_devices: dict[str, str] = field(default_factory=dict)
+    worker_assigned_devices: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def device_binding_pass(self) -> bool:
+        """True iff every worker's executed forward device EQUALS its
+        assigned device (and every worker executed on something)."""
+        return bool(self.worker_forward_devices) and all(
+            self.worker_forward_devices.get(worker) == device
+            for worker, device in self.worker_assigned_devices.items()
+        )
 
 
 def run_multi_worker_stream(
@@ -156,14 +171,23 @@ def run_multi_worker_stream(
     worker_count: int,
     queue_depth: int,
     device_for_worker: Callable[[int], str] | None = None,
+    forward_factory: Callable[[int, str], Callable[[Any], Any]] | None = None,
 ) -> MultiWorkerReport:
     """Execute the production tile plan across `worker_count` logical
     workers with in-order deterministic sink commits.
 
-    `device_for_worker(i)` names the device for worker i (CUDA hosts map
-    workers to GPUs; emulation returns "cpu").  The forward runs on the
-    worker's device and the committed tensor is always CPU (sink
-    semantics), matching the single-worker path.
+    GPU Authority Repair §16 (the historical Lane B defect): the device
+    returned by ``device_for_worker(i)`` is now actually USED — each
+    worker moves its tile to its ASSIGNED device, forwards on that
+    device, and moves the result back to CPU before the ordered commit.
+    ``forward_factory(worker_index, device)`` builds a PER-WORKER forward
+    instance (no ambiguous shared-device state); when absent, the shared
+    ``forward_fn`` runs on the moved tensor (its kernels are selected by
+    the input device).
+
+    The executed device per worker is recorded in the report — an
+    assignment/execution mismatch is a hard witness failure, never a
+    silent success.
     """
     shape = source.shape
     requests = plan_tile_requests(shape, core_size, halo_px)
@@ -179,18 +203,28 @@ def run_multi_worker_stream(
     # reorder buffer to O(all tiles).
     resident_cap = max(1, queue_depth) + max(1, worker_count)
     slots = threading.BoundedSemaphore(resident_cap)
+    worker_assigned: dict[str, str] = {}
+    worker_executed: dict[str, str] = {}
 
     def worker(worker_index: int, indices: list[int]) -> None:
         try:
+            device = "cpu"
             if device_for_worker is not None:
-                device_for_worker(worker_index)
+                device = device_for_worker(worker_index) or "cpu"
+            worker_assigned[f"worker{worker_index}"] = device
+            if forward_factory is not None:
+                forward = forward_factory(worker_index, device)
+            else:
+                forward = forward_fn
             for index in indices:
                 while not slots.acquire(timeout=0.05):
                     if failures or stopped.is_set():
                         return  # abort a doomed run; the sentinel still fires
                 request = requests[index]
                 tile = source.read_window(request.read_bbox)
-                forwarded = forward_fn(tile)
+                gpu_in = tile.to(device) if device != "cpu" else tile
+                forwarded = forward(gpu_in)
+                worker_executed[f"worker{worker_index}"] = str(forwarded.device)
                 if forwarded.device.type != "cpu":
                     forwarded = forwarded.cpu()
                 ys, xs = core_slices(request)
@@ -248,4 +282,6 @@ def run_multi_worker_stream(
         worker_counts={f"worker{i}": len(shard) for i, shard in enumerate(shards)},
         wall_s=time.perf_counter() - start,
         max_resident_results=ledger.max_resident,
+        worker_forward_devices=dict(worker_executed),
+        worker_assigned_devices=dict(worker_assigned),
     )
