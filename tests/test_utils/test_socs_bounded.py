@@ -50,12 +50,17 @@ def _assert_field_close(
     frozen gate therefore compares the normalized field (shape), plus an
     absolute gate for genuinely-zero signals; the absolute calibration
     itself is locked separately by the open-frame unity test."""
-    scale = float(want.abs().max())
     assert torch.isfinite(got).all()
-    if scale <= atol_abs:
+    got_scale = float(got.abs().max())
+    want_scale = float(want.abs().max())
+    if min(got_scale, want_scale) <= atol_abs:
         assert float((got - want).abs().max()) <= atol_abs
         return
-    assert float(((got / scale) - (want / scale)).abs().max()) <= rel
+    # each side is normalized by its OWN maximum: the open-frame
+    # calibration constants of the two decompositions differ in the last
+    # bits (the oracle calibrates K+1 modes), and a shared denominator
+    # would silently turn a global scaling difference into a shape error
+    assert float(((got / got_scale) - (want / want_scale)).abs().max()) <= rel
 
 
 def _params(illumination: str = "circular", num_kernels: int = 8) -> HopkinsParams:
@@ -112,22 +117,22 @@ def _principal_angle_gap(kernels_a: torch.Tensor, kernels_b: torch.Tensor, grid:
     return 1.0 - float(cosines.min().real)
 
 
-def _stable_subspace_depth(ref_weights: torch.Tensor) -> int:
-    """The largest top-j whose lower edge sits INSIDE a spectral gap
-    (relative gap > 1e-6 below the trailing eigenvalue).  A top-K set
-    whose K-th eigenvalue is numerically degenerate with the next one
-    has NO cross-backend stable membership (§5): the K-th mode is chosen
-    from a split degenerate pair, so the honest subspace gate pins only
-    the stable depth.  Returns 0 when even the leading eigenvalue is
-    degenerate (the caller skips the subspace gate for that combo)."""
-    lam = ref_weights.to(torch.float64)
+def _stable_subspace_depth(full_weights: torch.Tensor, target_k: int) -> int:
+    """V3.1.1: the LARGEST legal top-j (j <= target_k) whose lower edge
+    sits inside a spectral gap — max { j : (lambda_j - lambda_{j+1}) /
+    lambda_1 > 1e-6 }, scanning ALL boundaries (never breaking at the
+    first degenerate one).  ``full_weights`` must carry at least K+1
+    modes: whether the K-th mode is degenerate with lambda_{K+1} is
+    exactly what this search must see (§5).  Example: lambda_1 ~ lambda_2
+    >> lambda_3 gives depth 2 — the top-2 CLUSTER is stable even though
+    its interior is degenerate.  Returns 0 when no legal boundary is
+    degenerate-free (the caller then keeps only the physical gates)."""
+    lam = full_weights.to(torch.float64)
     scale = lam[0].clamp(min=1e-30)
     depth = 0
-    for j in range(lam.numel() - 1):
+    for j in range(min(lam.numel() - 1, target_k)):
         if float((lam[j] - lam[j + 1]) / scale) > 1e-6:
             depth = j + 1
-        else:
-            break
     return depth
 
 
@@ -140,10 +145,15 @@ def _projector_gap(kernels_a: torch.Tensor, kernels_b: torch.Tensor, grid: int) 
 
 
 def _oracle_socs(params: HopkinsParams, grid: int) -> tuple[torch.Tensor, torch.Tensor]:
-    """Independent reference: naive full-H SVD on a TINY grid (§18)."""
+    """Independent reference: naive full-H SVD on a TINY grid (§18).
+
+    V3.1.1: retains K+1 modes so the stable-subspace-depth search can see
+    whether the K-th mode sits on a degenerate boundary with lambda_{K+1}
+    — with only K modes that judgment is mathematically impossible."""
     from openlithohub._utils.hopkins import _build_frequency_block, _socs_static_tables
 
     dims = socs_problem_dimensions(params, grid, "cpu")
+    k_full = min(dims.K + 1, dims.n_src)
     pupil_flat, shifts, weights_sqrt = _socs_static_tables(params, grid, torch.device("cpu"))
     h = torch.empty((dims.n_src, dims.n_freq), dtype=torch.complex64)
     step = 256
@@ -153,12 +163,12 @@ def _oracle_socs(params: HopkinsParams, grid: int) -> tuple[torch.Tensor, torch.
             pupil_flat, shifts, weights_sqrt, grid, start, end, torch.device("cpu")
         )
     u, s, vh = torch.linalg.svd(h, full_matrices=False)  # oracle ONLY
-    lam = (s**2)[: dims.K]
-    kernels_freq = vh[: dims.K].reshape(dims.K, grid, grid)
+    lam = (s**2)[:k_full]
+    kernels_freq = vh[:k_full].reshape(k_full, grid, grid)
     spatial = torch.fft.fftshift(torch.fft.ifft2(kernels_freq), dim=(-2, -1))
     weights = lam.to(torch.float32)
     open_frame = torch.zeros((), dtype=torch.float32)
-    for idx in range(dims.K):
+    for idx in range(k_full):
         dc = spatial[idx].sum()
         open_frame = open_frame + weights[idx] * (dc.real**2 + dc.imag**2)
     if float(open_frame) > 0.0:
@@ -193,13 +203,23 @@ def test_bounded_socs_matches_independent_oracle(
         )
     clear_kernel_cache()
     kernels, weights = compute_socs_kernels(params, grid)
-    ref_kernels, ref_weights = _oracle_socs(params, grid)
+    ref_kernels_full, ref_weights_full = _oracle_socs(params, grid)
+    ref_kernels = ref_kernels_full[: dims.K]
+    ref_weights = ref_weights_full[: dims.K]
 
     assert kernels.shape == (dims.K, grid, grid)
     assert weights.shape == (dims.K,)
+    assert ref_weights_full.numel() >= dims.K + 1 or dims.n_src == dims.K
     # §5: mode phase/basis may rotate inside near-degenerate subspaces —
     # the frozen gates are the singular VALUE spectrum and the SUBSPACE.
-    _assert_field_close(weights, ref_weights)
+    # The calibration's legacy clamp(max=1e6) is a NONLINEAR guard whose
+    # firing edge moves by a rounding hair between the two decompositions
+    # (their open-frame constants differ in the last bits), so the shape
+    # gate covers the UNSATURATED spectrum; saturation itself is only
+    # asserted to be finite/non-negative (checked below).
+    saturated = (weights >= 1e6 * 0.999) | (ref_weights >= 1e6 * 0.999)
+    if bool((~saturated).any()):
+        _assert_field_close(weights[~saturated], ref_weights[~saturated])
 
     # §5 (V3.1): TRUE subspace gate.  The earlier a^H a vs b^H b form
     # compared each basis against its OWN Gram matrix — two orthogonal
@@ -209,7 +229,7 @@ def test_bounded_socs_matches_independent_oracle(
     # with the next one, the top-K MEMBERSHIP itself is a §5 knife edge
     # (the physical outputs stay consistent — the aerial gates above —
     # because the contested mode carries the same weight on both sides).
-    depth = _stable_subspace_depth(ref_weights)
+    depth = _stable_subspace_depth(ref_weights_full, dims.K)
     if depth >= 1:
         angle_gap = _principal_angle_gap(kernels[:depth], ref_kernels[:depth], grid)
         assert angle_gap <= 1e-6, (

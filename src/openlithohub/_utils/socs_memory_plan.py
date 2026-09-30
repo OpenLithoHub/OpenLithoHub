@@ -143,7 +143,16 @@ class SocsMemoryPlan:
     emergency_headroom_bytes: int
     physical_free_floor_bytes: int
     fixed_peak_estimate_bytes: int
+    """V3.1.1: the worst NON-chunk-scaled phase allocation (conservative,
+    not exact)."""
+    phase_peak_new_bytes_pass1: int
+    phase_peak_new_bytes_eigendecomposition: int
+    phase_peak_new_bytes_pass2: int
+    phase_peak_new_bytes_fft: int
+    """V3.1.1 per-phase NEW-allocation peaks (reserved excluded — the
+    runtime guard credits the reserved pool separately)."""
     bytes_per_chunk_column: int
+    """V3.1.1: the WORST-phase per-column slope (Pass 2)."""
     selected_chunk_columns: int
     chunk_alignment: int
     chunk_count: int
@@ -183,7 +192,11 @@ def plan_socs_decomposition(
 ) -> SocsMemoryPlan:
     """Compute the frozen bounded-memory plan for one SOCS computation.
 
-    Pure arithmetic over the frozen policy constants and the measured
+    V3.1.1: a PHASE-SPECIFIC CONSERVATIVE peak model (Pass 1 /
+    eigendecomposition / Pass 2 / FFT+fftshift, each enumerated from the
+    implementation's real allocations) — deliberately not called exact;
+    audited against the source and locked by tests.  Pure arithmetic over
+    the frozen policy constants and the measured
     :class:`DeviceMemoryFacts` — never over benchmark results (§8).  On a
     non-CUDA device (``facts is None``) the plan falls back to the frozen
     bounded default chunk with no free-memory gate; feasibility there is
@@ -204,42 +217,67 @@ def plan_socs_decomposition(
     fractional = int(FRACTIONAL_HEADROOM * total) if is_cuda else 0
     workspace = BACKEND_WORKSPACE_RESERVE_BYTES if is_cuda else 0
 
-    # ---- fixed allocations (§6), bytes, conservative ---------------------
+    # ---- V3.1.1 phase-specific conservative peak model (§6) -------------
+    # NOT claimed as exact: a conservative per-phase peak of what the
+    # implementation ACTUALLY materializes, audited against the source.
     pupil_state = 3 * n_freq * complex_bytes
     gram = n_src * n_src * 16  # complex128 accumulator (§4: stronger accumulator)
     topk = K * n_src * 16 + K * 8 + K * 8  # U_K complex128, sigma_K, lambda_K
     final_freq = K * n_freq * complex_bytes
-    spatial_fft = K * n_freq * complex_bytes
     weights = K * 4
-    fixed_peak = pupil_state + gram + topk + final_freq + spatial_fft + weights
+    common = pupil_state + weights  # resident through every phase
 
-    # ---- per-chunk allocations (§6; V3.1 exact accounting) -------------
-    # Modeled at the worst of the two streamed passes, per frequency
-    # column, enumerating EVERY temporary _build_frequency_block and the
-    # reconstruction actually create:
+    # ---- per-phase chunk slopes (§6; V3.1.1 enumeration) ----------------
+    # Every temporary the phase creates, per frequency column:
     #   h_block_c64   n_src × 8    the complex64 H block (both passes)
     #   h_block_c128  n_src × 16   its complex128 copy for the matmul
-    #   v_block       K × 16       the Pass-2 V block is created complex128
-    #                              ((block128.mH @ u_k) * sigma_inv) BEFORE
-    #                              the complex64 slice write (V3.1: the
-    #                              model previously under-counted this as K×8)
     #   cols/y/x      3 × 8        chunk-shaped int64 index vectors
     #   iy/ix/idx     3 × 8        per-source-row int64 index temporaries
     #   gathered      8            complex64 gathered row
     #   weighted      8            complex64 weighted row
-    h_block_c64 = n_src * complex_bytes
-    h_block_c128 = n_src * 16
-    v_block = K * 16  # complex128 — the form that exists before the slice write
+    #   v_block       K × 16       Pass-2 reconstruction, complex128 form
+    #   recon_cast    K × 8        the complex64 cast temporary that
+    #                              exists while v_block is still alive
     index_vectors = 6 * 8  # cols, y, x (chunk) + iy, ix, linear idx (per row)
     gather_temps = 2 * 8  # gathered row + weighted row, complex64
-    per_column = h_block_c64 + h_block_c128 + v_block + index_vectors + gather_temps
+    slope_pass1 = 24 * n_src + index_vectors + gather_temps
+    slope_pass2 = slope_pass1 + 16 * K + 8 * K  # + v_block c128 + c64 cast temp
+
+    # ---- phase fixed parts (on top of `common`) --------------------------
+    fixed_pass1 = gram
+    # symmetrize copy + eigh outputs + flipped U/lam overlap (conservative)
+    fixed_eig = 6 * gram
+    fixed_pass2 = topk + final_freq
+    # kernels_freq + spatial + shifted spatial coexist at fftshift time
+    fixed_fft = topk + 3 * final_freq
+
+    def phase_new_peak(selected_columns: int) -> dict[str, int]:
+        return {
+            "pass1": common + fixed_pass1 + slope_pass1 * selected_columns,
+            "eigendecomposition": common + fixed_eig,
+            "pass2": common + fixed_pass2 + slope_pass2 * selected_columns,
+            "fft": common + fixed_fft,
+        }
 
     reason = ""
     feasible = True
     selected = 0
     if is_cuda:
-        usable = free - absolute - fractional - workspace - reserved - fixed_peak
-        max_by_budget = int(usable // per_column) if usable > 0 and per_column > 0 else 0
+        # V3.1.1 budget semantics UNIFIED with the runtime guard: NEW torch
+        # pages are charged to physical free (the already-reserved pool is
+        # credited by the guard's effective budget, never double-counted
+        # here — physical_free never contained reserved pages anyway).
+        budget_new = free - absolute - fractional - workspace
+        limits = []
+        for slope, fixed in (
+            (slope_pass1, common + fixed_pass1),
+            (slope_pass2, common + fixed_pass2),
+        ):
+            if budget_new > fixed:
+                limits.append(int((budget_new - fixed) // slope))
+            else:
+                limits.append(0)
+        max_by_budget = min(limits)
         cap_columns = max(0, MAX_OPERATIONAL_H_CHUNK_BYTES // max(1, n_src * complex_bytes))
         upper = min(max_by_budget, cap_columns, n_freq)
         aligned = (upper // CHUNK_ALIGNMENT) * CHUNK_ALIGNMENT
@@ -247,9 +285,9 @@ def plan_socs_decomposition(
             feasible = False
             selected = 0
             reason = (
-                f"{REASON_INFEASIBLE_PREFIX}: budget {usable} B cannot hold the minimum "
-                f"legal chunk ({min(MIN_CHUNK_COLUMNS, n_freq)} aligned columns) at "
-                f"{per_column} B/column under the frozen policy"
+                f"{REASON_INFEASIBLE_PREFIX}: physical budget {budget_new} B cannot hold "
+                f"the minimum legal chunk ({min(MIN_CHUNK_COLUMNS, n_freq)} aligned "
+                f"columns) at {slope_pass2} B/column (worst phase) under the frozen policy"
             )
         else:
             selected = aligned
@@ -264,12 +302,18 @@ def plan_socs_decomposition(
             f"(strategy {SOCS_STRATEGY} v{SOCS_STRATEGY_VERSION})"
         )
 
+    phases = phase_new_peak(selected)
+    peak_new_max = max(phases.values())
     chunk_count = int(math.ceil(n_freq / selected)) if selected > 0 else 0
-    estimated_peak = reserved + fixed_peak + per_column * selected
-    estimated_headroom = free - absolute - fractional - workspace - estimated_peak if is_cuda else 0
+    estimated_peak = reserved + peak_new_max
+    estimated_headroom = free - absolute - fractional - workspace - peak_new_max if is_cuda else 0
     emergency = EMERGENCY_HEADROOM_BYTES if is_cuda else 0
     physical_floor = workspace + emergency
-    required_floor = absolute + fractional + workspace + fixed_peak + per_column * selected
+    # V3.1.1: the runtime guard's EFFECTIVE floor = absolute + fractional
+    # + workspace + worst-phase NEW allocations.  The reserved pool is
+    # credited on the guard side (physical + reserved - allocated), so it
+    # is deliberately NOT baked in here again.
+    required_floor = absolute + fractional + workspace + peak_new_max
 
     plan = SocsMemoryPlan(
         strategy=SOCS_STRATEGY,
@@ -290,8 +334,14 @@ def plan_socs_decomposition(
         workspace_reserve_bytes=workspace,
         emergency_headroom_bytes=emergency,
         physical_free_floor_bytes=physical_floor,
-        fixed_peak_estimate_bytes=fixed_peak,
-        bytes_per_chunk_column=per_column,
+        fixed_peak_estimate_bytes=max(
+            common + fixed_eig, common + fixed_fft
+        ),  # worst phase WITHOUT chunk-scaling terms (conservative)
+        phase_peak_new_bytes_pass1=phases["pass1"],
+        phase_peak_new_bytes_eigendecomposition=phases["eigendecomposition"],
+        phase_peak_new_bytes_pass2=phases["pass2"],
+        phase_peak_new_bytes_fft=phases["fft"],
+        bytes_per_chunk_column=slope_pass2,
         selected_chunk_columns=selected,
         chunk_alignment=CHUNK_ALIGNMENT,
         chunk_count=chunk_count,

@@ -760,9 +760,20 @@ def _collect_device_facts_subprocess(device: str) -> Any:
     proc = ctx.Process(target=_device_facts_child, args=(queue, device))
     proc.start()
     proc.join(timeout=600)
-    if proc.exitcode != 0 or queue.empty():
+    if proc.is_alive():
+        # v3.1.1: never leave a spawned collector holding a CUDA context.
+        proc.terminate()
+        proc.join(timeout=60)
+        if proc.is_alive():
+            proc.kill()
+            proc.join()
         return None
-    kind, payload = queue.get()
+    if proc.exitcode != 0:
+        return None
+    try:
+        kind, payload = queue.get(timeout=60)
+    except Exception:  # noqa: BLE001 — queue.Empty/OSError: no result is a failure
+        return None
     return payload if kind == "ok" else None
 
 
@@ -1031,7 +1042,7 @@ def main() -> int:
     }
     write_strict_json(workspace / "run-summary.json", status)
 
-    # 2B.1-J: formal runs close by building the exact seven-member family
+    # 2B.1-J: formal runs close by building the exact canonical family
     # through the fail-closed builder — the ONLY sanctioned path to
     # promote_canonical_family().  Provisional runs keep workspace rows.
     if args.formal:

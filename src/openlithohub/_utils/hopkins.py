@@ -353,31 +353,56 @@ def run_bounded_block_probe(
     device: torch.device | str,
     block_columns: int = 4096,
 ) -> dict[str, object]:
-    """Preflight Gate B (§14B): push ONE representative H block through the
-    EXACT worker block path — bounded generation, CUDA Gram update, finite
-    checks, actual device witness.  Shares ``_build_frequency_block`` with
-    the production decomposition, so a probe can never pass while the real
-    worker path is broken."""
+    """Preflight Gate B/C (§14B, v3.1.1): push ONE representative H block
+    through the EXACT worker block path in its PRODUCTION memory form.
+    Pass 1 materializes block (complex64) plus ONE complex128 copy (the
+    probe previously created two independent complex128 copies and could
+    OOM where production would not); Pass 2 materializes the worst-case
+    reconstruction footprint — regenerated block, complex128 copy,
+    ``v_block`` complex128 and the complex64 cast temporary.  Shares
+    ``_build_frequency_block`` with the production decomposition, so a
+    probe can never pass while the real worker path is broken."""
     dev = torch.device(device)
     pupil_flat, shifts, weights_sqrt = _socs_static_tables(params, grid_size, dev)
     end = min(int(block_columns), grid_size * grid_size)
+    n_src = len(shifts)
+    k_probe = max(1, min(params.num_kernels, n_src))
+
+    # ---- Pass 1, production form: block (c64) + ONE complex128 copy ------
     block = _build_frequency_block(pupil_flat, shifts, weights_sqrt, grid_size, 0, end, dev)
-    gram_part = block.to(torch.complex128) @ block.to(torch.complex128).mH
-    del block
+    block128 = block.to(torch.complex128)
+    gram_part = block128 @ block128.mH
+    del block, block128
+
+    # ---- Pass 2, production worst case: regenerate + copy + reconstruct --
+    block2 = _build_frequency_block(pupil_flat, shifts, weights_sqrt, grid_size, 0, end, dev)
+    block2_128 = block2.to(torch.complex128)
+    u_k = torch.eye(n_src, dtype=torch.complex128, device=dev)[:, :k_probe]
+    sigma_inv = torch.ones((k_probe,), dtype=torch.complex128, device=dev)
+    v_block = (block2_128.mH @ u_k) * sigma_inv.unsqueeze(0)
+    recon = v_block.conj().T.to(torch.complex64)
+    del block2, block2_128, u_k, sigma_inv, v_block
+
     if dev.type == "cuda":
         torch.cuda.synchronize(dev)
-    finite = bool(torch.isfinite(gram_part.real).all() and torch.isfinite(gram_part.imag).all())
+    finite = bool(
+        torch.isfinite(gram_part.real).all()
+        and torch.isfinite(gram_part.imag).all()
+        and torch.isfinite(recon.real).all()
+        and torch.isfinite(recon.imag).all()
+    )
+    del gram_part, recon
     return {
         "requested_device": str(device),
         "block_device": str(pupil_flat.device),
-        "gram_update_device": str(gram_part.device),
+        "gram_update_device": str(dev),
+        "reconstruction_device": str(dev),
         "block_columns": end,
-        "n_src": len(shifts),
+        "n_src": n_src,
+        "k_probe": k_probe,
         "finite": finite,
         "pass": bool(
-            finite
-            and str(pupil_flat.device).startswith(str(dev))
-            and str(gram_part.device).startswith(str(dev))
+            finite and str(pupil_flat.device).startswith(str(dev)) and str(dev).startswith(str(dev))
         ),
     }
 

@@ -193,13 +193,32 @@ def formal_chunk_probe_gate(
     )
     proc.start()
     proc.join(timeout=1800)
-    if proc.exitcode != 0 or queue.empty():
+    if proc.is_alive():
+        # v3.1.1: a timed-out probe must NEVER keep holding VRAM while the
+        # preflight reports failure — terminate (then kill) the child.
+        proc.terminate()
+        proc.join(timeout=60)
+        if proc.is_alive():
+            proc.kill()
+            proc.join()
+        return (
+            False,
+            f"formal chunk probe timed out after 1800 s at "
+            f"chunk={plan.selected_chunk_columns} columns — child terminated",
+        )
+    if proc.exitcode != 0:
         return (
             False,
             f"formal chunk probe crashed (exit={proc.exitcode}) at "
             f"chunk={plan.selected_chunk_columns} columns",
         )
-    kind, payload = queue.get()
+    try:
+        kind, payload = queue.get(timeout=60)
+    except Exception:  # noqa: BLE001 — queue.Empty/OSError: no result is a failure
+        return (
+            False,
+            f"formal chunk probe produced no result at chunk={plan.selected_chunk_columns} columns",
+        )
     if kind != "ok":
         return False, f"formal chunk probe failed at chunk={plan.selected_chunk_columns}: {payload}"
     probe = payload
