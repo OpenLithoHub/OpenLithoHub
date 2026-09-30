@@ -80,7 +80,7 @@ dev = [
     # wheel METADATA never carries a direct reference).
 ]
 docs = [
-    "mkdocs-material>=9.4,<10",
+    "mkdocs-material>=9.7.7,<10",
     "mkdocstrings[python]>=0.23",
     "mkdocs-gen-files>=0.5",
 ]
