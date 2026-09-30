@@ -184,13 +184,15 @@ def sha256_file(path: str) -> str:
 
 
 def write_strict_json(path: str, payload: Mapping[str, Any]) -> None:
-    """Strict-JSON write: NaN/Infinity raise instead of landing in an
-    artifact."""
-    from pathlib import Path
+    """Strict-JSON write through the shared canonical byte writer
+    (PR-S8, GPU Authority Repair v3 §24): UTF-8, LF only, stable
+    trailing newline — a Windows host can never produce CRLF artifact
+    bytes, and regeneration is byte-identical to the committed fixture
+    manifests (§25: no manual ``git checkout --`` restoration).  NaN/
+    Infinity raise instead of landing in an artifact."""
+    from openlithohub._utils.canonical_json import write_canonical_json
 
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n")
+    write_canonical_json(path, payload)
 
 
 def dense_float32_equivalent_bytes(width_px: int, height_px: int) -> int:
