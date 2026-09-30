@@ -252,13 +252,45 @@ def test_physical_floor_fields_are_frozen_plan_facts() -> None:
     assert plan.required_free_floor_bytes > plan.physical_free_floor_bytes
 
 
-def test_per_chunk_model_matches_the_v31_exact_accounting() -> None:
-    """V3.1: the planner models the Pass-2 V block as complex128 and
-    enumerates every block/index temporary (24*n_src + 16*K + 64 B per
-    column) — the model can no longer under-count what the code creates."""
+def test_per_chunk_model_matches_the_v311_phase_accounting() -> None:
+    """V3.1.1 phase-specific conservative model: the WORST-phase slope
+    (Pass 2) is 24*n_src + 24*K + 64 B/column — block c64 + its c128
+    copy + all index/gather temporaries + the complex128 v_block + the
+    complex64 cast temporary — and the per-phase peaks are recorded on
+    the plan for audit."""
     plan = plan_for(12 * 1024**3)
-    expected = 24 * N_SRC + 16 * K + 64
-    assert plan.bytes_per_chunk_column == expected
+    assert plan.bytes_per_chunk_column == 24 * N_SRC + 24 * K + 64
+    # exact per-phase formulas, independently recomputed from the frozen
+    # policy and the audited allocation enumeration:
+    n_freq = GRID * GRID
+    common = 3 * n_freq * 8 + K * 4
+    fixed_pass1 = N_SRC * N_SRC * 16
+    fixed_pass2 = K * N_SRC * 16 + 2 * K * 8 + K * n_freq * 8
+    chunk = plan.selected_chunk_columns
+    assert plan.phase_peak_new_bytes_pass1 == (common + fixed_pass1 + (24 * N_SRC + 64) * chunk)
+    assert plan.phase_peak_new_bytes_pass2 == (
+        common + fixed_pass2 + (24 * N_SRC + 24 * K + 64) * chunk
+    )
+    assert plan.phase_peak_new_bytes_eigendecomposition == common + 6 * fixed_pass1
+    assert plan.phase_peak_new_bytes_fft == common + fixed_pass2 + 2 * K * n_freq * 8
+    assert plan.phase_peak_new_bytes_pass2 == max(
+        plan.phase_peak_new_bytes_pass1,
+        plan.phase_peak_new_bytes_eigendecomposition,
+        plan.phase_peak_new_bytes_pass2,
+        plan.phase_peak_new_bytes_fft,
+    )
+    # planning budget semantics UNIFIED with the runtime guard: the floor
+    # covers worst-phase NEW allocations only (the reserved pool is
+    # credited guard-side, never double-counted)
+    assert plan.required_free_floor_bytes == (
+        plan.absolute_headroom_bytes
+        + plan.fractional_headroom_bytes
+        + plan.workspace_reserve_bytes
+        + plan.phase_peak_new_bytes_pass2
+    )
+    assert plan.estimated_peak_bytes == (
+        plan.reserved_bytes_at_plan + plan.phase_peak_new_bytes_pass2
+    )
 
 
 # ---- §10 worker enforcement -----------------------------------------------------------

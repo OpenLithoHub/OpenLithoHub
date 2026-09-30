@@ -168,7 +168,7 @@ bounded block path executes on CUDA.
        --workspace benchmarks/results/industrial-v2/runs/<RUN_ID> \
        --canonical-root /path/to/canonical-staging
    ```
-   The CLI is fail-closed: it requires the exact complete seven-member
+   The CLI is fail-closed: it requires the exact complete eight-member
    family, re-runs the verifier and the formal blockers (including a
    live dirty-tree check), refuses provisional/incomplete/drifted
    families, never touches the frozen v1.1 root, and never silently

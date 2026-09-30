@@ -11,7 +11,7 @@ supported operator path (2B.2-E)::
 It promotes NOTHING unless every gate closes:
 
 * the workspace is a formal v2 run workspace (run-config, environment
-  lock, all three tier rows) holding the exact complete seven-member
+  lock, all three tier rows) holding the exact complete eight-member
   canonical family, internally closed by the v2 verifier (strict JSON,
   SHA256SUMS, manifest, run-identity recomputation);
 * the formal blockers re-run clean against the WORKSPACE's own recorded
@@ -132,7 +132,7 @@ def _target_blockers(canonical_root: Path, workspace: Path) -> list[str]:
         unexpected = sorted(present - set(CANONICAL_FAMILY)) or "partial family"
         return [
             f"canonical root {target} already holds files that are not exactly the "
-            f"seven-member canonical family: {unexpected} — refusing to overwrite"
+            f"eight-member canonical family: {unexpected} — refusing to overwrite"
         ]
     existing_sums = (target / "SHA256SUMS.txt").read_bytes()
     staged_sums = workspace_sums.read_bytes()
@@ -177,7 +177,7 @@ def promotion_blockers(
             "workspace run-config records a dirty tracked tree at measurement time (B2-A)"
         )
 
-    # stage the exact seven-member family and close it with the verifier:
+    # stage the exact eight-member family and close it with the verifier:
     # a partial/stale/unprovable family never reaches the canonical root.
     staging = Path(tempfile.mkdtemp(prefix="v2-promotion-stage-"))
     try:
