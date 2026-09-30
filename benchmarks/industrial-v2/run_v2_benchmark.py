@@ -286,6 +286,18 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     # catch-and-ignore: failure here must fail the worker.
     initialize_cuda_measurement_device(device)
 
+    # v3 §22: fresh-worker environment identity — the child must match the
+    # parent's environment authority field-for-field.
+    from openlithohub.benchmark.measurement_support import (
+        compare_worker_environment_fingerprints,
+        worker_environment_fingerprint,
+    )
+
+    child_env = worker_environment_fingerprint(str(cfg.get("measurement_commit", "")))
+    env_pass, env_mismatch = compare_worker_environment_fingerprints(
+        cfg.get("parent_environment") or {}, child_env
+    )
+
     from openlithohub.streaming.crop_source import ExactVectorCropSource
     from openlithohub.streaming.geometry import BoundingBox
 
@@ -385,39 +397,93 @@ def tier_b_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         "cuda_execution_witness_pass": cuda_witness_pass,
         "forward_witness_batch1": witness_b1,
         "forward_witness_batch_n": witness_bn,
+        "worker_environment": child_env,
+        "worker_environment_witness_pass": env_pass,
+        "worker_environment_mismatch": env_mismatch,
         "correctness_witness_pass": bool(parity),
-        "status": "SUCCESS" if (parity and cuda_witness_pass) else "FAILED",
+        "status": "SUCCESS" if (parity and cuda_witness_pass and env_pass) else "FAILED",
         "device_requires_cuda": True,
     }
 
 
-def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
-    """Tier C: fixed-configuration Hopkins compute tier (2B.1-I).
+def _classify_worker_exception(exc: Exception) -> tuple[str, str]:
+    """§11: an unexpected CUDA OOM after a planner PASS is a
+    ``PLANNER_CONTRACT_VIOLATION`` — it must fail the run and is NEVER a
+    trigger for shrink-and-retry (OOM is not adaptive control flow)."""
+    import torch
 
-    The SOCS Hopkins primitives are device-aware
-    (``compute_socs_kernels(params, H, mask.device)``), so the GPU-resident
-    path executes the same mathematical operator on the mask's device.
+    if isinstance(exc, torch.cuda.OutOfMemoryError):
+        return (
+            "PLANNER_CONTRACT_VIOLATION",
+            "unexpected CUDA OOM after a planner PASS — no shrink-and-retry is "
+            "permitted in a formal run (v3 §11)",
+        )
+    return ("UNEXPECTED_EXCEPTION", f"{type(exc).__name__}: {exc}")
+
+
+def _load_frozen_memory_plan(path: str) -> Any:
+    """Load and type the driver-owned plan artifact a fresh worker must
+    honor (§10).  A missing or malformed plan is a contract violation."""
+    import json
+
+    from openlithohub._utils.socs_memory_plan import MemoryPlanContractViolation, SocsMemoryPlan
+
+    try:
+        payload = json.loads(Path(path).read_bytes().decode("utf-8"))
+    except OSError as exc:
+        raise MemoryPlanContractViolation(
+            f"MEMORY_PLAN_CONTRACT_VIOLATION: memory plan artifact unreadable: {exc}"
+        ) from exc
+    except ValueError as exc:
+        raise MemoryPlanContractViolation(
+            f"MEMORY_PLAN_CONTRACT_VIOLATION: memory plan artifact is not strict JSON: {exc}"
+        ) from exc
+    try:
+        return SocsMemoryPlan(**payload)
+    except TypeError as exc:
+        raise MemoryPlanContractViolation(
+            f"MEMORY_PLAN_CONTRACT_VIOLATION: memory plan payload has unexpected fields: {exc}"
+        ) from exc
+
+
+def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Tier C: fixed-configuration Hopkins compute tier (2B.1-I), on the
+    bounded-memory SOCS architecture (GPU Authority Repair v3).
+
     Protocol requirements implemented here:
 
+    * the driver-owned SOCS memory plan is received, hash-validated and
+      semantically validated BEFORE any large allocation; workers never
+      replan (v3 §10) and free memory is checked before every chunk
+      allocation (v3 §11)
+    * an unexpected CUDA OOM after a planner PASS is a
+      PLANNER_CONTRACT_VIOLATION — never shrink-and-retry (v3 §11)
     * CPU fixed-config witness (finite + deterministic across two calls)
     * fresh-worker timing contract (2B.2-C): untimed setup / warmup, then
       EXACTLY ONE synchronized measured steady-state GPU execution — one
       timing observation per worker; the DRIVER owns median/p10/p90/n
       across fresh-process repeats (never best-of-N within a worker)
-    * cold start (first GPU call incl. SOCS kernel construction) reported
-      SEPARATELY as a diagnostic — never mixed into the warm steady-state
-      headline statistic
-    * GPU allocated/reserved peaks recorded after the timed region
+    * cold start (bounded SOCS construction) reported SEPARATELY as a
+      diagnostic — never mixed into the warm steady-state headline
+    * planned-vs-observed memory witness (v3 §16)
+    * fresh-worker environment witness (v3 §22): the child process must
+      match the parent's environment authority field-for-field
     * CPU vs GPU agreement within the frozen fp32 tolerance
-    * actual-CUDA execution witness (GPU Authority Repair §7): input and
-      output devices recorded for EVERY execution BEFORE the D2H copy —
-      a CPU tensor path can never produce a SUCCESS row
+    * actual-CUDA execution witness (GPU Authority Repair §7)
     """
+
     import numpy as np
     import torch
 
     from openlithohub._utils.hopkins import (
+        compute_socs_kernels,
         simulate_aerial_image_hopkins,
+        socs_problem_dimensions,
+    )
+    from openlithohub._utils.socs_memory_plan import (
+        PEAK_WITNESS_TOLERANCE,
+        MemoryPlanContractViolation,
+        validate_worker_plan,
     )
     from openlithohub.benchmark.industrial_v2 import (
         cuda_synchronized_wall,
@@ -425,7 +491,9 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     )
     from openlithohub.benchmark.measurement_support import (
         ForwardExecutionWitness,
+        compare_worker_environment_fingerprints,
         initialize_cuda_measurement_device,
+        worker_environment_fingerprint,
     )
 
     device = str(cfg["device"])
@@ -451,11 +519,54 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     initialize_cuda_measurement_device(device)
 
     grid = int(cfg["hopkins_grid"])
-    # GPU Authority Repair §5: the EXACT worker params constructor —
-    # ``RunConfigV2.hopkins_sigma_outer`` maps to ``HopkinsParams.sigma``
-    # (issue #56 defect 2); an invalid keyword is now impossible here and
-    # in the shared preflight probe.
     params = tier_c_hopkins_params(cfg)
+    dims = socs_problem_dimensions(params, grid, "cpu")
+
+    # ---- v3 §22: fresh-worker environment identity ----------------------
+    child_env = worker_environment_fingerprint(str(cfg.get("measurement_commit", "")))
+    parent_env = cfg.get("parent_environment") or {}
+    env_pass, env_mismatch = compare_worker_environment_fingerprints(parent_env, child_env)
+
+    # ---- v3 §10: receive and validate the frozen plan; never replan ------
+    plan_payload_fields: dict[str, Any] = {}
+    failure_class = ""
+    failure_reason = ""
+    try:
+        plan = _load_frozen_memory_plan(str(cfg.get("memory_plan_path", "")))
+        validate_worker_plan(
+            plan,
+            grid_size=grid,
+            n_src=dims.n_src,
+            n_freq=dims.n_freq,
+            K=dims.K,
+            dtype="complex64",
+            device=device,
+        )
+        plan_payload_fields = {
+            "strategy": plan.strategy,
+            "strategy_version": plan.strategy_version,
+            "memory_plan_sha256": plan.plan_sha256,
+            "memory_feasible": plan.memory_feasible,
+            "selected_chunk_columns": plan.selected_chunk_columns,
+            "chunk_count": plan.chunk_count,
+            "n_src": dims.n_src,
+        }
+    except MemoryPlanContractViolation as exc:
+        return {
+            "grid": grid,
+            "n_src": dims.n_src,
+            "kernel_count": dims.K,
+            "worker_environment": child_env,
+            "worker_environment_witness_pass": env_pass,
+            "worker_environment_mismatch": env_mismatch,
+            "status": "FAILED",
+            "failure_class": "MEMORY_PLAN_CONTRACT_VIOLATION",
+            "reason": str(exc),
+            "correctness_witness_pass": False,
+            "device_requires_cuda": True,
+            "timing_method": "",
+        }
+
     rng = np.random.default_rng(0)
     mask_cpu = (rng.random((grid, grid)) > 0.5).astype(np.float32)
     tolerance = 1e-5
@@ -473,15 +584,62 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     # authority — record input/output devices for EVERY execution.
     witness = ForwardExecutionWitness(device)
 
-    # COLD (diagnostic only): first GPU call includes SOCS kernel
-    # construction on device. Never part of the warm headline statistic.
-    cold_gpu, cold_wall = cuda_synchronized_wall(
-        lambda: simulate_aerial_image_hopkins(mask_gpu, params=params), device
-    )
+    # COLD (diagnostic only): first GPU call includes the bounded SOCS
+    # construction on device under the frozen plan. Never part of the warm
+    # headline statistic.  The construction is NOT repeated: the §13 cache
+    # (keyed by strategy + chunk policy) serves the timed setup below.
+    memory_witness: dict[str, Any] = {}
+    try:
+        cold_gpu, cold_wall = cuda_synchronized_wall(
+            lambda: simulate_aerial_image_hopkins(
+                mask_gpu, params=params, memory_plan=plan, memory_witness=memory_witness
+            ),
+            device,
+        )
+    except Exception as exc:  # noqa: BLE001 — §11: classify and FAIL, never retry
+        failure_class, failure_reason = _classify_worker_exception(exc)
+        return {
+            "grid": grid,
+            "n_src": dims.n_src,
+            "kernel_count": dims.K,
+            **plan_payload_fields,
+            "worker_environment": child_env,
+            "worker_environment_witness_pass": env_pass,
+            "worker_environment_mismatch": env_mismatch,
+            "status": "FAILED",
+            "failure_class": failure_class,
+            "reason": failure_reason,
+            "correctness_witness_pass": False,
+            "device_requires_cuda": True,
+            "timing_method": "cuda_synchronized",
+        }
     witness.record(mask_gpu, cold_gpu)
 
-    # UNTIMED setup: device-resident kernels + pre-FFT'd kernel tables.
-    kernels, weights = _build_socs(params, grid, mask_gpu.device)
+    # UNTIMED setup: device-resident kernels (cache hit from the cold
+    # pass — the SAME bounded construction, never replanned) + pre-FFT'd
+    # kernel tables.
+    try:
+        kernels, weights = compute_socs_kernels(
+            params, grid, mask_gpu.device, memory_plan=plan, memory_witness={}
+        )
+    except Exception as exc:  # noqa: BLE001 — §11: classify and FAIL, never retry
+        failure_class, failure_reason = _classify_worker_exception(exc)
+        return {
+            "grid": grid,
+            "n_src": dims.n_src,
+            "kernel_count": dims.K,
+            **plan_payload_fields,
+            **memory_witness,
+            "worker_environment": child_env,
+            "worker_environment_witness_pass": env_pass,
+            "worker_environment_mismatch": env_mismatch,
+            "status": "FAILED",
+            "failure_class": failure_class,
+            "reason": failure_reason,
+            "correctness_witness_pass": False,
+            "device_requires_cuda": True,
+            "timing_method": "cuda_synchronized",
+        }
     kernels_f = torch.fft.fftn(torch.fft.ifftshift(kernels, dim=(-2, -1)), dim=(-2, -1)).to(
         torch.complex64
     )
@@ -514,8 +672,22 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         and cpu_deterministic
         and witness_summary["cuda_execution_witness_pass"]
     )
+    # v3 §16: planned-vs-observed memory peak witness — the frozen
+    # relation (observed allocated peak within the modeled peak, plus a
+    # frozen tolerance) is part of formal SUCCESS.
+    planner_estimated_peak = int(memory_witness.get("planner_estimated_peak_bytes") or 0)
+    min_free_observed = int(memory_witness.get("minimum_free_bytes_observed") or -1)
+    peak_witness_pass = bool(
+        planner_estimated_peak > 0
+        and peaks["max_memory_allocated"] <= planner_estimated_peak * PEAK_WITNESS_TOLERANCE
+        and headroom_witness_ok(memory_witness)
+    )
     return {
         "grid": grid,
+        "n_src": dims.n_src,
+        "kernel_count": dims.K,
+        **plan_payload_fields,
+        **memory_witness,
         "cpu_reference_wall_s": None,
         "gpu_cold_wall_s": round(cold_wall, 6),
         "gpu_warm_wall_s": round(warm_wall, 6),
@@ -527,6 +699,14 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         "host_peak_rss_bytes": host_peak_rss_bytes(),
         "max_memory_allocated": peaks["max_memory_allocated"],
         "max_memory_reserved": peaks["max_memory_reserved"],
+        "planner_estimated_peak_bytes": planner_estimated_peak,
+        "observed_max_memory_allocated": peaks["max_memory_allocated"],
+        "observed_max_memory_reserved": peaks["max_memory_reserved"],
+        "minimum_free_bytes_observed": min_free_observed,
+        "memory_plan_peak_witness_pass": peak_witness_pass,
+        "worker_environment": child_env,
+        "worker_environment_witness_pass": env_pass,
+        "worker_environment_mismatch": env_mismatch,
         "timing_method": "cuda_synchronized",
         "dtype": "fp32",
         "device": device,
@@ -536,23 +716,103 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         "cuda_execution_witness_pass": witness_summary["cuda_execution_witness_pass"],
         "forward_witness": witness_summary,
         "device_requires_cuda": True,
-        "status": "SUCCESS" if parity else "FAILED",
+        "status": "SUCCESS" if (parity and env_pass and peak_witness_pass) else "FAILED",
+        **({"failure_class": failure_class, "reason": failure_reason} if failure_class else {}),
     }
 
 
-def _build_socs(params: Any, grid: int, device: Any):
-    """Device-resident SOCS kernels via the existing device-aware primitives."""
-    from openlithohub._utils.hopkins import compute_socs_kernels
-
-    return compute_socs_kernels(params, grid, device)
+def headroom_witness_ok(build_witness: dict[str, Any]) -> bool:
+    """§11/§16: the guard must have run at least once and never observed
+    free memory below the plan floor (a violation raises, so reaching a
+    row at all means no violation occurred; a CUDA run with zero checks is
+    a contract breach)."""
+    checks = int(build_witness.get("headroom_checks") or 0)
+    return checks > 0
 
 
 # ---- driver ------------------------------------------------------------------
 # ---- driver ------------------------------------------------------------------
+
+
+def _device_facts_child(q: Any, device: str) -> None:
+    """Spawned-subprocess body: collect CUDA memory facts and exit — the
+    driver process itself never holds a CUDA context, which would
+    permanently shrink the fresh workers' usable VRAM on a 16-GiB host."""
+    try:
+        from openlithohub._utils.socs_memory_plan import collect_cuda_memory_facts
+
+        q.put(("ok", collect_cuda_memory_facts(device)))
+    except Exception:  # noqa: BLE001 — facts collection must never crash the driver
+        q.put(("err", None))
+
+
+def _collect_device_facts_subprocess(device: str) -> Any:
+    """Collect :class:`DeviceMemoryFacts` in a short-lived spawned
+    subprocess so the numbers reflect a quiescent device (§7)."""
+    import multiprocessing
+
+    ctx = multiprocessing.get_context("spawn")
+    queue: Any = ctx.Queue()
+    proc = ctx.Process(target=_device_facts_child, args=(queue, device))
+    proc.start()
+    proc.join(timeout=600)
+    if proc.exitcode != 0 or queue.empty():
+        return None
+    kind, payload = queue.get()
+    return payload if kind == "ok" else None
+
+
+def _plan_tier_c(args: argparse.Namespace, env_lock: Mapping[str, Any]) -> Any:
+    """v3 §10: the DRIVER computes the SOCS memory plan ONCE — from the
+    real frozen optical configuration (§37 Q5: n_src from the actual
+    source sampling) and the quiescent device facts — before the run
+    identity exists.  Returns ``None`` when no CUDA environment lock
+    exists (formal publication is blocked anyway) or when device facts
+    cannot be collected."""
+    from openlithohub._utils.hopkins import socs_problem_dimensions
+    from openlithohub._utils.socs_memory_plan import plan_socs_decomposition
+
+    if not env_lock.get("available"):
+        return None
+    facts = _collect_device_facts_subprocess(args.device)
+    if facts is None:
+        return None
+    params = tier_c_hopkins_params(
+        {
+            "hopkins_wavelength_nm": args.hopkins_wavelength_nm,
+            "hopkins_na": args.hopkins_na,
+            "hopkins_sigma_outer": args.hopkins_sigma_outer,
+            "hopkins_sigma_inner": args.hopkins_sigma_inner,
+            "hopkins_defocus_nm": 0.0,
+            "pixel_nm": args.pixel_nm,
+        }
+    )
+    grid = int(args.hopkins_grid)
+    dims = socs_problem_dimensions(params, grid, "cpu")
+    return plan_socs_decomposition(
+        grid_size=grid,
+        n_src=dims.n_src,
+        n_freq=dims.n_freq,
+        K=dims.K,
+        dtype="complex64",
+        complex_bytes=8,
+        device=args.device,
+        facts=facts,
+    )
 
 
 def worker_entry(args: argparse.Namespace) -> int:
     """Fresh-process worker: one repeat, strict JSON row on stdout."""
+    if args.worker_tier == "envprobe":
+        # v3 §22 preflight support: the EXACT fresh-worker mechanism (same
+        # re-invocation, same interpreter resolution) emitting ONLY the
+        # environment fingerprint, so a preflight can prove parent/child
+        # environment parity without running a measurement.
+        from openlithohub.benchmark.measurement_support import worker_environment_fingerprint
+
+        row = worker_environment_fingerprint(args.measurement_commit)
+        sys.stdout.write(json.dumps(row, allow_nan=False))
+        return 0
     if args.worker_tier == "a":
         row = tier_a_worker_once(
             args.gds, args.window, args.tile, args.halo, args.pixel_nm, args.layer
@@ -570,6 +830,8 @@ def worker_entry(args: argparse.Namespace) -> int:
                 "pixel_nm": args.pixel_nm,
                 "forward_radius": args.forward_radius,
                 "forward_sigma_nm": args.forward_sigma,
+                "parent_environment": json.loads(args.parent_environment),
+                "measurement_commit": args.measurement_commit,
             }
         )
     else:
@@ -584,6 +846,9 @@ def worker_entry(args: argparse.Namespace) -> int:
                 "hopkins_defocus_nm": 0.0,
                 "hopkins_grid": args.hopkins_grid,
                 "pixel_nm": args.pixel_nm,
+                "memory_plan_path": args.memory_plan,
+                "parent_environment": json.loads(args.parent_environment),
+                "measurement_commit": args.measurement_commit,
             }
         )
     sys.stdout.write(json.dumps(row, allow_nan=False))
@@ -621,6 +886,21 @@ def main() -> int:
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--worker-tier", default="a", help=argparse.SUPPRESS)
     parser.add_argument("--window", type=int, default=4096, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--memory-plan",
+        default="",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--parent-environment",
+        default="{}",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--measurement-commit",
+        default="",
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
 
     if args.worker:
@@ -655,6 +935,16 @@ def main() -> int:
     if not args.gds:
         raise SystemExit("--gds is required: fixture identity is part of the run identity")
     fixture_sha256 = sha256_file(args.gds)
+    # GPU Authority Repair v3 §10: the driver computes the SOCS memory
+    # plan ONCE (from the real frozen configuration and quiescent device
+    # facts) BEFORE the run identity — the plan's canonical SHA-256 is
+    # then bound into RunConfigV2 and honored by every fresh worker.
+    env_lock = gpu_environment_lock()
+    socs_plan_payload: dict[str, Any] | None = None
+    if "c" in tuple(sorted(set(args.tiers.split(",")) - {""})):
+        tier_c_plan = _plan_tier_c(args, env_lock)
+        if tier_c_plan is not None:
+            socs_plan_payload = tier_c_plan.to_payload()
     run_config = RunConfigV2(
         tiers=tuple(sorted(set(args.tiers.split(",")) - {""})),
         device=args.device,
@@ -675,10 +965,10 @@ def main() -> int:
         repeat_count=args.repeats,
         layer=args.layer,
         fixture_sha256=fixture_sha256,
+        socs_memory_plan_sha256=(socs_plan_payload or {}).get("plan_sha256", ""),
     )
     # 2B.1-D: the GPU environment lock is collected BEFORE identity so its
     # canonical hash binds GPU model/driver/CUDA/Torch/TF32 into identity.
-    env_lock = gpu_environment_lock()
     env_lock_sha = gpu_environment_lock_sha256(env_lock)
     identity = compute_run_identity_v2(
         run_config,
@@ -692,6 +982,10 @@ def main() -> int:
     workspace = Path(args.out_root) / "runs" / identity
     workspace.mkdir(parents=True, exist_ok=True)
 
+    if socs_plan_payload is not None:
+        # v3 §9: the plan is visible as a canonical artifact BEFORE any
+        # measurement begins, and fresh workers validate it (never replan).
+        write_strict_json(workspace / "socs-memory-plan.json", socs_plan_payload)
     write_strict_json(workspace / "environment-lock.json", env_lock)
     write_strict_json(
         workspace / "run-config.json",
@@ -709,7 +1003,7 @@ def main() -> int:
 
     tier_rows: dict[str, dict[str, Any]] = {}
     for tier in run_config.tiers:
-        row = run_tier(args, tier, identity, workspace, run_config)
+        row = run_tier(args, tier, identity, workspace, run_config, commit)
         tier_rows[tier] = row
         write_strict_json(workspace / f"tier-{tier}.json", row)
 
@@ -751,6 +1045,7 @@ def main() -> int:
             tier_rows=tier_rows,
             tracked_tree_clean=clean,
             provisional=False,
+            socs_memory_plan=socs_plan_payload,
         )
         status["canonical_build_blockers"] = blockers
         write_strict_json(workspace / "run-summary.json", status)
@@ -763,9 +1058,22 @@ def main() -> int:
 
 
 def _worker_once(
-    args: argparse.Namespace, tier: str, window: int, run_config: Any
+    args: argparse.Namespace, tier: str, window: int, run_config: Any, commit: str, workspace: Path
 ) -> dict[str, Any]:
-    """One fresh worker process = one repeat on one window."""
+    """One fresh worker process = one repeat on one window.
+
+    v3 §22: every worker receives the parent's environment authority and
+    the measurement commit and must match field-for-field.  v3 §10: the
+    Tier C worker additionally receives the driver-owned memory plan
+    artifact and may validate — never replan — it.  v3 §23: the per-tier
+    timeout comes from the frozen ``run_config.tier_timeouts_s`` policy,
+    never from a local constant."""
+    tier_index = {"a": 0, "b": 1, "c": 2}[tier]
+    tier_timeouts = tuple(int(t) for t in run_config.tier_timeouts_s)
+    worker_timeout = tier_timeouts[tier_index] if len(tier_timeouts) > tier_index else 3600
+    from openlithohub.benchmark.measurement_support import worker_environment_fingerprint
+
+    parent_env = worker_environment_fingerprint(commit)
     cmd = [
         sys.executable,
         str(HARNESS_PATH),
@@ -807,14 +1115,26 @@ def _worker_once(
         str(args.hopkins_sigma_inner),
         "--hopkins-grid",
         str(args.hopkins_grid),
+        "--parent-environment",
+        json.dumps(parent_env, allow_nan=False),
+        "--measurement-commit",
+        commit,
     ]
+    if tier == "c":
+        cmd += ["--memory-plan", str(workspace / "socs-memory-plan.json")]
     proc = subprocess.run(  # noqa: S603 — fixed-argv worker re-invocation
-        cmd, capture_output=True, text=True, timeout=3600
+        cmd, capture_output=True, text=True, timeout=worker_timeout
     )
     if proc.returncode != 0:
+        reason = (proc.stderr or "worker failed")[-2000:]
         return {
             "status": "FAILED",
-            "reason": (proc.stderr or "worker failed")[-2000:],
+            "reason": reason,
+            "failure_class": (
+                "MEMORY_PLAN_CONTRACT_VIOLATION"
+                if "MEMORY_PLAN_CONTRACT_VIOLATION" in reason
+                else ""
+            ),
             "correctness_witness_pass": False,
             "window": window,
         }
@@ -832,15 +1152,20 @@ def _worker_once(
 
 
 def _run_window_repeats(
-    args: argparse.Namespace, tier: str, window: int, run_config: Any
+    args: argparse.Namespace,
+    tier: str,
+    window: int,
+    run_config: Any,
+    commit: str,
+    workspace: Path,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Warmup + measured fresh-process repeats for ONE window."""
     warm: list[dict[str, Any]] = []
     measured: list[dict[str, Any]] = []
     for _ in range(max(0, args.warmup)):
-        warm.append(_worker_once(args, tier, window, run_config))
+        warm.append(_worker_once(args, tier, window, run_config, commit, workspace))
     for _ in range(max(1, args.repeats)):
-        measured.append(_worker_once(args, tier, window, run_config))
+        measured.append(_worker_once(args, tier, window, run_config, commit, workspace))
     return warm, measured
 
 
@@ -967,11 +1292,49 @@ def _aggregate_window(
                 "forward_witness": first.get("forward_witness"),
             }
         )
+        # GPU Authority Repair v3 §10/§16/§22/§32: the bounded-strategy,
+        # memory-plan, planned-vs-observed and worker-environment facts
+        # are locked aggregate-row facts on formal SUCCESS.
+        row.update(
+            {
+                "strategy": first.get("strategy"),
+                "strategy_version": first.get("strategy_version"),
+                "memory_plan_sha256": first.get("memory_plan_sha256"),
+                "memory_feasible": first.get("memory_feasible"),
+                "selected_chunk_columns": first.get("selected_chunk_columns"),
+                "chunk_count": first.get("chunk_count"),
+                "n_src": first.get("n_src"),
+                "kernel_count": first.get("kernel_count"),
+                "planner_estimated_peak_bytes": first.get("planner_estimated_peak_bytes"),
+                "observed_max_memory_allocated": first.get("observed_max_memory_allocated"),
+                "observed_max_memory_reserved": first.get("observed_max_memory_reserved"),
+                "minimum_free_bytes_observed": first.get("minimum_free_bytes_observed"),
+                "memory_plan_peak_witness_pass": first.get("memory_plan_peak_witness_pass"),
+                "worker_environment_witness_pass": first.get("worker_environment_witness_pass"),
+            }
+        )
+        # §32: every measured repeat must have used the SAME frozen plan —
+        # any per-repeat plan hash drift demotes the row to FAILED (a
+        # worker replanned somewhere).
+        plan_shas = {
+            str(r.get("memory_plan_sha256") or "") for r in measured if r.get("status") == "SUCCESS"
+        }
+        if len(plan_shas) > 1 or "" in plan_shas:
+            row["status"] = "FAILED"
+            row["reason"] = (
+                f"memory plan drift across repeats: {sorted(plan_shas)} — a worker "
+                "replanned or executed without the frozen plan (v3 §32)"
+            )
     return row
 
 
 def run_tier(
-    args: argparse.Namespace, tier: str, identity: str, workspace: Path, run_config: Any
+    args: argparse.Namespace,
+    tier: str,
+    identity: str,
+    workspace: Path,
+    run_config: Any,
+    commit: str,
 ) -> dict[str, Any]:
     """Driver-side tier execution (2B.1-G): EVERY declared window gets its
     own warmup + measured fresh-process repeats and its own aggregate row.
@@ -980,13 +1343,15 @@ def run_tier(
     workload, not a ladder).
     """
     if tier == "c":
-        warm, measured = _run_window_repeats(args, tier, run_config.hopkins_grid, run_config)
+        warm, measured = _run_window_repeats(
+            args, tier, run_config.hopkins_grid, run_config, commit, workspace
+        )
         return _aggregate_window(tier, run_config.hopkins_grid, warm, measured)
 
     window_rows = []
     statuses = []
     for window in run_config.window_sizes:
-        warm, measured = _run_window_repeats(args, tier, window, run_config)
+        warm, measured = _run_window_repeats(args, tier, window, run_config, commit, workspace)
         row = _aggregate_window(tier, window, warm, measured)
         window_rows.append(row)
         statuses.append(row["status"])

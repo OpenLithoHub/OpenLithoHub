@@ -257,9 +257,13 @@ def test_dtype_tolerances_are_frozen_before_measurement() -> None:
 class FamilyBuilder:
     """Build a synthetic canonical family in a temp dir, then corrupt it."""
 
+    # v3 §32: the frozen bounded strategy + a synthetic plan binding shared
+    # by the run config, the hopkins rows and the plan artifact.
+    PLAN_SHA = "e" * 64
+
     def __init__(self, root: Path) -> None:
         self.root = root
-        self.run_config = RunConfigV2(tiers=("a", "b", "c"))
+        self.run_config = RunConfigV2(tiers=("a", "b", "c"), socs_memory_plan_sha256=self.PLAN_SHA)
         self.commit = "a" * 40
         # keys match the verifier's recomputation contract
         self.source = {
@@ -285,12 +289,28 @@ class FamilyBuilder:
             "max_memory_allocated": 1,
             "max_memory_reserved": 2,
             "device_requires_cuda": False,
+            # GPU Authority Repair §7: actual-CUDA execution witness keys
+            "requested_device": "cuda:0",
+            "forward_input_device": "cuda:0",
+            "forward_output_device_before_d2h": "cuda:0",
+            "cuda_execution_witness_pass": True,
             # claim-bearing repeat statistics (verifier-locked on hopkins)
             "aggregate_n": 5,
             "aggregate_median_s": 1.0,
             "aggregate_p10_s": 0.9,
             "aggregate_p90_s": 1.1,
             "timing_observations": 1,
+            # GPU Authority Repair v3 §32: bounded-SOCS memory authority
+            "strategy": "exact_block_gram_topk_v1",
+            "memory_plan_sha256": self.PLAN_SHA,
+            "memory_feasible": True,
+            "selected_chunk_columns": 65536,
+            "chunk_count": 16,
+            "n_src": 1609,
+            "kernel_count": 24,
+            "grid": 1024,
+            "worker_environment_witness_pass": True,
+            "memory_plan_peak_witness_pass": True,
         }
 
     def write(self) -> Path:
@@ -315,6 +335,17 @@ class FamilyBuilder:
                     "rows": [dict(self.tier_row)],
                 },
             )
+        write_strict_json(
+            self.root / "industrial-v2-socs-memory-plan.json",
+            {
+                "schema": "OpenLithoHub.socs-memory-plan.v1",
+                "strategy": "exact_block_gram_topk_v1",
+                "plan_sha256": self.PLAN_SHA,
+                "memory_feasible": True,
+                "selected_chunk_columns": 65536,
+                "chunk_count": 16,
+            },
+        )
         write_strict_json(
             self.root / "industrial-v2-run-config.json",
             {

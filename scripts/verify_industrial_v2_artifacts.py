@@ -25,6 +25,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
+from openlithohub._constants import NUM_KERNELS_DEFAULT  # noqa: E402
+from openlithohub._utils.socs_memory_plan import SOCS_STRATEGY  # noqa: E402
 from openlithohub.benchmark.industrial_v2 import (  # noqa: E402
     CANONICAL_FAMILY,
     HEADLINE_MIN_REPEATS,
@@ -270,7 +272,71 @@ def verify(canonical_root: Path) -> list[str]:
     # every executed row must carry a warm steady-state aggregate — the
     # claim-bearing statistic is the driver's median/p10/p90/n over fresh
     # synchronized workers, never best-of-N and never zero-length (2B.2-B/C).
+    # GPU Authority Repair v3 §32: a formal Tier-C SUCCESS row must carry
+    # the frozen bounded strategy, the driver-owned memory plan, and the
+    # environment/peak witnesses — legacy dense rows, missing plans,
+    # runtime replans, OOM-retry evidence, CPU decomposition and worker
+    # environment mismatches are all rejected here.
     hopkins = _load_strict_json(canonical_root / "industrial-v2-hopkins.json")
+    hopkins_config_grid = run_config_payload.get("hopkins_grid")
+    bound_plan_sha = str(run_config.get("run_config", {}).get("socs_memory_plan_sha256", ""))
+    for row in hopkins.get("rows", []):
+        if row.get("status") != "SUCCESS":
+            continue
+        for key in (
+            "strategy",
+            "memory_plan_sha256",
+            "memory_feasible",
+            "selected_chunk_columns",
+            "chunk_count",
+            "kernel_count",
+            "n_src",
+            "worker_environment_witness_pass",
+            "memory_plan_peak_witness_pass",
+        ):
+            if key not in row:
+                _fail(f"hopkins SUCCESS row missing memory-authority key {key!r} (v3 §32)")
+        if row.get("strategy") != SOCS_STRATEGY:
+            _fail(
+                f"hopkins SUCCESS row strategy {row.get('strategy')!r} is not the frozen "
+                f"bounded strategy {SOCS_STRATEGY!r} (v3 §32 — legacy dense rejected)"
+            )
+        if not row.get("memory_plan_sha256"):
+            _fail("hopkins SUCCESS row has no memory_plan_sha256 (v3 §32)")
+        if bound_plan_sha and row.get("memory_plan_sha256") != bound_plan_sha:
+            _fail(
+                "hopkins SUCCESS row plan differs from the run-config binding — "
+                "runtime replan evidence (v3 §32)"
+            )
+        if not row.get("memory_feasible"):
+            _fail("hopkins SUCCESS row records an infeasible memory plan (v3 §32)")
+        if int(row.get("selected_chunk_columns") or 0) <= 0:
+            _fail("hopkins SUCCESS row selected_chunk_columns <= 0 (v3 §32)")
+        if int(row.get("chunk_count") or 0) <= 0:
+            _fail("hopkins SUCCESS row chunk_count <= 0 (v3 §32)")
+        if int(row.get("grid") or -1) != int(hopkins_config_grid or -1):
+            _fail("hopkins SUCCESS row formal grid != frozen RunConfigV2 hopkins_grid (v3 §32)")
+        expected_k = max(1, min(NUM_KERNELS_DEFAULT, int(row.get("n_src") or 0)))
+        if int(row.get("kernel_count") or -1) != expected_k:
+            _fail(f"hopkins SUCCESS row kernel_count != frozen K={expected_k} (v3 §32)")
+        if not row.get("worker_environment_witness_pass"):
+            _fail("hopkins SUCCESS row lacks a valid fresh-worker environment witness (v3 §22/§32)")
+        if not row.get("memory_plan_peak_witness_pass"):
+            _fail(
+                "hopkins SUCCESS row lacks a valid planned-vs-observed memory witness (v3 §16/§32)"
+            )
+        if str(row.get("failure_class", "")) == "PLANNER_CONTRACT_VIOLATION":
+            _fail("hopkins SUCCESS row carries planner-contract-violation evidence (v3 §11)")
+        for key, repeat in sorted((k, v) for k, v in row.items() if k.startswith("repeat_")):
+            if not isinstance(repeat, dict):
+                continue
+            if repeat.get("memory_plan_sha256") != row.get("memory_plan_sha256"):
+                _fail(
+                    f"hopkins {key} used a different memory plan — plan drift across "
+                    "repeats (v3 §32)"
+                )
+            if not repeat.get("worker_environment_witness_pass"):
+                _fail(f"hopkins {key} failed the fresh-worker environment witness (v3 §22/§32)")
     if hopkins.get("cold_wall_s") is not None and "warm_wall_s" not in hopkins:
         _fail("hopkins reports cold timing without warm steady-state (B2-F)")
     for row in hopkins.get("rows", []):

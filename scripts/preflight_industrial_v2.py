@@ -1,4 +1,4 @@
-"""Industrial Benchmark v2 formal-measurement preflight (PR-G §34).
+"""Industrial Benchmark v2 formal-measurement preflight (PR-G §34; v3 §14).
 
 Reports every formal blocker for a planned v2 measurement run and exits
 nonzero when formal publication would be impossible.  On a CPU-only host
@@ -9,6 +9,21 @@ this exits nonzero with::
 which is the documented, honest terminal state of Phase 2A — never a
 benchmark failure and never emulated.
 
+GPU Authority Repair v3 §14: the preflight has TWO distinct Tier-C
+gates, and a small-grid smoke NEVER implies formal-grid capacity again:
+
+* Gate A — the ANALYTICAL FORMAL-GRID memory plan, computed from the
+  actual frozen ``RunConfigV2`` grid (no full-H allocation), proving the
+  formal problem is feasible under the frozen memory policy.
+* Gate B — a BOUNDED real-CUDA block-path probe executing a
+  representative H block through the EXACT worker implementation
+  (generation → Gram update → finite checks → device witness), plus a
+  small full bounded-SOCS execution as an end-to-end smoke.
+
+It also spawns at least one fresh worker through the EXACT worker
+mechanism and verifies the environment fingerprint matches this process
+(v3 §22).
+
 Usage::
 
     python scripts/preflight_industrial_v2.py --gds /path/to/ibex.gds --device cuda:0
@@ -18,10 +33,14 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import shutil
+import subprocess  # noqa: S404 — fixed-argv worker re-invocation only
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+HARNESS_PATH = REPO / "benchmarks" / "industrial-v2" / "run_v2_benchmark.py"
 
 
 def load_v2_harness() -> object:
@@ -29,10 +48,9 @@ def load_v2_harness() -> object:
     construct ``HopkinsParams`` through the worker's own constructor
     (GPU Authority Repair §6: no preflight-only code path that can drift
     away from the benchmark worker)."""
-    harness_path = REPO / "benchmarks" / "industrial-v2" / "run_v2_benchmark.py"
-    spec = importlib.util.spec_from_file_location("run_v2_benchmark_harness", harness_path)
+    spec = importlib.util.spec_from_file_location("run_v2_benchmark_harness", HARNESS_PATH)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load the v2 harness at {harness_path}")
+        raise RuntimeError(f"cannot load the v2 harness at {HARNESS_PATH}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -69,16 +87,10 @@ def tier_b_preflight_probe(device: str) -> tuple[bool, str]:
     return ok, detail
 
 
-def tier_c_preflight_probe(device: str) -> tuple[bool, str]:
-    """Bounded Tier C probe through the SHARED worker-path helpers
-    (GPU Authority Repair §6): the EXACT worker ``HopkinsParams``
-    constructor (issue #56 defect 2) + one bounded CUDA Hopkins
-    execution with a finite output."""
-    import torch
-
-    from openlithohub._utils.hopkins import simulate_aerial_image_hopkins
-
-    harness = load_v2_harness()
+def frozen_tier_c_params(harness: object, hopkins_grid: int) -> tuple[object, int]:
+    """The EXACT worker ``HopkinsParams`` (GPU Authority Repair §5) for the
+    ACTUAL frozen formal grid — the preflight reasons about the same
+    problem the workers will execute, never a stand-in grid."""
     params = harness.tier_c_hopkins_params(
         {
             "hopkins_wavelength_nm": 13.5,
@@ -89,13 +101,132 @@ def tier_c_preflight_probe(device: str) -> tuple[bool, str]:
             "pixel_nm": 1.0,
         }
     )
-    grid = 128
-    mask = torch.ones((grid, grid), device=device)
+    return params, int(hopkins_grid)
+
+
+def formal_memory_plan_gate(
+    harness: object, device: str, hopkins_grid: int
+) -> tuple[bool, str, object]:
+    """Gate A (v3 §14A/§15): the analytical FORMAL-GRID memory plan.
+
+    Uses the actual frozen grid's real dimensions (n_src from the real
+    source sampling), computes the frozen-policy plan, prints the
+    diagnostic block, and PASSES only when the plan is feasible BEFORE any
+    allocation.  No full H is ever allocated here."""
+
+    from openlithohub._utils.hopkins import socs_problem_dimensions
+    from openlithohub._utils.socs_memory_plan import (
+        collect_cuda_memory_facts,
+        plan_socs_decomposition,
+    )
+
+    params, grid = frozen_tier_c_params(harness, hopkins_grid)
+    dims = socs_problem_dimensions(params, grid, "cpu")
+    facts = collect_cuda_memory_facts(device)
+    plan = plan_socs_decomposition(
+        grid_size=grid,
+        n_src=dims.n_src,
+        n_freq=dims.n_freq,
+        K=dims.K,
+        dtype="complex64",
+        complex_bytes=8,
+        device=device,
+        facts=facts,
+    )
+    legacy_dense_bytes = dims.n_src * dims.n_freq * 8
+    print("Tier C formal memory plan:")
+    print(f"  strategy: {plan.strategy}")
+    print(f"  grid: {grid}")
+    print(f"  n_src: {dims.n_src}")
+    print(f"  n_freq: {dims.n_freq}")
+    print(f"  K: {dims.K}")
+    print(f"  GPU total: {plan.device_total_bytes}")
+    print(f"  GPU free at plan: {plan.device_free_bytes_at_plan}")
+    print(f"  safety reserve: {plan.absolute_headroom_bytes + plan.fractional_headroom_bytes}")
+    print(f"  workspace reserve: {plan.workspace_reserve_bytes}")
+    print(f"  legacy dense-H bytes: {legacy_dense_bytes}")
+    print("  legacy dense strategy: NOT A RUNTIME OPTION")
+    print(f"  selected chunk columns: {plan.selected_chunk_columns}")
+    print(f"  chunk count: {plan.chunk_count}")
+    print(f"  estimated peak: {plan.estimated_peak_bytes}")
+    print(f"  estimated headroom: {plan.estimated_headroom_bytes}")
+    verdict = "PASS" if plan.memory_feasible else "FAIL"
+    print(f"  FORMAL TIER-C MEMORY PLAN: {verdict}")
+    detail = f"chunk={plan.selected_chunk_columns} plan={plan.plan_sha256[:16]}…"
+    return plan.memory_feasible, detail, plan
+
+
+def bounded_block_probe_gate(harness: object, device: str, hopkins_grid: int) -> tuple[bool, str]:
+    """Gate B (v3 §14B): the bounded real-CUDA block-path probe — one
+    representative H block through the EXACT worker implementation
+    (bounded generation → CUDA Gram update → finite checks), then a small
+    full bounded-SOCS execution as an end-to-end smoke with a device
+    witness.  Same implementation as the worker, by construction."""
+    import torch
+
+    from openlithohub._utils.hopkins import (
+        run_bounded_block_probe,
+        simulate_aerial_image_hopkins,
+    )
+    from openlithohub.benchmark.measurement_support import (
+        ForwardExecutionWitness,
+        initialize_cuda_measurement_device,
+    )
+
+    params, grid = frozen_tier_c_params(harness, hopkins_grid)
+    probe = run_bounded_block_probe(params, grid, device, block_columns=4096)
+    if not bool(probe["pass"]):
+        return False, f"formal-grid block probe failed: {probe}"
+
+    smoke_grid = 64
+    initialize_cuda_measurement_device(device)
+    witness = ForwardExecutionWitness(device)
+    mask = torch.ones((smoke_grid, smoke_grid), device=device)
     aerial = simulate_aerial_image_hopkins(mask, params=params)
+    witness.record(mask, aerial)
     torch.cuda.synchronize(device)
-    ok = bool(torch.isfinite(aerial).all() and str(aerial.device).startswith("cuda"))
-    detail = f"grid={grid} sigma=({params.sigma_inner},{params.sigma}) device={aerial.device}"
+    summary = witness.summary()
+    ok = bool(
+        torch.isfinite(aerial).all()
+        and str(aerial.device).startswith("cuda")
+        and summary["cuda_execution_witness_pass"]
+    )
+    detail = (
+        f"formal-grid block columns={probe['block_columns']} gram={probe['gram_update_device']} | "
+        f"smoke grid={smoke_grid} input={summary['forward_input_device']} "
+        f"output_before_d2h={summary['forward_output_device_before_d2h']}"
+    )
     return ok, detail
+
+
+def worker_environment_probe(device: str, commit: str) -> tuple[bool, str]:
+    """v3 §22: spawn at least ONE fresh worker through the EXACT
+    fresh-worker mechanism and verify its environment fingerprint matches
+    this parent process field-for-field."""
+    from openlithohub.benchmark.measurement_support import (
+        compare_worker_environment_fingerprints,
+        worker_environment_fingerprint,
+    )
+
+    parent = worker_environment_fingerprint(commit)
+    cmd = [
+        sys.executable,
+        str(HARNESS_PATH),
+        "--worker",
+        "--worker-tier",
+        "envprobe",
+        "--measurement-commit",
+        commit,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if proc.returncode != 0:
+        return False, f"envprobe worker failed: {(proc.stderr or '')[-200:]}"
+    try:
+        child = json.loads(proc.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return False, "envprobe worker produced no strict JSON row"
+    ok, mismatches = compare_worker_environment_fingerprints(parent, child)
+    return ok, "environment parity" if ok else f"mismatched: {mismatches[:6]}"
 
 
 def main() -> int:
@@ -103,6 +234,12 @@ def main() -> int:
     parser.add_argument("--gds", required=True, help="real routed GDS fixture path")
     parser.add_argument("--device", default="cuda:0", help="planned device (cuda:0)")
     parser.add_argument("--tiers", default="a,b,c")
+    parser.add_argument(
+        "--hopkins-grid",
+        type=int,
+        default=1024,
+        help="the ACTUAL frozen formal Tier-C grid (v3 §14 — never a stand-in)",
+    )
     args = parser.parse_args()
 
     import torch
@@ -119,11 +256,12 @@ def main() -> int:
     # no Windows operator shim.
     import subprocess
 
+    measurement_commit = ""
     try:
         from openlithohub.benchmark.measurement_support import measurement_git_state
 
-        commit, clean = measurement_git_state(REPO)
-        check("measurement commit", True, commit)
+        measurement_commit, clean = measurement_git_state(REPO)
+        check("measurement commit", True, measurement_commit)
         check("tracked tree clean", clean, "dirty files block formal runs (B2-A)")
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         check("git state", False, str(exc)[-200:])
@@ -157,21 +295,36 @@ def main() -> int:
         cudnn = torch.backends.cudnn.version()
         check("cuDNN version", cudnn is not None, str(cudnn))
     check("dtype fp32 support", True, "fp32 is always supported")
-    # 2B.1-I/§10 + GPU Authority Repair §6: bounded probes through the
-    # SAME shared helpers as the real workers — a failed probe blocks the
-    # formal run BEFORE expensive Tier A/B work starts, and the preflight
-    # can never pass while a real worker path is broken.
+
+    # 2B.1-I/§10 + GPU Authority Repair §6/§14/§22: bounded probes through
+    # the SAME shared helpers as the real workers — a failed probe blocks
+    # the formal run BEFORE expensive Tier A/B work starts, and the
+    # preflight can never pass while a real worker path is broken.
     if cuda_available:
         try:
             ok, detail = tier_b_preflight_probe(args.device)
             check("Tier B actual-CUDA forward probe", ok, detail)
         except Exception as exc:  # noqa: BLE001 — capability probe
             check("Tier B actual-CUDA forward probe", False, repr(exc)[:200])
+        harness = load_v2_harness()
+        # Gate A (v3 §14A): analytical FORMAL-GRID memory plan.
         try:
-            ok, detail = tier_c_preflight_probe(args.device)
-            check("Tier C GPU Hopkins smoke", ok, detail)
+            ok, detail, _plan = formal_memory_plan_gate(harness, args.device, args.hopkins_grid)
+            check("Tier C formal-grid memory plan (gate A)", ok, detail)
         except Exception as exc:  # noqa: BLE001 — capability probe
-            check("Tier C GPU Hopkins smoke", False, repr(exc)[:200])
+            check("Tier C formal-grid memory plan (gate A)", False, repr(exc)[:200])
+        # Gate B (v3 §14B): bounded real-CUDA block-path probe.
+        try:
+            ok, detail = bounded_block_probe_gate(harness, args.device, args.hopkins_grid)
+            check("Tier C bounded CUDA block probe (gate B)", ok, detail)
+        except Exception as exc:  # noqa: BLE001 — capability probe
+            check("Tier C bounded CUDA block probe (gate B)", False, repr(exc)[:200])
+        # v3 §22: fresh-worker environment parity through the exact mechanism.
+        try:
+            ok, detail = worker_environment_probe(args.device, measurement_commit)
+            check("fresh-worker environment parity", ok, detail)
+        except Exception as exc:  # noqa: BLE001 — capability probe
+            check("fresh-worker environment parity", False, repr(exc)[:200])
     check(
         "TF32 policy",
         True,
@@ -195,7 +348,7 @@ def main() -> int:
 
     # tooling
     check("KLayout available", importlib.util.find_spec("klayout") is not None)
-    check("benchmark capabilities", True, "finite-support blur + hopkins sim present")
+    check("benchmark capabilities", True, "finite-support blur + bounded SOCS present")
 
     cuda_required = any(tier.strip() in ("b", "c") for tier in args.tiers.split(","))
     formal_blockers = [name for name, ok, _ in checks if not ok]

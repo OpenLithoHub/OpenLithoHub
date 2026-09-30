@@ -1,0 +1,323 @@
+"""SocsMemoryPlan hostile tests (GPU Authority Repair v3 §20).
+
+The planner must be monotone under free-memory changes, aligned,
+fail-closed BEFORE allocation, hash-bound, and worker-enforced.  CUDA
+paths are exercised through injected :class:`DeviceMemoryFacts` and
+monkeypatched CUDA queries so the whole matrix runs on CPU-only CI.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+
+import pytest
+import torch
+
+from openlithohub._utils.socs_memory_plan import (
+    CHUNK_ALIGNMENT,
+    MIN_CHUNK_COLUMNS,
+    PEAK_WITNESS_TOLERANCE,
+    DeviceMemoryFacts,
+    MemoryPlanContractViolation,
+    MemoryPlanHeadroomViolation,
+    SocsMemoryPlan,
+    assert_headroom,
+    plan_socs_decomposition,
+    validate_worker_plan,
+)
+
+GRID = 1024
+N_SRC = 1609
+N_FREQ = GRID * GRID
+K = 24
+TOTAL_16GIB = 16 * 1024**3
+
+
+def facts(free_bytes: int) -> DeviceMemoryFacts:
+    return DeviceMemoryFacts(
+        device="cuda:0",
+        device_total_bytes=TOTAL_16GIB,
+        device_free_bytes=free_bytes,
+        allocated_bytes=0,
+        reserved_bytes=0,
+    )
+
+
+def plan_for(free_bytes: int) -> SocsMemoryPlan:
+    return plan_socs_decomposition(
+        grid_size=GRID,
+        n_src=N_SRC,
+        n_freq=N_FREQ,
+        K=K,
+        dtype="complex64",
+        complex_bytes=8,
+        device="cuda:0",
+        facts=facts(free_bytes),
+    )
+
+
+# ---- monotonicity / alignment / bounds --------------------------------------------
+
+
+def test_less_free_vram_never_increases_selected_chunk() -> None:
+    big = plan_for(12 * 1024**3)
+    small = plan_for(6 * 1024**3)
+    assert big.memory_feasible and small.memory_feasible
+    assert small.selected_chunk_columns <= big.selected_chunk_columns
+
+
+def test_more_free_vram_never_decreases_selected_chunk_unless_capped() -> None:
+    from openlithohub._utils.socs_memory_plan import MAX_OPERATIONAL_H_CHUNK_BYTES
+
+    mid = plan_for(10 * 1024**3)
+    huge = plan_for(15 * 1024**3)
+    assert huge.selected_chunk_columns >= mid.selected_chunk_columns
+    # both respect the frozen operational cap (§8)
+    cap_columns = MAX_OPERATIONAL_H_CHUNK_BYTES // (N_SRC * 8)
+    assert mid.selected_chunk_columns <= cap_columns
+    assert huge.selected_chunk_columns <= cap_columns
+
+
+def test_selected_chunk_is_aligned_and_within_n_freq() -> None:
+    plan = plan_for(12 * 1024**3)
+    assert plan.selected_chunk_columns % CHUNK_ALIGNMENT == 0
+    assert plan.selected_chunk_columns <= N_FREQ
+
+
+def test_estimated_peak_within_conservative_budget() -> None:
+    free = 12 * 1024**3
+    plan = plan_for(free)
+    budget = free - plan.absolute_headroom_bytes - plan.fractional_headroom_bytes
+    assert plan.estimated_peak_bytes <= budget
+    assert plan.estimated_headroom_bytes >= 0
+
+
+def test_plan_hash_changes_with_semantic_inputs() -> None:
+    base = plan_for(12 * 1024**3)
+    other_k = plan_socs_decomposition(
+        grid_size=GRID,
+        n_src=N_SRC,
+        n_freq=N_FREQ,
+        K=K + 1,
+        dtype="complex64",
+        complex_bytes=8,
+        device="cuda:0",
+        facts=facts(12 * 1024**3),
+    )
+    other_free = plan_for(11 * 1024**3)
+    assert base.plan_sha256 != other_k.plan_sha256
+    assert base.plan_sha256 != other_free.plan_sha256
+    # identical inputs → identical hash
+    again = plan_for(12 * 1024**3)
+    assert base.plan_sha256 == again.plan_sha256
+
+
+# ---- infeasibility is decided BEFORE allocation -------------------------------------
+
+
+def test_minimum_legal_chunk_cannot_fit_is_infeasible_before_allocation() -> None:
+    plan = plan_for(1 * 1024**3)
+    assert not plan.memory_feasible
+    assert plan.reason.startswith("MEMORY_PLAN_INFEASIBLE")
+    assert plan.selected_chunk_columns == 0
+    assert plan.chunk_count == 0
+
+
+def test_minimum_legal_chunk_fits_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Shrink the frozen MIN_CHUNK_COLUMNS requirement via a tiny problem:
+    a feasible plan passes with positive chunks."""
+    plan = plan_for(12 * 1024**3)
+    assert plan.memory_feasible
+    assert plan.selected_chunk_columns >= MIN_CHUNK_COLUMNS
+
+
+# ---- §11 runtime guard ---------------------------------------------------------------
+
+
+def _patch_cuda(monkeypatch: pytest.MonkeyPatch, free_bytes: int) -> list[int]:
+    calls: list[int] = []
+
+    monkeypatch.setattr(
+        "openlithohub.benchmark.measurement_support.initialize_cuda_measurement_device",
+        lambda device: device,
+    )
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda device: None)
+
+    def fake_mem_get_info(index: int) -> tuple[int, int]:
+        calls.append(index)
+        return free_bytes, TOTAL_16GIB
+
+    monkeypatch.setattr(torch.cuda, "mem_get_info", fake_mem_get_info)  # type: ignore[attr-defined]
+    return calls
+
+
+def test_headroom_violation_stops_before_allocation(monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = plan_for(12 * 1024**3)
+    assert plan.memory_feasible
+    _patch_cuda(monkeypatch, free_bytes=plan.required_free_floor_bytes - 1)
+    with pytest.raises(MemoryPlanHeadroomViolation, match="MEMORY_PLAN_HEADROOM_VIOLATION"):
+        assert_headroom(plan, "cuda:0")
+
+
+def test_headroom_guard_passes_at_floor_and_reports_free(monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = plan_for(12 * 1024**3)
+    _patch_cuda(monkeypatch, free_bytes=plan.required_free_floor_bytes)
+    observed = assert_headroom(plan, "cuda:0")
+    assert observed == plan.required_free_floor_bytes
+
+
+def test_headroom_guard_noop_off_cuda() -> None:
+    plan = plan_socs_decomposition(
+        grid_size=GRID,
+        n_src=N_SRC,
+        n_freq=N_FREQ,
+        K=K,
+        dtype="complex64",
+        complex_bytes=8,
+        device="cpu",
+        facts=None,
+    )
+    assert assert_headroom(plan, "cpu") == -1
+
+
+# ---- §10 worker enforcement -----------------------------------------------------------
+
+
+def _valid_plan() -> SocsMemoryPlan:
+    return plan_for(12 * 1024**3)
+
+
+def test_worker_accepts_the_exact_frozen_plan() -> None:
+    plan = _valid_plan()
+    validate_worker_plan(
+        plan,
+        grid_size=GRID,
+        n_src=N_SRC,
+        n_freq=N_FREQ,
+        K=K,
+        dtype="complex64",
+        device="cuda:0",
+    )
+
+
+def test_worker_refuses_hash_tampering() -> None:
+    plan = _valid_plan()
+    tampered = dataclasses.replace(plan, selected_chunk_columns=plan.selected_chunk_columns + 1)
+    with pytest.raises(MemoryPlanContractViolation, match="hash mismatch"):
+        validate_worker_plan(
+            tampered,
+            grid_size=GRID,
+            n_src=N_SRC,
+            n_freq=N_FREQ,
+            K=K,
+            dtype="complex64",
+            device="cuda:0",
+        )
+
+
+def test_worker_refuses_semantic_mismatch() -> None:
+    plan = _valid_plan()
+    with pytest.raises(MemoryPlanContractViolation, match="grid_size"):
+        validate_worker_plan(
+            plan,
+            grid_size=512,
+            n_src=N_SRC,
+            n_freq=N_FREQ,
+            K=K,
+            dtype="complex64",
+            device="cuda:0",
+        )
+    with pytest.raises(MemoryPlanContractViolation, match="replan"):
+        validate_worker_plan(
+            plan,
+            grid_size=GRID,
+            n_src=N_SRC,
+            n_freq=N_FREQ,
+            K=K,
+            dtype="complex64",
+            device="cuda:1",
+        )
+
+
+def test_worker_refuses_infeasible_plan() -> None:
+    plan = plan_for(512 * 1024**2)
+    assert not plan.memory_feasible
+    with pytest.raises(MemoryPlanContractViolation, match="MEMORY_PLAN_INFEASIBLE"):
+        validate_worker_plan(
+            plan,
+            grid_size=GRID,
+            n_src=N_SRC,
+            n_freq=N_FREQ,
+            K=K,
+            dtype="complex64",
+            device="cuda:0",
+        )
+
+
+# ---- §11 OOM is never control flow ------------------------------------------------------
+
+
+def test_unexpected_oom_is_planner_contract_violation_not_retry() -> None:
+    import sys
+    from pathlib import Path
+
+    harness_path = (
+        Path(__file__).resolve().parents[2] / "benchmarks" / "industrial-v2" / "run_v2_benchmark.py"
+    )
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("run_v2_benchmark_oom", harness_path)
+    assert spec is not None and spec.loader is not None
+    harness = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(harness)
+
+    oom = torch.cuda.OutOfMemoryError()
+    failure_class, reason = harness._classify_worker_exception(oom)
+    assert failure_class == "PLANNER_CONTRACT_VIOLATION"
+    assert "shrink-and-retry" in reason
+    other = RuntimeError("something else")
+    failure_class2, _ = harness._classify_worker_exception(other)
+    assert failure_class2 == "UNEXPECTED_EXCEPTION"
+    assert sys.modules  # keep import used
+
+
+def test_peak_witness_tolerance_is_frozen() -> None:
+    assert PEAK_WITNESS_TOLERANCE == 1.05
+
+
+# ---- same plan across warmup/repeats (§32, driver-side drift gate) ----------------------
+
+
+def test_aggregate_row_fails_on_plan_drift_across_repeats() -> None:
+    import importlib.util
+    from pathlib import Path
+
+    harness_path = (
+        Path(__file__).resolve().parents[2] / "benchmarks" / "industrial-v2" / "run_v2_benchmark.py"
+    )
+    spec = importlib.util.spec_from_file_location("run_v2_benchmark_drift", harness_path)
+    assert spec is not None and spec.loader is not None
+    harness = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(harness)
+
+    def repeat(sha: str) -> dict:
+        return {
+            "status": "SUCCESS",
+            "correctness_witness_pass": True,
+            "gpu_warm_wall_s": 0.02,
+            "memory_plan_sha256": sha,
+            "worker_environment_witness_pass": True,
+        }
+
+    good = [repeat("a" * 64) for _ in range(5)]
+    row = harness._aggregate_window("c", 1024, warm=[], measured=good)
+    assert row["status"] == "SUCCESS"
+
+    drifted = [repeat("a" * 64) for _ in range(4)] + [repeat("b" * 64)]
+    row_bad = harness._aggregate_window("c", 1024, warm=[], measured=drifted)
+    assert row_bad["status"] == "FAILED"
+    assert "replanned" in row_bad["reason"]
+
+    missing = [repeat("a" * 64) for _ in range(4)] + [repeat("")]
+    row_missing = harness._aggregate_window("c", 1024, warm=[], measured=missing)
+    assert row_missing["status"] == "FAILED"
