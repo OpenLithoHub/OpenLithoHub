@@ -144,7 +144,29 @@ def _projector_gap(kernels_a: torch.Tensor, kernels_b: torch.Tensor, grid: int) 
     return float((qa @ qa.conj().T - qb @ qb.conj().T).abs().max())
 
 
-def _oracle_socs(params: HopkinsParams, grid: int) -> tuple[torch.Tensor, torch.Tensor]:
+class OracleReference:
+    """V3.1.2: the oracle reference split by PURPOSE.
+
+    ``kernels`` / ``weights`` are the K-MODE PHYSICAL oracle — exactly
+    the first K modes, open-frame-calibrated over exactly those K, the
+    same calibration production performs.  ``raw_lambda`` is the
+    UNNORMALIZED, UNCLAMPED lambda spectrum (K+1 modes) used ONLY for
+    the spectral-cluster-boundary search: lambda_K ~ lambda_{K+1} is a
+    statement about the spectrum itself and must never be polluted by
+    open-frame scaling or the calibration clamp."""
+
+    def __init__(
+        self,
+        kernels: torch.Tensor,
+        weights: torch.Tensor,
+        raw_lambda: torch.Tensor,
+    ) -> None:
+        self.kernels = kernels
+        self.weights = weights
+        self.raw_lambda = raw_lambda
+
+
+def _oracle_socs(params: HopkinsParams, grid: int) -> OracleReference:
     """Independent reference: naive full-H SVD on a TINY grid (§18).
 
     V3.1.1: retains K+1 modes so the stable-subspace-depth search can see
@@ -163,17 +185,21 @@ def _oracle_socs(params: HopkinsParams, grid: int) -> tuple[torch.Tensor, torch.
             pupil_flat, shifts, weights_sqrt, grid, start, end, torch.device("cpu")
         )
     u, s, vh = torch.linalg.svd(h, full_matrices=False)  # oracle ONLY
-    lam = (s**2)[:k_full]
-    kernels_freq = vh[:k_full].reshape(k_full, grid, grid)
-    spatial = torch.fft.fftshift(torch.fft.ifft2(kernels_freq), dim=(-2, -1))
-    weights = lam.to(torch.float32)
+    raw_lambda = (s**2).to(torch.float32)[:k_full]
+
+    # K-MODE PHYSICAL oracle: calibration over exactly the first K modes,
+    # identical to the production calibration loop.
+    spatial = torch.fft.fftshift(
+        torch.fft.ifft2(vh[: dims.K].reshape(dims.K, grid, grid)), dim=(-2, -1)
+    )
+    weights = raw_lambda[: dims.K].clone()
     open_frame = torch.zeros((), dtype=torch.float32)
-    for idx in range(k_full):
+    for idx in range(dims.K):
         dc = spatial[idx].sum()
         open_frame = open_frame + weights[idx] * (dc.real**2 + dc.imag**2)
     if float(open_frame) > 0.0:
         weights = (weights / open_frame).clamp(max=1e6)
-    return spatial.to(torch.complex64), weights
+    return OracleReference(spatial.to(torch.complex64), weights, raw_lambda)
 
 
 # ---- §19 validation matrix: grids × optical sets × K ----------------------------
@@ -203,13 +229,14 @@ def test_bounded_socs_matches_independent_oracle(
         )
     clear_kernel_cache()
     kernels, weights = compute_socs_kernels(params, grid)
-    ref_kernels_full, ref_weights_full = _oracle_socs(params, grid)
-    ref_kernels = ref_kernels_full[: dims.K]
-    ref_weights = ref_weights_full[: dims.K]
+    oracle = _oracle_socs(params, grid)
+    ref_kernels = oracle.kernels
+    ref_weights = oracle.weights
 
     assert kernels.shape == (dims.K, grid, grid)
     assert weights.shape == (dims.K,)
-    assert ref_weights_full.numel() >= dims.K + 1 or dims.n_src == dims.K
+    assert oracle.raw_lambda.numel() >= dims.K + 1 or dims.n_src == dims.K
+    assert oracle.raw_lambda.numel() >= dims.K + 1 or dims.n_src == dims.K
     # §5: mode phase/basis may rotate inside near-degenerate subspaces —
     # the frozen gates are the singular VALUE spectrum and the SUBSPACE.
     # The calibration's legacy clamp(max=1e6) is a NONLINEAR guard whose
@@ -229,7 +256,7 @@ def test_bounded_socs_matches_independent_oracle(
     # with the next one, the top-K MEMBERSHIP itself is a §5 knife edge
     # (the physical outputs stay consistent — the aerial gates above —
     # because the contested mode carries the same weight on both sides).
-    depth = _stable_subspace_depth(ref_weights_full, dims.K)
+    depth = _stable_subspace_depth(oracle.raw_lambda, dims.K)
     if depth >= 1:
         angle_gap = _principal_angle_gap(kernels[:depth], ref_kernels[:depth], grid)
         assert angle_gap <= 1e-6, (
@@ -272,7 +299,8 @@ def test_aerial_matches_oracle_through_params_path() -> None:
     clear_kernel_cache()
     mask = (torch.rand((grid, grid)) > 0.5).float()
     got = simulate_aerial_image_hopkins(mask, params=params)
-    ref_kernels, ref_weights = _oracle_socs(params, grid)
+    oracle_p = _oracle_socs(params, grid)
+    ref_kernels, ref_weights = oracle_p.kernels, oracle_p.weights
     want = simulate_aerial_image_hopkins(mask, kernels=ref_kernels, weights=ref_weights)
     _assert_field_close(got, want)
 

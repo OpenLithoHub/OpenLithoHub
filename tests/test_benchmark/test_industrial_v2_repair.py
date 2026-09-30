@@ -977,7 +977,7 @@ def _workspace_rows(workspace: Path) -> dict[str, dict]:
 
 
 def _built_formal_workspace(tmp_path: Path) -> tuple[Path, str, dict, dict]:
-    """A formal workspace whose seven-member canonical family was built
+    """A formal workspace whose canonical family was built
     through the fail-closed builder (the only sanctioned source)."""
     workspace, run_config, identity, source, env_lock = _formal_workspace(tmp_path)
     blockers = build_canonical_family_in_workspace(
