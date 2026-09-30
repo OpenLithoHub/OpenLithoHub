@@ -487,14 +487,18 @@ def compute_socs_kernels(
 
     pupil_flat, shifts, weights_sqrt = _socs_static_tables(params, grid_size, dev)
     min_free_observed = 2**62
+    min_effective_observed = 2**62
     headroom_checks = 0
 
     def guard() -> None:
-        nonlocal min_free_observed, headroom_checks
+        nonlocal min_free_observed, min_effective_observed, headroom_checks
         if dev.type == "cuda":
-            free = assert_headroom(plan, str(dev))
-            if free >= 0:
-                min_free_observed = min(min_free_observed, free)
+            observation = assert_headroom(plan, str(dev))
+            if observation.physical_free_bytes >= 0:
+                min_free_observed = min(min_free_observed, observation.physical_free_bytes)
+                min_effective_observed = min(
+                    min_effective_observed, observation.effective_reusable_bytes
+                )
             headroom_checks += 1
 
     # ---- Pass 1: streamed Gram accumulation, complex128 (§3/§4) -------
@@ -577,6 +581,9 @@ def compute_socs_kernels(
                 "planner_estimated_peak_bytes": plan.estimated_peak_bytes,
                 "required_free_floor_bytes": plan.required_free_floor_bytes,
                 "minimum_free_bytes_observed": (min_free_observed if headroom_checks else -1),
+                "minimum_effective_reusable_bytes_observed": (
+                    min_effective_observed if headroom_checks else -1
+                ),
                 "headroom_checks": headroom_checks,
             }
         )

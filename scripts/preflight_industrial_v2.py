@@ -38,6 +38,7 @@ import shutil
 import subprocess  # noqa: S404 — fixed-argv worker re-invocation only
 import sys
 from pathlib import Path
+from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 HARNESS_PATH = REPO / "benchmarks" / "industrial-v2" / "run_v2_benchmark.py"
@@ -154,6 +155,61 @@ def formal_memory_plan_gate(
     print(f"  FORMAL TIER-C MEMORY PLAN: {verdict}")
     detail = f"chunk={plan.selected_chunk_columns} plan={plan.plan_sha256[:16]}…"
     return plan.memory_feasible, detail, plan
+
+
+def _formal_chunk_probe_child(
+    q: Any, params: Any, grid: int, device: str, block_columns: int
+) -> None:
+    """Spawned-subprocess body (v3.1): run the PLANNED-CHUNK-SIZED block
+    through the exact worker path and exit — the probe allocates the real
+    chunk footprint, so it must not hold allocations in the preflight
+    process afterwards."""
+    try:
+        from openlithohub._utils.hopkins import run_bounded_block_probe
+
+        q.put(("ok", run_bounded_block_probe(params, grid, device, block_columns=block_columns)))
+    except Exception as exc:  # noqa: BLE001 — probe failure is the diagnostic
+        q.put(("err", f"{type(exc).__name__}: {exc}"))
+
+
+def formal_chunk_probe_gate(
+    harness: object, device: str, hopkins_grid: int, plan: Any
+) -> tuple[bool, str]:
+    """Gate C (v3.1 closure): execute ONE block at the PLANNED chunk
+    width through the exact worker block path, inside a short-lived
+    spawned subprocess so the preflight process never retains the
+    multi-GiB footprint.  This proves the analytical plan's actual chunk
+    really fits and executes — not just that a small block does."""
+    import multiprocessing
+
+    params, grid = frozen_tier_c_params(harness, hopkins_grid)
+    if not getattr(plan, "memory_feasible", False):
+        return False, "plan infeasible — chunk probe not attempted (gate A must pass first)"
+    ctx = multiprocessing.get_context("spawn")
+    queue: Any = ctx.Queue()
+    proc = ctx.Process(
+        target=_formal_chunk_probe_child,
+        args=(queue, params, grid, device, int(plan.selected_chunk_columns)),
+    )
+    proc.start()
+    proc.join(timeout=1800)
+    if proc.exitcode != 0 or queue.empty():
+        return (
+            False,
+            f"formal chunk probe crashed (exit={proc.exitcode}) at "
+            f"chunk={plan.selected_chunk_columns} columns",
+        )
+    kind, payload = queue.get()
+    if kind != "ok":
+        return False, f"formal chunk probe failed at chunk={plan.selected_chunk_columns}: {payload}"
+    probe = payload
+    ok = bool(probe.get("pass"))
+    detail = (
+        f"chunk={probe.get('block_columns')} n_src={probe.get('n_src')} "
+        f"gram={probe.get('gram_update_device')} finite={probe.get('finite')}"
+    )
+    print(f"  FORMAL CHUNK CUDA PROBE: {'PASS' if ok else 'FAIL'} ({detail})")
+    return ok, detail
 
 
 def bounded_block_probe_gate(harness: object, device: str, hopkins_grid: int) -> tuple[bool, str]:
@@ -309,10 +365,20 @@ def main() -> int:
         harness = load_v2_harness()
         # Gate A (v3 §14A): analytical FORMAL-GRID memory plan.
         try:
-            ok, detail, _plan = formal_memory_plan_gate(harness, args.device, args.hopkins_grid)
+            ok, detail, tier_c_plan = formal_memory_plan_gate(
+                harness, args.device, args.hopkins_grid
+            )
             check("Tier C formal-grid memory plan (gate A)", ok, detail)
         except Exception as exc:  # noqa: BLE001 — capability probe
+            tier_c_plan = None
             check("Tier C formal-grid memory plan (gate A)", False, repr(exc)[:200])
+        try:
+            ok, detail = formal_chunk_probe_gate(
+                harness, args.device, args.hopkins_grid, tier_c_plan
+            )
+            check("Tier C formal-chunk CUDA probe (gate C, planned chunk)", ok, detail)
+        except Exception as exc:  # noqa: BLE001 — capability probe
+            check("Tier C formal-chunk CUDA probe (gate C, planned chunk)", False, repr(exc)[:200])
         # Gate B (v3 §14B): bounded real-CUDA block-path probe.
         try:
             ok, detail = bounded_block_probe_gate(harness, args.device, args.hopkins_grid)

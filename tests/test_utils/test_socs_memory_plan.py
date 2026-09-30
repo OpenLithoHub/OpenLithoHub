@@ -134,7 +134,13 @@ def test_minimum_legal_chunk_fits_passes(monkeypatch: pytest.MonkeyPatch) -> Non
 # ---- §11 runtime guard ---------------------------------------------------------------
 
 
-def _patch_cuda(monkeypatch: pytest.MonkeyPatch, free_bytes: int) -> list[int]:
+def _patch_cuda(
+    monkeypatch: pytest.MonkeyPatch,
+    free_bytes: int,
+    *,
+    allocated_bytes: int = 0,
+    reserved_bytes: int = 0,
+) -> list[int]:
     calls: list[int] = []
 
     monkeypatch.setattr(
@@ -142,6 +148,8 @@ def _patch_cuda(monkeypatch: pytest.MonkeyPatch, free_bytes: int) -> list[int]:
         lambda device: device,
     )
     monkeypatch.setattr(torch.cuda, "synchronize", lambda device: None)
+    monkeypatch.setattr(torch.cuda, "memory_allocated", lambda index: allocated_bytes)
+    monkeypatch.setattr(torch.cuda, "memory_reserved", lambda index: reserved_bytes)
 
     def fake_mem_get_info(index: int) -> tuple[int, int]:
         calls.append(index)
@@ -162,8 +170,10 @@ def test_headroom_violation_stops_before_allocation(monkeypatch: pytest.MonkeyPa
 def test_headroom_guard_passes_at_floor_and_reports_free(monkeypatch: pytest.MonkeyPatch) -> None:
     plan = plan_for(12 * 1024**3)
     _patch_cuda(monkeypatch, free_bytes=plan.required_free_floor_bytes)
-    observed = assert_headroom(plan, "cuda:0")
-    assert observed == plan.required_free_floor_bytes
+    observation = assert_headroom(plan, "cuda:0")
+    assert observation.physical_free_bytes == plan.required_free_floor_bytes
+    assert observation.allocator_reusable_bytes == 0
+    assert observation.effective_reusable_bytes == plan.required_free_floor_bytes
 
 
 def test_headroom_guard_noop_off_cuda() -> None:
@@ -177,7 +187,78 @@ def test_headroom_guard_noop_off_cuda() -> None:
         device="cpu",
         facts=None,
     )
-    assert assert_headroom(plan, "cpu") == -1
+    observation = assert_headroom(plan, "cpu")
+    assert observation.physical_free_bytes == -1
+    assert observation.effective_reusable_bytes == -1
+
+
+# ---- V3.1 allocator-aware double budget ---------------------------------------------
+
+
+def test_reusable_allocator_cache_prevents_false_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """V3.1 core scenario: after the first chunk, PyTorch holds most freed
+    VRAM as reserved cache the driver no longer reports as free.  The
+    guard must credit REUSABLE cache against the modeled PyTorch need —
+    physical free alone would wrongly STOP a safe run."""
+    plan = plan_for(12 * 1024**3)
+    physical = 3 * 1024**3  # driver sees far less than the modeled need
+    cache = 8 * 1024**3  # but the allocator holds reusable cache
+    _patch_cuda(
+        monkeypatch,
+        free_bytes=physical,
+        allocated_bytes=1 * 1024**3,
+        reserved_bytes=1 * 1024**3 + cache,
+    )
+    observation = assert_headroom(plan, "cuda:0")
+    assert observation.physical_free_bytes == physical
+    assert observation.allocator_reusable_bytes == cache
+    assert observation.effective_reusable_bytes == physical + cache
+
+
+def test_physical_floor_still_stops_even_with_large_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cache must NEVER back the hard physical floor (workspace +
+    emergency): no allocator reuse can serve driver/OS memory."""
+    plan = plan_for(12 * 1024**3)
+    physical = plan.physical_free_floor_bytes - 1
+    _patch_cuda(
+        monkeypatch,
+        free_bytes=physical,
+        allocated_bytes=0,
+        reserved_bytes=16 * 1024**3,  # absurd cache cannot help the physical budget
+    )
+    with pytest.raises(MemoryPlanHeadroomViolation, match="hard floor"):
+        assert_headroom(plan, "cuda:0")
+
+
+def test_effective_budget_below_modeled_need_stops(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Physical above its floor but modeled need uncovered even after
+    crediting reusable cache -> STOP before allocation."""
+    plan = plan_for(12 * 1024**3)
+    physical = plan.physical_free_floor_bytes + 1024**3
+    _patch_cuda(monkeypatch, free_bytes=physical, allocated_bytes=0, reserved_bytes=0)
+    assert physical + 0 < plan.required_free_floor_bytes
+    with pytest.raises(MemoryPlanHeadroomViolation, match="effective reusable"):
+        assert_headroom(plan, "cuda:0")
+
+
+def test_physical_floor_fields_are_frozen_plan_facts() -> None:
+    plan = plan_for(12 * 1024**3)
+    from openlithohub._utils.socs_memory_plan import EMERGENCY_HEADROOM_BYTES
+
+    assert plan.emergency_headroom_bytes == EMERGENCY_HEADROOM_BYTES
+    assert plan.physical_free_floor_bytes == (
+        plan.workspace_reserve_bytes + EMERGENCY_HEADROOM_BYTES
+    )
+    assert plan.required_free_floor_bytes > plan.physical_free_floor_bytes
+
+
+def test_per_chunk_model_matches_the_v31_exact_accounting() -> None:
+    """V3.1: the planner models the Pass-2 V block as complex128 and
+    enumerates every block/index temporary (24*n_src + 16*K + 64 B per
+    column) — the model can no longer under-count what the code creates."""
+    plan = plan_for(12 * 1024**3)
+    expected = 24 * N_SRC + 16 * K + 64
+    assert plan.bytes_per_chunk_column == expected
 
 
 # ---- §10 worker enforcement -----------------------------------------------------------

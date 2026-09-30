@@ -677,6 +677,9 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
     # frozen tolerance) is part of formal SUCCESS.
     planner_estimated_peak = int(memory_witness.get("planner_estimated_peak_bytes") or 0)
     min_free_observed = int(memory_witness.get("minimum_free_bytes_observed") or -1)
+    min_effective_observed = int(
+        memory_witness.get("minimum_effective_reusable_bytes_observed") or -1
+    )
     peak_witness_pass = bool(
         planner_estimated_peak > 0
         and peaks["max_memory_allocated"] <= planner_estimated_peak * PEAK_WITNESS_TOLERANCE
@@ -703,6 +706,7 @@ def tier_c_worker_once(cfg: dict[str, Any]) -> dict[str, Any]:
         "observed_max_memory_allocated": peaks["max_memory_allocated"],
         "observed_max_memory_reserved": peaks["max_memory_reserved"],
         "minimum_free_bytes_observed": min_free_observed,
+        "minimum_effective_reusable_bytes_observed": min_effective_observed,
         "memory_plan_peak_witness_pass": peak_witness_pass,
         "worker_environment": child_env,
         "worker_environment_witness_pass": env_pass,
@@ -1309,6 +1313,9 @@ def _aggregate_window(
                 "observed_max_memory_allocated": first.get("observed_max_memory_allocated"),
                 "observed_max_memory_reserved": first.get("observed_max_memory_reserved"),
                 "minimum_free_bytes_observed": first.get("minimum_free_bytes_observed"),
+                "minimum_effective_reusable_bytes_observed": first.get(
+                    "minimum_effective_reusable_bytes_observed"
+                ),
                 "memory_plan_peak_witness_pass": first.get("memory_plan_peak_witness_pass"),
                 "worker_environment_witness_pass": first.get("worker_environment_witness_pass"),
             }
