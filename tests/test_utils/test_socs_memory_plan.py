@@ -241,6 +241,40 @@ def test_effective_budget_below_modeled_need_stops(monkeypatch: pytest.MonkeyPat
         assert_headroom(plan, "cuda:0")
 
 
+def test_chunk_independent_phase_over_budget_fails_closed() -> None:
+    """V3.1.2: when a chunk-INDEPENDENT phase (FFT/fftshift or
+    eigendecomposition overlap) cannot fit the frozen budget — large K,
+    large n_src — the plan is infeasible with the FIXED_PHASE reason no
+    matter what chunk selection says; no allocation is ever attempted."""
+    from openlithohub._utils.socs_memory_plan import REASON_INFEASIBLE_FIXED_PHASE
+
+    # FFT phase dominates: 3*K*n_freq*8 must exceed the budget.  With
+    # K = 420 the FFT/fftshift coexistence (~10.6 GiB) alone breaks the
+    # ~10.4 GiB frozen budget regardless of chunk size.
+    k_big = 420
+    plan = plan_socs_decomposition(
+        grid_size=GRID,
+        n_src=1609,
+        n_freq=N_FREQ,
+        K=k_big,
+        dtype="complex64",
+        complex_bytes=8,
+        device="cuda:0",
+        facts=facts(12 * 1024**3),
+    )
+    budget = (
+        12 * 1024**3
+        - plan.absolute_headroom_bytes
+        - plan.fractional_headroom_bytes
+        - plan.workspace_reserve_bytes
+    )
+    assert plan.phase_peak_new_bytes_fft > budget
+    assert not plan.memory_feasible
+    assert plan.reason.startswith(REASON_INFEASIBLE_FIXED_PHASE)
+    assert "fft" in plan.reason
+    assert plan.selected_chunk_columns == 0
+
+
 def test_physical_floor_fields_are_frozen_plan_facts() -> None:
     plan = plan_for(12 * 1024**3)
     from openlithohub._utils.socs_memory_plan import EMERGENCY_HEADROOM_BYTES

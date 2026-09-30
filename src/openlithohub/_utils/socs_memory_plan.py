@@ -72,6 +72,10 @@ exists there; the boundedness of the algorithm itself is the policy)."""
 PEAK_WITNESS_TOLERANCE = 1.05
 
 REASON_INFEASIBLE_PREFIX = "MEMORY_PLAN_INFEASIBLE"
+REASON_INFEASIBLE_FIXED_PHASE = "MEMORY_PLAN_INFEASIBLE_FIXED_PHASE"
+"""A phase whose peak is INDEPENDENT of the chunk (eigendecomposition
+or FFT/fftshift overlap) cannot fit the frozen budget at all — no chunk
+choice can fix it, so the plan fails closed before any allocation."""
 
 
 class MemoryPlanContractViolation(RuntimeError):  # noqa: N818 — violation is the protocol term
@@ -304,6 +308,30 @@ def plan_socs_decomposition(
 
     phases = phase_new_peak(selected)
     peak_new_max = max(phases.values())
+
+    # v3.1.2 generic fixed-phase fail-closed: the chunk-scaled phases are
+    # already bounded by the chunk selection, but the chunk-INDEPENDENT
+    # phases (eigendecomposition overlap, FFT/fftshift coexistence) can
+    # exceed the frozen budget no matter how small the chunk is (large K
+    # or large n_src).  Refuse BEFORE any allocation — chunk selection
+    # alone would otherwise report a feasible plan that cannot execute.
+    if is_cuda and feasible:
+        budget_new = free - absolute - fractional - workspace
+        for phase_name, fixed_only in (
+            ("eigendecomposition", phases["eigendecomposition"]),
+            ("fft", phases["fft"]),
+        ):
+            if fixed_only > budget_new:
+                feasible = False
+                selected = 0
+                reason = (
+                    f"{REASON_INFEASIBLE_FIXED_PHASE}: {phase_name} phase peak "
+                    f"{fixed_only} B exceeds the frozen physical budget {budget_new} B "
+                    "independently of chunk size — reduce n_src/K or use a larger "
+                    "device; this is a separate protocol decision, never a runtime retry"
+                )
+                break
+
     chunk_count = int(math.ceil(n_freq / selected)) if selected > 0 else 0
     estimated_peak = reserved + peak_new_max
     estimated_headroom = free - absolute - fractional - workspace - peak_new_max if is_cuda else 0
