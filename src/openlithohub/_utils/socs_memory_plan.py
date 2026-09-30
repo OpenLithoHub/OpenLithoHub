@@ -43,6 +43,13 @@ BACKEND_WORKSPACE_RESERVE_BYTES = 256 * 1024 * 1024
 """Reserve for cuSOLVER/cuBLAS/cuDNN workspaces the allocator reports
 only after the fact."""
 
+EMERGENCY_HEADROOM_BYTES = 256 * 1024 * 1024
+"""Hard PHYSICAL floor (V3.1): driver/OS/display reserve that must be
+backed by real free VRAM regardless of what the PyTorch caching
+allocator could reuse.  Checked separately from the modeled PyTorch
+need (v3.1 closure — allocator-aware double-budget guard)."""
+
+
 MIN_CHUNK_COLUMNS = 1024
 """Smallest legal frequency-column chunk; below this the plan is
 infeasible and must fail BEFORE allocation."""
@@ -133,6 +140,8 @@ class SocsMemoryPlan:
     absolute_headroom_bytes: int
     fractional_headroom_bytes: int
     workspace_reserve_bytes: int
+    emergency_headroom_bytes: int
+    physical_free_floor_bytes: int
     fixed_peak_estimate_bytes: int
     bytes_per_chunk_column: int
     selected_chunk_columns: int
@@ -141,6 +150,8 @@ class SocsMemoryPlan:
     estimated_peak_bytes: int
     estimated_headroom_bytes: int
     required_free_floor_bytes: int
+    """V3.1: the ALLOCATOR-EFFECTIVE floor (physical free + reusable
+    PyTorch cache) the guard enforces before every chunk allocation."""
     memory_feasible: bool
     reason: str
     plan_sha256: str = ""
@@ -202,13 +213,26 @@ def plan_socs_decomposition(
     weights = K * 4
     fixed_peak = pupil_state + gram + topk + final_freq + spatial_fft + weights
 
-    # ---- per-chunk allocations (§6), bytes per frequency column ----------
+    # ---- per-chunk allocations (§6; V3.1 exact accounting) -------------
+    # Modeled at the worst of the two streamed passes, per frequency
+    # column, enumerating EVERY temporary _build_frequency_block and the
+    # reconstruction actually create:
+    #   h_block_c64   n_src × 8    the complex64 H block (both passes)
+    #   h_block_c128  n_src × 16   its complex128 copy for the matmul
+    #   v_block       K × 16       the Pass-2 V block is created complex128
+    #                              ((block128.mH @ u_k) * sigma_inv) BEFORE
+    #                              the complex64 slice write (V3.1: the
+    #                              model previously under-counted this as K×8)
+    #   cols/y/x      3 × 8        chunk-shaped int64 index vectors
+    #   iy/ix/idx     3 × 8        per-source-row int64 index temporaries
+    #   gathered      8            complex64 gathered row
+    #   weighted      8            complex64 weighted row
     h_block_c64 = n_src * complex_bytes
-    h_block_c128 = n_src * 16  # complex128 copy for the Gram matmul
-    v_block = K * complex_bytes
-    index_vectors = 5 * 8  # y/x chunk vectors + per-row iy/ix/idx int64 temporaries
-    block_temp = 8  # per-source-row gather temporary
-    per_column = h_block_c64 + h_block_c128 + v_block + index_vectors + block_temp
+    h_block_c128 = n_src * 16
+    v_block = K * 16  # complex128 — the form that exists before the slice write
+    index_vectors = 6 * 8  # cols, y, x (chunk) + iy, ix, linear idx (per row)
+    gather_temps = 2 * 8  # gathered row + weighted row, complex64
+    per_column = h_block_c64 + h_block_c128 + v_block + index_vectors + gather_temps
 
     reason = ""
     feasible = True
@@ -243,6 +267,8 @@ def plan_socs_decomposition(
     chunk_count = int(math.ceil(n_freq / selected)) if selected > 0 else 0
     estimated_peak = reserved + fixed_peak + per_column * selected
     estimated_headroom = free - absolute - fractional - workspace - estimated_peak if is_cuda else 0
+    emergency = EMERGENCY_HEADROOM_BYTES if is_cuda else 0
+    physical_floor = workspace + emergency
     required_floor = absolute + fractional + workspace + fixed_peak + per_column * selected
 
     plan = SocsMemoryPlan(
@@ -262,6 +288,8 @@ def plan_socs_decomposition(
         absolute_headroom_bytes=absolute,
         fractional_headroom_bytes=fractional,
         workspace_reserve_bytes=workspace,
+        emergency_headroom_bytes=emergency,
+        physical_free_floor_bytes=physical_floor,
         fixed_peak_estimate_bytes=fixed_peak,
         bytes_per_chunk_column=per_column,
         selected_chunk_columns=selected,
@@ -276,15 +304,30 @@ def plan_socs_decomposition(
     return SocsMemoryPlan(**{**plan.to_payload(), "plan_sha256": plan.plan_sha256_excluding_self()})
 
 
-def assert_headroom(plan: SocsMemoryPlan, device: str) -> int:
-    """§11 pre-allocation guard: CUDA-synchronize, query free memory, and
-    raise :class:`MemoryPlanHeadroomViolation` BEFORE allocating when free
-    memory is below the plan floor.  Returns the observed free bytes so
-    the caller can accumulate ``minimum_free_bytes_observed``.
+@dataclass(frozen=True)
+class HeadroomObservation:
+    """V3.1 allocator-aware headroom facts (§11 guard, v3.1 closure).
 
-    No-op on non-CUDA devices (the plan itself carries no floor there)."""
-    if not device.startswith("cuda") or plan.device_total_bytes == 0:
-        return -1
+    ``physical_free_bytes`` is what the CUDA driver reports
+    (``torch.cuda.mem_get_info``).  After the first chunk, PyTorch's
+    caching allocator holds most freed VRAM as RESERVED cache, which the
+    driver no longer reports as free but the next same-shaped PyTorch
+    allocation can reuse directly.  Treating that cache as spent would
+    wrongly STOP a safe run; treating it as driver-usable would be a
+    fiction.  The guard therefore budgets both:
+
+    * ``allocator_reusable_bytes`` = max(reserved - allocated, 0)
+    * ``effective_reusable_bytes`` = physical_free + allocator_reusable
+
+    against two separate floors (see :func:`assert_headroom`)."""
+
+    physical_free_bytes: int
+    allocator_reusable_bytes: int
+    effective_reusable_bytes: int
+
+
+def observe_headroom(device: str) -> HeadroomObservation:
+    """Synchronize and collect the double-budget headroom facts."""
     import torch
 
     from openlithohub.benchmark.measurement_support import initialize_cuda_measurement_device
@@ -293,14 +336,54 @@ def assert_headroom(plan: SocsMemoryPlan, device: str) -> int:
     torch.cuda.synchronize(device)
     index = int(device.split(":", 1)[1]) if ":" in device else 0
     free, _ = torch.cuda.mem_get_info(index)  # type: ignore[no-untyped-call]
-    free = int(free)
-    if free < plan.required_free_floor_bytes:
+    physical_free = int(free)
+    allocated = int(torch.cuda.memory_allocated(index))
+    reserved = int(torch.cuda.memory_reserved(index))
+    reusable = max(reserved - allocated, 0)
+    return HeadroomObservation(
+        physical_free_bytes=physical_free,
+        allocator_reusable_bytes=reusable,
+        effective_reusable_bytes=physical_free + reusable,
+    )
+
+
+def assert_headroom(plan: SocsMemoryPlan, device: str) -> HeadroomObservation:
+    """§11 pre-allocation guard (v3.1 allocator-aware double budget):
+    CUDA-synchronize, collect the headroom facts, and raise
+    :class:`MemoryPlanHeadroomViolation` BEFORE allocating when either
+    budget is violated.
+
+    Physical budget: ``physical_free >= workspace_reserve + emergency``
+    — the part NO allocator cache can back.  Effective budget:
+    ``physical_free + allocator_reusable >= required_free_floor_bytes``
+    — the full modeled PyTorch need, crediting cache the allocator can
+    actually hand back.  Returns the observation so the caller can
+    accumulate the §16 minimum witnesses.
+
+    No-op on non-CUDA devices (the plan itself carries no floors there)."""
+    if not device.startswith("cuda") or plan.device_total_bytes == 0:
+        return HeadroomObservation(
+            physical_free_bytes=-1, allocator_reusable_bytes=-1, effective_reusable_bytes=-1
+        )
+    observation = observe_headroom(device)
+    physical_floor = plan.workspace_reserve_bytes + EMERGENCY_HEADROOM_BYTES
+    if observation.physical_free_bytes < physical_floor:
         raise MemoryPlanHeadroomViolation(
-            "MEMORY_PLAN_HEADROOM_VIOLATION: free VRAM "
-            f"{free} B < required floor {plan.required_free_floor_bytes} B "
+            "MEMORY_PLAN_HEADROOM_VIOLATION: physical free VRAM "
+            f"{observation.physical_free_bytes} B < hard floor {physical_floor} B "
+            "(workspace + emergency; no allocator cache can back this) "
             f"(plan {plan.plan_sha256[:16]}…) — STOPPING BEFORE ALLOCATION (§11)"
         )
-    return free
+    if observation.effective_reusable_bytes < plan.required_free_floor_bytes:
+        raise MemoryPlanHeadroomViolation(
+            "MEMORY_PLAN_HEADROOM_VIOLATION: effective reusable VRAM "
+            f"{observation.effective_reusable_bytes} B "
+            f"(physical {observation.physical_free_bytes} + allocator cache "
+            f"{observation.allocator_reusable_bytes}) < modeled need "
+            f"{plan.required_free_floor_bytes} B "
+            f"(plan {plan.plan_sha256[:16]}…) — STOPPING BEFORE ALLOCATION (§11)"
+        )
+    return observation
 
 
 def validate_worker_plan(

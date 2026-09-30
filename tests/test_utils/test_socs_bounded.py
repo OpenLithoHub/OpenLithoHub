@@ -92,6 +92,34 @@ def _plan_with_chunk(chunk: int, grid: int, n_src: int, n_freq: int, k: int):
     return replace(stepped, plan_sha256=stepped.plan_sha256_excluding_self())
 
 
+def _freq_basis(kernels: torch.Tensor, grid: int) -> torch.Tensor:
+    """Orthonormal frequency-domain basis (n_freq, K) of the top-K kernel
+    set (QR-stabilized)."""
+    a = torch.fft.fft2(
+        torch.fft.ifftshift(kernels.to(torch.complex128), dim=(-2, -1)), dim=(-2, -1)
+    ).reshape(kernels.shape[0], -1)
+    q, _ = torch.linalg.qr(a.T)
+    return q
+
+
+def _principal_angle_gap(kernels_a: torch.Tensor, kernels_b: torch.Tensor, grid: int) -> float:
+    """V3.1: 1 - sigma_min(Q_A^H Q_B) — the true subspace agreement gate.
+    Identical K-dimensional subspaces give exactly 0; ANY rotation away
+    from the oracle top-K subspace strictly decreases sigma_min."""
+    qa = _freq_basis(kernels_a, grid)
+    qb = _freq_basis(kernels_b, grid)
+    cosines = torch.linalg.svdvals(qa.conj().T @ qb)
+    return 1.0 - float(cosines.min().real)
+
+
+def _projector_gap(kernels_a: torch.Tensor, kernels_b: torch.Tensor, grid: int) -> float:
+    """V3.1: the actual space projector difference max|P_A - P_B| with
+    P = Q Q^H on the frequency grid (small grids only — n_freq^2 memory)."""
+    qa = _freq_basis(kernels_a, grid)
+    qb = _freq_basis(kernels_b, grid)
+    return float((qa @ qa.conj().T - qb @ qb.conj().T).abs().max())
+
+
 def _oracle_socs(params: HopkinsParams, grid: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Independent reference: naive full-H SVD on a TINY grid (§18)."""
     from openlithohub._utils.hopkins import _build_frequency_block, _socs_static_tables
@@ -154,11 +182,15 @@ def test_bounded_socs_matches_independent_oracle(
     # the frozen gates are the singular VALUE spectrum and the SUBSPACE.
     _assert_field_close(weights, ref_weights)
 
-    # subspace principal-angle / projector error on the spatial grid
-    a = kernels.to(torch.complex128).reshape(dims.K, -1)
-    b = ref_kernels.to(torch.complex128).reshape(dims.K, -1)
-    projector_err = (a.conj() @ a.T - b.conj() @ b.T).abs().max()
-    assert float(projector_err) <= 1e-6, f"projector error {float(projector_err)}"
+    # §5 (V3.1): TRUE subspace gate.  The earlier a^H a vs b^H b form
+    # compared each basis against its OWN Gram matrix — two orthogonal
+    # bases of two entirely different subspaces would both pass.  The
+    # gates below actually pin the bounded top-K SUBSPACE to the oracle's.
+    angle_gap = _principal_angle_gap(kernels, ref_kernels, grid)
+    assert angle_gap <= 1e-6, f"principal-angle gap {angle_gap}"
+    if grid <= 32:
+        projector_err = _projector_gap(kernels, ref_kernels, grid)
+        assert projector_err <= 1e-6, f"projector error {projector_err}"
 
     # open-frame normalization: whether the open-frame calibration fires
     # depends on whether the truncated top-K subspace contains the DC
