@@ -154,12 +154,13 @@ def parameter_authority(design: str, parameter: str) -> dict[str, Any]:
     except KeyError as exc:  # pragma: no cover - frozen namespace
         raise KeyError(f"unknown scale design: {design!r}") from exc
     try:
-        return entry["parameters"][parameter]
+        record: dict[str, Any] = entry["parameters"][parameter]
     except KeyError as exc:
         raise KeyError(
             f"design {design!r} has no authority record for parameter "
             f"{parameter!r} — a parameter without a record is UNRESOLVED"
         ) from exc
+    return record
 
 
 def validate_scale_parameter_authority() -> list[str]:
