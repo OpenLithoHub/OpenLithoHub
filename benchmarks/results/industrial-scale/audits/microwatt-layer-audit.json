@@ -1,0 +1,572 @@
+{
+  "audit_script_sha256": "66312d720843d48fa2f0e797691308552e5bff4549b3b7b02f31242a113ade0d",
+  "bbox_dbu": [
+    0,
+    0,
+    3020000,
+    3610000
+  ],
+  "count_definition": "shape_elements: cell-local GDS elements summed over every cell (placements NOT multiplied out); flattened_instances: placement-expanded shape instances under the top cell (the protocol's density/instance metric). Density ranks use flattened_instances.",
+  "dbu_nm": 1.0,
+  "design": "microwatt",
+  "die_size_px": [
+    3020000,
+    3610000
+  ],
+  "fixture_manifest_sha256": "dd8626ae7edef81d6a2878a99d1341d51bdaafb7ce74e3ed8585ba1f54ea9da1",
+  "gds_bytes": 554770926,
+  "gds_sha256": "b0253af06f35d1a8b11c2a47f70aac89f33be53e8f28da844b35c2ad6cc92a6d",
+  "layer_count": 41,
+  "per_layer": [
+    {
+      "bbox_dbu": [
+        10250,
+        10760,
+        3009580,
+        3595960
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.3,
+      "flattened_instances": 2843201,
+      "layer": "122:16",
+      "shape_elements": 488
+    },
+    {
+      "bbox_dbu": [
+        10120,
+        10880,
+        3009780,
+        3598560
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.4,
+      "flattened_instances": 5,
+      "layer": "14:0",
+      "shape_elements": 5
+    },
+    {
+      "bbox_dbu": [
+        0,
+        0,
+        3020000,
+        3610000
+      ],
+      "coverage_x_pct": 100.0,
+      "coverage_y_pct": 100.0,
+      "flattened_instances": 7,
+      "layer": "235:4",
+      "shape_elements": 5
+    },
+    {
+      "bbox_dbu": [
+        98900,
+        106080,
+        2941700,
+        3582240
+      ],
+      "coverage_x_pct": 94.1,
+      "coverage_y_pct": 96.3,
+      "flattened_instances": 1167619,
+      "layer": "236:0",
+      "shape_elements": 449
+    },
+    {
+      "bbox_dbu": [
+        10220,
+        13490,
+        3009575,
+        3598620
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.3,
+      "flattened_instances": 2843180,
+      "layer": "64:16",
+      "shape_elements": 486
+    },
+    {
+      "bbox_dbu": [
+        9930,
+        12185,
+        3009970,
+        3598750
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.4,
+      "flattened_instances": 3433853,
+      "layer": "64:20",
+      "shape_elements": 464
+    },
+    {
+      "bbox_dbu": [
+        10350,
+        13600,
+        3009550,
+        3598560
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.3,
+      "flattened_instances": 2800316,
+      "layer": "64:5",
+      "shape_elements": 482
+    },
+    {
+      "bbox_dbu": [
+        10350,
+        10880,
+        3009550,
+        3595840
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.3,
+      "flattened_instances": 2806288,
+      "layer": "64:59",
+      "shape_elements": 485
+    },
+    {
+      "bbox_dbu": [
+        99035,
+        106315,
+        2941560,
+        3582005
+      ],
+      "coverage_x_pct": 94.1,
+      "coverage_y_pct": 96.3,
+      "flattened_instances": 3647932,
+      "layer": "65:20",
+      "shape_elements": 1423
+    },
+    {
+      "bbox_dbu": [
+        24065,
+        11200,
+        3009175,
+        3598240
+      ],
+      "coverage_x_pct": 98.8,
+      "coverage_y_pct": 99.4,
+      "flattened_instances": 1667850,
+      "layer": "65:44",
+      "shape_elements": 10
+    },
+    {
+      "bbox_dbu": [
+        105445,
+        129000,
+        2896975,
+        3418205
+      ],
+      "coverage_x_pct": 92.4,
+      "coverage_y_pct": 91.1,
+      "flattened_instances": 13930,
+      "layer": "66:15",
+      "shape_elements": 10
+    },
+    {
+      "bbox_dbu": [
+        99035,
+        106185,
+        2941405,
+        3582135
+      ],
+      "coverage_x_pct": 94.1,
+      "coverage_y_pct": 96.3,
+      "flattened_instances": 5405405,
+      "layer": "66:20",
+      "shape_elements": 2332
+    },
+    {
+      "bbox_dbu": [
+        24065,
+        11435,
+        3009175,
+        3598120
+      ],
+      "coverage_x_pct": 98.8,
+      "coverage_y_pct": 99.4,
+      "flattened_instances": 27487849,
+      "layer": "66:44",
+      "shape_elements": 15342
+    },
+    {
+      "bbox_dbu": [
+        99130,
+        106505,
+        2940635,
+        3581815
+      ],
+      "coverage_x_pct": 94.1,
+      "coverage_y_pct": 96.3,
+      "flattened_instances": 5145237,
+      "layer": "67:16",
+      "shape_elements": 3698
+    },
+    {
+      "bbox_dbu": [
+        10120,
+        10795,
+        3009780,
+        3598645
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.4,
+      "flattened_instances": 15624630,
+      "layer": "67:20",
+      "shape_elements": 459084
+    },
+    {
+      "bbox_dbu": [
+        10265,
+        10795,
+        3009635,
+        3598645
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.4,
+      "flattened_instances": 34588639,
+      "layer": "67:44",
+      "shape_elements": 464482
+    },
+    {
+      "bbox_dbu": [
+        99215,
+        106590,
+        2940550,
+        3581730
+      ],
+      "coverage_x_pct": 94.1,
+      "coverage_y_pct": 96.3,
+      "flattened_instances": 5021365,
+      "layer": "67:5",
+      "shape_elements": 3421
+    },
+    {
+      "bbox_dbu": [
+        10265,
+        10780,
+        3009610,
+        3598645
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.4,
+      "flattened_instances": 6988950,
+      "layer": "68:16",
+      "shape_elements": 961
+    },
+    {
+      "bbox_dbu": [
+        10120,
+        10640,
+        3019830,
+        3609740
+      ],
+      "coverage_x_pct": 99.7,
+      "coverage_y_pct": 99.7,
+      "flattened_instances": 11249598,
+      "layer": "68:20",
+      "shape_elements": 2575591
+    },
+    {
+      "bbox_dbu": [
+        22975,
+        10805,
+        3019745,
+        3609685
+      ],
+      "coverage_x_pct": 99.2,
+      "coverage_y_pct": 99.7,
+      "flattened_instances": 1401671,
+      "layer": "68:44",
+      "shape_elements": 526166
+    },
+    {
+      "bbox_dbu": [
+        10350,
+        10880,
+        3009525,
+        3598560
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.4,
+      "flattened_instances": 6903222,
+      "layer": "68:5",
+      "shape_elements": 953
+    },
+    {
+      "bbox_dbu": [
+        2000,
+        0,
+        2908030,
+        3610000
+      ],
+      "coverage_x_pct": 96.2,
+      "coverage_y_pct": 100.0,
+      "flattened_instances": 2500,
+      "layer": "69:16",
+      "shape_elements": 1600
+    },
+    {
+      "bbox_dbu": [
+        22920,
+        155,
+        3019810,
+        3609780
+      ],
+      "coverage_x_pct": 99.2,
+      "coverage_y_pct": 100.0,
+      "flattened_instances": 2048419,
+      "layer": "69:20",
+      "shape_elements": 1349372
+    },
+    {
+      "bbox_dbu": [
+        22990,
+        240,
+        3019770,
+        3609200
+      ],
+      "coverage_x_pct": 99.2,
+      "coverage_y_pct": 100.0,
+      "flattened_instances": 560522,
+      "layer": "69:44",
+      "shape_elements": 140123
+    },
+    {
+      "bbox_dbu": [
+        2070,
+        242,
+        2099670,
+        3609757
+      ],
+      "coverage_x_pct": 69.5,
+      "coverage_y_pct": 100.0,
+      "flattened_instances": 128,
+      "layer": "69:5",
+      "shape_elements": 128
+    },
+    {
+      "bbox_dbu": [
+        110400,
+        113600,
+        3020000,
+        3497200
+      ],
+      "coverage_x_pct": 96.3,
+      "coverage_y_pct": 93.7,
+      "flattened_instances": 903,
+      "layer": "70:16",
+      "shape_elements": 605
+    },
+    {
+      "bbox_dbu": [
+        22900,
+        175,
+        3019835,
+        3609265
+      ],
+      "coverage_x_pct": 99.2,
+      "coverage_y_pct": 100.0,
+      "flattened_instances": 703718,
+      "layer": "70:20",
+      "shape_elements": 429146
+    },
+    {
+      "bbox_dbu": [
+        22990,
+        240,
+        3009790,
+        3609200
+      ],
+      "coverage_x_pct": 98.9,
+      "coverage_y_pct": 100.0,
+      "flattened_instances": 452174,
+      "layer": "70:44",
+      "shape_elements": 62234
+    },
+    {
+      "bbox_dbu": [
+        3019600,
+        1660900,
+        3019600,
+        2679540
+      ],
+      "coverage_x_pct": 0.0,
+      "coverage_y_pct": 28.2,
+      "flattened_instances": 13,
+      "layer": "70:5",
+      "shape_elements": 13
+    },
+    {
+      "bbox_dbu": [
+        116610,
+        114000,
+        2900990,
+        3487960
+      ],
+      "coverage_x_pct": 92.2,
+      "coverage_y_pct": 93.5,
+      "flattened_instances": 138,
+      "layer": "71:16",
+      "shape_elements": 100
+    },
+    {
+      "bbox_dbu": [
+        22890,
+        175,
+        3009890,
+        3609265
+      ],
+      "coverage_x_pct": 98.9,
+      "coverage_y_pct": 100.0,
+      "flattened_instances": 166526,
+      "layer": "71:20",
+      "shape_elements": 36579
+    },
+    {
+      "bbox_dbu": [
+        23290,
+        24080,
+        3009490,
+        3588080
+      ],
+      "coverage_x_pct": 98.9,
+      "coverage_y_pct": 98.7,
+      "flattened_instances": 22654,
+      "layer": "71:44",
+      "shape_elements": 4
+    },
+    {
+      "bbox_dbu": [
+        22890,
+        23680,
+        3009890,
+        3588480
+      ],
+      "coverage_x_pct": 98.9,
+      "coverage_y_pct": 98.7,
+      "flattened_instances": 21687,
+      "layer": "72:20",
+      "shape_elements": 505
+    },
+    {
+      "bbox_dbu": [
+        10120,
+        12130,
+        3009780,
+        3598560
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.3,
+      "flattened_instances": 3468180,
+      "layer": "78:44",
+      "shape_elements": 478
+    },
+    {
+      "bbox_dbu": [
+        360400,
+        361520,
+        2658975,
+        3249160
+      ],
+      "coverage_x_pct": 76.1,
+      "coverage_y_pct": 80.0,
+      "flattened_instances": 4,
+      "layer": "81:14",
+      "shape_elements": 3
+    },
+    {
+      "bbox_dbu": [
+        113295,
+        118795,
+        2925005,
+        3569525
+      ],
+      "coverage_x_pct": 93.1,
+      "coverage_y_pct": 95.6,
+      "flattened_instances": 31671,
+      "layer": "81:23",
+      "shape_elements": 3
+    },
+    {
+      "bbox_dbu": [
+        10120,
+        10880,
+        3009780,
+        3598560
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.4,
+      "flattened_instances": 3433853,
+      "layer": "81:4",
+      "shape_elements": 464
+    },
+    {
+      "bbox_dbu": [
+        10120,
+        10880,
+        3009320,
+        3595840
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.3,
+      "flattened_instances": 3539076,
+      "layer": "83:44",
+      "shape_elements": 497
+    },
+    {
+      "bbox_dbu": [
+        10120,
+        10690,
+        3009780,
+        3598370
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.4,
+      "flattened_instances": 4267778,
+      "layer": "93:44",
+      "shape_elements": 469
+    },
+    {
+      "bbox_dbu": [
+        10120,
+        11070,
+        3009780,
+        3598750
+      ],
+      "coverage_x_pct": 99.3,
+      "coverage_y_pct": 99.4,
+      "flattened_instances": 4267778,
+      "layer": "94:20",
+      "shape_elements": 469
+    },
+    {
+      "bbox_dbu": [
+        98900,
+        107455,
+        2941700,
+        3580865
+      ],
+      "coverage_x_pct": 94.1,
+      "coverage_y_pct": 96.2,
+      "flattened_instances": 1147164,
+      "layer": "95:20",
+      "shape_elements": 481
+    }
+  ],
+  "pixel_nm": 1.0,
+  "schema": "OpenLithoHub.scale-fixture-layer-audit.v1",
+  "selected_layer": "66:44",
+  "selected_layer_audit": {
+    "coverage_x_pct": 98.8,
+    "coverage_y_pct": 99.4,
+    "density_rank_by_flattened_instances": 2,
+    "flattened_instances": 27487849,
+    "layer": "66:44",
+    "non_empty": true,
+    "non_empty_layers": 41,
+    "present": true,
+    "shape_elements": 15342
+  },
+  "source_commit": "9e1e3399b1b707f26fee853bce1ff91ab466ce24",
+  "source_repository": "SJTU-YONGFU-RESEARCH-GRP/PDB-Physical-Design-Database",
+  "top_cell": "microwatt"
+}

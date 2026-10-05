@@ -199,7 +199,68 @@ bbox/pixel. That equivalent is a derived number — it must never be
 worded as processed bytes.
 
 The benchmark layer is an explicit per-design decision frozen into the
-manifest. Microwatt must never inherit Ibex's `66:44` by assumption.
+manifest. Microwatt must never inherit Ibex's `66:44` by assumption —
+and since PR-V3.1.3 that rule is machine-checked, not prose.
+
+## Parameter authority (per design)
+
+Every design-specific parameter carries a source-owned authority record
+(`openlithohub.benchmark.scale_parameter_authority`). No parameter may
+be inherited from another design by analogy: the only valid bases are
+`lineage` (live-measured for THIS design in the frozen v1.1/v2 lineage)
+or `direct_audit` (committed audit evidence re-derived from the frozen
+GDS bytes). Anything else is UNRESOLVED and blocks formal use for that
+design. CI enforces the consistency of this table, the fixture
+manifests, the audit evidence and the numbers quoted in these docs
+(`tests/test_benchmark/test_scale_parameter_authority.py`).
+
+| Design | Parameter | Value | Basis | Evidence |
+|---|---|---|---|---|
+| Ibex | selected layer | `66:44` | `lineage` — the v1.1/v2 authority runs live-measured this GDS on this layer | frozen GDS sha256 `5b706ac4…4664c` (source-owned record; regenerated per #94) |
+| Ibex | pixel | 1.0 nm/px | `lineage` — v1.1/v2 measurement grid | — |
+| Microwatt | selected layer | `66:44` | `direct_audit` — committed audit re-derived from the frozen GDS bytes | `benchmarks/results/industrial-scale/audits/microwatt-layer-audit.json` |
+| Microwatt | pixel | 1.0 nm/px | `lineage` — scale-track protocol grid | — |
+
+Until PR-V3.1.3 the Microwatt selection rationale existed only in
+prose; it is now regenerable evidence
+(`scripts/audit_industrial_scale_fixture_layer.py`): 27,487,849
+flattened shape instances — second densest of 41 non-empty layers by
+this metric (densest is 67:44) — spanning 98.8% × 99.4% of the die;
+15,342 cell-local GDS elements. The audit also freezes the metric
+definitions, so "instances" can never silently change meaning again.
+
+Per-design fixture-tracking semantics are frozen in the same module:
+the two Microwatt manifests are committed, so the tracked-tree gate is
+a live tripwire on them; the Ibex fixture directory and every GDS byte
+are host-local (gitignored), so the same gate is structurally blind to
+them and their integrity rests entirely on manifest SHA-256
+revalidation. The asymmetry is a protocol property, not an accident of
+`.gitignore`.
+
+### Adding a new design — fixed review questions
+
+Before a new design enters the scale track, answer these in writing.
+Every answer of the form "we assumed it from <previous design>" marks
+an UNRESOLVED parameter until it gets its own authority record:
+
+1. Which parameters did we inherit from the previous design by
+   analogy? List them explicitly; each needs `lineage` or
+   `direct_audit` evidence or must not be used.
+2. What does the tracked-tree gate see for this design's fixture —
+   which paths are committed, which host-local? Declare it in
+   `fixture_tracking`; `.gitignore` must never imply protocol
+   semantics.
+3. Does the reference host still fit? Record resource margins per
+   design BEFORE the first run: GDS bytes, dense float32
+   raster-equivalent, expected memmap output volume, and free
+   disk/RAM headroom.
+4. Which stale artifacts from earlier eras linger on measurement
+   hosts, and which SHA gate rejects them? (Known instance: the
+   standin-era 144,566-byte `ibex.gds`, sha256 `9b1790b9…` — no
+   authority; `--expected-gds-sha256` is the gate.)
+5. Is the operator checklist in
+   `docs/industrial-scale-gpu-runbook.md` §9 updated for this design
+   before the first GPU handoff?
 
 ## Claim boundaries
 
