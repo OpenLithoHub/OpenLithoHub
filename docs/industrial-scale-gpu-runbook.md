@@ -102,13 +102,26 @@ python scripts/prepare_industrial_scale_fixture.py \
 
 Each must print `FIXTURE PREP: PASS`. Record both manifest
 `gds_sha256` values. The layers above are the maintainer's audited,
-frozen decisions recorded in the committed fixture manifests — never
-chosen on the GPU host.
+frozen decisions — recorded in the fixture manifests (committed for
+microwatt; host-local for ibex) and anchored in source
+(`openlithohub.benchmark.scale_parameter_authority`) — never chosen on
+the GPU host.
 
 ### Frozen fixture facts (maintainer-verified 2026-09-25)
 
 Ibex (`layout/sky130hd/ibex/ibex.gds`, top cell `ibex_core`,
-layer 66:44): the v1.1/v2 authority lineage.
+layer 66:44): the v1.1/v2 authority lineage. Frozen GDS sha256
+(regenerated from the pinned PDB tree, #94):
+
+```text
+5b706ac417f994d357ff78627a01baad8724b808b5e66ed7fe32a022f904664c
+```
+
+The ibex fixture directory is host-local (gitignored) — the frozen
+sha256 above and `--expected-gds-sha256` are the only gates against a
+stale local `ibex.gds` (a 144,566-byte standin-era file, sha256
+`9b1790b9…`, is known to linger on measurement hosts and has NO
+authority; see §9).
 
 Microwatt (`layout/sky130hd/microwatt/split/`, top cell `microwatt`,
 11 split chunks `microwatt.gds.part_[aa..ak]`):
@@ -127,17 +140,25 @@ selected layer:        66:44
 ```
 
 Layer-decision rationale (source-owned rule, fixed BEFORE any
-benchmark): 66:44 is the same sky130hd li1 routed-layout semantic
-class as the frozen v1.1/v2 lineage; the audit shows it is non-empty
-(27,487,849 shape instances, second densest of 41 layers) and
-spans 98.8% × 99.4% of the die. Marker/fill/boundary layers
-(14:0, 81:*, 235:*, 236:0) were rejected as non-representative. No
-candidate was benchmarked before selection.
+benchmark; per-design authority records in
+`openlithohub.benchmark.scale_parameter_authority`): 66:44 is the same
+sky130hd li1 routed-layout semantic class as the frozen v1.1/v2
+lineage; the audit shows it is non-empty (27,487,849 flattened shape
+instances — second densest of 41 non-empty layers by this metric,
+densest is 67:44) and spans 98.8% × 99.4% of the die. For Ibex the
+basis is `lineage` (the v1.1/v2 runs live-measured this layer); for
+Microwatt it is `direct_audit` — no analogy inheritance.
+Marker/fill/boundary layers (14:0, 81:*, 235:*, 236:0) were rejected
+as non-representative. No candidate was benchmarked before selection.
 
 Verification evidence committed with this freeze:
 `benchmarks/results/industrial-scale/fixtures/microwatt/fixture-manifest.json`
 and `pdb-split-manifest.json` (per-chunk git-blob sha1 from the pinned
-PDB tree; every chunk byte-verified against it).
+PDB tree; every chunk byte-verified against it), plus the PR-V3.1.3
+committed layer audit
+`benchmarks/results/industrial-scale/audits/microwatt-layer-audit.json`
+(regenerable via `scripts/audit_industrial_scale_fixture_layer.py` —
+the artifact that turns the numbers above from prose into evidence).
 
 ## 4. Preflight
 
@@ -305,6 +326,10 @@ STOP and attach evidence if ANY of:
 * a frozen command exits nonzero;
 * `SCALE VERIFIER` fails;
 * any SUCCESS row lacks its correctness witness;
+* `git status --porcelain` becomes non-empty at any point — this is a
+  REPRODUCIBILITY-VERIFICATION failure (tracked protocol state changed
+  since the freeze), not a tool bug; never repair it with
+  `git checkout --` (see §9 for what the gate can and cannot see);
 * you feel tempted to edit source, parameters, or artifacts.
 
 Upload: the `gpu-authority-evidence-<run-id>.tar.gz` bundle(s) + their
@@ -318,3 +343,53 @@ comparisons, no protocol/threshold/repeat changes, no benchmark source
 edits, no v1.1/v2/P-054 mutation. Those are maintainer-owned. If code
 must change: STOP — a source fix means a new commit, new run identity,
 new dry run, new freeze, and re-running every GPU issue from zero.
+
+## 9. Operator checklist — what the scripts cannot check (PR-V3.1.3)
+
+The fail-closed gates verify everything mechanically checkable; these
+three classes of defect live exactly where scripts stop. Check each by
+hand BEFORE starting a campaign — every past closure-round finding in
+this class was preventable here.
+
+**1. Per-design gate semantics — what "tracked tree clean" can and
+cannot see.** The same `git status` gate has different reach per
+design, and that is protocol, not accident:
+
+```text
+ibex:      whole fixture dir host-local (gitignored) → gate sees NOTHING;
+           integrity = manifest SHA-256 revalidation + --expected-gds-sha256
+microwatt: the two manifests are TRACKED → gate is a live tripwire on them;
+           the 554,770,926-byte GDS is gitignored → SHA-256 equality only
+```
+
+Source of truth:
+`openlithohub.benchmark.scale_parameter_authority` (declared, CI-checked
+against the real `.gitignore`). When the preflight prints the
+"tracked tree clean" FAIL, it now explains this semantics itself — read
+it; do not reach for `git checkout --`.
+
+**2. Resource margins, per design, before the first window.** Confirm
+free disk ≥ prepared fixture + ~64 GiB outputs (§1) AND, for the
+design being measured: GDS bytes (ibex ≈ per frozen manifest;
+microwatt 554,770,926), dense float32 raster-EQUIVALENT (microwatt
+43,608,800,000,000 bytes — derived, never materialized), expected
+memmap output volume per window, and host RAM headroom. A "NOT_RUN_
+MEMORY_POLICY" row is a valid outcome (§5 Command C); an operator who
+did not check margins first is not diagnosing, just discovering.
+
+**3. Machine hygiene — stale-state inventory before fixture prep.**
+
+```bash
+ls -la benchmarks/results/industrial-scale/fixtures/*/   # sizes must match the frozen bytes
+git -C "$PDB_ROOT" rev-parse HEAD                        # must equal 9e1e3399b1b707f26fee853bce1ff91ab466ce24
+git -C "$PDB_ROOT" status --porcelain                    # must be empty (operator authority gate, #94)
+```
+
+Known hazards: the standin-era 144,566-byte `ibex.gds`
+(sha256 `9b1790b9…`, no authority), leftover `pdb-standin/` fixture
+directories, and PDB clones from earlier campaigns. Rule: never repair
+a stale clone or fixture in place — regenerate from a clean frozen
+sibling checkout; the frozen sha256 values (ibex `5b706ac4…`,
+microwatt `b0253af0…`) are the only acceptance test for prepared
+bytes. The layer audit tool fails closed on any sha mismatch by
+construction.

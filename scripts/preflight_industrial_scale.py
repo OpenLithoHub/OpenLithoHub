@@ -51,9 +51,46 @@ from openlithohub.benchmark.industrial_scale import (  # noqa: E402
     SUPPORTED_SCALE_OS,
     load_scale_fixture_manifest,
 )
+from openlithohub.benchmark.scale_parameter_authority import (  # noqa: E402
+    SCALE_PARAMETER_AUTHORITY,
+)
 
 DISK_FREE_BYTES = 16 * 1024**3
 FROZEN_SELECTED_LAYER = "66:44"
+
+# The STOP message IS part of the protocol surface (PR-V3.1.3): a
+# tracked-tree failure must explain itself — what the gate watches,
+# what it structurally cannot see, and why it is a reproducibility
+# verification, never a tool bug to be "fixed" with `git checkout --`.
+TRACKED_TREE_GATE_EXPLANATION = """\
+  GATE SEMANTICS — 'tracked tree clean' is a REPRODUCIBILITY VERIFICATION, not a
+  tool bug: tracked protocol state changed since the freeze, so the run can no
+  longer be tied to the frozen commit.
+  This gate watches TRACKED files only. Per design (source of truth:
+  openlithohub.benchmark.scale_parameter_authority):\
+"""
+_TRACKED_TREE_GATE_FOOTER = """\
+  Everything gitignored above is INVISIBLE to this gate by construction; its
+  integrity is enforced by manifest SHA-256 revalidation and
+  --expected-gds-sha256 instead (the '[PASS] fixture' checks above).
+  Remedy at runtime: NONE. Never repair a FAIL with `git checkout --` — a real
+  change means a new freeze, new run identity, and a full rerun. STOP and
+  attach evidence (GPU Authority Repair §25)."""
+
+
+def tracked_tree_gate_explanation() -> str:
+    """Self-explaining STOP text for the tracked-tree gate, rendered from
+    the frozen per-design fixture-tracking semantics (so the message can
+    never drift from the declared authority table)."""
+    lines = [TRACKED_TREE_GATE_EXPLANATION]
+    for design, entry in sorted(SCALE_PARAMETER_AUTHORITY["designs"].items()):
+        tracking = entry["fixture_tracking"]
+        tracked = ", ".join(tracking["tracked_paths"]) or "(none — fully host-local)"
+        host_local = ", ".join(tracking["host_local_paths"])
+        lines.append(f"    {design}: tracked = {tracked}")
+        lines.append(f"      host-local (invisible to this gate) = {host_local}")
+    lines.append(_TRACKED_TREE_GATE_FOOTER)
+    return "\n".join(lines)
 
 
 def scale_forward_probe(device: str) -> tuple[bool, str]:
@@ -117,7 +154,12 @@ def main() -> int:
         check("measurement commit", True, head)
         if args.expected_commit:
             check("source commit == frozen commit", head == args.expected_commit, head)
-        check("tracked tree clean", clean, "dirty tree blocks formal runs (B2-A)")
+        check(
+            "tracked tree clean",
+            clean,
+            "dirty tree blocks formal runs (B2-A) — reproducibility "
+            "verification, see gate semantics below on FAIL",
+        )
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         check("git state", False, str(exc)[-160:])
 
@@ -264,6 +306,8 @@ def main() -> int:
         print(f"  [{'PASS' if ok else 'FAIL'}] {name}: {detail}")
     failures = [name for name, ok, _ in checks if not ok]
     if failures:
+        if any(name == "tracked tree clean" for name in failures):
+            print(tracked_tree_gate_explanation())
         print(
             f"SCALE PREFLIGHT: FAIL — {len(failures)} blocker(s); "
             "formal scale measurement is blocked"
