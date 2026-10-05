@@ -48,9 +48,7 @@ VALID_AUTHORITY_BASES: Final = ("lineage", "direct_audit")
 #: preflight/``--expected-gds-sha256`` gate rejects any local file that
 #: does not match it — including the stale standin-era 144,566-byte
 #: ``ibex.gds`` (``9b1790b9…``) known to linger on measurement hosts.
-IBEX_FROZEN_GDS_SHA256: Final = (
-    "5b706ac417f994d357ff78627a01baad8724b808b5e66ed7fe32a022f904664c"
-)
+IBEX_FROZEN_GDS_SHA256: Final = "5b706ac417f994d357ff78627a01baad8724b808b5e66ed7fe32a022f904664c"
 
 SCALE_PARAMETER_AUTHORITY: Final[dict[str, Any]] = {
     "schema": SCALE_PARAMETER_AUTHORITY_SCHEMA,
@@ -83,8 +81,7 @@ SCALE_PARAMETER_AUTHORITY: Final[dict[str, Any]] = {
                     "value": 1.0,
                     "authority_basis": "lineage",
                     "basis_reference": (
-                        "v1.1/v2 measurement grid, carried unchanged into the "
-                        "scale track"
+                        "v1.1/v2 measurement grid, carried unchanged into the scale track"
                     ),
                     "status": "FROZEN",
                 },
@@ -130,14 +127,12 @@ SCALE_PARAMETER_AUTHORITY: Final[dict[str, Any]] = {
             },
             "fixture_tracking": {
                 "tracked_paths": [
-                    "benchmarks/results/industrial-scale/fixtures/microwatt/"
-                    "fixture-manifest.json",
+                    "benchmarks/results/industrial-scale/fixtures/microwatt/fixture-manifest.json",
                     "benchmarks/results/industrial-scale/fixtures/microwatt/"
                     "pdb-split-manifest.json",
                 ],
                 "host_local_paths": [
-                    "benchmarks/results/industrial-scale/fixtures/microwatt/"
-                    "microwatt.gds",
+                    "benchmarks/results/industrial-scale/fixtures/microwatt/microwatt.gds",
                 ],
                 "tracked_tree_gate_visibility": (
                     "live tripwire on the two committed manifests only — a "
@@ -209,14 +204,11 @@ def validate_scale_parameter_authority() -> list[str]:
                     f"{VALID_AUTHORITY_BASES} — analogy is never a basis"
                 )
             if record.get("status") != "FROZEN":
-                violations.append(
-                    f"{design}.{name}: status {record.get('status')!r} is not FROZEN"
-                )
+                violations.append(f"{design}.{name}: status {record.get('status')!r} is not FROZEN")
             if basis == "direct_audit" and repo is not None:
                 reference = record.get("basis_reference", "").split(" (")[0].strip()
                 if not (repo / reference).is_file():
                     violations.append(
-                        f"{design}.{name}: direct_audit evidence artifact "
-                        f"missing: {reference}"
+                        f"{design}.{name}: direct_audit evidence artifact missing: {reference}"
                     )
     return violations

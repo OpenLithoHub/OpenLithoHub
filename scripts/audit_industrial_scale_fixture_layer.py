@@ -161,8 +161,7 @@ def audit_layer_statistics(
     checkpoint_path = out_path.with_suffix(out_path.suffix + ".checkpoint.json")
     per_layer: list[dict] = []
     print(
-        f"[3/5] per-layer statistics over {len(layers)} layers "
-        "(checkpoint per layer) ...",
+        f"[3/5] per-layer statistics over {len(layers)} layers (checkpoint per layer) ...",
         flush=True,
     )
     for position, layer_idx in enumerate(sorted(layout.layer_indices(), key=str), start=1):
@@ -220,9 +219,7 @@ def audit_layer_statistics(
     print("[4/5] selected-layer verdict ...", flush=True)
     selected_entry = next(e for e in per_layer if e["layer"] == selected_layer)
     non_empty = [e for e in per_layer if e["flattened_instances"] > 0]
-    density_rank = sorted(
-        non_empty, key=lambda e: e["flattened_instances"], reverse=True
-    )
+    density_rank = sorted(non_empty, key=lambda e: e["flattened_instances"], reverse=True)
     rank = next(i for i, e in enumerate(density_rank, start=1) if e["layer"] == selected_layer)
     selected_audit = {
         "layer": selected_layer,
@@ -269,9 +266,7 @@ def audit_layer_statistics(
             "protocol's density/instance metric). Density ranks use "
             "flattened_instances."
         ),
-        "fixture_manifest_sha256": _sha256_file(manifest_path)
-        if manifest_path.is_file()
-        else None,
+        "fixture_manifest_sha256": _sha256_file(manifest_path) if manifest_path.is_file() else None,
         "audit_script_sha256": _sha256_file(Path(__file__).resolve()),
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)

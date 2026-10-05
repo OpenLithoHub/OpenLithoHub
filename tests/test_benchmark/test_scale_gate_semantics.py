@@ -29,9 +29,7 @@ from openlithohub.benchmark.scale_parameter_authority import (
 REPO = Path(__file__).resolve().parents[2]
 RUNBOOK = REPO / "docs/industrial-scale-gpu-runbook.md"
 PREFLIGHT_SCRIPT = REPO / "scripts" / "preflight_industrial_scale.py"
-AUDIT_EVIDENCE = (
-    REPO / "benchmarks/results/industrial-scale/audits/microwatt-layer-audit.json"
-)
+AUDIT_EVIDENCE = REPO / "benchmarks/results/industrial-scale/audits/microwatt-layer-audit.json"
 
 
 def _norm(text: str) -> str:
@@ -78,9 +76,7 @@ def test_ibex_fixture_is_invisible_to_the_tracked_tree_gate() -> None:
     nothing about it — SHA-256 revalidation is the only gate."""
     tracking = SCALE_PARAMETER_AUTHORITY["designs"]["ibex"]["fixture_tracking"]
     assert tracking["tracked_paths"] == []
-    ibex_manifest = (
-        "benchmarks/results/industrial-scale/fixtures/ibex/fixture-manifest.json"
-    )
+    ibex_manifest = "benchmarks/results/industrial-scale/fixtures/ibex/fixture-manifest.json"
     assert _git("check-ignore", "-q", "--", ibex_manifest).returncode == 0
 
 

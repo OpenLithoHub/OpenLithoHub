@@ -39,9 +39,7 @@ REPO = Path(__file__).resolve().parents[2]
 MICROWATT_MANIFEST = (
     REPO / "benchmarks/results/industrial-scale/fixtures/microwatt/fixture-manifest.json"
 )
-MICROWATT_AUDIT = (
-    REPO / "benchmarks/results/industrial-scale/audits/microwatt-layer-audit.json"
-)
+MICROWATT_AUDIT = REPO / "benchmarks/results/industrial-scale/audits/microwatt-layer-audit.json"
 RUNBOOK = REPO / "docs/industrial-scale-gpu-runbook.md"
 BENCH_DOC = REPO / "docs/industrial-scale-benchmark.md"
 AUDIT_SCRIPT = REPO / "scripts" / "audit_industrial_scale_fixture_layer.py"
@@ -243,11 +241,16 @@ def test_audit_tool_end_to_end_on_synthetic_gds(tmp_path: Path) -> None:
     gds_path, manifest_path = _build_synthetic_fixture(tmp_path)
     out = tmp_path / "audit.json"
     proc = _run_audit(
-        "--gds", str(gds_path),
-        "--manifest", str(manifest_path),
-        "--design", "testdesign",
-        "--selected-layer", "66:44",
-        "--out", str(out),
+        "--gds",
+        str(gds_path),
+        "--manifest",
+        str(manifest_path),
+        "--design",
+        "testdesign",
+        "--selected-layer",
+        "66:44",
+        "--out",
+        str(out),
     )
     assert proc.returncode == 0, proc.stderr
     assert "LAYER AUDIT: PASS" in proc.stdout
@@ -276,11 +279,16 @@ def test_audit_tool_rejects_stale_gds_bytes(tmp_path: Path) -> None:
     data[-1] ^= 0xFF
     stale.write_bytes(bytes(data))
     proc = _run_audit(
-        "--gds", str(stale),
-        "--manifest", str(manifest_path),
-        "--design", "testdesign",
-        "--selected-layer", "66:44",
-        "--out", str(tmp_path / "audit.json"),
+        "--gds",
+        str(stale),
+        "--manifest",
+        str(manifest_path),
+        "--design",
+        "testdesign",
+        "--selected-layer",
+        "66:44",
+        "--out",
+        str(tmp_path / "audit.json"),
     )
     assert proc.returncode == 1
     assert "no authority" in proc.stderr
@@ -293,11 +301,16 @@ def test_audit_tool_rejects_stale_gds_bytes(tmp_path: Path) -> None:
 def test_audit_tool_never_picks_a_layer(tmp_path: Path) -> None:
     gds_path, manifest_path = _build_synthetic_fixture(tmp_path)
     proc = _run_audit(
-        "--gds", str(gds_path),
-        "--manifest", str(manifest_path),
-        "--design", "testdesign",
-        "--selected-layer", "67:20",
-        "--out", str(tmp_path / "audit.json"),
+        "--gds",
+        str(gds_path),
+        "--manifest",
+        str(manifest_path),
+        "--design",
+        "testdesign",
+        "--selected-layer",
+        "67:20",
+        "--out",
+        str(tmp_path / "audit.json"),
     )
     assert proc.returncode == 1
     assert "never picks a layer" in proc.stderr
