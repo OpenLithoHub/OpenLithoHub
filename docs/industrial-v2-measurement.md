@@ -116,11 +116,18 @@ bounded block path executes on CUDA.
 
 1. **Clone the exact measurement commit** (the frozen candidate
    measurement commit; record `git rev-parse HEAD`) and confirm
-   `git status --porcelain` is empty.
+   `git status --porcelain` is empty. Run every later step from the
+   OpenLithoHub repository root — anchor it with
+   `cd "$(git rev-parse --show-toplevel)"`, never from a sibling
+   checkout; re-check repo root + HEAD + tree together after any
+   checkout between tracks.
 2. **Isolated environment**: fresh venv, install the host's CUDA-enabled
    PyTorch build, then `pip install -e ".[server,workflow]"`. Capture
-   `pip freeze` and the torch/CUDA facts. Never edit dependencies
-   mid-run.
+   `pip freeze` and the torch/CUDA facts — and the interpreter path
+   itself (`command -v python`): one interpreter for preflight,
+   harness and verification; never switch environments mid-run and
+   never install packages to rescue a failing gate. Never edit
+   dependencies mid-run.
 3. **Fixture identity**: `sha256sum ibex.gds` — the same real routed
    Ibex lineage as v1 (`benchmarks/results/industrial/fixtures/`
    provenance). Never substitute a different GDS mid-run. The fixture
@@ -132,7 +139,10 @@ bounded block path executes on CUDA.
    python scripts/preflight_industrial_v2.py --gds /path/to/ibex.gds --device cuda:0
    ```
 5. **Save operator evidence** (preflight output, `nvidia-smi -q`, git
-   status, commit) under `measurement-logs/`. Canonical facts remain
+   status, commit) under `measurement-logs/` — create it FIRST:
+   `mkdir -p measurement-logs`. Git IGNORES that directory but never
+   creates it, so on a fresh clone the first tee into it would fail.
+   Canonical facts remain
    harness-owned — operator logs are context, never claim inputs.
    `measurement-logs/` is ignored by the committed root `.gitignore`
    (GPU Authority Repair §11): the tracked tree stays verifiably clean
