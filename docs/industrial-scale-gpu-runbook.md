@@ -52,7 +52,10 @@ enforce it fail-closed:
 Record, before anything else:
 
 ```bash
-mkdir -p measurement-logs
+cd "$(git rev-parse --show-toplevel)"   # anchor EVERY command at the OpenLithoHub
+                                        # repo root — never the PDB sibling checkout
+mkdir -p measurement-logs               # git IGNORES this dir but never creates it;
+                                        # a fresh clone fails the first tee without it
 nvidia-smi -q | tee measurement-logs/nvidia-smi-q.txt
 nvidia-smi topo -m | tee measurement-logs/nvidia-smi-topo.txt
 git rev-parse HEAD | tee measurement-logs/git-head.txt
@@ -62,7 +65,10 @@ git status --porcelain | tee measurement-logs/git-status-before.txt
 Required: `HEAD` equals the frozen scale commit; `git status` empty.
 `measurement-logs/` is ignored by the committed root `.gitignore`
 (GPU Authority Repair §11), so evidence logs never dirty the tracked
-tree and no operator-created nested `.gitignore` is needed.
+tree and no operator-created nested `.gitignore` is needed. Re-check
+repo root + HEAD + tree together after ANY track switch (V2 freezes at
+`d9ec685a…`, Scale at `b8948572…` — a checkout done in the wrong
+working directory is the classic silent failure).
 
 ## 2. Environment
 
@@ -72,7 +78,15 @@ python -m pip install --upgrade pip
 # install the CUDA-enabled torch build matching this host's driver FIRST
 pip install -e ".[server,workflow]"
 pip freeze | tee measurement-logs/pip-freeze.txt
+command -v python | tee measurement-logs/python-path.txt
+python -c "import klayout.db; print('KLayout Python API: OK in this interpreter')" \
+  | tee measurement-logs/klayout-identity.txt
 ```
+
+ONE interpreter for everything: the KLayout gate, the preflight and
+every benchmark command must run in the python recorded in
+`python-path.txt` — never switch environments mid-campaign, never
+install packages to rescue a failing gate.
 
 ## 3. Fixture preparation (frozen source, verified bytes)
 
