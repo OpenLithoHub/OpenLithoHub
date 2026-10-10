@@ -7,6 +7,6 @@ starlette>=0.40,<0.46
 fastapi>=0.115,<0.116
 matplotlib>=3.7
 Pillow>=10.0
-pydantic>=2.0
+pydantic>=2.13.5
 scipy>=1.10
 openlithohub @ git+https://github.com/OpenLithoHub/OpenLithoHub.git@main
