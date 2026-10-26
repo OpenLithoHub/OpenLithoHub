@@ -22,7 +22,7 @@
 # torch.version.cuda is None and the absence of nvidia-*/jupyter.
 # ---------------------------------------------------------------------------
 # Digest pinned (audit P1.11); Dependabot (docker ecosystem) keeps it current.
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS wheel-builder
+FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704 AS wheel-builder
 
 WORKDIR /build
 
@@ -53,7 +53,7 @@ RUN SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} \
 # fat-env-builder: dev-convenient CLI dependency set (data + models +
 # workflow + jupyter) on genuine CPU torch, from the canonical wheel.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS fat-env-builder
+FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704 AS fat-env-builder
 
 COPY --from=wheel-builder /wheels /wheels
 
@@ -70,7 +70,7 @@ RUN python -m venv /opt/venv \
 # ---------------------------------------------------------------------------
 # server-env-builder: the fat server set (adds the [server] extra).
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS server-env-builder
+FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704 AS server-env-builder
 
 COPY --from=wheel-builder /wheels /wheels
 
@@ -86,7 +86,7 @@ RUN python -m venv /opt/venv \
 # server-cpu-env-builder: MINIMAL production dependency set (models +
 # workflow + server; no jupyter, no dataset clients) on genuine CPU torch.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS server-cpu-env-builder
+FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704 AS server-cpu-env-builder
 
 COPY --from=wheel-builder /wheels /wheels
 
@@ -102,7 +102,7 @@ RUN python -m venv /opt/venv \
 # runtime-base: the shared non-root runtime skeleton — KLayout's Qt deps,
 # non-root user, scratch dir. No venv; targets add their own.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS runtime-base
+FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704 AS runtime-base
 
 # KLayout's Python wheel ships its own .so files but links against the
 # system libstdc++/libgomp/libGL/Qt — install the minimum runtime set.
